@@ -11,6 +11,9 @@ export const NEW_PUBLIC_API_CACHE_ROUTES = [
   { match: (path) => path === "/api/system/dms-top-ads", ttl: 15 },
   { match: (path) => path === "/api/themes/active", ttl: 30 },
   { match: (path) => path === "/api/kings-cup/overview", ttl: 5 },
+  // Live scores: the origin's own TTL (5 s while a match is on) caps these.
+  { match: (path) => path === "/api/sports/today", ttl: 60 },
+  { match: (path) => path === "/api/rsl/hero", ttl: 60 },
   // Reads the apps and web poll most (Render bills egress per GB). The
   // origin marks them in server/routes/publicEdgeCacheHooks.ts.
   { match: (path) => path === "/api/v1/homepage", ttl: 15 },
@@ -34,6 +37,9 @@ const NEW_PUBLIC_API_MAX_INFLIGHT = 32;
 export const NEW_PUBLIC_API_MAX_BODY_BYTES = 4 * 1024 * 1024;
 const NEW_PUBLIC_API_BODY_TIMEOUT_MS = 10_000;
 const NEW_PUBLIC_API_CACHE_LEASE_MS = 1_000;
+// Sports reads answered in the language from ?lang or Accept-Language
+// (server/services/sportsLang.ts), so the key carries the effective language.
+const SPORTS_LANG_PATHS = new Set(["/api/kings-cup/overview", "/api/sports/today"]);
 // Store time of an entry, so a hit can hand on only what is left of its TTL.
 const NEW_PUBLIC_API_STORED_AT = "X-Sabq-Edge-Stored-At";
 
@@ -56,9 +62,9 @@ export function newPublicApiCacheKey(request) {
   // request-origin dimension, including absent vs present, in the key.
   const requestOrigin = request.headers.get("origin") || "";
   url.searchParams.set("__sabq_origin", requestOrigin ? `present:${requestOrigin}` : "absent");
-  // Preserve every caller query parameter. Kings Cup also varies by the
+  // Preserve every caller query parameter. Sports reads also vary by the
   // effective language selected from ?lang or Accept-Language.
-  if (url.pathname === "/api/kings-cup/overview") {
+  if (SPORTS_LANG_PATHS.has(url.pathname)) {
     const queryLang = (url.searchParams.get("lang") || "").toLowerCase();
     const acceptLanguage = (request.headers.get("accept-language") || "").toLowerCase();
     const lang = queryLang === "en" || queryLang === "ar"
@@ -72,7 +78,7 @@ export function newPublicApiCacheKey(request) {
 export function newPublicApiPolicy(request) {
   if (request.method !== "GET" || hasNewPublicApiCredentials(request)) return null;
   const url = new URL(request.url);
-  if (url.pathname === "/api/kings-cup/overview" && url.searchParams.get("resilient") === "1") {
+  if (SPORTS_LANG_PATHS.has(url.pathname) && url.searchParams.get("resilient") === "1") {
     return null;
   }
   const route = NEW_PUBLIC_API_CACHE_ROUTES.find(({ match }) => match(url.pathname));
@@ -93,7 +99,7 @@ function publicOriginTtl(response, routeTtl, path, requestOrigin = "") {
   if (directives.some((directive) => ["private", "no-store", "no-cache"].includes(directive))) return 0;
   const vary = (response.headers.get("vary") || "").split(",").map((name) => name.trim().toLowerCase());
   const allowedVary = new Set(["accept-encoding", "origin"]);
-  if (path === "/api/kings-cup/overview") allowedVary.add("accept-language");
+  if (SPORTS_LANG_PATHS.has(path)) allowedVary.add("accept-language");
   if (vary.some((name) => name && (name === "*" || !allowedVary.has(name)))) return 0;
   const allowOrigin = response.headers.get("access-control-allow-origin");
   if (allowOrigin && allowOrigin !== "*" && allowOrigin !== requestOrigin) return 0;

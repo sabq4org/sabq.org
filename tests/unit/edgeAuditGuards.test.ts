@@ -86,6 +86,19 @@ describe("edge audit boundaries", () => {
     expect(apiProxyTimeoutMs("/api/homepage", true)).toBe(10_000);
     expect(apiProxyTimeoutMs("/api/stories", false)).toBe(0);
   });
+  it("edge-caches sitemaps for anonymous GETs, under the origin's s-maxage, without a read deadline", () => {
+    const req = (path: string, headers: Record<string, string> = {}, method = "GET") =>
+      new Request("https://sabq.org" + path, { method, headers });
+    for (const p of ["/sitemap.xml", "/sitemap-news.xml", "/sitemap-articles-91.xml", "/sitemap-en-articles-3.xml"]) {
+      expect(getApiCacheTtl(p, req(p)), p).toBe(3600);
+      expect(apiProxyTimeoutMs(p, true), p).toBe(0);
+    }
+    expect(getApiCacheTtl("/sitemap-news.xml", req("/sitemap-news.xml", {}, "HEAD"))).toBe(0);
+    expect(getApiCacheTtl("/sitemap-news.xml", req("/sitemap-news.xml", { cookie: "connect.sid=s%3Aabc" }))).toBe(0);
+    expect(getApiCacheTtl("/sitemaps/x.xml", req("/sitemaps/x.xml"))).toBe(0);
+    // Bare URL key, so publishing's purge of /sitemap-news.xml reaches it.
+    expect(apiCacheKey("https://sabq.org/sitemap-news.xml").url).toBe("https://sabq.org/sitemap-news.xml");
+  });
   it("never replays an unpublished article's clip from the 24 h last-good copy", () => {
     expect(apiLastGoodAllowed("/api/articles/some-slug/summary-audio")).toBe(false);
     expect(apiLastGoodAllowed("/api/stories")).toBe(true);
