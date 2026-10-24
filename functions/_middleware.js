@@ -759,22 +759,42 @@ export function resolveFallbackOrigin(apiOrigin, env = {}) {
   return fallback;
 }
 
-// GET/HEAD only: a request body is a one-shot stream, and a write that the
-// edge refused was never executed, so replaying it is pointless anyway.
-// Sitemaps go through the api.sabq.org Worker, whose single placed location
-// keeps one copy for the whole edge (cloudflare-worker/sitemap-edge-cache.js);
-// this middleware's own cache is per location, and crawlers fetch the same
-// sitemap from many locations at once. SITEMAP_EDGE_ORIGIN=off (or another
-// origin) is the rollback; the API origin stays the 429 fallback.
-export function sitemapEdgeOrigin(path, apiOrigin, env = {}) {
+// Sitemaps go to the api.sabq.org Worker through the API_EDGE service binding:
+// its single placed location keeps one copy for the whole edge
+// (cloudflare-worker/sitemap-edge-cache.js), while this middleware's own cache
+// is per location and crawlers fetch the same sitemap from many locations at
+// once. A plain fetch to https://api.sabq.org would not help: Cloudflare never
+// runs a route Worker for a same-zone subrequest, so it went straight to
+// Render (2026-10-24). Without the binding, or with SITEMAP_EDGE=off, sitemaps
+// go to the API origin as before; any failure through the Worker does too.
+export const SITEMAP_EDGE_URL = "https://api.sabq.org";
+
+export function sitemapEdgeService(path, env = {}) {
   if (!isSitemapPath(path)) return null;
-  const configured = String(env.SITEMAP_EDGE_ORIGIN || "").trim().replace(/\/+$/, "");
-  if (configured.toLowerCase() === "off") return null;
-  const candidate = originOf(configured || DEFAULT_API_ORIGIN);
-  if (!candidate || candidate === originOf(apiOrigin)) return null;
-  return candidate;
+  if (String(env.SITEMAP_EDGE || "").trim().toLowerCase() === "off") return null;
+  return typeof env.API_EDGE?.fetch === "function" ? env.API_EDGE : null;
 }
 
+export async function fetchSitemapViaEdge(request, service, timeoutMs = 0) {
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+  headers.delete("cookie");
+  const init = { method: "GET", headers };
+  if (timeoutMs > 0) init.signal = AbortSignal.timeout(timeoutMs);
+  try {
+    const res = await service.fetch(new Request(`${SITEMAP_EDGE_URL}${url.pathname}${url.search}`, init));
+    // An edge 429 gets the same second route as proxyToApiWithFallback gives it.
+    if (res.status < 500 && !isEdgeRateLimited(res)) return res;
+    await res.body?.cancel();
+    console.warn(`[pages-fn] sitemap edge ${res.status}, using the API origin: ${url.pathname}`);
+  } catch (err) {
+    console.error("[pages-fn] sitemap edge error, using the API origin:", err);
+  }
+  return null;
+}
+
+// GET/HEAD only: a request body is a one-shot stream, and a write that the
+// edge refused was never executed, so replaying it is pointless anyway.
 export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin, timeoutMs = 0, proxySecret) {
   const res = await proxyToApi(request, apiOrigin, timeoutMs, proxySecret);
   const idempotent = request.method === "GET" || request.method === "HEAD";
@@ -1506,14 +1526,15 @@ async function handleRequest(context) {
     }
 
     try {
-      const sitemapOrigin = sitemapEdgeOrigin(path, apiOrigin, env);
-      const res = await proxyToApiWithFallback(
-        request,
-        sitemapOrigin || apiOrigin,
-        sitemapOrigin ? apiOrigin : resolveFallbackOrigin(apiOrigin, env),
-        apiProxyTimeoutMs(path, useApiCache),
-        env.EDGE_PROXY_SHARED_SECRET,
-      );
+      const sitemapService = request.method === "GET" ? sitemapEdgeService(path, env) : null;
+      const res = (sitemapService && await fetchSitemapViaEdge(request, sitemapService, apiProxyTimeoutMs(path, useApiCache)))
+        || await proxyToApiWithFallback(
+          request,
+          apiOrigin,
+          resolveFallbackOrigin(apiOrigin, env),
+          apiProxyTimeoutMs(path, useApiCache),
+          env.EDGE_PROXY_SHARED_SECRET,
+        );
 
       const originSmax = originPublicSmaxAge(res);
       const effectiveCacheTtl = useApiCache
