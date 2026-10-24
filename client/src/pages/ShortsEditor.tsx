@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient, getCsrfToken } from "@/lib/queryClient";
 import { ArrowRight, Loader2, Save, Upload } from "lucide-react";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { Category, User } from "@shared/schema";
@@ -117,7 +117,7 @@ export default function ShortsEditor() {
   const isEditMode = !!shortId && shortId !== "new";
 
   const form = useForm<ShortFormData>({
-    resolver: zodResolver(shortFormSchema),
+    resolver: zodResolver(shortFormSchema) as Resolver<ShortFormData>,
     defaultValues: {
       title: "",
       description: "",
@@ -161,7 +161,7 @@ export default function ShortsEditor() {
   const { data: reportersRaw, isLoading: reportersLoading } = useQuery<User[]>({
     queryKey: ["/api/users", { role: "reporter" }],
     queryFn: async () => {
-      const response = await fetch("/api/users?role=reporter", {
+      const response = await fetch(apiUrl("/api/users?role=reporter"), {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Failed to fetch reporters");
@@ -176,7 +176,7 @@ export default function ShortsEditor() {
   const { data: shortData, isLoading: shortLoading } = useQuery<ShortWithDetails>({
     queryKey: ["/api/admin/shorts", shortId],
     queryFn: async () => {
-      const response = await fetch(`/api/admin/shorts/${shortId}`, {
+      const response = await fetch(apiUrl(`/api/admin/shorts/${shortId}`), {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Failed to fetch short");
@@ -513,7 +513,7 @@ export default function ShortsEditor() {
                             allowedFileTypes={['.jpg', '.jpeg', '.png', '.gif', '.webp']}
                             onGetUploadParameters={async () => {
                               const csrfToken = getCsrfToken();
-                              const response = await fetch('/api/admin/shorts/upload', {
+                              const response = await fetch(apiUrl('/api/admin/shorts/upload'), {
                                 method: 'POST',
                                 credentials: 'include',
                                 headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
@@ -573,7 +573,7 @@ export default function ShortsEditor() {
                             allowedFileTypes={['.mp4', '.mov', '.avi']}
                             onGetUploadParameters={async () => {
                               const csrfToken = getCsrfToken();
-                              const response = await fetch('/api/admin/shorts/upload', {
+                              const response = await fetch(apiUrl('/api/admin/shorts/upload'), {
                                 method: 'POST',
                                 credentials: 'include',
                                 headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
@@ -633,7 +633,7 @@ export default function ShortsEditor() {
                             allowedFileTypes={['.m3u8', '.ts']}
                             onGetUploadParameters={async () => {
                               const csrfToken = getCsrfToken();
-                              const response = await fetch('/api/admin/shorts/upload', {
+                              const response = await fetch(apiUrl('/api/admin/shorts/upload'), {
                                 method: 'POST',
                                 credentials: 'include',
                                 headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},

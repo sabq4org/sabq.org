@@ -27,8 +27,9 @@ export function makePromptAgent<T extends z.ZodTypeAny>(def: PromptAgentDef<T>):
       const system = baseSystemPrompt(OPS_AGENTS[def.slug].roleAr, def.rulesAr);
       const user = `${externalInputBlock(ctx)}${priorBlock(ctx, def.reads)}${humanNotesBlock(ctx)}`;
       const { data } = await callModelJson(ctx, def.slug, system, user, BaseOutputSchema.extend({ result: def.resultSchema }), { maxTokens: def.maxTokens });
-      const output = toAgentOutput(data, data.result as Record<string, unknown>);
-      const reason = def.escalateIf?.(data.result, output.confidence);
+      const result = (data as { result: z.infer<T> }).result;
+      const output = toAgentOutput(data, result as Record<string, unknown>);
+      const reason = def.escalateIf?.(result, output.confidence);
       if (reason) return { ok: false, escalate: "needs_info", reasonAr: reason, partialOutput: output };
       return { ok: true, output };
     },

@@ -1012,7 +1012,7 @@ export async function setContestResult(contestId: string, resultPayload: unknown
   await db
     .update(predictionContests)
     .set({
-      resultPayload: parsed.data,
+      resultPayload: parsed.data as Record<string, unknown>,
       resultVersion: contest.resultVersion + 1,
       // نتيجة قبل الإغلاق لا تسوّي مبكرًا — القفل أولًا
       status: contest.status === "open" ? "open" : "ready",

@@ -277,7 +277,7 @@ router.post(
     try {
       const parsed = createMeetingSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات غير صالحة" });
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "بيانات غير صالحة" });
       }
       const userId = (req.user as { id: string }).id;
       const meeting = await createMeeting(userId, parsed.data);
@@ -343,7 +343,7 @@ router.patch(
       if (!loaded) return;
       const parsed = updateMeetingSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات غير صالحة" });
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "بيانات غير صالحة" });
       }
       const result = await updateMeeting(loaded.meeting, loaded.userId, parsed.data);
       if ("error" in result) return res.status(result.code).json({ message: result.error });

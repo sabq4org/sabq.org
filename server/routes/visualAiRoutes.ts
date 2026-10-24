@@ -50,7 +50,7 @@ router.post("/analyze", isAuthenticated, async (req: Request, res: Response) => 
     if (!parseResult.success) {
       return res.status(400).json({ 
         error: "بيانات غير صالحة",
-        details: parseResult.error.errors.map(e => ({
+        details: parseResult.error.issues.map(e => ({
           field: e.path.join('.'),
           message: e.message
         }))

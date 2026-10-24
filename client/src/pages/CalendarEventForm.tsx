@@ -1,5 +1,5 @@
 import { useState, KeyboardEvent, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
@@ -77,7 +77,7 @@ export default function CalendarEventForm() {
   const existingReminders = Array.isArray(existingRemindersRaw) ? existingRemindersRaw : [];
 
   const form = useForm<EventFormValues>({
-    resolver: zodResolver(eventSchema),
+    resolver: zodResolver(eventSchema) as Resolver<EventFormValues>,
     defaultValues: {
       title: "",
       description: "",

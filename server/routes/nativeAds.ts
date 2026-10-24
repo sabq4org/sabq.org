@@ -15,6 +15,7 @@ import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { objectStorageClient } from "../objectStorage";
 import { setObjectAclPolicy } from "../objectAcl";
 import { paginationOrReject, parsePage, parseLimit } from "../utils/pagination";
+import { partialWithoutDefaults } from "@shared/zodPartial";
 
 const router = Router();
 
@@ -728,7 +729,7 @@ router.post("/submit", async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
         message: "بيانات غير صحيحة", 
-        errors: error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+        errors: error.issues.map(e => ({ field: e.path.join('.'), message: e.message }))
       });
     }
     console.error("[NativeAds] Error submitting self-serve ad:", error);
@@ -1039,7 +1040,7 @@ router.post("/", requireAuth, isAdminOrEditor, async (req: Request, res: Respons
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
         message: "بيانات غير صالحة", 
-        errors: error.errors 
+        errors: error.issues 
       });
     }
     console.error("[NativeAds] Error creating ad:", error);
@@ -1151,7 +1152,7 @@ router.patch("/my-ads/:id/budget", async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
         message: "بيانات غير صالحة", 
-        errors: error.errors 
+        errors: error.issues 
       });
     }
     console.error("[NativeAds] Error updating advertiser ad budget:", error);
@@ -1168,7 +1169,7 @@ router.patch("/:id", requireAuth, isAdminOrEditor, async (req: Request, res: Res
       return res.status(404).json({ message: "الإعلان غير موجود" });
     }
 
-    const updateSchema = insertNativeAdSchema.partial();
+    const updateSchema = partialWithoutDefaults(insertNativeAdSchema);
     const validatedData = updateSchema.parse(req.body);
     
     // Validate that dailyBudget doesn't exceed totalBudget
@@ -1274,7 +1275,7 @@ router.patch("/:id", requireAuth, isAdminOrEditor, async (req: Request, res: Res
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
         message: "بيانات غير صالحة", 
-        errors: error.errors 
+        errors: error.issues 
       });
     }
     console.error("[NativeAds] Error updating ad:", error);

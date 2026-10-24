@@ -110,6 +110,7 @@ import { chargePublishInTx, deductPublisherCreditSafely } from "./services/publi
 import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish, resolvePublisherForUser } from "./services/publisherPortalService";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
+import { partialWithoutDefaults } from "@shared/zodPartial";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { assertOpinionAuthorPipelineOpen, notifyOpinionArticleSubmittedForReview, opinionResubmitReviewPatch } from "./services/opinionWritersService";
 import {
@@ -927,7 +928,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     try {
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         return res.status(400).json({ message: firstError?.message || "البيانات غير صحيحة" });
       }
       const { email, password, firstName, lastName, role } = parsed.data;
@@ -1659,7 +1660,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!parsed.success) {
         return res.status(400).json({
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors
+          errors: parsed.error.issues
         });
       }
 
@@ -2682,7 +2683,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!parsed.success) {
         return res.status(400).json({
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors,
+          errors: parsed.error.issues,
         });
       }
 
@@ -2826,7 +2827,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!parsed.success) {
         return res.status(400).json({
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors,
+          errors: parsed.error.issues,
         });
       }
       
@@ -2897,7 +2898,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!parsed.success) {
         return res.status(400).json({
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors,
+          errors: parsed.error.issues,
         });
       }
 
@@ -4264,7 +4265,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -4326,11 +4327,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      const parsed = insertCategorySchema.partial().safeParse(updateData);
+      const parsed = partialWithoutDefaults(insertCategorySchema).safeParse(updateData);
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -6855,7 +6856,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.error("❌ [CREATE ROLE] Validation failed:", validationResult.error);
         return res.status(400).json({ 
           message: "بيانات غير صحيحة",
-          errors: validationResult.error.errors 
+          errors: validationResult.error.issues 
         });
       }
 
@@ -7028,7 +7029,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة", 
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -14691,7 +14692,7 @@ Respond in valid JSON format only:
         if (!parsed.success) {
           return res.status(400).json({ 
             message: "Invalid data", 
-            errors: parsed.error.errors 
+            errors: parsed.error.issues 
           });
         }
         
@@ -14774,7 +14775,7 @@ Respond in valid JSON format only:
         if (!parsed.success) {
           return res.status(400).json({ 
             message: "Invalid data", 
-            errors: parsed.error.errors 
+            errors: parsed.error.issues 
           });
         }
         
@@ -15982,7 +15983,7 @@ Respond in valid JSON format only:
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -16048,7 +16049,7 @@ Respond in valid JSON format only:
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -17146,7 +17147,7 @@ Respond in valid JSON format only:
     try {
       const parsed = insertSuspiciousWordSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.issues });
       }
 
       // Check if word already exists
@@ -17702,7 +17703,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        return res.status(400).json({ message: error.issues[0].message });
       }
       console.error("Error summarizing text:", error);
       res.status(500).json({ 
@@ -17725,7 +17726,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        return res.status(400).json({ message: error.issues[0].message });
       }
       console.error("Error generating social post:", error);
       res.status(500).json({ 
@@ -17744,7 +17745,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        return res.status(400).json({ message: error.issues[0].message });
       }
       console.error("Error suggesting image query:", error);
       res.status(500).json({ 
@@ -17767,7 +17768,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        return res.status(400).json({ message: error.issues[0].message });
       }
       console.error("Error translating content:", error);
       res.status(500).json({ 
@@ -17789,7 +17790,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        return res.status(400).json({ message: error.issues[0].message });
       }
       console.error("❌ [AI Tools] Fact check failed:", error);
       res.status(500).json({ 
@@ -17811,7 +17812,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
+        return res.status(400).json({ message: error.issues[0].message });
       }
       console.error("❌ [AI Tools] Trends analysis failed:", error);
       res.status(500).json({ 
@@ -19304,7 +19305,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "البيانات غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -19907,7 +19908,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid notification data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -20471,7 +20472,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة", 
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
       
@@ -20728,7 +20729,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة", 
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
       
@@ -20757,7 +20758,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة", 
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
       
@@ -20847,7 +20848,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const parsed = insertTopicSchema.safeParse(body);
       
       if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid topic data", errors: parsed.error.errors });
+        return res.status(400).json({ message: "Invalid topic data", errors: parsed.error.issues });
       }
       
       const topic = await storage.createTopic(parsed.data);
@@ -20885,7 +20886,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const parsed = updateTopicSchema.safeParse(body);
       
       if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid topic data", errors: parsed.error.errors });
+        return res.status(400).json({ message: "Invalid topic data", errors: parsed.error.issues });
       }
       
       const topic = await storage.updateTopic(req.params.id, parsed.data);
@@ -21931,7 +21932,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       // Handle Zod validation errors
       if (error instanceof z.ZodError) {
-        const firstError = error.errors[0];
+        const firstError = error.issues[0];
         return res.status(400).json({
           success: false,
           message: firstError.message,
@@ -22105,7 +22106,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       // Handle Zod validation errors
       if (error instanceof z.ZodError) {
-        const firstError = error.errors[0];
+        const firstError = error.issues[0];
         return res.status(400).json({
           success: false,
           message: firstError.message,
@@ -22310,7 +22311,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ 
           success: false,
           message: "بيانات الطلب غير صالحة",
-          errors: error.errors,
+          errors: error.issues,
         });
       }
 
@@ -23592,7 +23593,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(newCategory);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
       }
       console.error("[Smart Categories Admin] Error creating category:", error);
       res.status(500).json({ message: "فشل في إنشاء التصنيف" });
@@ -23607,7 +23608,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const { id } = req.params;
       
       // Validate with Zod schema (partial update allowed)
-      const validated = insertCategorySchema.partial().parse(req.body);
+      const validated = partialWithoutDefaults(insertCategorySchema).parse(req.body);
 
       // Remove id/timestamps from validated data
       delete (validated as any).id;
@@ -23629,7 +23630,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
       }
       console.error("[Smart Categories Admin] Error updating category:", error);
       res.status(500).json({ message: "فشل في تحديث التصنيف" });
@@ -26279,7 +26280,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const result = insertEntityTypeSchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: result.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: result.error.issues });
       }
 
       const entityType = await storage.createEntityType(result.data);
@@ -26323,7 +26324,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const result = insertSmartEntitySchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: result.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: result.error.issues });
       }
 
       const entity = await storage.createSmartEntity(result.data as any);
@@ -26412,7 +26413,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const result = insertSmartTermSchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: result.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: result.error.issues });
       }
 
       const term = await storage.createSmartTerm(result.data as any);
@@ -27168,7 +27169,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(newCategory[0]);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+        return res.status(400).json({ message: "Invalid data", errors: error.issues });
       }
       console.error("Error creating EN category:", error);
       res.status(500).json({ message: "Failed to create category" });
@@ -28114,7 +28115,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(newArticle);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+        return res.status(400).json({ message: "Invalid data", errors: error.issues });
       }
       console.error("Error creating EN article:", error);
       res.status(500).json({ message: "Failed to create article" });
@@ -28251,7 +28252,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json(newComment[0]);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+        return res.status(400).json({ message: "Invalid data", errors: error.issues });
       }
       console.error("Error creating EN comment:", error);
       res.status(500).json({ message: "Failed to create comment" });
@@ -29446,7 +29447,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -29510,7 +29511,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -29796,7 +29797,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -29880,7 +29881,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -30088,7 +30089,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "Invalid data",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -30498,7 +30499,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     } catch (error) {
       console.error("Error creating short link:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
       }
       res.status(500).json({ message: "فشل إنشاء الرابط القصير" });
     }
@@ -31117,7 +31118,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // Validation
       const eventSchema = z.object({
         eventType: z.enum(['view', 'share', 'download', 'export_pdf', 'export_docx'], {
-          errorMap: () => ({ message: 'نوع الحدث غير صالح' }),
+          error: 'نوع الحدث غير صالح',
         }),
         metadata: z.any().optional(),
       });
@@ -31127,7 +31128,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ 
           success: false,
           error: 'بيانات غير صالحة',
-          details: validation.error.errors 
+          details: validation.error.issues 
         });
       }
       
@@ -31229,7 +31230,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         topic: z.string().min(10).optional(),
         description: z.string().optional(),
         status: z.enum(['draft', 'completed', 'published', 'archived']).optional(),
-        categoryId: z.string().uuid().optional(),
+        categoryId: z.string().guid().optional(),
         keywords: z.array(z.string()).optional(),
       });
       
@@ -31238,7 +31239,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ 
           success: false,
           error: 'بيانات غير صالحة',
-          details: validation.error.errors 
+          details: validation.error.issues 
         });
       }
       
@@ -32474,7 +32475,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(result);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error fetching iFox articles:", error);
         res.status(500).json({ message: "فشل في جلب مقالات آي فوكس" });
@@ -32594,7 +32595,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error bulk deleting iFox articles:", error);
         res.status(500).json({ message: "فشل في حذف المقالات" });
@@ -32690,7 +32691,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(article);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error creating iFox article:", error);
         res.status(500).json({ message: "فشل في إنشاء المقال" });
@@ -32769,7 +32770,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(article);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error updating iFox article:", error);
         res.status(500).json({ message: "فشل في تحديث المقال" });
@@ -32816,7 +32817,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error bulk archiving iFox articles:", error);
         res.status(500).json({ message: "فشل في أرشفة المقالات" });
@@ -32953,7 +32954,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json({ settings });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error fetching iFox category settings:", error);
         res.status(500).json({ message: "فشل في جلب إعدادات الفئات" });
@@ -32975,7 +32976,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           aiEnhancement: z.boolean().optional(),
           seoOptimization: z.boolean().optional(),
           socialSharing: z.boolean().optional(),
-          settings: z.record(z.any()).optional(),
+          settings: z.record(z.string(), z.any()).optional(),
         });
 
         const data = bodySchema.parse(req.body);
@@ -32998,7 +32999,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error updating iFox category settings:", error);
         res.status(500).json({ message: "فشل في حفظ إعدادات الفئة" });
@@ -33038,7 +33039,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(result);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error fetching iFox media:", error);
         res.status(500).json({ message: "فشل في جلب الوسائط" });
@@ -33106,7 +33107,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error uploading iFox media:", error);
         res.status(500).json({ message: "فشل في رفع الملف" });
@@ -33174,7 +33175,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json({ schedules });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error fetching iFox schedules:", error);
         res.status(500).json({ message: "فشل في جلب الجدولة" });
@@ -33222,7 +33223,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error scheduling iFox article:", error);
         res.status(500).json({ message: "فشل في جدولة المقال" });
@@ -33269,7 +33270,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error updating iFox schedule:", error);
         res.status(500).json({ message: "فشل في تحديث الجدولة" });
@@ -33372,7 +33373,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json({ analytics });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error fetching iFox analytics:", error);
         res.status(500).json({ message: "فشل في جلب التحليلات" });
@@ -33405,7 +33406,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(summary);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error fetching iFox analytics summary:", error);
         res.status(500).json({ message: "فشل في جلب ملخص التحليلات" });
@@ -33427,7 +33428,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             metric: z.enum(['views', 'clicks', 'shares', 'comments', 'reactions']),
             value: z.number(),
             date: z.string().datetime(),
-            metadata: z.record(z.any()).optional(),
+            metadata: z.record(z.string(), z.any()).optional(),
           })),
         });
 
@@ -33448,7 +33449,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error recording iFox analytics:", error);
         res.status(500).json({ message: "فشل في تسجيل الأحداث التحليلية" });
@@ -33488,7 +33489,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(result);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error generating iFox title:", error);
         res.status(500).json({ message: "فشل في توليد العنوان" });
@@ -33525,7 +33526,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json({ suggestions });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error generating iFox suggestions:", error);
         res.status(500).json({ message: "فشل في توليد الاقتراحات" });
@@ -33562,7 +33563,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         res.json(analysis);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error analyzing iFox content:", error);
         res.status(500).json({ message: "فشل في تحليل المحتوى" });
@@ -33782,7 +33783,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.json({ message: "تم تحديث حالة الفئة بنجاح", status });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error toggling iFox category status:", error);
         res.status(500).json({ message: "فشل في تحديث حالة الفئة" });
@@ -33866,7 +33867,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.errors });
+          return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues });
         }
         console.error("Error updating iFox settings:", error);
         res.status(500).json({ message: "فشل في حفظ الإعدادات" });
@@ -35299,7 +35300,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       const parsed = updateSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.issues });
       }
       const settings = await updateEditorAlertSettings(parsed.data);
       await (logActivity as any)(req, {
@@ -35415,7 +35416,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         createdBy: req.user.id,
       });
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.issues });
       }
       const topic = await storage.createBreakingTickerTopic(parsed.data);
       invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
@@ -35508,7 +35509,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const parsed = insertBreakingTickerHeadlineSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.issues });
       }
       const headline = await storage.createBreakingTickerHeadline(parsed.data);
       invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });

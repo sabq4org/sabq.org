@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -96,7 +96,7 @@ const editUserSchema = z.object({
   bio: z.string().optional().or(z.literal("")),
   titleAr: z.string().optional().or(z.literal("")),
   title: z.string().optional().or(z.literal("")),
-  roleIds: z.array(z.string().uuid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
+  roleIds: z.array(z.string().guid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
   emailVerified: z.boolean().default(false),
   phoneVerified: z.boolean().default(false),
   hasPressCard: z.boolean().optional(),
@@ -308,7 +308,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   };
 
   const form = useForm<FormData>({
-    resolver: zodResolver(editUserSchema),
+    resolver: zodResolver(editUserSchema) as Resolver<FormData>,
     defaultValues: {
       email: "",
       firstName: "",

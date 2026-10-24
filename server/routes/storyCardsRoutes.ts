@@ -73,7 +73,7 @@ export const generateStoryCards = [
       if (!validation.success) {
         return res.status(400).json({
           error: "Invalid request data",
-          details: validation.error.errors,
+          details: validation.error.issues,
         });
       }
 
@@ -222,7 +222,7 @@ export const updateStoryCard = [
       if (!validation.success) {
         return res.status(400).json({
           error: "Invalid update data",
-          details: validation.error.errors,
+          details: validation.error.issues,
         });
       }
 

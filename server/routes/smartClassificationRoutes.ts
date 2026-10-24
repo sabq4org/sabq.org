@@ -74,7 +74,7 @@ router.post('/classify', isAuthenticated, isEditorOrAdmin, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'بيانات غير صحيحة',
-        errors: error.errors,
+        errors: error.issues,
       });
     }
     
@@ -165,7 +165,7 @@ router.post('/newsletter-subtitle', isAuthenticated, isEditorOrAdmin, async (req
       return res.status(400).json({
         success: false,
         message: 'بيانات غير صحيحة',
-        errors: error.errors,
+        errors: error.issues,
       });
     }
     

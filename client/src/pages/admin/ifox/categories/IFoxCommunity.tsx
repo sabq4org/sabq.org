@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IFoxCategoryTemplate } from "@/components/admin/ifox/IFoxCategoryTemplate";
@@ -160,7 +160,7 @@ export default function IFoxCommunity() {
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
 
   const topicForm = useForm<TopicFormData>({
-    resolver: zodResolver(topicSchema),
+    resolver: zodResolver(topicSchema) as Resolver<TopicFormData>,
     defaultValues: {
       title: "",
       description: "",
@@ -172,7 +172,7 @@ export default function IFoxCommunity() {
   });
 
   const expertForm = useForm<ExpertFormData>({
-    resolver: zodResolver(expertSchema),
+    resolver: zodResolver(expertSchema) as Resolver<ExpertFormData>,
     defaultValues: {
       name: "",
       title: "",

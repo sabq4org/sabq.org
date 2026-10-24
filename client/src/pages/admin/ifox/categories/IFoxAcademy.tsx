@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IFoxCategoryTemplate } from "@/components/admin/ifox/IFoxCategoryTemplate";
@@ -153,7 +153,7 @@ export default function IFoxAcademy() {
   const [requirementInput, setRequirementInput] = useState("");
 
   const courseForm = useForm<CourseFormData>({
-    resolver: zodResolver(courseSchema),
+    resolver: zodResolver(courseSchema) as Resolver<CourseFormData>,
     defaultValues: {
       title: "",
       description: "",
@@ -168,7 +168,7 @@ export default function IFoxAcademy() {
   });
 
   const lessonForm = useForm<LessonFormData>({
-    resolver: zodResolver(lessonSchema),
+    resolver: zodResolver(lessonSchema) as Resolver<LessonFormData>,
     defaultValues: {
       title: "",
       description: "",

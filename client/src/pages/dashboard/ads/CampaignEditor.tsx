@@ -44,12 +44,12 @@ import type { Campaign } from "@shared/schema";
 const formSchema = z.object({
   name: z.string().min(3, "يجب أن يكون الاسم 3 أحرف على الأقل"),
   objective: z.enum(["brand_awareness", "traffic", "conversions", "engagement"], {
-    required_error: "يرجى اختيار هدف الحملة",
+    error: (iss) => (iss.input === undefined ? "يرجى اختيار هدف الحملة" : undefined),
   }),
   dailyBudget: z.number().min(1, "عدد الظهورات اليومية يجب أن يكون أكبر من صفر"),
   totalBudget: z.number().min(1, "إجمالي عدد الظهورات يجب أن يكون أكبر من صفر"),
   startDate: z.date({
-    required_error: "تاريخ البداية مطلوب",
+    error: (iss) => (iss.input === undefined ? "تاريخ البداية مطلوب" : undefined),
   }),
   endDate: z.date().optional(),
 }).refine(

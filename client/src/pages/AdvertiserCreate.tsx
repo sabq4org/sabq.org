@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiUrl } from "@/lib/queryClient";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -69,7 +69,7 @@ const adContentSchema = z.object({
 
 const targetingSchema = z.object({
   targetCategories: z.array(z.string()).optional(),
-  startDate: z.date({ required_error: "تاريخ البداية مطلوب" }),
+  startDate: z.date({ error: (iss) => (iss.input === undefined ? "تاريخ البداية مطلوب" : undefined) }),
   endDate: z.date().optional().nullable(),
   dailyBudgetEnabled: z.boolean().optional().default(false),
   dailyBudget: z.coerce.number().min(10, "الحد الأدنى 10 ريال").optional(),
@@ -109,7 +109,7 @@ export default function AdvertiserCreate() {
   }, []);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(fullSchema),
+    resolver: zodResolver(fullSchema) as Resolver<FormValues>,
     defaultValues: {
       advertiserName: "",
       email: "",
@@ -149,13 +149,11 @@ export default function AdvertiserCreate() {
     mutationFn: async (values: FormValues) => {
       // Synchronous check to prevent duplicate submissions (useRef updates immediately)
       if (isSubmittingRef.current) {
-        console.log("[AdvertiserCreate] Prevented duplicate submission (ref check)");
         return { duplicate: true };
       }
       // Set flag immediately before async operation
       isSubmittingRef.current = true;
       
-      console.log("[AdvertiserCreate] Submitting ad...");
       return await apiRequest("/api/native-ads/submit", {
         method: "POST",
         body: JSON.stringify({
@@ -182,7 +180,6 @@ export default function AdvertiserCreate() {
       // Ignore if this was a prevented duplicate
       if (data?.duplicate) return;
       
-      console.log("[AdvertiserCreate] Submission successful");
       // Show success overlay on preview instead of immediately transitioning
       setShowSuccessOverlay(true);
     },
@@ -206,7 +203,7 @@ export default function AdvertiserCreate() {
     formData.append("file", file);
 
     try {
-      const response = await fetch("/api/native-ads/upload", {
+      const response = await fetch(apiUrl("/api/native-ads/upload"), {
         method: "POST",
         body: formData,
       });

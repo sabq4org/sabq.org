@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -282,7 +282,7 @@ export default function WorldDaysManagement() {
   const [quickTimeFilter, setQuickTimeFilter] = useState<"all" | "today" | "soon" | "month">("all");
 
   const form = useForm<WorldDayFormValues>({
-    resolver: zodResolver(worldDayFormSchema),
+    resolver: zodResolver(worldDayFormSchema) as Resolver<WorldDayFormValues>,
     defaultValues: {
       nameAr: "",
       nameEn: "",

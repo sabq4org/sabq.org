@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -112,7 +112,7 @@ export function MediaLibraryPicker({
   const [uploadStatus, setUploadStatus] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
 
   const form = useForm<UploadFormValues>({
-    resolver: zodResolver(uploadFormSchema),
+    resolver: zodResolver(uploadFormSchema) as Resolver<UploadFormValues>,
     defaultValues: {
       title: "",
       description: "",

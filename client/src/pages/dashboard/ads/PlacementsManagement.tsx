@@ -68,10 +68,10 @@ import {
   Video,
   Code
 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useParams, useLocation } from "wouter";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -158,10 +158,10 @@ const statusLabels: Record<Placement["status"], string> = {
 
 // Form schema
 const formSchema = z.object({
-  creativeId: z.string().uuid({ message: "يجب اختيار البنر" }),
-  inventorySlotId: z.string().uuid({ message: "يجب اختيار مكان العرض" }),
+  creativeId: z.string().guid({ message: "يجب اختيار البنر" }),
+  inventorySlotId: z.string().guid({ message: "يجب اختيار مكان العرض" }),
   priority: z.coerce.number().int().min(1, "الأولوية يجب أن تكون على الأقل 1").max(10, "الأولوية يجب ألا تتجاوز 10").default(5),
-  startDate: z.date({ required_error: "تاريخ البداية مطلوب" }),
+  startDate: z.date({ error: (iss) => (iss.input === undefined ? "تاريخ البداية مطلوب" : undefined) }),
   endDate: z.date().optional().nullable(),
   status: z.enum(["scheduled", "active", "paused"]).default("scheduled"),
 }).refine((data) => !data.endDate || data.endDate > data.startDate, {
@@ -231,7 +231,7 @@ export default function PlacementsManagement() {
   }, []);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: {
       creativeId: "",
       inventorySlotId: "",
@@ -257,7 +257,7 @@ export default function PlacementsManagement() {
   const { data: adGroupsRaw } = useQuery<AdGroup[]>({
     queryKey: ["/api/ads/ad-groups", { campaignId }],
     queryFn: async () => {
-      const res = await fetch(`/api/ads/ad-groups?campaignId=${campaignId}`, {
+      const res = await fetch(apiUrl(`/api/ads/ad-groups?campaignId=${campaignId}`), {
         credentials: "include"
       });
       if (!res.ok) throw new Error("فشل في جلب المجموعات الإعلانية");
@@ -271,7 +271,7 @@ export default function PlacementsManagement() {
   const { data: creativesRaw, isLoading: isLoadingCreatives } = useQuery<Creative[]>({
     queryKey: ["/api/ads/campaigns", campaignId, "creatives"],
     queryFn: async () => {
-      const res = await fetch(`/api/ads/campaigns/${campaignId}/creatives`, {
+      const res = await fetch(apiUrl(`/api/ads/campaigns/${campaignId}/creatives`), {
         credentials: "include"
       });
       if (!res.ok) throw new Error("فشل في جلب البنرات");
@@ -285,7 +285,7 @@ export default function PlacementsManagement() {
   const { data: slotsRaw, isLoading: isLoadingSlots } = useQuery<InventorySlot[]>({
     queryKey: ["/api/ads/inventory-slots"],
     queryFn: async () => {
-      const res = await fetch("/api/ads/inventory-slots", {
+      const res = await fetch(apiUrl("/api/ads/inventory-slots"), {
         credentials: "include"
       });
       if (!res.ok) throw new Error("فشل في جلب أماكن العرض");

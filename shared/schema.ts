@@ -3,6 +3,7 @@ import { pgTable, text, varchar, timestamp, boolean, integer, bigint, jsonb, ind
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { whatsappCtaFieldSchema } from "./whatsappCta";
+import { partialWithoutDefaults } from "./zodPartial";
 export {
   whatsappCtaSchema,
   whatsappCtaFieldSchema,
@@ -123,10 +124,10 @@ export const themeAssetsSchema = z.object({
 }).optional();
 
 export const themeTokensSchema = z.object({
-  colors: z.record(z.string()).optional(),
-  fonts: z.record(z.string()).optional(),
-  spacing: z.record(z.string()).optional(),
-  borderRadius: z.record(z.string()).optional(),
+  colors: z.record(z.string(), z.string()).optional(),
+  fonts: z.record(z.string(), z.string()).optional(),
+  spacing: z.record(z.string(), z.string()).optional(),
+  borderRadius: z.record(z.string(), z.string()).optional(),
 }).optional();
 
 export const themeChangelogSchema = z.array(z.object({
@@ -137,7 +138,7 @@ export const themeChangelogSchema = z.array(z.object({
 })).optional();
 
 // Theme audit
-export const themeAuditChangesSchema = z.record(z.any()).optional();
+export const themeAuditChangesSchema = z.record(z.string(), z.any()).optional();
 
 export const themeAuditMetadataSchema = z.object({
   previousStatus: z.string().optional(),
@@ -173,7 +174,7 @@ export const rewardDataSchema = z.object({
   qrCode: z.string().optional(),
   expiryDate: z.string().optional(),
   instructions: z.string().optional(),
-  customFields: z.record(z.any()).optional(),
+  customFields: z.record(z.string(), z.any()).optional(),
 }).optional();
 
 export const rewardSnapshotSchema = z.object({
@@ -201,7 +202,7 @@ export const smartBlockFiltersSchema = z.object({
 }).optional();
 
 // Additional jsonb schemas for remaining fields
-export const rawMetadataSchema = z.record(z.any()).optional();
+export const rawMetadataSchema = z.record(z.string(), z.any()).optional();
 
 // User preferences arrays
 export const preferredCategoriesSchema = z.array(z.string()).optional();
@@ -294,7 +295,7 @@ export const topicContentBlockSchema = z.object({
   alt: z.string().optional(),
   caption: z.string().optional(),
   level: z.number().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 export const topicContentSchema = z.object({
@@ -425,7 +426,7 @@ export const deepAnalysisResultsSchema = z.object({
 }).optional();
 
 // Data story source schemas
-export const columnsSchema = z.record(z.object({
+export const columnsSchema = z.record(z.string(), z.object({
   name: z.string(),
   type: z.string(),
   sampleValues: z.array(z.any()).optional(),
@@ -492,7 +493,7 @@ export const systemSettingsValueSchema = z.union([
   z.number(),
   z.boolean(),
   z.array(z.any()),
-  z.record(z.any()),
+  z.record(z.string(), z.any()),
 ]);
 
 // Notification template content schema
@@ -537,7 +538,7 @@ export const sessionDataSchema = z.object({
 }).catchall(z.any());
 
 // Activity log old/new value schemas
-export const activityLogValueSchema = z.record(z.any()).optional();
+export const activityLogValueSchema = z.record(z.string(), z.any()).optional();
 
 // Internal announcement revision schemas
 export const revisionDiffSchema = z.any().optional();
@@ -547,7 +548,7 @@ export const revisionMetaSchema = z.object({
 }).optional();
 
 // Preview data schema
-export const previewDataSchema = z.array(z.record(z.any())).optional();
+export const previewDataSchema = z.array(z.record(z.string(), z.any())).optional();
 
 // AI analysis schemas
 export const aiAnalysisSchema = z.object({
@@ -3818,9 +3819,9 @@ export const adminUpdateUserSchema = z.object({
   phoneNumber: z.string().regex(/^[0-9+\-\s()]*$/, "رقم الهاتف غير صحيح").optional().or(z.literal("")),
   profileImageUrl: z.string().nullable().optional(),
   status: z.enum(["active", "pending", "suspended", "banned", "locked", "deleted"], {
-    errorMap: () => ({ message: "الحالة يجب أن تكون: نشط، معلق، محظور، أو مقفل" })
+    error: "الحالة يجب أن تكون: نشط، معلق، محظور، أو مقفل"
   }).optional(),
-  roleId: z.string().uuid("معرف الدور غير صحيح").optional(),
+  roleId: z.string().guid("معرف الدور غير صحيح").optional(),
   verificationBadge: z.enum(["none", "silver", "gold"]).optional(),
   emailVerified: z.boolean().optional(),
   phoneVerified: z.boolean().optional(),
@@ -3842,7 +3843,7 @@ export const adminCreateUserSchema = z.object({
   lastNameEn: z.union([z.string().min(2, "English last name must be at least 2 characters"), z.literal("")]).optional(),
   phoneNumber: z.string().regex(/^[0-9+\-\s()]*$/, "رقم الهاتف غير صحيح").optional().or(z.literal("")),
   profileImageUrl: z.string().nullable().optional(),
-  roleIds: z.array(z.string().uuid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
+  roleIds: z.array(z.string().guid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
   status: z.enum(["active", "pending", "suspended", "banned", "locked"]).default("active"),
   emailVerified: z.boolean().default(false),
   phoneVerified: z.boolean().default(false),
@@ -3850,7 +3851,7 @@ export const adminCreateUserSchema = z.object({
 
 // Admin schema for updating user roles (bulk update)
 export const adminUpdateUserRolesSchema = z.object({
-  roleIds: z.array(z.string().uuid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
+  roleIds: z.array(z.string().guid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
   reason: z.string().min(5, "يجب إدخال سبب التغيير (5 أحرف على الأقل)").optional(),
 });
 
@@ -4093,7 +4094,7 @@ export const insertUserPreferenceSchema = createInsertSchema(userPreferences).om
   blockedCategories: blockedCategoriesSchema,
   recommendationFrequency: z.enum(["daily", "weekly", "never"]).default("daily"),
 });
-export const updateUserPreferenceSchema = insertUserPreferenceSchema.partial();
+export const updateUserPreferenceSchema = partialWithoutDefaults(insertUserPreferenceSchema);
 
 // NEW: Social follows insert schema
 export const insertSocialFollowSchema = createInsertSchema(socialFollows).omit({
@@ -4161,10 +4162,10 @@ export const updateThemeSchema = z.object({
     ogImage: z.union([z.literal(''), z.null(), z.undefined(), z.string().url()]).optional(),
   }).optional().nullable(),
   tokens: z.object({
-    colors: z.record(z.string()).optional(),
-    fonts: z.record(z.string()).optional(),
-    spacing: z.record(z.string()).optional(),
-    borderRadius: z.record(z.string()).optional(),
+    colors: z.record(z.string(), z.string()).optional(),
+    fonts: z.record(z.string(), z.string()).optional(),
+    spacing: z.record(z.string(), z.string()).optional(),
+    borderRadius: z.record(z.string(), z.string()).optional(),
   }).optional(),
   applyTo: z.array(z.string()).optional(),
   approvedBy: z.union([z.string(), z.null()]).optional(),
@@ -4352,7 +4353,7 @@ export const insertTopicSchema = createInsertSchema(topics).omit({
   seoMeta: topicSeoMetaSchema,
 });
 
-export const updateTopicSchema = insertTopicSchema.partial().extend({
+export const updateTopicSchema = partialWithoutDefaults(insertTopicSchema).extend({
   updatedBy: z.string(),
 });
 
@@ -4587,7 +4588,7 @@ export const updateArticleSchema = z.object({
 export const adminArticleFiltersSchema = z.object({
   status: z.enum(["draft", "ready_to_publish", "scheduled", "published", "archived", "all"]).optional(),
   articleType: z.enum(["news", "opinion", "analysis", "column", "infographic", "weekly_photos", "all"]).optional(),
-  categoryId: z.string().uuid().optional(),
+  categoryId: z.string().guid().optional(),
   authorId: z.string().optional(),
   search: z.string().optional(),
   featured: z.boolean().optional(),
@@ -6086,7 +6087,7 @@ export const insertInternalAnnouncementSchema = createInsertSchema(internalAnnou
   endAt: z.coerce.date().nullable().optional(),
 });
 
-export const updateInternalAnnouncementSchema = insertInternalAnnouncementSchema.partial();
+export const updateInternalAnnouncementSchema = partialWithoutDefaults(insertInternalAnnouncementSchema);
 
 export const insertInternalAnnouncementVersionSchema = createInsertSchema(internalAnnouncementVersions).omit({
   id: true,
@@ -6232,7 +6233,7 @@ export const insertShortSchema = createInsertSchema(shorts).omit({
   publishType: z.enum(["instant", "scheduled"]).default("instant"),
 });
 
-export const updateShortSchema = insertShortSchema.partial();
+export const updateShortSchema = partialWithoutDefaults(insertShortSchema);
 
 export const insertShortAnalyticSchema = createInsertSchema(shortAnalytics).omit({
   id: true,
@@ -6609,7 +6610,7 @@ export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit
   tags: z.array(z.string()).default([]),
 });
 
-export const updateCalendarEventSchema = insertCalendarEventSchema.partial();
+export const updateCalendarEventSchema = partialWithoutDefaults(insertCalendarEventSchema);
 
 export const insertCalendarReminderSchema = createInsertSchema(calendarReminders).omit({
   id: true,
@@ -6634,7 +6635,7 @@ export const insertCalendarAssignmentSchema = createInsertSchema(calendarAssignm
   status: z.enum(["planned", "in_progress", "done", "cancelled"]).default("planned"),
 });
 
-export const updateCalendarAssignmentSchema = insertCalendarAssignmentSchema.partial().omit({
+export const updateCalendarAssignmentSchema = partialWithoutDefaults(insertCalendarAssignmentSchema).omit({
   eventId: true,
   userId: true,
   assignedBy: true,
@@ -8226,9 +8227,9 @@ export const insertAdCreativePlacementSchema = createInsertSchema(adCreativePlac
   createdAt: true,
   updatedAt: true,
 }).extend({
-  campaignId: z.string().uuid("معرف الحملة غير صحيح"),
-  creativeId: z.string().uuid("معرف البنر غير صحيح"),
-  inventorySlotId: z.string().uuid("معرف مكان العرض غير صحيح"),
+  campaignId: z.string().guid("معرف الحملة غير صحيح"),
+  creativeId: z.string().guid("معرف البنر غير صحيح"),
+  inventorySlotId: z.string().guid("معرف مكان العرض غير صحيح"),
   priority: z.coerce.number().int().min(1, "الأولوية يجب أن تكون 1 على الأقل").max(10, "الأولوية لا يمكن أن تزيد عن 10").default(5),
   startDate: z.coerce.date({ message: "تاريخ البداية مطلوب" }),
   endDate: z.coerce.date({ message: "تاريخ النهاية غير صحيح" }).optional().nullable(),
@@ -8938,7 +8939,7 @@ export const insertDeepAnalysisMetricsSchema = createInsertSchema(deepAnalysisMe
   createdAt: true,
   updatedAt: true,
 }).extend({
-  analysisId: z.string().uuid("يجب أن يكون معرف التحليل صالح"),
+  analysisId: z.string().guid("يجب أن يكون معرف التحليل صالح"),
 });
 
 // Deep analysis metrics select types
@@ -8950,10 +8951,10 @@ export const insertDeepAnalysisEventSchema = createInsertSchema(deepAnalysisEven
   id: true,
   occurredAt: true,
 }).extend({
-  analysisId: z.string().uuid("يجب أن يكون معرف التحليل صالح"),
-  userId: z.string().uuid("يجب أن يكون معرف المستخدم صالح").optional(),
+  analysisId: z.string().guid("يجب أن يكون معرف التحليل صالح"),
+  userId: z.string().guid("يجب أن يكون معرف المستخدم صالح").optional(),
   eventType: z.enum(["view", "share", "download", "export_pdf", "export_docx"], {
-    errorMap: () => ({ message: "نوع الحدث غير صالح" }),
+    error: "نوع الحدث غير صالح",
   }),
 });
 
@@ -9179,7 +9180,7 @@ export const insertSubtaskSchema = createInsertSchema(subtasks).omit({
   completedById: true,
   displayOrder: true,
 }).extend({
-  taskId: z.string().uuid("معرف المهمة غير صالح"),
+  taskId: z.string().guid("معرف المهمة غير صالح"),
   title: z.string().min(1, "العنوان مطلوب"),
   description: z.string().optional(),
 });
@@ -9189,8 +9190,8 @@ export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  taskId: z.string().uuid("معرف المهمة غير صالح"),
-  userId: z.string().uuid("معرف المستخدم غير صالح"),
+  taskId: z.string().guid("معرف المهمة غير صالح"),
+  userId: z.string().guid("معرف المستخدم غير صالح"),
   content: z.string().min(1, "التعليق مطلوب"),
 });
 
@@ -9198,8 +9199,8 @@ export const insertTaskAttachmentSchema = createInsertSchema(taskAttachments).om
   id: true,
   createdAt: true,
 }).extend({
-  taskId: z.string().uuid("معرف المهمة غير صالح"),
-  userId: z.string().uuid("معرف المستخدم غير صالح"),
+  taskId: z.string().guid("معرف المهمة غير صالح"),
+  userId: z.string().guid("معرف المستخدم غير صالح"),
   fileName: z.string().min(1, "اسم الملف مطلوب"),
   fileUrl: z.string().url("رابط الملف غير صالح"),
   fileSize: z.number().int().positive().optional(),
@@ -10821,7 +10822,7 @@ export type InsertStoryCard = z.infer<typeof insertStoryCardSchema>;
 // Schema for image analysis API requests
 export const visualAiAnalyzeRequestSchema = z.object({
   imageUrl: z.string().url("يجب أن يكون رابط صورة صالح"),
-  articleId: z.string().uuid().optional(),
+  articleId: z.string().guid().optional(),
   articleTitle: z.string().max(500).optional(),
   articleContent: z.string().max(50000).optional(),
   checkQuality: z.boolean().default(true),
@@ -10835,7 +10836,7 @@ export type VisualAiAnalyzeRequest = z.infer<typeof visualAiAnalyzeRequestSchema
 export const visualAiGenerateImageRequestSchema = z.object({
   articleTitle: z.string().min(5, "عنوان المقال قصير جداً").max(500),
   articleContent: z.string().min(50, "محتوى المقال قصير جداً").max(50000).optional(),
-  articleId: z.string().uuid().optional(),
+  articleId: z.string().guid().optional(),
   style: z.enum(["photorealistic", "illustration", "infographic", "abstract", "news"]).default("photorealistic"),
   aspectRatio: z.enum(["16:9", "4:3", "1:1", "9:16"]).default("16:9"),
   includeText: z.boolean().default(false),
@@ -10845,7 +10846,7 @@ export type VisualAiGenerateImageRequest = z.infer<typeof visualAiGenerateImageR
 
 // Schema for social media cards generation
 export const visualAiSocialCardsRequestSchema = z.object({
-  articleId: z.string().uuid("معرف المقال غير صالح"),
+  articleId: z.string().guid("معرف المقال غير صالح"),
   articleTitle: z.string().min(5).max(500),
   articleSummary: z.string().max(1000).optional(),
   articleImage: z.string().url().optional(),
@@ -10857,16 +10858,16 @@ export type VisualAiSocialCardsRequest = z.infer<typeof visualAiSocialCardsReque
 
 // Schema for card performance tracking
 export const visualAiTrackPerformanceRequestSchema = z.object({
-  cardId: z.string().uuid("معرف البطاقة غير صالح"),
+  cardId: z.string().guid("معرف البطاقة غير صالح"),
   platform: z.enum(["twitter", "instagram", "facebook", "whatsapp", "linkedin"]),
   eventType: z.enum(["view", "click", "share", "download"]),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 export type VisualAiTrackPerformanceRequest = z.infer<typeof visualAiTrackPerformanceRequestSchema>;
 
 // Schema for visual recommendations decision
 export const visualAiRecommendationDecisionSchema = z.object({
-  recommendationId: z.string().uuid(),
+  recommendationId: z.string().guid(),
   action: z.enum(["apply", "dismiss", "defer"]),
   feedback: z.string().max(500).optional(),
 });
@@ -14473,7 +14474,7 @@ export const insertOpinionTicketSchema = z.object({
 
 export const insertOpinionTicketMessageSchema = z.object({
   message: z.string().trim().min(1, "الرسالة مطلوبة").max(10000, "النص طويل جداً"),
-  parentMessageId: z.string().uuid().optional().nullable(),
+  parentMessageId: z.string().guid().optional().nullable(),
 });
 
 export const updateOpinionTicketStatusSchema = z.object({

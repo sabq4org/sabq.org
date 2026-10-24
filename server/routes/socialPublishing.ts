@@ -271,7 +271,7 @@ router.post(
       res.json(suggestion);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0]?.message ?? "طلب غير صالح" });
+        return res.status(400).json({ message: error.issues[0]?.message ?? "طلب غير صالح" });
       }
       handleError(res, error, "تعذر توليد الاقتراح — يمكنك كتابة النص يدوياً");
     }
@@ -325,7 +325,7 @@ router.post(
       res.status(201).json(post);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0]?.message ?? "طلب غير صالح" });
+        return res.status(400).json({ message: error.issues[0]?.message ?? "طلب غير صالح" });
       }
       handleError(res, error, "تعذر إنشاء المسودة");
     }
@@ -399,7 +399,7 @@ router.patch(
       res.json(post);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0]?.message ?? "طلب غير صالح" });
+        return res.status(400).json({ message: error.issues[0]?.message ?? "طلب غير صالح" });
       }
       handleError(res, error, "تعذر تعديل المنشور");
     }

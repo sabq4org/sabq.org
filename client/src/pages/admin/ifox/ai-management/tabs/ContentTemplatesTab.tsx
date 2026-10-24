@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { FileText, Plus, Edit, Trash2, Loader2, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { IfoxContentTemplate } from "@shared/schema";
@@ -286,13 +286,13 @@ function TemplateDialog({ open, onClose, template, onSubmit, isPending }: Templa
   });
 
   const form = useForm({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<z.infer<typeof formSchema>>,
     defaultValues: {
       name: template?.name || "",
       description: template?.description || "",
-      templateType: template?.templateType || "breaking_news",
+      templateType: (template?.templateType || "breaking_news") as z.infer<typeof formSchema>["templateType"],
       promptTemplate: template?.promptTemplate || "",
-      language: template?.language || "ar",
+      language: (template?.language || "ar") as z.infer<typeof formSchema>["language"],
       isActive: template?.isActive ?? true,
     },
   });

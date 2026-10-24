@@ -56,7 +56,7 @@ const issueSchema = z.object({
   letterType: z.enum(OFFICIAL_LETTER_TYPES),
   recipientEntity: z.string().trim().max(200).optional().nullable(),
   purposeNote: z.string().trim().max(600).optional().nullable(),
-  ticketId: z.string().uuid().optional().nullable(),
+  ticketId: z.string().guid().optional().nullable(),
 });
 
 const requestSchema = z.object({
@@ -151,7 +151,7 @@ router.post("/api/official-letters/requests", async (req: Request, res: Response
   try {
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
     }
     const userId = currentUserId(req)!;
     const result = await requestSelfLetter({
@@ -238,7 +238,7 @@ router.post(
     try {
       const parsed = issueSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
       }
       const actorId = currentUserId(req)!;
       const letter = await issueLetter({

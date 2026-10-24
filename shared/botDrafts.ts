@@ -224,7 +224,7 @@ export const botDraftUpdateSchema = z
  */
 export const botDraftPublishSchema = z
   .object({
-    operationId: z.string().uuid().optional(),
+    operationId: z.string().guid().optional(),
     sensitiveOverride: z.boolean().optional(),
     overrideReason: z.string().trim().max(500).optional(),
   })

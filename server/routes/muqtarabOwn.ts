@@ -250,7 +250,7 @@ router.post("/api/muqtarab/my-angle/topics", requireAuth, async (req: any, res) 
       createdBy: req.user.id,
     });
     if (!parsed.success) {
-      return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.errors });
+      return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.issues });
     }
 
     const topic = await storage.createTopic(parsed.data);
@@ -282,7 +282,7 @@ router.patch("/api/muqtarab/my-angle/topics/:id", requireAuth, async (req: any, 
 
     const parsed = updateTopicSchema.safeParse({ ...whitelist, updatedBy: req.user.id });
     if (!parsed.success) {
-      return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.errors });
+      return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.issues });
     }
 
     const updated = await storage.updateTopic(req.params.id, parsed.data);

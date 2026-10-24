@@ -129,7 +129,7 @@ function safeParseAiJson<T>(
     return validated;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error(`❌ [${providerName}] Zod validation error:`, error.errors);
+      console.error(`❌ [${providerName}] Zod validation error:`, error.issues);
     } else {
       console.error(`❌ [${providerName}] JSON parse error:`, error);
     }

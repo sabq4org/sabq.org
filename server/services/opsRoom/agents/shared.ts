@@ -220,7 +220,7 @@ export async function callModelJson<T extends z.ZodTypeAny>(
   const raw = extractJson(res.content);
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(`مخرج النموذج لا يطابق العقد: ${parsed.error.errors[0]?.path.join(".")} ${parsed.error.errors[0]?.message}`);
+    throw new Error(`مخرج النموذج لا يطابق العقد: ${parsed.error.issues[0]?.path.join(".")} ${parsed.error.issues[0]?.message}`);
   }
   return { data: parsed.data, modelId: res.modelId, latencyMs: res.latencyMs, costUsd: res.estimatedCostUsd };
 }

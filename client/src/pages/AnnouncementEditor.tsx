@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation, useParams } from "wouter";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -91,7 +91,7 @@ export default function AnnouncementEditor() {
   const availableRoles = Array.isArray(rolesRaw) ? rolesRaw : [];
 
   const form = useForm<AnnouncementFormData>({
-    resolver: zodResolver(announcementSchema),
+    resolver: zodResolver(announcementSchema) as Resolver<AnnouncementFormData>,
     defaultValues: {
       title: "",
       message: "",

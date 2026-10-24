@@ -15,7 +15,7 @@ router.get(`${prefix}/jobs`, async (req, res) => {
 });
 router.post(`${prefix}/jobs`, async (req, res) => {
   const parsed = researchRequestSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "راجع موضوع البحث." });
+  if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "راجع موضوع البحث." });
   try { res.status(202).json(await createResearchJob((req.user as { id: string }).id, parsed.data)); }
   catch (error) {
     const safe = error instanceof ResearchError ? error : new ResearchError(503, "unavailable", "تعذر بدء البحث. حاول مجددًا.");
@@ -23,7 +23,7 @@ router.post(`${prefix}/jobs`, async (req, res) => {
   }
 });
 router.get(`${prefix}/jobs/:id`, async (req, res) => {
-  if (!z.string().uuid().safeParse(req.params.id).success) return res.status(400).json({ message: "معرّف غير صالح." });
+  if (!z.string().guid().safeParse(req.params.id).success) return res.status(400).json({ message: "معرّف غير صالح." });
   try {
     const job = await getResearchJob((req.user as { id: string }).id, req.params.id);
     if (!job) return res.status(404).json({ message: "المهمة غير موجودة." });
@@ -31,7 +31,7 @@ router.get(`${prefix}/jobs/:id`, async (req, res) => {
   } catch { res.status(503).json({ message: "تعذر تحديث حالة البحث. حاول مجددًا." }); }
 });
 router.post(`${prefix}/jobs/:id/cancel`, async (req, res) => {
-  if (!z.string().uuid().safeParse(req.params.id).success) return res.status(400).json({ message: "معرّف غير صالح." });
+  if (!z.string().guid().safeParse(req.params.id).success) return res.status(400).json({ message: "معرّف غير صالح." });
   try {
     const job = await requestResearchCancellation((req.user as { id: string }).id, req.params.id);
     if (!job) return res.status(404).json({ message: "المهمة غير موجودة." });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
@@ -214,7 +214,7 @@ export default function DashboardProfile() {
   });
 
   const form = useForm<UpdateProfileFormData>({
-    resolver: zodResolver(updateProfileSchema),
+    resolver: zodResolver(updateProfileSchema) as Resolver<UpdateProfileFormData>,
     values: {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",

@@ -26,7 +26,7 @@ router.post(
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({
-          message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة",
+          message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة",
         });
       }
       const reply = await polishProfessionalReply(parsed.data);

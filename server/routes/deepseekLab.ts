@@ -79,7 +79,7 @@ router.post("/api/deepseek-lab/run", ...guard, async (req, res) => {
   const parsed = runBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة",
+      message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة",
     });
   }
   if (!isDeepSeekConfigured()) {

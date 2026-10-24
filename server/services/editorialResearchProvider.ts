@@ -5,7 +5,7 @@ export class ResearchError extends Error {
   constructor(public status: number, public code: string, message: string, public diagnostics?: Record<string, number>) { super(message); }
 }
 export const usageSchema = z.object({ input_tokens: z.number().nonnegative(), output_tokens: z.number().nonnegative(), total_tokens: z.number().nonnegative(), input_tokens_details: z.object({ cached_tokens: z.number().nonnegative() }).optional() });
-const sessionSchema = z.object({ id: z.string(), status: z.enum(["idle", "in_progress", "requires_action", "failed"]), created_at: z.number(), metadata: z.record(z.string()).default({}), usage: usageSchema.nullish() });
+const sessionSchema = z.object({ id: z.string(), status: z.enum(["idle", "in_progress", "requires_action", "failed"]), created_at: z.number(), metadata: z.record(z.string(), z.string()).default({}), usage: usageSchema.nullish() });
 export type AgentSession = z.infer<typeof sessionSchema>;
 const turnSchema = z.object({ id: z.string(), status: z.enum(["queued", "in_progress", "waiting", "completed", "failed", "cancelled"]), subagent_id: z.string().nullable(), usage: usageSchema.nullish() });
 const itemSchema = z.object({ type: z.string(), turn_id: z.string().optional(), status: z.string().optional(), role: z.string().optional(), phase: z.string().nullable().optional(), content: z.array(z.object({ type: z.string(), text: z.string().optional() })).optional(), action: z.object({ type: z.string(), url: z.string().nullable().optional() }).nullable().optional() });
@@ -99,7 +99,7 @@ export function extractResearch(items: AgentItem[], turnId: string): ResearchBun
   const text = message?.content?.filter(c => c.type === "output_text").map(c => c.text ?? "").join("") ?? "";
   if (!text || text.length > 30000) throw new ResearchError(502, "missing_output", "لم تصل نتيجة بحث مكتملة.");
   const candidate = JSON.parse(text);
-  if (researchBundleSchema.extend({ sources: researchBundleSchema.shape.sources.min(0).max(0) }).safeParse(candidate).success) {
+  if (researchBundleSchema.extend({ sources: z.array(z.unknown()).max(0) }).safeParse(candidate).success) {
     throw new ResearchError(502, "no_readable_sources", "تعذر قراءة نصوص المصادر المتاحة لهذا الموضوع. جرّب إضافة رابط مصدر يمكن فتحه إلى موضوع البحث؛ لم يُنشأ تقرير من مقتطفات البحث وحدها.");
   }
   const parsed = researchBundleSchema.safeParse(candidate);

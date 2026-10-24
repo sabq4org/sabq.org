@@ -387,7 +387,7 @@ const addCartItemSchema = z.object({
   itemName: z.string().min(1, "اسم العنصر مطلوب"),
   quantity: z.number().int().min(1, "الكمية يجب أن تكون 1 على الأقل").default(1),
   priceHalalas: z.number().int().min(0, "السعر غير صالح"),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 router.post("/cart/items", storeAuthMiddleware, async (req: Request, res: Response) => {
