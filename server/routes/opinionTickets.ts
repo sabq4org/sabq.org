@@ -12,7 +12,8 @@
  *
  * Access:
  *   - Contributors (opinion_author, angle_writer, reporter): own tickets only.
- *   - Admins (SUPERUSER_ROLE_NAMES, or editor): all tickets + إرسال رسالة صادرة لزميل.
+ *   - Admins (SUPERUSER_ROLE_NAMES, or editor — via isOpinionDeskViewer): all tickets + إرسال رسالة صادرة لزميل.
+ *     صف user_roles إداري لحساب users.role فيه قارئ لا يُحتسب.
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
@@ -29,16 +30,14 @@ import {
   updateOpinionTicketStatusSchema,
   opinionTicketStatuses,
 } from "@shared/schema";
-import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
-import { countUnansweredTickets, shouldNotifyDeskOfTicketMessage } from "../services/opinionTicketNotice";
+import {
+  countUnansweredTickets,
+  isOpinionDeskViewer,
+  shouldNotifyDeskOfTicketMessage,
+} from "../services/opinionTicketNotice";
 import { notifyDeskOfWriterInquiry } from "../services/opinionTicketNotifications";
 
 const router = Router();
-
-const ADMIN_ROLE_NAMES = new Set<string>([
-  ...SUPERUSER_ROLE_NAMES,
-  "editor",
-]);
 
 /** من يستطيع فتح استفسار والرد عليه (نفس الصندوق). */
 const CONTRIBUTOR_ROLE_NAMES = new Set(["opinion_author", "angle_writer", "reporter"]);
@@ -82,8 +81,8 @@ async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isContribut
 
   const all = await collectUserRoleNames(userId, req.user?.role);
 
-  let isAdmin = false;
-  for (const r of all) if (ADMIN_ROLE_NAMES.has(r)) { isAdmin = true; break; }
+  // نفس قاعدة مستلمي الإشعار: صف user_roles قديم لحساب يظهر «قارئ» لا يفتح كل التذاكر.
+  const isAdmin = isOpinionDeskViewer(req.user?.role, [...all]);
   let isContributor = false;
   for (const r of all) if (CONTRIBUTOR_ROLE_NAMES.has(r)) { isContributor = true; break; }
   return { isAdmin, isContributor };

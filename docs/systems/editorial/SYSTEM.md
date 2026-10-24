@@ -320,7 +320,7 @@
 
 ## استفسارات الكتّاب — إشعار هيئة التحرير — 2026-10-15
 
-- `POST /api/opinion-tickets` و`POST /api/opinion-tickets/:id/messages` عند رسالة المساهم (وليس رسالة الإدارة) ينشئان إشعاراً داخل الصندوق `notifications_inbox` لكل حساب نشط بدور أدمن أو محرر (`OpinionTicketInquiry`، الرابط `/dashboard/opinion-tickets/:id`)، ويرسلان بريداً عبر `sendEmailNotification` إن وُجد عنوان. فشل الإشعار لا يمنع حفظ التذكرة.
+- `POST /api/opinion-tickets` و`POST /api/opinion-tickets/:id/messages` عند رسالة المساهم (وليس رسالة الإدارة) ينشئان إشعاراً داخل الصندوق `notifications_inbox` لكل حساب نشط بدور مسؤول/مدير النظام فقط (`SUPERUSER_ROLE_NAMES`، لا المحرر؛ `isOpinionTicketNotifyRecipient`). صف `user_roles` إداري لا يُحتسب إذا كان `users.role` قارئًا (صف قديم بعد تخفيض الدور)، والقاعدة نفسها تحكم من يفتح كل التذاكر (`isOpinionDeskViewer`: المسؤول والمحرر) (`OpinionTicketInquiry`، الرابط `/dashboard/opinion-tickets/:id`)، ويرسلان بريداً عبر `sendEmailNotification` إن وُجد عنوان. فشل الإشعار لا يمنع حفظ التذكرة.
 - `GET /api/opinion-tickets/unread-count` يضيف `unansweredCount` لعدد التذاكر `open`. لوحة النبض وقائمة الاستفسارات تُظهران البلا رد في شريط بارز وتقدّمانها في الترتيب.
 
 ## تطوير قسم مقالات الرأي وتجربة القارئ (`/opinion` و `/opinion/:slug`) — 2026-10-14
