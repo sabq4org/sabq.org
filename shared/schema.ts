@@ -5141,9 +5141,10 @@ export function getUserEffectiveStatus(user: User): UserStatus {
     // Temporary ban expired - continue checking other statuses
   }
   
-  // Priority 3: Suspended (temporary)
+  // Priority 3: Suspended (temporary, or indefinite when suspendedUntil is null —
+  // storage.suspendUser stores null for a suspension without a duration)
   if (user.status === "suspended") {
-    if (user.suspendedUntil && user.suspendedUntil > now) {
+    if (!user.suspendedUntil || user.suspendedUntil > now) {
       return "suspended";
     }
     // Suspension expired - continue checking other statuses
