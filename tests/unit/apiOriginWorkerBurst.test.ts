@@ -129,7 +129,7 @@ describe("api-origin-worker public API burst guard", () => {
     const ctx = { waitUntil: vi.fn() };
 
     await Promise.all([
-      apiOriginWorker.fetch(request("/api/themes/active?auth=1", { headers: { cookie: "sid=1" } }), env, ctx),
+      apiOriginWorker.fetch(request("/api/themes/active?auth=1", { headers: { cookie: "_ga=GA1.1; connect.sid=s%3Aabc" } }), env, ctx),
       apiOriginWorker.fetch(request("/api/themes/active?auth=1", { headers: { authorization: "Bearer 1" } }), env, ctx),
     ]);
     await Promise.all([
@@ -145,6 +145,23 @@ describe("api-origin-worker public API burst guard", () => {
     expect(fetchMock.mock.calls[2][1].method).toBe("POST");
     expect(fetchMock.mock.calls[2][1].body).toBeTruthy();
     expect(fetchMock.mock.calls[4][1].method).toBe("GET");
+  });
+
+  it("caches a read that carries only analytics or consent cookies", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(apiResponse({ theme: "light" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = { waitUntil: vi.fn() };
+
+    await Promise.all(
+      ["_ga=GA1.1.1; _gid=GA1.1.2", "cookie_consent=yes", "accessibility_session=abc"].map((cookie) =>
+        apiOriginWorker.fetch(request("/api/themes/active?cookies=analytics", { headers: { cookie } }), env, ctx),
+      ),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+    const forwarded = new Headers(fetchMock.mock.calls[0][1].headers);
+    expect(forwarded.has("cookie")).toBe(true);
   });
 
   it("isolates reflected CORS origins while accepting the worker's Vary header", async () => {

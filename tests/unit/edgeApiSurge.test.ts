@@ -62,13 +62,26 @@ describe("Pages auxiliary public API surge guard", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await Promise.all([
-      onRequest(requestContext("/api/themes/active", { cookie: "session=abc" })),
+      onRequest(requestContext("/api/themes/active", { cookie: "_ga=GA1.1; connect.sid=s%3Aabc" })),
       onRequest(requestContext("/api/themes/active", { authorization: "Bearer abc" })),
       onRequest(requestContext("/api/themes/active", { "x-session-id": "abc" })),
     ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it("shares one origin fetch for reads that carry only analytics cookies", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(apiResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const responses = await Promise.all([
+      onRequest(requestContext("/api/themes/active?cookies=analytics", { cookie: "_ga=GA1.1.1; _gid=GA1.1.2" })),
+      onRequest(requestContext("/api/themes/active?cookies=analytics", { cookie: "cookie_consent=yes" })),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(responses.every((res) => res.status === 200)).toBe(true);
   });
 
   it.each([
