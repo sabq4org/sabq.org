@@ -104,15 +104,15 @@ import {
 } from "../../server/services/deskBotAlerts";
 import { notifyDeskOfWriterInquiry } from "../../server/services/opinionTicketNotifications";
 
-const VALID_BOTPUB_TOKEN = "botpub_0123456789abcdefghijklmnopqrstuvwxyzABCD";
-const REVOKED_BOTPUB_TOKEN = "botpub_revoked_0123456789abcdefghijklmnopqrstuv";
-const EXPIRED_BOTPUB_TOKEN = "botpub_expired_0123456789abcdefghijklmnopqrstuv";
-const NON_BOTPUB_TOKEN = "legacy-shared-token-0123456789abcdef";
+const VALID_CREDENTIAL = "botpub_valid_personal_credential";
+const REVOKED_CREDENTIAL = "botpub_revoked_personal_credential";
+const EXPIRED_CREDENTIAL = "botpub_expired_personal_credential";
+const NON_BOTPUB_CREDENTIAL = "legacy-shared-credential-placeholder";
 
-const TOKEN_OWNER_PRINCIPAL = {
+const OWNER_PRINCIPAL = {
   userId: "desk-admin-user-1",
   tokenId: "tok-uuid-1",
-  tokenPrefix: "botpub_012345678",
+  tokenPrefix: "botpub_valid_per",
   label: "sohba-desk-assistant",
   email: "desk-owner@sabq.org",
   name: "مسؤول الديسك",
@@ -130,13 +130,13 @@ function call(
   method: string,
   path: string,
   body?: unknown,
-  token: string | null = VALID_BOTPUB_TOKEN,
+  credential: string | null = VALID_CREDENTIAL,
 ) {
   return fetch(`${base}${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -165,7 +165,7 @@ beforeEach(() => {
   }
 
   mocks.authenticatePublisherToken.mockImplementation(async (raw: string) => {
-    if (raw === VALID_BOTPUB_TOKEN) return TOKEN_OWNER_PRINCIPAL;
+    if (raw === VALID_CREDENTIAL) return OWNER_PRINCIPAL;
     return null;
   });
   mocks.canUserViewOpinionDesk.mockResolvedValue(true);
@@ -208,7 +208,7 @@ describe("Bot Desk API — Auth & RBAC", () => {
       "GET",
       "/api/internal/bot-desk/tickets",
       undefined,
-      NON_BOTPUB_TOKEN,
+      NON_BOTPUB_CREDENTIAL,
     );
     expect(nonBotpub.status).toBe(401);
     expect(mocks.authenticatePublisherToken).not.toHaveBeenCalled();
@@ -217,7 +217,7 @@ describe("Bot Desk API — Auth & RBAC", () => {
       "GET",
       "/api/internal/bot-desk/tickets",
       undefined,
-      REVOKED_BOTPUB_TOKEN,
+      REVOKED_CREDENTIAL,
     );
     expect(revoked.status).toBe(401);
     expect((await revoked.json()).code).toBe("unauthorized");
@@ -226,7 +226,7 @@ describe("Bot Desk API — Auth & RBAC", () => {
       "GET",
       "/api/internal/bot-desk/social/pending",
       undefined,
-      EXPIRED_BOTPUB_TOKEN,
+      EXPIRED_CREDENTIAL,
     );
     expect(expired.status).toBe(401);
     expect((await expired.json()).code).toBe("unauthorized");
@@ -315,7 +315,7 @@ describe("Bot Desk API — Tickets", () => {
       latestMessageExcerpt: "متى يُنشر مقالي الأسبوعي؟",
     });
     expect(mocks.listOpinionTickets).toHaveBeenCalledWith({
-      viewerId: TOKEN_OWNER_PRINCIPAL.userId,
+      viewerId: OWNER_PRINCIPAL.userId,
       isAdmin: true,
       status: "open",
       authorKind: "opinion_author",
@@ -369,7 +369,7 @@ describe("Bot Desk API — Tickets", () => {
       message: {
         id: "msg-reply-1",
         ticketId: "t-100",
-        senderId: TOKEN_OWNER_PRINCIPAL.userId,
+        senderId: OWNER_PRINCIPAL.userId,
         senderRole: "admin",
         message: "تمت جدولة مقالكم ليوم غد بإذن الله.",
         parentMessageId: null,
@@ -387,7 +387,7 @@ describe("Bot Desk API — Tickets", () => {
     expect(body.status).toBe("answered");
     expect(body.message).toMatchObject({
       id: "msg-reply-1",
-      senderId: TOKEN_OWNER_PRINCIPAL.userId,
+      senderId: OWNER_PRINCIPAL.userId,
       role: "admin",
       text: "تمت جدولة مقالكم ليوم غد بإذن الله.",
       created_at: "2026-10-24T16:00:00.000Z",
@@ -395,7 +395,7 @@ describe("Bot Desk API — Tickets", () => {
 
     expect(mocks.appendOpinionTicketMessage).toHaveBeenCalledWith({
       ticketId: "t-100",
-      senderId: TOKEN_OWNER_PRINCIPAL.userId,
+      senderId: OWNER_PRINCIPAL.userId,
       isAdmin: true,
       message: "تمت جدولة مقالكم ليوم غد بإذن الله.",
       parentMessageId: null,
@@ -405,7 +405,7 @@ describe("Bot Desk API — Tickets", () => {
     expect(mocks.logActivity).toHaveBeenCalledTimes(1);
     const auditCall = mocks.logActivity.mock.calls[0][0];
     expect(auditCall).toMatchObject({
-      userId: TOKEN_OWNER_PRINCIPAL.userId,
+      userId: OWNER_PRINCIPAL.userId,
       action: "ticket_reply",
       entityType: "opinion_ticket",
       entityId: "t-100",
@@ -413,12 +413,12 @@ describe("Bot Desk API — Tickets", () => {
       newValue: { status: "answered", messageId: "msg-reply-1" },
       metadata: expect.objectContaining({
         channel: "bot-desk-api",
-        tokenId: TOKEN_OWNER_PRINCIPAL.tokenId,
-        tokenPrefix: TOKEN_OWNER_PRINCIPAL.tokenPrefix,
-        tokenLabel: TOKEN_OWNER_PRINCIPAL.label,
+        tokenId: OWNER_PRINCIPAL.tokenId,
+        tokenPrefix: OWNER_PRINCIPAL.tokenPrefix,
+        tokenLabel: OWNER_PRINCIPAL.label,
       }),
     });
-    expect(JSON.stringify(auditCall)).not.toContain(VALID_BOTPUB_TOKEN);
+    expect(JSON.stringify(auditCall)).not.toContain(VALID_CREDENTIAL);
   });
 
   it("returns 400 when replying to a closed ticket", async () => {
@@ -483,14 +483,14 @@ describe("Bot Desk API — Tickets", () => {
     mocks.dbInsert.mockReturnValueOnce({
       values: (val: Record<string, unknown>) => {
         expect(val.senderRole).toBe("admin");
-        expect(val.senderId).toBe(TOKEN_OWNER_PRINCIPAL.userId);
+        expect(val.senderId).toBe(OWNER_PRINCIPAL.userId);
         return {
           returning: () =>
             Promise.resolve([
               {
                 id: "m-new-1",
                 ticketId: "t-open-1",
-                senderId: TOKEN_OWNER_PRINCIPAL.userId,
+                senderId: OWNER_PRINCIPAL.userId,
                 senderRole: "admin",
                 message: "تم الرد",
                 createdAt: new Date("2026-10-24T17:00:00.000Z"),
@@ -512,7 +512,7 @@ describe("Bot Desk API — Tickets", () => {
 
     const replyOutcome = await mocks.realAppendOpinionTicketMessage!({
       ticketId: "t-open-1",
-      senderId: TOKEN_OWNER_PRINCIPAL.userId,
+      senderId: OWNER_PRINCIPAL.userId,
       isAdmin: true,
       message: "تم الرد",
       forceAdminRole: true,
@@ -545,7 +545,7 @@ describe("Bot Desk API — Tickets", () => {
     await expect(
       mocks.realAppendOpinionTicketMessage!({
         ticketId: "t-closed-1",
-        senderId: TOKEN_OWNER_PRINCIPAL.userId,
+        senderId: OWNER_PRINCIPAL.userId,
         isAdmin: true,
         message: "رد بعد الإغلاق",
         forceAdminRole: true,
@@ -612,7 +612,7 @@ describe("Bot Desk API — Social Proposals (created by other users)", () => {
     mocks.cancelPost.mockResolvedValue({
       ...otherUsersDraftPost,
       status: "canceled",
-      canceledByUserId: TOKEN_OWNER_PRINCIPAL.userId,
+      canceledByUserId: OWNER_PRINCIPAL.userId,
       lastError: "النص يحتاج اختصاراً",
     });
 
@@ -624,7 +624,7 @@ describe("Bot Desk API — Social Proposals (created by other users)", () => {
     expect(body.post.status).toBe("canceled");
     expect(mocks.cancelPost).toHaveBeenCalledWith(
       "social-post-99",
-      TOKEN_OWNER_PRINCIPAL.userId,
+      OWNER_PRINCIPAL.userId,
       "النص يحتاج اختصاراً",
     );
     expect(mocks.logActivity).toHaveBeenCalledWith(
@@ -672,7 +672,7 @@ describe("Bot Desk API — Social Proposals (created by other users)", () => {
     const publishedPost = {
       ...otherUsersDraftPost,
       status: "published",
-      publishedByUserId: TOKEN_OWNER_PRINCIPAL.userId,
+      publishedByUserId: OWNER_PRINCIPAL.userId,
       externalPostUrl: "https://x.com/sabqorg/status/12345",
     };
 
@@ -692,7 +692,7 @@ describe("Bot Desk API — Social Proposals (created by other users)", () => {
     });
     expect(mocks.publishClaimedPost).toHaveBeenCalledWith(
       claimedPost,
-      TOKEN_OWNER_PRINCIPAL.userId,
+      OWNER_PRINCIPAL.userId,
     );
 
     // Second attempt: claim returns null, getPost returns published -> 409
