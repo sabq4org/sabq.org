@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T04:58:37.239Z",
+  "generatedAt": "2026-10-24T06:17:38.974Z",
   "systems": [
     {
       "id": "account-center",
@@ -185,7 +185,7 @@
     },
     {
       "id": "ads",
-      "fileCount": 17,
+      "fileCount": 18,
       "samplePaths": [
         "server/services/adsAnalytics.ts",
         "server/ads-routes.ts",
@@ -213,7 +213,7 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 81,
+      "fileCount": 583,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
@@ -222,7 +222,7 @@
         "web-next/.dockerignore",
         "web-next/.env.example",
         "web-next/.gitignore",
-        "web-next/Dockerfile"
+        "web-next/.next/BUILD_ID"
       ]
     },
     {

@@ -1,7 +1,43 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../auth";
+import { requireAnyPermission } from "../rbac";
+import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { authorizeArticleWrite } from "../services/articleAccessService";
 import { storyCardsService } from "../services/storyCardsService";
+
+const requireStoryCardWritePermission = requireAnyPermission(
+  PERMISSION_CODES.ARTICLES_CREATE,
+  PERMISSION_CODES.ARTICLES_EDIT_OWN,
+  PERMISSION_CODES.ARTICLES_EDIT_ANY,
+  PERMISSION_CODES.ARTICLES_GENERATE_IMAGES,
+);
+
+async function authorizeStoryCardMutation(req: Request, res: Response, cardId: string): Promise<boolean> {
+  if (!cardId) {
+    res.status(400).json({ error: "Card ID is required" });
+    return false;
+  }
+  const card = await storyCardsService.getStoryCardById(cardId);
+  if (!card) {
+    res.status(404).json({ error: "Story card not found" });
+    return false;
+  }
+  const userId = String((req as any).user?.id || "");
+  if (card.articleId) {
+    const access = await authorizeArticleWrite(userId, card.articleId);
+    if (!access.ok && card.userId !== userId) {
+      res.status(access.httpStatus).json({ error: access.message });
+      return false;
+    }
+    return true;
+  }
+  if (card.userId !== userId) {
+    res.status(403).json({ error: "غير مصرح لك بتعديل هذه البطاقة" });
+    return false;
+  }
+  return true;
+}
 
 // Validation schemas
 const generateStoryCardsSchema = z.object({
@@ -176,6 +212,7 @@ export const getStoryCardsByArticle = [
  */
 export const updateStoryCard = [
   isAuthenticated,
+  requireStoryCardWritePermission,
   async (req: Request, res: Response) => {
     try {
       const { cardId } = req.params;
@@ -187,6 +224,10 @@ export const updateStoryCard = [
           error: "Invalid update data",
           details: validation.error.errors,
         });
+      }
+
+      if (!(await authorizeStoryCardMutation(req, res, cardId))) {
+        return;
       }
 
       await storyCardsService.updateStoryCard(cardId, validation.data);
@@ -209,14 +250,13 @@ export const updateStoryCard = [
  */
 export const deleteStoryCard = [
   isAuthenticated,
+  requireStoryCardWritePermission,
   async (req: Request, res: Response) => {
     try {
       const { cardId } = req.params;
 
-      if (!cardId) {
-        return res.status(400).json({
-          error: "Card ID is required",
-        });
+      if (!(await authorizeStoryCardMutation(req, res, cardId))) {
+        return;
       }
 
       await storyCardsService.deleteStoryCard(cardId);

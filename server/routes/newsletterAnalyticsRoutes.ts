@@ -4,18 +4,37 @@ import { newsletterEmailCampaigns, newsletterEmailEvents, insertNewsletterEmailC
 import { eq, desc, sql, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { requireAuth } from "../rbac";
+import { requireAuth, requireAnyPermission } from "../rbac";
+import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { isSafeRedirectUrl } from "../utils/safeRedirect";
 import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
+
+const requireNewsletterView = [
+  requireAuth,
+  requireAnyPermission(
+    PERMISSION_CODES.AUDIO_NEWSLETTERS_VIEW,
+    PERMISSION_CODES.ANALYTICS_VIEW,
+    PERMISSION_CODES.ARTICLES_PUBLISH,
+  ),
+];
+
+const requireNewsletterManage = [
+  requireAuth,
+  requireAnyPermission(
+    PERMISSION_CODES.AUDIO_NEWSLETTERS_CREATE,
+    PERMISSION_CODES.AUDIO_NEWSLETTERS_EDIT,
+    PERMISSION_CODES.ARTICLES_PUBLISH,
+  ),
+];
 
 const TRANSPARENT_1X1_GIF = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
   "base64"
 );
 
-router.get("/campaigns", requireAuth, async (req: Request, res: Response) => {
+router.get("/campaigns", ...requireNewsletterView, async (req: Request, res: Response) => {
   try {
     const limit = parseLimit(req.query.limit, 50, 200);
     const offset = parseOffset(req.query.offset);
@@ -43,7 +62,7 @@ router.get("/campaigns", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.get("/campaigns/:id", requireAuth, async (req: Request, res: Response) => {
+router.get("/campaigns/:id", ...requireNewsletterView, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -188,7 +207,7 @@ const createCampaignSchema = insertNewsletterEmailCampaignSchema.extend({
   id: z.string().optional(),
 });
 
-router.post("/campaigns", requireAuth, async (req: Request, res: Response) => {
+router.post("/campaigns", ...requireNewsletterManage, async (req: Request, res: Response) => {
   try {
     const data = createCampaignSchema.parse(req.body);
 
@@ -222,7 +241,7 @@ const updateCampaignSchema = z.object({
   sentAt: z.string().datetime().optional(),
 });
 
-router.patch("/campaigns/:id", requireAuth, async (req: Request, res: Response) => {
+router.patch("/campaigns/:id", ...requireNewsletterManage, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data = updateCampaignSchema.parse(req.body);

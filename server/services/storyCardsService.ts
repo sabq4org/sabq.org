@@ -359,6 +359,18 @@ ${language === 'ar' ? 'Output all text in Arabic RTL format.' : ''}`;
   }
 
   /**
+   * Get a single story card by ID
+   */
+  async getStoryCardById(cardId: string): Promise<typeof storyCards.$inferSelect | null> {
+    const [card] = await this.dbInstance
+      .select()
+      .from(storyCards)
+      .where(eq(storyCards.id, cardId))
+      .limit(1);
+    return card ?? null;
+  }
+
+  /**
    * Update story card
    */
   async updateStoryCard(

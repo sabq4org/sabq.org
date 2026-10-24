@@ -111,4 +111,15 @@ describe("real Express order: JSON parser → /api CSRF → Media Store router",
     expect((await post("/api/media-store/webhook", charge, signature())).status).toBe(400);
     expect(mocks.update).not.toHaveBeenCalled();
   });
+  it("omits trackingToken from public order status responses", async () => {
+    mocks.order = { id: "order1", orderNumber: "MS-test", status: "paid", trackingToken: "private-token" };
+    const response = await fetch(`${origin}/api/media-store/orders/status/order1`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data).toEqual({ id: "order1", orderNumber: "MS-test", status: "paid" });
+    expect(body.data.trackingToken).toBeUndefined();
+    const selectedColumns = mocks.select.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(selectedColumns).toBeDefined();
+    expect(selectedColumns?.trackingToken).toBeUndefined();
+  });
 });

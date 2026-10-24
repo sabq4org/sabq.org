@@ -703,7 +703,6 @@ router.get("/orders/status/:orderId", async (req: Request, res: Response) => {
         id: mediaServiceOrders.id,
         orderNumber: mediaServiceOrders.orderNumber,
         status: mediaServiceOrders.status,
-        trackingToken: mediaServiceOrders.trackingToken,
       })
       .from(mediaServiceOrders)
       .where(eq(mediaServiceOrders.id, orderId))
@@ -715,7 +714,11 @@ router.get("/orders/status/:orderId", async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: order,
+      data: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+      },
     });
   } catch (error: any) {
     console.error("[Media Store] Error checking order status:", error);
