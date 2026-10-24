@@ -41,6 +41,7 @@ import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
 import botDraftsRouter from "./botDrafts";
 import botDeskRouter from "./botDesk";
+import staffAppMobileRouter from "./staffAppMobile";
 import botPublisherTokensRouter from "./botPublisherTokens";
 import botSocialRouter from "./botSocial";
 import publishFirstRouter from "./publishFirst";
@@ -172,6 +173,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(botDraftsRouter);
   // بوت الديسك (استفسارات المساهمين + مقترحات النشر الاجتماعي) — /api/internal/bot-desk، Bearer botpub_*
   app.use(botDeskRouter);
+  // تطبيق الديسك للمنسوبين (Sabq Desk iOS — com.sabq.desk) — /api/v1/staff، Bearer جلسة عضو + 2FA إلزامي
+  app.use("/api/v1/staff", staffAppMobileRouter);
   app.use(botPublisherTokensRouter);
   // نشر X للبوت الخارجي — /api/internal/bot-social، توكن منفصل عن مسودات البوت
   app.use(botSocialRouter);

@@ -31,6 +31,7 @@ import {
   loadDeskBotSettingEmails,
   resolveAgencySocialAlertRecipients,
 } from "./deskBotAlerts";
+import { notifyStaffDeskOfSocialProposal } from "./staffAppPushService";
 
 export type AgencySocialMode = "off" | "approval" | "direct";
 export type AgencyMediaChoice = "article" | "images" | "video" | "none";
@@ -327,6 +328,19 @@ export async function saveAgencySocialPost(
       deeplink: "/dashboard/social-publishing?filter=agency",
     });
     whatsapp(`🐦 طلب تغريدة من وكالة بانتظار موافقتك${askedAt ? ` (موعد مطلوب: ${riyadh(askedAt)})` : ""}`);
+  }
+  try {
+    await notifyStaffDeskOfSocialProposal({
+      postId: post.id,
+      proposalKind: "agency",
+      senderName: publisher.agencyName,
+      articleTitle: status.article.title,
+      text,
+      isUpdate: Boolean(pendingId),
+      excludeUserId: userId,
+    });
+  } catch (pushErr) {
+    console.error("[Agency Social] staff app push failed:", pushErr);
   }
   return { outcome: pendingId ? "updated" : "submitted", post };
 }

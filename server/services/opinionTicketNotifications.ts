@@ -18,6 +18,7 @@ import {
   buildDeskTicketAlertEmail,
   getDeskBotAlertRecipients,
 } from "./deskBotAlerts";
+import { SABQ_DESK_BUNDLE_ID, sendPushToUserApp } from "./userAppPushService";
 
 const NOTIFY_ROLE_NAMES = [...OPINION_TICKET_NOTIFY_ROLE_NAMES];
 
@@ -94,6 +95,22 @@ export async function notifyDeskOfWriterInquiry(input: {
           });
         } catch (err) {
           console.error("[opinion-tickets] inbox notify failed", err);
+        }
+
+        try {
+          await sendPushToUserApp(recipient.id, SABQ_DESK_BUNDLE_ID, {
+            title: notice.title,
+            body: notice.body,
+            type: notice.type,
+            deeplink: `sabqdesk://ticket/${input.ticketId}`,
+            data: {
+              ticketId: input.ticketId,
+              kind: input.kind,
+            },
+            collapseId: `desk-ticket-${input.ticketId}`,
+          });
+        } catch (pushErr) {
+          console.error("[opinion-tickets] staff app push failed", pushErr);
         }
       }),
     );

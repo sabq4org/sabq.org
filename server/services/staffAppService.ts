@@ -1,0 +1,576 @@
+import { and, eq, inArray, or } from "drizzle-orm";
+import { db } from "../db";
+import {
+  articles,
+  canUserLogin,
+  permissions,
+  publishers,
+  pushDevices,
+  rolePermissions,
+  roles,
+  userPermissionOverrides,
+  userRoles,
+  users,
+  type SocialPost,
+  type SocialPostAttempt,
+} from "@shared/schema";
+import {
+  PERMISSION_CODES,
+  ROLE_PERMISSIONS_MAP,
+  SUPERUSER_ROLE_NAMES,
+} from "@shared/rbac-constants";
+import { composeXPostText, validateXPostText } from "@shared/socialPostText";
+import {
+  STAFF_APP_BUNDLE_ID,
+  decodeStaffInboxCursor,
+  encodeStaffInboxCursor,
+  type StaffCapabilities,
+  type StaffInboxCursorPayload,
+  type StaffInboxItem,
+  type StaffInboxType,
+  type StaffSenderKind,
+} from "@shared/staffApp";
+import {
+  getUserRoleNames,
+  invalidateUserPermissionCache,
+  userHasPermission,
+} from "../rbac";
+import { clipDeskAlertExcerpt } from "./deskBotAlerts";
+import { isOpinionTicketNotifyRecipient } from "./opinionTicketNotice";
+import {
+  canUserViewOpinionDesk,
+  fullName,
+  getOpinionTicketsUnreadCounts,
+  listOpinionTickets,
+} from "./opinionTicketsService";
+import {
+  buildArticleUrl,
+  getPost,
+  getPostAttempts,
+  listPendingSocialProposalsForDesk,
+} from "./socialPublishing/socialPublishingService";
+import { sendPushToUserApp } from "./userAppPushService";
+
+export interface StaffUserAccount {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  name: string;
+  role: string;
+  status: string;
+  profileImageUrl: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorMethod: string;
+}
+
+export interface StaffAuthContext {
+  user: StaffUserAccount;
+  roles: string[];
+  capabilities: StaffCapabilities;
+}
+
+function toIsoString(value: Date | string | null | undefined): string {
+  if (!value) return new Date(0).toISOString();
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+}
+
+export async function getStaffUserAccount(userId: string): Promise<StaffUserAccount | null> {
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      role: users.role,
+      status: users.status,
+      profileImageUrl: users.profileImageUrl,
+      twoFactorEnabled: users.twoFactorEnabled,
+      twoFactorMethod: users.twoFactorMethod,
+      bannedUntil: users.bannedUntil,
+      suspendedUntil: users.suspendedUntil,
+      accountLocked: users.accountLocked,
+      lockedUntil: users.lockedUntil,
+      deletedAt: users.deletedAt,
+      emailVerified: users.emailVerified,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  if (!row) return null;
+  if (!canUserLogin(row as Parameters<typeof canUserLogin>[0])) {
+    return null;
+  }
+
+  const displayName =
+    fullName(row.firstName, row.lastName) || row.email || row.id;
+
+  return {
+    id: row.id,
+    email: row.email ?? null,
+    firstName: row.firstName ?? null,
+    lastName: row.lastName ?? null,
+    name: displayName,
+    role: row.role,
+    status: row.status,
+    profileImageUrl: row.profileImageUrl ?? null,
+    twoFactorEnabled: Boolean(row.twoFactorEnabled),
+    twoFactorMethod: row.twoFactorMethod || "authenticator",
+  };
+}
+
+export async function resolveStaffCapabilitiesAndRoles(
+  userId: string,
+  legacyRole?: string | null,
+): Promise<{ roles: string[]; capabilities: StaffCapabilities }> {
+  // Always evaluate live RBAC per request on staff endpoints.
+  if (typeof invalidateUserPermissionCache === "function") {
+    invalidateUserPermissionCache(userId);
+  }
+
+  const [
+    resolvedRoles,
+    canTickets,
+    canViewSocial,
+    canPublishSocial,
+    canScheduleSocial,
+    canManageScheduledSocial,
+    canCreateSocial,
+  ] = await Promise.all([
+    typeof getUserRoleNames === "function"
+      ? getUserRoleNames(userId).catch(() => (legacyRole ? [legacyRole] : []))
+      : Promise.resolve(legacyRole ? [legacyRole] : []),
+    canUserViewOpinionDesk(userId, legacyRole),
+    userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG),
+    userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_NOW),
+    userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE),
+    userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
+    userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_CREATE),
+  ]);
+
+  const roleList =
+    Array.isArray(resolvedRoles) && resolvedRoles.length > 0
+      ? resolvedRoles
+      : legacyRole
+        ? [legacyRole]
+        : [];
+
+  return {
+    roles: roleList,
+    capabilities: {
+      canTickets: Boolean(canTickets),
+      canSocial: {
+        view: Boolean(canViewSocial),
+        publish: Boolean(canPublishSocial),
+        schedule: Boolean(canScheduleSocial),
+        reject: Boolean(canManageScheduledSocial || canCreateSocial),
+      },
+    },
+  };
+}
+
+export function mapTicketAuthorKindToSenderKind(
+  authorKind: string | null | undefined,
+): StaffSenderKind {
+  if (authorKind === "reporter") return "reporter";
+  return "writer";
+}
+
+function compareInboxItemsDesc(a: StaffInboxItem, b: StaffInboxItem): number {
+  const timeA = Date.parse(a.updatedAt) || Date.parse(a.createdAt) || 0;
+  const timeB = Date.parse(b.updatedAt) || Date.parse(b.createdAt) || 0;
+  if (timeA !== timeB) return timeB - timeA;
+  if (a.kind !== b.kind) return b.kind.localeCompare(a.kind);
+  return b.id.localeCompare(a.id);
+}
+
+function isAfterCursorDesc(
+  item: StaffInboxItem,
+  cursor: StaffInboxCursorPayload,
+): boolean {
+  const itemTime = Date.parse(item.updatedAt) || Date.parse(item.createdAt) || 0;
+  const cursorTime = Date.parse(cursor.t) || 0;
+  if (itemTime !== cursorTime) {
+    return itemTime < cursorTime;
+  }
+  if (item.kind !== cursor.k) {
+    return bCompareDesc(item.kind, cursor.k) > 0;
+  }
+  return bCompareDesc(item.id, cursor.id) > 0;
+}
+
+function bCompareDesc(itemVal: string, cursorVal: string): number {
+  // In descending order, items after cursor have smaller lexical keys than cursorVal.
+  return cursorVal.localeCompare(itemVal);
+}
+
+export function paginateStaffInboxItems(
+  sortedItems: StaffInboxItem[],
+  options: { cursor?: string; limit: number },
+): {
+  items: StaffInboxItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+} {
+  let working = sortedItems;
+  if (options.cursor) {
+    const decoded = decodeStaffInboxCursor(options.cursor);
+    if (!decoded) {
+      throw new StaffInboxCursorError("مؤشر الصفحات (cursor) غير صالح");
+    }
+    const exactIndex = working.findIndex(
+      (item) => item.id === decoded.id && item.kind === decoded.k,
+    );
+    if (exactIndex >= 0) {
+      working = working.slice(exactIndex + 1);
+    } else {
+      working = working.filter((item) => isAfterCursorDesc(item, decoded));
+    }
+  }
+
+  const limit = Math.min(Math.max(options.limit, 1), 50);
+  const hasMore = working.length > limit;
+  const pageItems = working.slice(0, limit);
+  const lastItem = pageItems[pageItems.length - 1];
+  const nextCursor =
+    hasMore && lastItem
+      ? encodeStaffInboxCursor({
+          t: lastItem.updatedAt || lastItem.createdAt,
+          k: lastItem.kind,
+          id: lastItem.id,
+        })
+      : null;
+
+  return {
+    items: pageItems,
+    nextCursor,
+    hasMore,
+  };
+}
+
+export class StaffInboxCursorError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StaffInboxCursorError";
+  }
+}
+
+export async function listStaffUnifiedInbox(options: {
+  userId: string;
+  canTickets: boolean;
+  canSocialView: boolean;
+  type: StaffInboxType;
+  status?: string;
+  unread?: boolean;
+  q?: string;
+  cursor?: string;
+  limit: number;
+}): Promise<{
+  items: StaffInboxItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}> {
+  if (options.cursor) {
+    const decoded = decodeStaffInboxCursor(options.cursor);
+    if (!decoded) {
+      throw new StaffInboxCursorError("مؤشر الصفحات (cursor) غير صالح");
+    }
+  }
+
+  const includeTickets =
+    (options.type === "all" || options.type === "ticket") && options.canTickets;
+  const includeSocial =
+    (options.type === "all" || options.type === "social") && options.canSocialView;
+
+  const [ticketsRaw, socialRaw] = await Promise.all([
+    includeTickets
+      ? listOpinionTickets({
+          viewerId: options.userId,
+          isAdmin: true,
+          status: options.status,
+          unread: options.unread,
+          limit: 200,
+        })
+      : Promise.resolve([]),
+    includeSocial
+      ? listPendingSocialProposalsForDesk("all", 200)
+      : Promise.resolve([]),
+  ]);
+
+  const unified: StaffInboxItem[] = [];
+
+  for (const t of ticketsRaw) {
+    const createdAt = toIsoString(t.createdAt ?? t.lastMessageAt ?? t.last_message_at);
+    const updatedAt = toIsoString(t.lastMessageAt ?? t.last_message_at ?? t.updatedAt ?? t.createdAt);
+    const previewText = t.latestMessageExcerpt ?? t.latest_message_excerpt ?? t.title ?? "";
+    const senderKind = mapTicketAuthorKindToSenderKind(t.authorKind);
+    const senderName = t.writerName ?? t.writer?.name ?? t.writerEmail ?? "مساهم";
+
+    unified.push({
+      id: t.id,
+      kind: "ticket",
+      title: t.title,
+      previewText,
+      preview: previewText,
+      sender: {
+        id: t.writerId ?? t.writer?.id ?? null,
+        name: senderName,
+        kind: senderKind,
+        roleKind: t.authorKind ?? "other",
+      },
+      createdAt,
+      updatedAt,
+      status: t.status,
+      hasUnread: Boolean(t.hasUnread),
+      deeplink: `sabqdesk://ticket/${t.id}`,
+    });
+  }
+
+  for (const s of socialRaw) {
+    const createdAt = toIsoString(s.createdAt ?? s.created_at);
+    const updatedAt = toIsoString(s.updatedAt ?? s.updated_at ?? s.createdAt ?? s.created_at);
+    const isAgency = s.kind === "agency" || Boolean(s.isAgencyProposal || s.publisherId);
+    const senderKind: StaffSenderKind = isAgency ? "agency" : "writer";
+    const senderName =
+      s.proposerName ??
+      (isAgency ? s.agencyName : s.authorName) ??
+      s.createdByName ??
+      (isAgency ? "وكالة" : "كاتب رأي");
+    const title = s.articleTitle ?? s.article?.title ?? "مقترح نشر اجتماعي";
+    const previewText = s.text ?? "";
+    const hasUnread = s.status === "draft";
+
+    unified.push({
+      id: s.id,
+      kind: "social",
+      title,
+      previewText,
+      preview: previewText,
+      sender: {
+        id: s.publisherId ?? s.createdByUserId ?? null,
+        name: senderName,
+        kind: senderKind,
+        roleKind: isAgency ? "agency" : "opinion_author",
+      },
+      createdAt,
+      updatedAt,
+      status: s.status,
+      hasUnread,
+      deeplink: `sabqdesk://social/${s.id}`,
+      article: s.article ?? null,
+    });
+  }
+
+  let filtered = unified;
+  if (options.status) {
+    filtered = filtered.filter((item) => item.status === options.status);
+  }
+  if (typeof options.unread === "boolean") {
+    filtered = filtered.filter((item) => item.hasUnread === options.unread);
+  }
+  if (options.q && options.q.trim().length > 0) {
+    const needle = options.q.trim().toLowerCase();
+    filtered = filtered.filter((item) => {
+      const hay = `${item.title} ${item.previewText} ${item.sender.name}`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }
+
+  filtered.sort(compareInboxItemsDesc);
+
+  return paginateStaffInboxItems(filtered, {
+    cursor: options.cursor,
+    limit: options.limit,
+  });
+}
+
+export async function getStaffUnreadCounts(options: {
+  userId: string;
+  canTickets: boolean;
+  canSocialView: boolean;
+}): Promise<{ tickets: number; social: number; total: number }> {
+  const [ticketCounts, socialPending] = await Promise.all([
+    options.canTickets
+      ? getOpinionTicketsUnreadCounts({ viewerId: options.userId, isAdmin: true })
+      : Promise.resolve({ unreadCount: 0, unansweredCount: 0 }),
+    options.canSocialView
+      ? listPendingSocialProposalsForDesk("all", 200)
+      : Promise.resolve([]),
+  ]);
+
+  const tickets = Number(ticketCounts?.unreadCount ?? 0);
+  const social = Array.isArray(socialPending) ? socialPending.length : 0;
+
+  return {
+    tickets,
+    social,
+    total: tickets + social,
+  };
+}
+
+export interface StaffSocialDetailResult {
+  post: SocialPost;
+  preview: {
+    text: string;
+    linkUrl: string | null;
+    composedText: string;
+    weightedLength: number;
+    maxLength: number;
+    valid: boolean;
+    overStandard: boolean;
+    imageUrl: string | null;
+    imageSource: string;
+    mediaKind: string;
+    mediaUrls: string[];
+  };
+  author: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
+  agency: {
+    id: string;
+    name: string | null;
+  } | null;
+  article: {
+    id: string;
+    title: string | null;
+    url: string | null;
+    imageUrl: string | null;
+  } | null;
+  sender: {
+    id: string | null;
+    name: string;
+    kind: StaffSenderKind;
+  };
+  attempts: SocialPostAttempt[];
+}
+
+export async function getStaffSocialPostDetail(
+  postId: string,
+): Promise<StaffSocialDetailResult | null> {
+  const post = await getPost(postId);
+  if (!post) return null;
+
+  const attempts = await getPostAttempts(post.id);
+
+  let authorName: string | null = null;
+  let authorEmail: string | null = null;
+  let agencyName: string | null = null;
+  let articleInfo: {
+    id: string;
+    title: string | null;
+    url: string | null;
+    imageUrl: string | null;
+  } | null = null;
+
+  try {
+    if (post.createdByUserId) {
+      const userRows = await db
+        .select({
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        })
+        .from(users)
+        .where(eq(users.id, post.createdByUserId))
+        .limit(1);
+      const u = Array.isArray(userRows) ? userRows[0] : undefined;
+      if (u) {
+        authorName = fullName(u.firstName, u.lastName);
+        authorEmail = u.email ?? null;
+      }
+    }
+
+    if (post.publisherId) {
+      const pubRows = await db
+        .select({ agencyName: publishers.agencyName })
+        .from(publishers)
+        .where(eq(publishers.id, post.publisherId))
+        .limit(1);
+      const p = Array.isArray(pubRows) ? pubRows[0] : undefined;
+      if (p) {
+        agencyName = p.agencyName ?? null;
+      }
+    }
+
+    if (post.articleId) {
+      const artRows = await db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          imageUrl: articles.imageUrl,
+        })
+        .from(articles)
+        .where(eq(articles.id, post.articleId))
+        .limit(1);
+      const a = Array.isArray(artRows) ? artRows[0] : undefined;
+      if (a) {
+        articleInfo = {
+          id: a.id,
+          title: a.title ?? null,
+          url: buildArticleUrl({ slug: a.slug, englishSlug: a.englishSlug }),
+          imageUrl: a.imageUrl ?? null,
+        };
+      }
+    }
+  } catch {
+    // Enrichment is best-effort so unit tests mocking only getPost/getPostAttempts succeed cleanly.
+  }
+
+  const effectiveLinkUrl = post.linkUrl ?? articleInfo?.url ?? null;
+  const validation = validateXPostText(post.text ?? "", effectiveLinkUrl);
+  const composedText = composeXPostText(post.text ?? "", effectiveLinkUrl);
+  const isAgency = Boolean(post.publisherId);
+  const senderKind: StaffSenderKind = isAgency ? "agency" : "writer";
+  const senderName = isAgency
+    ? agencyName ?? authorName ?? "وكالة"
+    : authorName ?? authorEmail ?? "كاتب رأي";
+
+  return {
+    post,
+    preview: {
+      text: post.text ?? "",
+      linkUrl: effectiveLinkUrl,
+      composedText,
+      weightedLength: validation.weightedLength,
+      maxLength: 280,
+      valid: validation.valid,
+      overStandard: validation.overStandard,
+      imageUrl: post.imageUrl ?? articleInfo?.imageUrl ?? null,
+      imageSource: post.imageSource ?? "none",
+      mediaKind: post.mediaKind ?? "none",
+      mediaUrls: Array.isArray(post.mediaUrls) ? post.mediaUrls : [],
+    },
+    author: post.createdByUserId
+      ? {
+          id: post.createdByUserId,
+          name: authorName,
+          email: authorEmail,
+        }
+      : null,
+    agency: post.publisherId
+      ? {
+          id: post.publisherId,
+          name: agencyName,
+        }
+      : null,
+    article: articleInfo,
+    sender: {
+      id: post.publisherId ?? post.createdByUserId ?? null,
+      name: senderName,
+      kind: senderKind,
+    },
+    attempts,
+  };
+}
+
+export {
+  listSocialDeskRecipientUserIds,
+  notifyStaffDeskOfSocialProposal,
+} from "./staffAppPushService";

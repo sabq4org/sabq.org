@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALLOWED_MEMBER_PUSH_BUNDLE_IDS,
   GULF_CUP_BUNDLE_ID,
+  SABQ_DESK_BUNDLE_ID,
+  SABQ_READER_BUNDLE_ID,
+  isAllowedMemberPushBundleId,
   normalizeDeviceLocale,
   resolveGenericDeviceRegistrationPolicy,
   sanitizeDeviceRegistrationBody,
@@ -101,6 +105,15 @@ describe("generic device registration identity policy", () => {
 
     expect(policy.safeBundleId).toBe("com.sabqorg.sabq");
     expect(policy.bundleIdUpdate).toBe("com.sabqorg.sabq");
+  });
+
+  it("accepts com.sabq.desk in the member push-token bundle allowlist", () => {
+    expect(SABQ_DESK_BUNDLE_ID).toBe("com.sabq.desk");
+    expect(SABQ_READER_BUNDLE_ID).toBe("com.sabq.sabqorg");
+    expect(ALLOWED_MEMBER_PUSH_BUNDLE_IDS).toContain("com.sabq.desk");
+    expect(isAllowedMemberPushBundleId("com.sabq.desk")).toBe(true);
+    expect(isAllowedMemberPushBundleId("com.sabq.sabqorg")).toBe(true);
+    expect(isAllowedMemberPushBundleId("com.unknown.malicious")).toBe(false);
   });
 });
 

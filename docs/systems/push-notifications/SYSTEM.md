@@ -1,6 +1,6 @@
 # الإشعارات الفورية (`push-notifications`)
 
-> آخر مراجعة: 2026-10-21 | المالك: platform
+> آخر مراجعة: 2026-10-24 | المالك: platform
 
 ## الغرض
 إرسال إشعارات عبر FCM / APNs / Expo مع عامل خلفي وناقل داخلي.
@@ -30,6 +30,7 @@
 - **فصل مشروعَي Android (2026-09-14):** تبقى `FCM_PROJECT_ID` / `FCM_CLIENT_EMAIL` / `FCM_PRIVATE_KEY` لمشروع VARA وللتوكنات القديمة غير الموسومة. تستخدم حزم سبق `com.sabqorg.sabq` و`.dev` الاعتمادات المنفصلة `FCM_SABQ_PROJECT_ID` / `FCM_SABQ_CLIENT_EMAIL` / `FCM_SABQ_PRIVATE_KEY`. لا يرجع توكن سبق إلى اعتماد VARA عند غياب إعداد سبق، حتى لا يُعطّل بسبب `SENDER_ID_MISMATCH`.
 - **قص اللغة قبل التسجيل (2026-10-21):** Android يرسل `Locale.toLanguageTag()` بامتدادات مثل `ar-SA-u-nu-latn`، فيفيض `push_devices.locale` (varchar 10) ويفشل الإدراج بـ «value too long» ولا يصل الجهاز أي إشعار. خطاف `mobileAccountHooks.ts` يقص `locale`/`language` إلى اللغة+النص/المنطقة (`normalizeDeviceLocale`) ويُسقط `tokenProvider` (>10) و`platform` (>20) الأطول من أعمدتهما لتطبّق القيم الافتراضية. لا يُعدَّل `mobileApiRoutes.ts` (فوق سقف الأسطر).
 - تطبيق سبق يرسل `BuildConfig.APPLICATION_ID` مع `/api/v1/devices/register`. التوكنات القديمة بلا `bundleId` تبقى على المسار القديم تدريجيًا، ولا تُحذف أو تُعاد نسبتها بالتخمين.
+- **حزمة تطبيق الديسك (`com.sabq.desk`، 2026-10-24):** مقبولة ضمن `ALLOWED_MEMBER_PUSH_BUNDLE_IDS` على `POST /api/v1/members/push-token` (`deviceRegistrationPolicy.ts`). إشعارات التذاكر ومقترحات النشر الاجتماعي تدفع عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` بروابط `sabqdesk://ticket/<id>` و`sabqdesk://social/<id>`، بينما تحصر `notifyEditorialEvent` دفع iOS في حزمة القارئ `com.sabq.sabqorg`.
 - **إشعار «انتهت المباراة» (2026-08-21):** `sportsAlertsService` لا يُعلن النهاية من ومضة FT عند الاستراحة/د47 ولا عند د87 والشوط الثاني جارٍ. الحارس في `sportsMatchStatus.ts` — المصدر الحيّ يغلب، والنهاية تتطلب ≥90 دقيقة لعب و≥120 دقيقة تقويمية. Live Activity تستخدم الحارس نفسه حتى لا تُثبَّت شاشة القفل على «انتهت» أثناء الشوط الثاني.
 
 ## صحة وتشغيل
