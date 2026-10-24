@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T04:58:37.239Z",
+  "generatedAt": "2026-10-24T06:25:53.062Z",
   "systems": [
     {
       "id": "account-center",
@@ -199,7 +199,7 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 84,
+      "fileCount": 86,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",

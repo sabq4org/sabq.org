@@ -56,6 +56,7 @@
 
 import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
 import { createVideoEdgeCache } from "../cloudflare-worker/video-edge-cache.js";
+import { isSitemapPath } from "../cloudflare-worker/sitemap-edge-cache.js";
 import { mawaeedSlugFromPath, serveMawaeedPage } from "./mawaeedPage.js";
 
 export { newPublicApiCacheKey, newPublicApiPolicy };
@@ -180,9 +181,6 @@ export function isNoindexPrefix(p) {
   return false;
 }
 
-function isSitemapPath(p) {
-  return p === "/sitemap.xml" || /^\/sitemap-[^/]+\.xml$/.test(p);
-}
 
 // Paths proxied verbatim to the backend. Mirrors vercel.json `rewrites`.
 function isProxyPath(p) {
@@ -763,6 +761,20 @@ export function resolveFallbackOrigin(apiOrigin, env = {}) {
 
 // GET/HEAD only: a request body is a one-shot stream, and a write that the
 // edge refused was never executed, so replaying it is pointless anyway.
+// Sitemaps go through the api.sabq.org Worker, whose single placed location
+// keeps one copy for the whole edge (cloudflare-worker/sitemap-edge-cache.js);
+// this middleware's own cache is per location, and crawlers fetch the same
+// sitemap from many locations at once. SITEMAP_EDGE_ORIGIN=off (or another
+// origin) is the rollback; the API origin stays the 429 fallback.
+export function sitemapEdgeOrigin(path, apiOrigin, env = {}) {
+  if (!isSitemapPath(path)) return null;
+  const configured = String(env.SITEMAP_EDGE_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (configured.toLowerCase() === "off") return null;
+  const candidate = originOf(configured || DEFAULT_API_ORIGIN);
+  if (!candidate || candidate === originOf(apiOrigin)) return null;
+  return candidate;
+}
+
 export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin, timeoutMs = 0, proxySecret) {
   const res = await proxyToApi(request, apiOrigin, timeoutMs, proxySecret);
   const idempotent = request.method === "GET" || request.method === "HEAD";
@@ -1494,10 +1506,11 @@ async function handleRequest(context) {
     }
 
     try {
+      const sitemapOrigin = sitemapEdgeOrigin(path, apiOrigin, env);
       const res = await proxyToApiWithFallback(
         request,
-        apiOrigin,
-        resolveFallbackOrigin(apiOrigin, env),
+        sitemapOrigin || apiOrigin,
+        sitemapOrigin ? apiOrigin : resolveFallbackOrigin(apiOrigin, env),
         apiProxyTimeoutMs(path, useApiCache),
         env.EDGE_PROXY_SHARED_SECRET,
       );
