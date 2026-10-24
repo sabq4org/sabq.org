@@ -681,7 +681,7 @@ router.post("/submit", async (req: Request, res: Response) => {
     
     // Validate advertiserId if provided - must match session or be from valid logged-in advertiser
     let advertiserId = validatedData.advertiserId || null;
-    if (advertiserId && req.session.advertiserId !== advertiserId) {
+    if (advertiserId && req.session?.advertiserId !== advertiserId) {
       // Prevent spoofing - if advertiserId doesn't match session, ignore it
       advertiserId = null;
     }
@@ -1052,7 +1052,7 @@ router.post("/", requireAuth, isAdminOrEditor, async (req: Request, res: Respons
 router.patch("/my-ads/:id/budget", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const advertiserId = req.session.advertiserId;
+    const advertiserId = req.session?.advertiserId;
     
     if (!advertiserId) {
       return res.status(401).json({ message: "يجب تسجيل الدخول كمعلن" });
