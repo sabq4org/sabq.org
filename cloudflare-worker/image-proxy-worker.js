@@ -19,6 +19,27 @@ const GCS_ORIGINS = [
   'storage.cloud.google.com'
 ];
 
+// الصور النقطية فقط: SVG (وأي نوع غير مدرج) يُقدَّم من أصل sabq.org فيُنفّذ
+// سكربتًا بصلاحيات الموقع، والمسار يقبل أي حاوية GCS يحددها الرابط.
+const RASTER_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+]);
+
+export function isServableImageType(contentType) {
+  const base = String(contentType || '').split(';')[0].trim().toLowerCase();
+  return RASTER_TYPES.has(base);
+}
+
+const SAFETY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; sandbox",
+};
+
 // Cache settings
 const CACHE_TTL = 60 * 60 * 24 * 30; // 30 days
 const STALE_WHILE_REVALIDATE = 60 * 60 * 24 * 7; // 7 days
@@ -49,10 +70,17 @@ export default {
     
     let response = await cache.match(cacheKey);
     
+    if (response && !isServableImageType(response.headers.get('Content-Type'))) {
+      // نسخة خُزِّنت قبل هذا الفحص (مثل SVG): لا تُقدَّم وتُحذف.
+      ctx.waitUntil(cache.delete(cacheKey));
+      return new Response('Unsupported image type', { status: 415, headers: { 'Cache-Control': 'no-store', ...SAFETY_HEADERS } });
+    }
+
     if (response) {
       // Return cached response with HIT header
       const headers = new Headers(response.headers);
       headers.set('X-Cache-Status', 'HIT');
+      for (const [name, value] of Object.entries(SAFETY_HEADERS)) headers.set(name, value);
       return new Response(response.body, {
         status: response.status,
         headers: headers
@@ -92,9 +120,9 @@ export default {
       // Get content type
       const contentType = gcsResponse.headers.get('Content-Type') || 'image/jpeg';
       
-      // Only process image types
-      if (!contentType.startsWith('image/')) {
-        return new Response('Not an image', { status: 400 });
+      // Only raster image types (no SVG / HTML / unknown)
+      if (!isServableImageType(contentType)) {
+        return new Response('Unsupported image type', { status: 415, headers: { 'Cache-Control': 'no-store', ...SAFETY_HEADERS } });
       }
       
       // Create response with caching headers
@@ -104,7 +132,8 @@ export default {
         'X-Cache-Status': 'MISS',
         'X-Original-URL': gcsUrl,
         'Vary': 'Accept',
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        ...SAFETY_HEADERS,
       });
       
       // Copy ETag if present
