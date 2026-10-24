@@ -1,0 +1,55 @@
+name: Sabq Desk iOS build
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['sabq desk ios/**', '.github/workflows/sabq-desk-ios-build.yml']
+  push:
+    branches: [main]
+    paths: ['sabq desk ios/**', '.github/workflows/sabq-desk-ios-build.yml']
+permissions:
+  contents: read
+concurrency:
+  group: desk-ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kit-tests:
+    name: SabqDeskKit unit tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Xcode version
+        run: xcodebuild -version && swift --version
+      - name: swift test
+        working-directory: sabq desk ios/SabqDeskKit
+        run: swift test
+  app:
+    name: Build app and run tests on iOS Simulator
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      IOS_PROJECT: sabq desk ios/SabqDesk.xcodeproj
+      IOS_SCHEME: SabqDesk
+    steps:
+      - uses: actions/checkout@v6
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Compile app without signing
+        run: xcodebuild -project "$IOS_PROJECT" -scheme "$IOS_SCHEME" -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+      - name: Pick an iPhone simulator
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime, items in sorted(devices.items(), reverse=True):
+              if "iOS" not in runtime:
+                  continue
+              for item in items:
+                  if item["name"].startswith("iPhone"):
+                      print(item["udid"])
+                      sys.exit(0)
+          sys.exit(1)
+          ')
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+      - name: Run tests on the simulator
+        run: xcodebuild -project "$IOS_PROJECT" -scheme "$IOS_SCHEME" -destination "id=$SIM_UDID" CODE_SIGNING_ALLOWED=NO test
