@@ -1,0 +1,341 @@
+import Foundation
+
+// Codable mirrors of the `/api/v1/staff/*` responses documented in
+// docs/systems/editorial/STAFF_APP_API.md. Fields the app does not depend on
+// are optional so an additive server change never breaks decoding.
+
+// MARK: - Identity
+
+public struct StaffCapabilities: Codable, Sendable, Equatable {
+    public struct Social: Codable, Sendable, Equatable {
+        public var view: Bool
+        public var publish: Bool
+        public var schedule: Bool
+        public var reject: Bool
+
+        public init(view: Bool = false, publish: Bool = false, schedule: Bool = false, reject: Bool = false) {
+            self.view = view
+            self.publish = publish
+            self.schedule = schedule
+            self.reject = reject
+        }
+    }
+
+    public var canTickets: Bool
+    public var canSocial: Social
+
+    public init(canTickets: Bool = false, canSocial: Social = Social()) {
+        self.canTickets = canTickets
+        self.canSocial = canSocial
+    }
+
+    public static let none = StaffCapabilities()
+}
+
+public struct StaffMe: Codable, Sendable, Equatable {
+    public var id: String
+    public var email: String?
+    public var name: String?
+    public var firstName: String?
+    public var lastName: String?
+    public var profileImageUrl: String?
+    public var role: String?
+    public var twoFactorEnabled: Bool?
+    public var roles: [String]?
+    public var capabilities: StaffCapabilities
+
+    public var displayName: String {
+        if let name, !name.isEmpty { return name }
+        let joined = [firstName, lastName].compactMap { $0 }.joined(separator: " ")
+        return joined.isEmpty ? (email ?? "") : joined
+    }
+}
+
+// MARK: - Inbox
+
+public enum StaffInboxKind: String, Codable, Sendable, CaseIterable {
+    case ticket
+    case social
+}
+
+public enum StaffInboxFilter: String, Sendable, CaseIterable {
+    case all
+    case ticket
+    case social
+}
+
+public enum StaffSenderKind: String, Codable, Sendable {
+    case writer
+    case reporter
+    case agency
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = StaffSenderKind(rawValue: raw) ?? .unknown
+    }
+}
+
+public struct StaffSender: Codable, Sendable, Equatable {
+    public var id: String?
+    public var name: String
+    public var kind: StaffSenderKind
+    public var roleKind: String?
+}
+
+public struct StaffArticleRef: Codable, Sendable, Equatable {
+    public var id: String
+    public var title: String?
+    public var url: String?
+    public var imageUrl: String?
+}
+
+public struct StaffInboxItem: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var kind: StaffInboxKind
+    public var title: String
+    public var previewText: String?
+    public var sender: StaffSender
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var status: String
+    public var hasUnread: Bool
+    public var deeplink: String?
+    public var article: StaffArticleRef?
+
+    /// Stable across kinds: a ticket and a social post may share a UUID space.
+    public var listID: String { "\(kind.rawValue):\(id)" }
+}
+
+public struct StaffInboxPage: Codable, Sendable, Equatable {
+    public var items: [StaffInboxItem]
+    public var nextCursor: String?
+    public var hasMore: Bool
+}
+
+public struct StaffUnreadCounts: Codable, Sendable, Equatable {
+    public var tickets: Int
+    public var social: Int
+    public var total: Int
+
+    public init(tickets: Int = 0, social: Int = 0, total: Int = 0) {
+        self.tickets = tickets
+        self.social = social
+        self.total = total
+    }
+}
+
+public struct StaffInboxQuery: Sendable, Equatable {
+    public var type: StaffInboxFilter
+    public var status: String?
+    public var unreadOnly: Bool
+    public var search: String?
+    public var cursor: String?
+    public var limit: Int
+
+    public init(type: StaffInboxFilter = .all, status: String? = nil, unreadOnly: Bool = false,
+                search: String? = nil, cursor: String? = nil, limit: Int = 20) {
+        self.type = type
+        self.status = status
+        self.unreadOnly = unreadOnly
+        self.search = search
+        self.cursor = cursor
+        self.limit = min(max(limit, 1), 50)
+    }
+
+    var queryItems: [URLQueryItem] {
+        var items = [URLQueryItem(name: "type", value: type.rawValue),
+                     URLQueryItem(name: "limit", value: String(limit))]
+        if let status, !status.isEmpty { items.append(URLQueryItem(name: "status", value: status)) }
+        if unreadOnly { items.append(URLQueryItem(name: "unread", value: "true")) }
+        let trimmed = search?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { items.append(URLQueryItem(name: "q", value: String(trimmed.prefix(200)))) }
+        if let cursor, !cursor.isEmpty { items.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return items
+    }
+}
+
+// MARK: - Tickets
+
+public enum StaffTicketStatus: String, Codable, Sendable, CaseIterable {
+    case open
+    case answered
+    case closed
+}
+
+public struct StaffTicket: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var writerId: String?
+    public var title: String
+    public var status: StaffTicketStatus
+    public var lastMessageAt: Date?
+    public var createdAt: Date
+    public var updatedAt: Date?
+    public var writerFirstName: String?
+    public var writerLastName: String?
+    public var writerEmail: String?
+    public var sender: StaffSender?
+    public var deeplink: String?
+
+    public var writerName: String {
+        if let name = sender?.name, !name.isEmpty { return name }
+        return [writerFirstName, writerLastName].compactMap { $0 }.joined(separator: " ")
+    }
+}
+
+public enum StaffTicketSenderRole: String, Codable, Sendable {
+    case writer
+    case admin
+}
+
+public struct StaffTicketMessage: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var ticketId: String
+    public var senderId: String?
+    public var senderRole: StaffTicketSenderRole
+    public var message: String
+    public var parentMessageId: String?
+    public var createdAt: Date
+    public var senderName: String?
+}
+
+public struct StaffTicketDetail: Codable, Sendable, Equatable {
+    public var ticket: StaffTicket
+    public var messages: [StaffTicketMessage]
+}
+
+public struct StaffTicketReplyResult: Codable, Sendable, Equatable {
+    public var message: StaffTicketMessage
+    public var ticketStatus: StaffTicketStatus?
+}
+
+public struct StaffTicketEnvelope: Codable, Sendable, Equatable {
+    public var ticket: StaffTicket
+}
+
+// MARK: - Social
+
+public enum StaffSocialStatus: String, Codable, Sendable {
+    case draft
+    case scheduled
+    case processing
+    case published
+    case failed
+    case canceled
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = StaffSocialStatus(rawValue: raw) ?? .unknown
+    }
+
+    /// Only a pending proposal or a failed post can still be acted on.
+    public var isActionable: Bool { self == .draft || self == .failed || self == .scheduled }
+}
+
+public struct StaffSocialPost: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var articleId: String?
+    public var platform: String?
+    public var text: String
+    public var linkUrl: String?
+    public var imageUrl: String?
+    public var mediaKind: String?
+    public var mediaUrls: [String]?
+    public var publisherId: String?
+    public var status: StaffSocialStatus
+    public var scheduledAt: Date?
+    public var publishedAt: Date?
+    public var externalPostUrl: String?
+    public var lastError: String?
+    public var createdAt: Date
+    public var updatedAt: Date?
+}
+
+public struct StaffSocialPreview: Codable, Sendable, Equatable {
+    public var text: String?
+    public var linkUrl: String?
+    public var composedText: String
+    public var weightedLength: Int
+    public var maxLength: Int
+    public var valid: Bool
+    public var overStandard: Bool?
+    public var imageUrl: String?
+    public var mediaKind: String?
+    public var mediaUrls: [String]?
+}
+
+public struct StaffPersonRef: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String?
+    public var email: String?
+}
+
+public struct StaffSocialAttempt: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var phase: String?
+    public var outcome: String?
+    public var httpStatus: Int?
+    public var errorCode: String?
+    public var errorMessage: String?
+    public var retryable: Bool?
+    public var createdAt: Date
+}
+
+public struct StaffSocialDetail: Codable, Sendable, Equatable {
+    public var post: StaffSocialPost
+    public var preview: StaffSocialPreview
+    public var author: StaffPersonRef?
+    public var agency: StaffPersonRef?
+    public var article: StaffArticleRef?
+    public var sender: StaffSender?
+    public var attempts: [StaffSocialAttempt]
+    public var deeplink: String?
+}
+
+public struct StaffSocialPostEnvelope: Codable, Sendable, Equatable {
+    public var post: StaffSocialPost
+}
+
+// MARK: - Auth
+
+public struct StaffSession: Codable, Sendable, Equatable {
+    public var token: String
+    public var expiresAt: Date?
+    public var userId: String
+
+    public init(token: String, expiresAt: Date?, userId: String) {
+        self.token = token
+        self.expiresAt = expiresAt
+        self.userId = userId
+    }
+
+    public func isExpired(now: Date = Date()) -> Bool {
+        guard let expiresAt else { return false }
+        return expiresAt <= now
+    }
+}
+
+public enum StaffLoginResult: Sendable, Equatable {
+    case signedIn(StaffSession)
+    case needsTwoFactor(challengeToken: String, message: String?)
+}
+
+public enum StaffSecondFactor: Sendable, Equatable {
+    case code(String)
+    case backupCode(String)
+}
+
+/// `{ success, token, expiresAt, user, requires2FA, challengeToken, message }`
+/// from `/api/v1/auth/login` and `/api/v1/auth/verify-2fa`.
+struct MemberAuthResponse: Decodable {
+    struct User: Decodable { var id: String }
+
+    var success: Bool?
+    var message: String?
+    var token: String?
+    var expiresAt: Date?
+    var user: User?
+    var requires2FA: Bool?
+    var challengeToken: String?
+}
