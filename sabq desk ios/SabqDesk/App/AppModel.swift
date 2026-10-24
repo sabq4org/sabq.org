@@ -25,8 +25,7 @@ final class AppModel {
     var pendingLink: DeskDeepLink?
 
     let client: StaffAPIClient
-    private var pushToken: String?
-    private var registeredPushToken: String?
+    private var push = PushRegistrationState()
 
     init(client: StaffAPIClient? = nil) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -74,10 +73,10 @@ final class AppModel {
     }
 
     func signOut() async {
-        if let token = registeredPushToken {
+        if let token = push.registeredToken {
             try? await client.unregisterPushToken(token)
         }
-        registeredPushToken = nil
+        push.resetBinding()
         await client.logout()
         unread = StaffUnreadCounts()
         pendingLink = nil
@@ -92,6 +91,7 @@ final class AppModel {
         guard let error = error as? StaffAPIError else { return false }
         switch error {
         case .unauthorized:
+            push.resetBinding()
             phase = .signedOut
             return true
         case .twoFactorRequired(let message):
@@ -139,16 +139,16 @@ final class AppModel {
     }
 
     func didReceivePushToken(_ token: String) {
-        pushToken = token
+        push.receive(deviceToken: token)
         Task { await registerPushTokenIfNeeded() }
     }
 
     private func registerPushTokenIfNeeded() async {
-        guard let token = pushToken, token != registeredPushToken, me != nil else { return }
+        guard let me, let token = push.tokenToRegister(for: me.id) else { return }
         do {
             let device = UIDevice.current
             try await client.registerPushToken(token, deviceName: device.model, osVersion: device.systemVersion)
-            registeredPushToken = token
+            push.markRegistered(token: token, userID: me.id)
         } catch {
             handle(error)
         }
