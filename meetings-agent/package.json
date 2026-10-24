@@ -20,5 +20,12 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "sharp": "^0.35.5",
+    "brace-expansion": "^5.0.12",
+    "zod": "^4.6.7",
+    "@opentelemetry/core": "^2.10.0",
+    "@opentelemetry/propagator-jaeger": "^2.12.0"
   }
 }
