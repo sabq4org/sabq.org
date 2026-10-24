@@ -51,5 +51,6 @@ jobs:
           sys.exit(1)
           ')
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
-      - name: Run tests on the simulator
-        run: xcodebuild -project "$IOS_PROJECT" -scheme "$IOS_SCHEME" -destination "id=$SIM_UDID" CODE_SIGNING_ALLOWED=NO test
+      - name: Run SabqDeskKit tests on the simulator
+        working-directory: sabq desk ios/SabqDeskKit
+        run: xcodebuild -scheme SabqDeskKit-Package -destination "id=$SIM_UDID" CODE_SIGNING_ALLOWED=NO test

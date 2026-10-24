@@ -264,7 +264,7 @@ Content-Type: application/json
 | مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي |
 | شاشات التطبيق | `sabq desk ios/SabqDesk/` — الدخول + 2FA، شاشة «فعّل المصادقة الثنائية»، تبويبا «الوارد» و«الإعدادات»، تفاصيل الاستفسار، تفاصيل مقترح النشر وورقتا الجدولة والرفض |
 | حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
-| الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومن مخطط `SabqDesk` على محاكي iOS |
+| الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
 | CI | `.github/workflows/sabq-desk-ios-build.yml` — بناء بلا توقيع + الاختبارات |
 
 **سلوك العميل:**
