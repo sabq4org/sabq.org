@@ -43,8 +43,12 @@ const SPORTS_LANG_PATHS = new Set(["/api/kings-cup/overview", "/api/sports/today
 // Store time of an entry, so a hit can hand on only what is left of its TTL.
 const NEW_PUBLIC_API_STORED_AT = "X-Sabq-Edge-Stored-At";
 
+// Same identity rule as the origin's marker (carriesIdentity in
+// server/routes/publicEdgeCacheHooks.ts): only the session cookie makes a
+// read personal. Analytics or consent cookies, which nearly every browser on
+// sabq.org carries, used to send each such read past the cache to Render.
 function hasNewPublicApiCredentials(request) {
-  if (request.headers.has("cookie")) return true;
+  if ((request.headers.get("cookie") || "").includes("connect.sid")) return true;
   if (request.headers.has("authorization")) return true;
   if (request.headers.has("x-session-id")) return true;
   const cacheControl = (request.headers.get("cache-control") || "").toLowerCase();
