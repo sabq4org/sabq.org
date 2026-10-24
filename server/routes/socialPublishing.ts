@@ -69,8 +69,9 @@ function handleError(res: Response, error: unknown, fallback: string): void {
     return;
   }
   if (error instanceof SocialProviderError) {
-    // رسائل المزود منظفة مسبقاً من الأسرار
-    res.status(502).json({ message: error.message, retryable: error.opts.retryable });
+    // رسائل المزود منظفة مسبقاً من الأسرار. 422 لا 502: الواجهة تحوّل كل
+    // 502 إلى «الخادم غير متاح مؤقتاً» فتخفي سبب الرفض الحقيقي عن المحرر.
+    res.status(422).json({ message: error.message, retryable: error.opts.retryable });
     return;
   }
   console.error("[SocialPublish routes]", error);
@@ -430,7 +431,8 @@ router.post(
       if (result.status === "published") {
         res.json({ post: result });
       } else {
-        res.status(502).json({ message: result.lastError || "فشل النشر", post: result });
+        // 422 حتى تعرض الواجهة lastError بدل رسالة «الخادم غير متاح» العامة
+        res.status(422).json({ message: result.lastError || "فشل النشر", post: result });
       }
     } catch (error) {
       handleError(res, error, "تعذر تنفيذ النشر");
