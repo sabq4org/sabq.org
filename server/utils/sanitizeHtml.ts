@@ -39,45 +39,49 @@ function scheduleWindowReset(): void {
  * المضبوطة على 25% تخرج للـSSR/الزواحف بلا عرض فتُعرض بعرض المقال كاملًا.
  *
  * لذلك: نسمح صراحةً بسمات التخطيط الثلاث (وهي بيانات وصفية لا تنفّذ شيئًا)،
- * ثم نعيد بناء `style` للصور فقط من قيمة `data-width` بعد التعقيم — بقيمة
- * مُتحقَّق منها (نسبة أو بكسل) لا تأتي من نص المستخدم مباشرة. أي `style`
- * آخر يبقى محذوفًا كما كان.
+ * ثم نعيد بناء `style` للصور فقط من قيمة `data-width` — بقيمة مُتحقَّق منها
+ * (نسبة أو بكسل) لا تأتي من نص المستخدم مباشرة. أي `style` آخر يبقى محذوفًا.
+ *
+ * الاستعادة تجري على شجرة DOM المعقَّمة عبر setAttribute ثم تُسلسَل مرة واحدة،
+ * ولا تُعدَّل سلسلة HTML بعد التعقيم: كان التعديل بـregex يقطع الوسم عند أول
+ * `>` داخل سمة مقتبسة (مثل alt)، فيتحول نص خامل إلى وسم فعّال (XSS مخزّن).
  */
 const IMAGE_LAYOUT_ATTRS = ["data-width", "data-align", "data-caption"];
 
 const SAFE_IMAGE_WIDTH = /^(?:\d{1,3}(?:\.\d+)?%|\d{1,4}(?:\.\d+)?px)$/;
 
-function restoreImageWidths(html: string): string {
-  if (!html.includes("data-width")) return html;
+const SANITIZE_CONFIG = {
+  FORBID_TAGS: ["script", "style", "iframe", "embed", "object", "form", "svg", "math"],
+  FORBID_ATTR: ["style"],
+  ALLOW_DATA_ATTR: false,
+  ADD_ATTR: IMAGE_LAYOUT_ATTRS,
+};
 
-  return html.replace(/<img\b[^>]*>/gi, (tag) => {
-    const match = tag.match(/\sdata-width\s*=\s*"([^"]*)"/i);
-    const width = match?.[1]?.trim();
-    if (!width) return tag;
+function restoreImageWidths(fragment: DocumentFragment): void {
+  fragment.querySelectorAll("img[data-width]").forEach((img) => {
+    const width = img.getAttribute("data-width")?.trim();
 
     // قيمة غير مطابقة للنمط الآمن = بقايا لصق أو محاولة حقن: تُحذف السمة.
-    if (!SAFE_IMAGE_WIDTH.test(width)) {
-      return tag.replace(/\sdata-width\s*=\s*"[^"]*"/i, "");
+    if (!width || !SAFE_IMAGE_WIDTH.test(width)) {
+      img.removeAttribute("data-width");
+      return;
     }
-    if (/\sstyle\s*=/i.test(tag)) return tag;
+    if (img.hasAttribute("style")) return;
 
-    const style = ` style="width: ${width}; max-width: 100%; height: auto;"`;
-    return tag.endsWith("/>")
-      ? `${tag.slice(0, -2)}${style}/>`
-      : `${tag.slice(0, -1)}${style}>`;
+    img.setAttribute("style", `width: ${width}; max-width: 100%; height: auto;`);
   });
 }
 
 export function sanitizeArticleHtml(html: string): string {
   if (!html) return "";
   try {
-    const clean = sanitize(html, {
-      FORBID_TAGS: ["script", "style", "iframe", "embed", "object", "form", "svg", "math"],
-      FORBID_ATTR: ["style"],
-      ALLOW_DATA_ATTR: false,
-      ADD_ATTR: IMAGE_LAYOUT_ATTRS,
-    });
-    return restoreImageWidths(clean);
+    if (!html.includes("data-width")) return sanitize(html, SANITIZE_CONFIG);
+
+    const fragment = sanitize(html, { ...SANITIZE_CONFIG, RETURN_DOM_FRAGMENT: true });
+    restoreImageWidths(fragment);
+    const host = fragment.ownerDocument.createElement("div");
+    host.appendChild(fragment);
+    return host.innerHTML;
   } finally {
     scheduleWindowReset();
   }
