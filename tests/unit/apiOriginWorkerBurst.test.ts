@@ -170,4 +170,46 @@ describe("api-origin-worker public API burst guard", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(cache.put).toHaveBeenCalledTimes(2);
   });
+
+  it("keeps live-score reads apart by answer language and honours the origin's live TTL", async () => {
+    const fetchMock = vi.fn((target: string, init: RequestInit) => {
+      const lang = (new Headers(init.headers).get("accept-language") || "").startsWith("en") ? "en" : "ar";
+      const response = apiResponse({ lang });
+      response.headers.set("cache-control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
+      // Only /api/sports/* answers per language (server/routes/sports.ts).
+      response.headers.set("vary", String(target).includes("/api/sports/") ? "Origin, Accept-Language" : "Origin");
+      return Promise.resolve(response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = { waitUntil: vi.fn() };
+
+    const ar = await apiOriginWorker.fetch(request("/api/sports/today"), env, ctx);
+    const en = await apiOriginWorker.fetch(request("/api/sports/today", { headers: { "accept-language": "en-US" } }), env, ctx);
+    const hero = await apiOriginWorker.fetch(request("/api/rsl/hero"), env, ctx);
+
+    expect(await ar.json()).toEqual({ lang: "ar" });
+    expect(await en.json()).toEqual({ lang: "en" });
+    expect(hero.status).toBe(200);
+    expect(cache.put).toHaveBeenCalledTimes(3);
+    const keys = cache.put.mock.calls.map(([key]) => new URL((key as Request).url));
+    expect(keys[0].searchParams.get("__sabq_sports_lang")).toBe("ar");
+    expect(keys[1].searchParams.get("__sabq_sports_lang")).toBe("en");
+    for (const [, stored] of cache.put.mock.calls) {
+      expect((stored as Response).headers.get("cache-control")).toContain("s-maxage=5");
+    }
+  });
+
+  it("does not store a live-score read the origin marks no-store", async () => {
+    const fetchMock = vi.fn(() => {
+      const response = apiResponse({ today: [] });
+      response.headers.set("cache-control", "no-store");
+      return Promise.resolve(response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = { waitUntil: vi.fn() };
+
+    const res = await apiOriginWorker.fetch(request("/api/sports/today?resilient=1"), env, ctx);
+    expect(res.status).toBe(200);
+    expect(cache.put).not.toHaveBeenCalled();
+  });
 });

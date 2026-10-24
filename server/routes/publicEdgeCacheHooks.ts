@@ -33,6 +33,10 @@ export const PUBLIC_EDGE_CACHE_ROUTES: readonly PublicEdgeRoute[] = [
   { match: (p) => p === "/api/stories", ttl: 60 },
   { match: (p) => p === "/api/muqtarab/topics/featured", ttl: 60 },
   { match: (p) => p === "/api/economy/snapshot", ttl: 60 },
+  // Live scores: each handler replaces this with its own TTL (5 s while a
+  // match is on, no-store for ?resilient=1), and the edge keeps the lower one.
+  { match: (p) => p === "/api/sports/today", ttl: 60 },
+  { match: (p) => p === "/api/rsl/hero", ttl: 60 },
 ];
 
 function carriesIdentity(req: Request): boolean {

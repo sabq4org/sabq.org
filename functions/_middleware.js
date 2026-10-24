@@ -74,7 +74,10 @@ const SEO_META_TTL = (meta) =>
   (typeof meta.robots === "string" && meta.robots.toLowerCase().includes("noindex"))
     ? 10
     : 60;
-const SLUG_REDIRECT_TTL = (slug) => (slug && (slug.gone || slug.redirect) ? 10 : 60);
+// A plain «no redirect» answer only changes when an article's slug does, and
+// it is fetched for every uncached page view at every edge location (about a
+// quarter of Render's requests, 2026-10-24), so it is kept five minutes.
+const SLUG_REDIRECT_TTL = (slug) => (slug && (slug.gone || slug.redirect) ? 10 : 300);
 // A crawler must never wait for an unbounded Next.js subrequest. If SSR is
 // unavailable we fall back to the existing SEO path (when enabled), but an
 // otherwise generic SPA shell is always no-store for that crawler request.
@@ -125,7 +128,7 @@ const HTML_EDGE_CACHE_HEADERS = {
 const STATIC_EXTENSIONS = [
   ".js", ".css", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
   ".woff", ".woff2", ".ttf", ".eot", ".webp", ".avif", ".mp4", ".webm",
-  ".json", ".xml", ".txt", ".pdf",
+  ".json", ".xml", ".txt", ".pdf", ".webmanifest",
 ];
 
 // Mirrors server/utils/noindexPaths.ts — every private/authenticated SPA route
@@ -175,6 +178,10 @@ export function isNoindexPrefix(p) {
   return false;
 }
 
+function isSitemapPath(p) {
+  return p === "/sitemap.xml" || /^\/sitemap-[^/]+\.xml$/.test(p);
+}
+
 // Paths proxied verbatim to the backend. Mirrors vercel.json `rewrites`.
 function isProxyPath(p) {
   return (
@@ -184,8 +191,7 @@ function isProxyPath(p) {
     p === "/ads.txt" ||
     p === "/app-ads.txt" ||
     p === "/robots.txt" ||
-    p === "/sitemap.xml" ||
-    /^\/sitemap-[^/]+\.xml$/.test(p) ||
+    isSitemapPath(p) ||
     /^\/s\/[^/]+$/.test(p) ||
     p.startsWith("/uploads/") ||
     p.startsWith("/branding/")
@@ -989,6 +995,12 @@ export function getApiCacheTtl(path, request) {
   if (/^\/api\/articles\/[^/]+$/.test(path)) return 60;
   if (ARTICLE_API_SUBREAD_PATH.test(path)) return 60;
 
+  // Sitemaps were never edge-cached: crawlers fetched every bucket from
+  // Render, about a fifth of its non-video egress (2026-10-24). The origin's
+  // s-maxage caps this (180 s for sitemap-news.xml), and publishing purges the
+  // bare URLs. GET only: a HEAD answer would store an empty body.
+  if (isSitemapPath(path)) return request.method === "GET" ? 3600 : 0;
+
   // GET only: a HEAD answer has no JSON body to validate before caching.
   const fullQueryRoute = request.method === "GET" ? fullQueryApiCacheRoute(path, url) : null;
   if (fullQueryRoute) return fullQueryRoute.ttl;
@@ -1015,8 +1027,9 @@ const FULL_QUERY_API_CACHE_ROUTES = [
   { match: (p) => p === "/api/audio-bulletin/current", ttl: 30 },
   { match: (p) => p === "/api/muqtarab/topics/featured", ttl: 60 },
   { match: (p) => p === "/api/mawaeed", ttl: 60 },
-  // Live-score reads (sports/today, rsl/hero) stay out: the origin sends
-  // no-store or a 5s TTL while a match is on.
+  // Live-score reads (sports/today, rsl/hero) are cached by the shared burst
+  // cache (cloudflare-worker/public-api-burst-cache.js), which follows the
+  // origin's 5 s TTL while a match is on and stores nothing on no-store.
   { match: (p) => /^\/api\/shortlinks\/article\/[^/]+$/.test(p), ttl: 300 },
   // «استمع» audio (0.6–1.3 MB each) was 5–8% of Render egress. Same article,
   // same audio for every anonymous reader; a voice/provider switch reaches the
@@ -1074,6 +1087,8 @@ export function originPublicSmaxAge(res) {
 // hung origin falls back to the last-good copy; a route may opt out.
 export function apiProxyTimeoutMs(path, useApiCache) {
   if (!useApiCache) return 0;
+  // A cold sitemap bucket is built on request; keep its unbounded attempt.
+  if (isSitemapPath(path)) return 0;
   return fullQueryApiCacheRoute(path)?.timeoutMs ?? API_PROXY_TIMEOUT_MS;
 }
 
