@@ -25,25 +25,58 @@ function hasS3Credentials(): boolean {
   );
 }
 
-/** Generic R2_* first; fall back to NEWS_IMAGES_R2_* (what production actually has). */
-function r2AccountId(): string | undefined {
-  return process.env.R2_ACCOUNT_ID || process.env.NEWS_IMAGES_R2_ACCOUNT_ID || undefined;
+type R2Credentials = { accountId: string; accessKeyId: string; secretAccessKey: string };
+
+function readR2CredentialSet(prefix: "R2" | "NEWS_IMAGES_R2"): R2Credentials | undefined {
+  const accountId = process.env[`${prefix}_ACCOUNT_ID`]?.trim();
+  const accessKeyId = process.env[`${prefix}_ACCESS_KEY_ID`]?.trim();
+  const secretAccessKey = process.env[`${prefix}_SECRET_ACCESS_KEY`]?.trim();
+  return accountId && accessKeyId && secretAccessKey
+    ? { accountId, accessKeyId, secretAccessKey }
+    : undefined;
 }
 
-function r2AccessKeyId(): string | undefined {
-  return process.env.R2_ACCESS_KEY_ID || process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID || undefined;
-}
-
-function r2SecretAccessKey(): string | undefined {
-  return (
-    process.env.R2_SECRET_ACCESS_KEY ||
-    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY ||
-    undefined
+function hasAnyR2Credential(prefix: "R2" | "NEWS_IMAGES_R2"): boolean {
+  return !!(
+    process.env[`${prefix}_ACCOUNT_ID`] ||
+    process.env[`${prefix}_ACCESS_KEY_ID`] ||
+    process.env[`${prefix}_SECRET_ACCESS_KEY`]
   );
 }
 
+/** Use one complete credential source; never combine IDs and keys across accounts. */
+function r2Credentials(): R2Credentials | undefined {
+  if (hasAnyR2Credential("R2")) return readR2CredentialSet("R2");
+  return readR2CredentialSet("NEWS_IMAGES_R2");
+}
+
 function hasR2Credentials(): boolean {
-  return !!(r2AccountId() && r2AccessKeyId() && r2SecretAccessKey());
+  return !!r2Credentials();
+}
+
+function privateR2Bucket(): string | undefined {
+  const bucket = process.env.R2_BUCKET_NAME?.trim();
+  const publicBucket = process.env.NEWS_IMAGES_R2_BUCKET_NAME?.trim() || "sabq-media";
+  if (!bucket || bucket === publicBucket || bucket === "sabq-news-images" || bucket === "sabq-media") {
+    return undefined;
+  }
+  return bucket;
+}
+
+function hasNewsR2Credentials(): boolean {
+  return !!readR2CredentialSet("NEWS_IMAGES_R2");
+}
+
+function hasAnyNewsR2Credential(): boolean {
+  return !!(
+    process.env.NEWS_IMAGES_R2_ACCOUNT_ID ||
+    process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID ||
+    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY
+  );
+}
+
+function hasAnyR2Configuration(): boolean {
+  return hasAnyR2Credential("R2") || hasAnyNewsR2Credential();
 }
 
 function isReplitRuntime(): boolean {
@@ -68,7 +101,7 @@ function resolveStorageProvider(): ResolvedStorageProvider {
   const forceS3 = process.env.OBJECT_STORAGE_FORCE_S3 === "1";
 
   // Live R2 wins over stale S3 env left over from the Replit → Railway move.
-  if (hasR2Credentials() && !forceS3) {
+  if ((hasR2Credentials() || hasNewsR2Credentials()) && !forceS3) {
     if (explicit === "s3") {
       console.warn(
         "[ObjectStorage] STORAGE_PROVIDER=s3 ignored — using R2 " +
@@ -89,11 +122,9 @@ function resolveStorageProvider(): ResolvedStorageProvider {
 }
 
 const STORAGE_PROVIDER: ResolvedStorageProvider = resolveStorageProvider();
-const R2_CRED_SOURCE = process.env.R2_ACCOUNT_ID
-  ? "R2_*"
-  : process.env.NEWS_IMAGES_R2_ACCOUNT_ID
-    ? "NEWS_IMAGES_R2_*"
-    : "none";
+const R2_CRED_SOURCE = r2Credentials()
+  ? hasAnyR2Credential("R2") ? "R2_*" : "NEWS_IMAGES_R2_*"
+  : "none";
 
 console.log(
   `[ObjectStorage] provider=${STORAGE_PROVIDER}` +
@@ -104,25 +135,24 @@ console.log(
 
 /** True when private file upload/download (license/CV, PDFs, etc.) can work. */
 export function isPrivateObjectStorageConfigured(): boolean {
-  // R2 (incl. NEWS_IMAGES_R2_*) wins for private docs even when a stale
-  // STORAGE_PROVIDER=s3 / FORCE_S3 points at a dead Tigris bucket.
-  if (hasR2Credentials()) return true;
+  // Private documents always prefer configured R2 credentials; a bad or
+  // missing private bucket must fail closed instead of escaping to stale S3.
+  if (hasAnyR2Configuration()) return hasR2Credentials() && !!privateR2Bucket();
   if (STORAGE_PROVIDER === "s3") return hasS3Credentials();
-  if (STORAGE_PROVIDER === "r2") return hasR2Credentials();
+  if (STORAGE_PROVIDER === "r2") return false;
   if (STORAGE_PROVIDER === "gcs") return isReplitRuntime();
   return false;
 }
 
 let r2Client: S3Client | null = null;
+let r2PublicClient: S3Client | null = null;
 let s3Client: S3Client | null = null;
 
 function getR2Client(): S3Client {
   if (!r2Client) {
-    const accountId = r2AccountId();
-    const accessKeyId = r2AccessKeyId();
-    const secretAccessKey = r2SecretAccessKey();
+    const credentials = r2Credentials();
 
-    if (!accountId || !accessKeyId || !secretAccessKey) {
+    if (!credentials) {
       throw new Error(
         "[R2] Missing R2 credentials. Set R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/" +
           "R2_SECRET_ACCESS_KEY (or NEWS_IMAGES_R2_* equivalents).",
@@ -131,24 +161,79 @@ function getR2Client(): S3Client {
 
     r2Client = new S3Client({
       region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
+      endpoint: `https://${credentials.accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
     });
   }
   return r2Client;
 }
 
-function getR2Bucket(): string {
-  // Prefer dedicated private-docs bucket when set; else news-images bucket
-  // (private keys still live under `.private/` and are served via signed URLs).
-  return (
-    process.env.R2_BUCKET_NAME ||
-    process.env.NEWS_IMAGES_R2_BUCKET_NAME ||
-    "sabq-media"
-  );
+function getR2PublicBucket(): string {
+  // Public assets stay on the news/public bucket. R2_BUCKET_NAME is reserved
+  // for private documents and must never redirect public uploads.
+  const configured = process.env.NEWS_IMAGES_R2_BUCKET_NAME?.trim();
+  if (configured) return configured;
+
+  // Backward compatibility for deployments that used generic R2 credentials
+  // before a dedicated private bucket was configured.
+  if (!process.env.R2_BUCKET_NAME?.trim()) return "sabq-media";
+  throw new Error("[R2] Public R2 bucket is not configured (NEWS_IMAGES_R2_BUCKET_NAME).");
+}
+
+function getR2PrivateBucket(): string {
+  const bucket = privateR2Bucket();
+  if (!bucket) {
+    throw new Error(
+      "[R2] Private storage requires R2_BUCKET_NAME set to a dedicated bucket " +
+        "different from NEWS_IMAGES_R2_BUCKET_NAME.",
+    );
+  }
+  return bucket;
+}
+
+function getR2PublicClient(): S3Client {
+  if (hasNewsR2Credentials()) {
+    const credentials = readR2CredentialSet("NEWS_IMAGES_R2")!;
+    if (!r2PublicClient) r2PublicClient = new S3Client({
+      region: "auto",
+      endpoint: `https://${credentials.accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+      },
+    });
+    return r2PublicClient;
+  }
+
+  if (hasAnyNewsR2Credential()) {
+    throw new Error("[R2] Public R2 credentials are incomplete; configure all NEWS_IMAGES_R2_* values.");
+  }
+
+  // Existing public R2 deployments keep working until a private bucket is
+  // configured. Once configured, generic R2 credentials are treated as
+  // private-only and are not reused for public assets.
+  if (process.env.R2_BUCKET_NAME?.trim()) {
+    throw new Error("[R2] Public R2 credentials are unavailable; configure NEWS_IMAGES_R2_*.");
+  }
+  return getR2Client();
+}
+
+function getPrivateStorageProvider(): ResolvedStorageProvider {
+  // Private documents always prefer R2 when its credentials exist, including
+  // when FORCE_S3 points at a stale legacy bucket.
+  if (hasAnyR2Configuration()) return "r2";
+  if (STORAGE_PROVIDER === "s3" && hasS3Credentials()) return "s3";
+  if (STORAGE_PROVIDER === "r2") return "r2";
+  if (STORAGE_PROVIDER === "gcs" && isReplitRuntime()) return "gcs";
+  return "local";
+}
+
+function getR2PublicUrl(bucket: string): string {
+  const newsBucket = process.env.NEWS_IMAGES_R2_BUCKET_NAME?.trim();
+  const configured = bucket === newsBucket
+    ? process.env.NEWS_IMAGES_R2_PUBLIC_URL?.trim()
+    : undefined;
+  return (configured || process.env.R2_PUBLIC_URL || `https://${bucket}.r2.dev`).replace(/\/+$/, "");
 }
 
 // Generic S3-compatible client (Tigris on Railway, MinIO, Backblaze B2,
@@ -607,8 +692,8 @@ export class ObjectStorageService {
     }
 
     if (STORAGE_PROVIDER === 'r2') {
-      const client = getR2Client();
-      const bucket = getR2Bucket();
+      const client = getR2PublicClient();
+      const bucket = getR2PublicBucket();
       const objectId = randomUUID();
       const key = `public/uploads/${objectId}`;
       const cmd = new PutObjectCommand({ Bucket: bucket, Key: key });
@@ -649,8 +734,8 @@ export class ObjectStorageService {
     contentType: string,
     visibility: "public" | "private" = "private"
   ): Promise<{ url: string; path: string }> {
-    const client = getR2Client();
-    const bucket = getR2Bucket();
+    const client = visibility === "public" ? getR2PublicClient() : getR2Client();
+    const bucket = visibility === "public" ? getR2PublicBucket() : getR2PrivateBucket();
     const prefix = visibility === "public" ? "public" : ".private";
     const key = `${prefix}/${path}`;
 
@@ -661,7 +746,7 @@ export class ObjectStorageService {
       ContentType: contentType,
     }));
 
-    const r2PublicUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.r2.dev`;
+    const r2PublicUrl = getR2PublicUrl(bucket);
     const url = visibility === "public" ? `${r2PublicUrl}/${key}` : key;
 
     return { url, path: key };
@@ -710,17 +795,18 @@ export class ObjectStorageService {
   // Used by admin-only routes (e.g. correspondent license/CV downloads) —
   // never embed these keys in public payloads.
   async getPrivateFileDownloadURL(key: string, ttlSec: number = 300): Promise<string> {
-    if (STORAGE_PROVIDER === 's3') {
+    const provider = getPrivateStorageProvider();
+    if (provider === 's3') {
       const client = getS3Client();
       const bucket = getS3Bucket();
       return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
     }
-    if (STORAGE_PROVIDER === 'r2') {
+    if (provider === 'r2') {
       const client = getR2Client();
-      const bucket = getR2Bucket();
+      const bucket = getR2PrivateBucket();
       return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
     }
-    if (STORAGE_PROVIDER !== 'gcs') {
+    if (provider !== 'gcs') {
       throw new Error(
         "[ObjectStorage] Private download unavailable — configure STORAGE_PROVIDER=s3 or r2.",
       );
@@ -740,10 +826,12 @@ export class ObjectStorageService {
     buffer: Buffer,
     contentType: string,
   ): Promise<{ url: string; path: string }> {
-    if (hasR2Credentials()) {
+    const provider = getPrivateStorageProvider();
+    if (provider === "r2") {
+      getR2PrivateBucket(); // fail closed before any object write
       return this.uploadFileR2(path, buffer, contentType, "private");
     }
-    if (hasS3Credentials()) {
+    if (provider === "s3") {
       return this.uploadFileS3(path, buffer, contentType, "private");
     }
     throw new Error(
@@ -758,14 +846,15 @@ export class ObjectStorageService {
     contentType: string,
     visibility: "public" | "private" = "private"
   ): Promise<{ url: string; path: string }> {
-    if (STORAGE_PROVIDER === 's3') {
+    const provider = visibility === "private" ? getPrivateStorageProvider() : STORAGE_PROVIDER;
+    if (provider === 's3') {
       return this.uploadFileS3(path, buffer, contentType, visibility);
     }
-    if (STORAGE_PROVIDER === 'r2') {
+    if (provider === 'r2') {
       return this.uploadFileR2(path, buffer, contentType, visibility);
     }
 
-    if (STORAGE_PROVIDER !== 'gcs') {
+    if (provider !== 'gcs') {
       // Avoid the Replit sidecar (127.0.0.1:1106) on Railway/local — it always
       // ECONNREFUSED outside Replit and surfaces as a raw GaxiosError to users.
       throw new Error(

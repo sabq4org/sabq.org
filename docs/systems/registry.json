@@ -1445,6 +1445,8 @@
       "pathGlobs": [
         "server/index.ts",
         "server/bootstrap.ts",
+        "server/objectStorage.ts",
+        "tests/unit/objectStoragePrivate*.test.ts",
         "server/leaderElection.ts",
         "server/leaderCron.ts",
         "server/shutdown.ts",
