@@ -55,11 +55,13 @@
  */
 
 import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
+import { createVideoEdgeCache } from "../cloudflare-worker/video-edge-cache.js";
 import { mawaeedSlugFromPath, serveMawaeedPage } from "./mawaeedPage.js";
 
 export { newPublicApiCacheKey, newPublicApiPolicy };
 
 const pagesPublicApiBurstCache = createPublicApiBurstCache();
+const pagesVideoEdgeCache = createVideoEdgeCache();
 
 const DEFAULT_API_ORIGIN = "https://api.sabq.org";
 const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=no";
@@ -1432,6 +1434,15 @@ async function handleRequest(context) {
 
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
+    // X videos (/api/video/stream/:id) were 35–50% of Render egress: a kept
+    // copy answers every Range; a miss is relayed while the whole file is
+    // fetched once in the background (cloudflare-worker/video-edge-cache.js).
+    const videoResponse = await pagesVideoEdgeCache(request, {
+      cache: caches.default,
+      waitUntil: (promise) => context.waitUntil(promise),
+      fetchOrigin: (sourceRequest) => proxyToApi(sourceRequest, apiOrigin, 0, env.EDGE_PROXY_SHARED_SECRET),
+    });
+    if (videoResponse) return videoResponse;
     const newPublicApiResponse = await pagesPublicApiBurstCache(request, {
       cache: caches.default,
       waitUntil: (promise) => context.waitUntil(promise),
