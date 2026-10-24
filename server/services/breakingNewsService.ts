@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db";
 import { memoryCache } from "../memoryCache";
 import { articles, enArticles, urArticles } from "@shared/schema";
@@ -187,6 +187,77 @@ export function invalidateClearedBreakingArticles(
     );
   }
   memoryCache.delete("lite-feed");
+}
+
+/** A published breaking article stops being breaking this long after `published_at`. */
+export const BREAKING_NEWS_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
+export function breakingExpiryCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - BREAKING_NEWS_MAX_AGE_MS);
+}
+
+/**
+ * Builds `status = 'published' AND hide_from_homepage IN (false, true) AND
+ * news_type = 'breaking' AND published_at < cutoff`. The `hide_from_homepage`
+ * term matches every row; it lets Postgres seek `idx_articles_breaking`
+ * (status, hide_from_homepage, news_type, published_at) instead of scanning.
+ */
+export function buildExpiredBreakingWhere(
+  table: typeof articles | typeof enArticles | typeof urArticles,
+  cutoff: Date,
+) {
+  return and(
+    eq(table.status, "published"),
+    inArray(table.hideFromHomepage, [false, true]),
+    eq(table.newsType, BREAKING_NEWS_TYPE),
+    lt(table.publishedAt, cutoff),
+  );
+}
+
+export interface ExpiredBreakingResult {
+  ar: ClearedBreakingArticle[];
+  en: ClearedBreakingArticle[];
+  ur: ClearedBreakingArticle[];
+}
+
+/**
+ * Demotes published breaking articles older than `BREAKING_NEWS_MAX_AGE_MS`
+ * to regular in all three language tables. `updatedAt` is left alone so an
+ * editor who has the article open does not get a save conflict.
+ */
+export async function expireStaleBreakingArticles(
+  now: Date = new Date(),
+  executor: BreakingDbExecutor = db,
+): Promise<ExpiredBreakingResult> {
+  const cutoff = breakingExpiryCutoff(now);
+
+  const ar = await executor
+    .update(articles)
+    .set({ newsType: REGULAR_NEWS_TYPE })
+    .where(buildExpiredBreakingWhere(articles, cutoff))
+    .returning({ id: articles.id, slug: articles.slug, englishSlug: articles.englishSlug });
+
+  const en = await executor
+    .update(enArticles)
+    .set({ newsType: REGULAR_NEWS_TYPE })
+    .where(buildExpiredBreakingWhere(enArticles, cutoff))
+    .returning({ id: enArticles.id, slug: enArticles.slug, englishSlug: enArticles.englishSlug });
+
+  const ur = await executor
+    .update(urArticles)
+    .set({ newsType: REGULAR_NEWS_TYPE })
+    .where(buildExpiredBreakingWhere(urArticles, cutoff))
+    .returning({ id: urArticles.id, slug: urArticles.slug, englishSlug: urArticles.englishSlug });
+
+  if (ar.length + en.length + ur.length > 0) {
+    invalidateClearedBreakingArticles(ar, "breaking-auto-expire");
+    invalidateClearedBreakingArticles(en, "en-breaking-auto-expire");
+    invalidateClearedBreakingArticles(ur, "ur-breaking-auto-expire");
+    if (en.length > 0) memoryCache.invalidatePattern("^en:article:base:");
+    void purgeBreakingNews({ immediate: true });
+  }
+
+  return { ar, en, ur };
 }
 
 /**

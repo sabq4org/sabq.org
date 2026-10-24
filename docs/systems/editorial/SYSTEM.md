@@ -349,4 +349,11 @@
 - خبر عاجل واحد فقط (`newsType = 'breaking'`) مسموح في الوقت نفسه في كل جدول مقالات (`articles`، `en_articles`، `ur_articles`).
 - عند إنشاء أو حفظ أو نشر أو جدولة أو تبديل حالة العاجل لأي مقال مع `newsType = 'breaking'` (عبر لوحة التحكم، النشر المباشر، النشر المجدول `publishScheduledArticles`، بوت المسودات `/api/internal/bot-drafts`، وكيل واتساب، استرجاع النسخ، أو واجهة إدارة الجوال `/api/v1/admin/articles`)، ينفّذ `server/services/breakingNewsService.ts` تحديثاً ذرياً داخل المعاملة نفسها لتحويل جميع المقالات الأخرى التي تحمل `news_type = 'breaking'` إلى `'regular'` (`WHERE id <> current_id AND news_type = 'breaking'`)، مع مزامنة الترجمات الإنجليزية المرتبطة وإبطال الكاش (`invalidateArticleWrite` و`purgeBreakingNews`) للمقالات التي أُزيل عنها العاجل.
 
+## انتهاء العاجل تلقائياً بعد 3 ساعات — 2026-10-24
+- `server/jobs/breakingNewsExpiryJob.ts` يعمل كل 5 دقائق على القائد فقط (`leaderCron`)، ويستدعي `expireStaleBreakingArticles()` في `breakingNewsService.ts`: كل مقال منشور (`status = 'published'`) يحمل `news_type = 'breaking'` ومضى على `published_at` أكثر من `BREAKING_NEWS_MAX_AGE_MS` (3 ساعات) يتحول إلى `'regular'` في الجداول الثلاثة. التأخير الأقصى بعد الساعات الثلاث 5 دقائق.
+- المرجع وقت النشر لا وقت تفعيل العاجل (لا عمود يسجل الأخير): تفعيل العاجل على خبر منشور قبل أكثر من 3 ساعات يسقط في الدورة التالية. المسودات والمجدولة لا تُمس حتى تُنشر. كل جدول يُحسب بوقت نشره، فالترجمة تسقط بحسب وقت نشرها هي.
+- التحديث لا يرفع `updatedAt`، حتى لا يصطدم حفظ محرر فاتح للمقال بـ 409. إن حفظ المحرر النموذج والعاجل ما زال مفعّلاً فيه، يعود المقال عاجلاً ثم يسقط في الدورة التالية.
+- عند أي تحويل: `invalidateClearedBreakingArticles` لكل مقال، ومسح `^en:article:base:` إن تغيّر مقال إنجليزي، و`purgeBreakingNews({ immediate: true })` لشريط العاجل والرئيسية على الحافة.
+- شرط الجدول العربي يطابق أعمدة `idx_articles_breaking` كلها (`hide_from_homepage IN (false, true)` ليتقدّم الفهرس إلى `news_type` و`published_at`). جدولا `en_articles` و`ur_articles` بلا فهرس على `news_type`، فيمرّان على `idx_*_status_published`. الاختبار: `tests/unit/breakingNewsExpiry.test.ts`.
+
 
