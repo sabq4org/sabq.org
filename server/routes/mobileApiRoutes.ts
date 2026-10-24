@@ -869,7 +869,11 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
       lastUsedAt: appMemberSessions.lastUsedAt,
       status: users.status,
       bannedUntil: users.bannedUntil,
+      suspendedUntil: users.suspendedUntil,
+      accountLocked: users.accountLocked,
+      lockedUntil: users.lockedUntil,
       deletedAt: users.deletedAt,
+      emailVerified: users.emailVerified,
     })
     .from(appMemberSessions)
     .innerJoin(users, eq(users.id, appMemberSessions.memberId))
@@ -1238,10 +1242,10 @@ router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res:
       });
     }
 
-    // Activate user
+    // Activate user — a pending account only; a banned/suspended one keeps its sanction.
     await db.update(users)
       .set({ 
-        status: "active",
+        ...(user.status === "pending" ? { status: "active" } : {}),
         emailVerified: true,
       })
       .where(eq(users.id, user.id));

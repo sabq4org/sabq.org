@@ -20,6 +20,7 @@ export function createOAuthWebCompletion(
     if (user.twoFactorEnabled) {
       req.user = undefined;
       (req.session as any).pending2FAUserId = user.id;
+      (req.session as any).pending2FAFirstFactor = "oauth";
       return req.session.save((saveErr) => {
         if (saveErr) {
           console.error(`❌ ${provider} OAuth 2FA session save error:`, saveErr);

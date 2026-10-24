@@ -1,3 +1,6 @@
+import { and, ne, or, sql } from 'drizzle-orm';
+import { articles, mediaFiles } from '@shared/schema';
+import { db } from '../db';
 import { cloudflareImagesService } from './cloudflareImagesService';
 import { newsImageStorageService } from './newsImageStorageService';
 
@@ -44,4 +47,55 @@ export async function deleteMediaBlob(url: string): Promise<void> {
   } catch (storageError) {
     console.error('[Media Delete] Error deleting blob (continuing with DB delete):', storageError);
   }
+}
+
+/**
+ * هوية الملف الفعلي خلف رابط وسائط: عائلة R2 (news/YYYY/MM/uuid/) التي يحذفها
+ * deleteByPublicUrl كاملة، أو معرّف صورة Cloudflare. روابط مختلفة الشكل
+ * (مقاس آخر، ?x=1) تشير إلى الملف نفسه، فالملكية لا تُقاس بنص الرابط.
+ */
+export function mediaBlobIdentity(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const cfId = cloudflareImagesService.extractImageId(url);
+  if (cfId) return `imagedelivery.net/%/${cfId}/`;
+  try {
+    const path = decodeURIComponent(new URL(url).pathname);
+    const family = path.match(/\/(news\/\d{4}\/\d{2}\/[a-f0-9-]+)\//i);
+    if (family) return `/${family[1]}/`;
+  } catch {
+    // ليس رابطًا مطلقًا
+  }
+  return null;
+}
+
+/**
+ * يحذف الملف الفعلي فقط إذا لم يعد يشير إليه صف وسائط آخر ولا صورة مقال.
+ * كان أي حساب media.view يسجّل رابط صورة غيره («حفظ رابط قائم» يُنشئ صفًا
+ * يملكه) ثم يحذف صفه فيُحذف ملف المالك الأصلي معه.
+ */
+export async function deleteMediaBlobIfUnshared(row: { id: string; url: string }): Promise<void> {
+  const identity = mediaBlobIdentity(row.url);
+  const pattern = `%${identity ?? row.url.split('?')[0]}%`;
+  try {
+    const [otherMedia] = await db
+      .select({ id: mediaFiles.id })
+      .from(mediaFiles)
+      .where(and(ne(mediaFiles.id, row.id), sql`${mediaFiles.url} LIKE ${pattern}`))
+      .limit(1);
+    const [articleRef] = otherMedia
+      ? [null]
+      : await db
+          .select({ id: articles.id })
+          .from(articles)
+          .where(or(sql`${articles.imageUrl} LIKE ${pattern}`, sql`${articles.thumbnailUrl} LIKE ${pattern}`))
+          .limit(1);
+    if (otherMedia || articleRef) {
+      console.log('[Media Delete] File still referenced elsewhere — keeping it');
+      return;
+    }
+  } catch (err) {
+    console.error('[Media Delete] Reference check failed — keeping the file:', err);
+    return;
+  }
+  await deleteMediaBlob(row.url);
 }

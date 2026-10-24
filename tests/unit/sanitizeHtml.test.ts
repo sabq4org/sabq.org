@@ -82,6 +82,34 @@ describe("sanitizeArticleHtml", () => {
     expect(clean).not.toMatch(/expression/i);
   });
 
+  it("keeps a quoted '>' inside alt inert when restoring an image width", async () => {
+    const { sanitizeArticleHtml } = await import("../../server/utils/sanitizeHtml");
+    const dirty =
+      '<img data-width="50%" src="/a.jpg" alt="x><img src=x onerror=alert(1)>">' +
+      '<img data-width="25%" src="/b.jpg" alt=\'q"><svg onload=alert(2)>\'>';
+
+    const clean = sanitizeArticleHtml(dirty);
+
+    // نعيد تحليل الناتج كما يفعل المتصفح: صورتان فقط، والحمولة نص داخل alt.
+    const purify = await import("isomorphic-dompurify");
+    const fragment = purify.sanitize(clean, {
+      RETURN_DOM_FRAGMENT: true,
+      ADD_ATTR: ["style", "data-width"],
+    });
+    const removedHandlers = purify.removed.filter(
+      (entry) => "attribute" in entry && /^on/i.test(entry.attribute?.name ?? ""),
+    );
+    expect(removedHandlers).toHaveLength(0);
+    expect(purify.removed.some((entry) => "element" in entry && entry.element?.nodeName === "SVG")).toBe(false);
+
+    const images = Array.from(fragment.querySelectorAll("img"));
+    expect(images).toHaveLength(2);
+    expect(images[0].getAttribute("alt")).toBe("x><img src=x onerror=alert(1)>");
+    expect(images[0].getAttribute("style")).toBe("width: 50%; max-width: 100%; height: auto;");
+    expect(images[1].getAttribute("alt")).toBe('q"><svg onload=alert(2)>');
+    expect(images[1].getAttribute("style")).toBe("width: 25%; max-width: 100%; height: auto;");
+  });
+
   it("coalesces multiple sanitizations into one Window reset per event-loop turn", async () => {
     const sanitize = vi.fn((html: string) => html);
     const clearWindow = vi.fn();

@@ -10,6 +10,7 @@ import { recordFailure, isLockedOut, clearFailures } from "../services/authAttem
 import { sendSMSOTP, verifySMSOTP } from "../twilio";
 import { generateSecret, generateQRCode, verifyToken, generateBackupCodes, verifyBackupCode } from "../twoFactor";
 import { getRealIp as getTrustedRealIp } from "../utils/trustedProxyIp";
+import { smsSecondFactorAllowed } from "../utils/twoFactorPolicy";
 
 function getRealIp(req: any): string {
   return getTrustedRealIp(req);
@@ -299,6 +300,7 @@ export function registerTwoFactorRoutes(app: Express) {
 
         // Clear the pending 2FA userId from session
         delete (req.session as any).pending2FAUserId;
+        delete (req.session as any).pending2FAFirstFactor;
 
       res.json({
           message: "تم التحقق بنجاح",
@@ -349,6 +351,11 @@ export function registerTwoFactorRoutes(app: Express) {
         return res.status(400).json({ message: "يرجى إضافة رقم الجوال أولاً في الملف الشخصي" });
       }
 
+      // أثناء الدخول: لا SMS لحساب طريقته تطبيق المصادقة، ولا لمن دخل برمز الجوال.
+      if (pendingId && !authedId && !smsSecondFactorAllowed(user.twoFactorMethod, (req.session as any).pending2FAFirstFactor)) {
+        return res.status(403).json({ message: "استخدم تطبيق المصادقة أو رمز الاحتياط لهذا الحساب" });
+      }
+
       // Send SMS OTP
       const result = await sendSMSOTP(user.phoneNumber);
 
@@ -384,9 +391,10 @@ export function registerTwoFactorRoutes(app: Express) {
         return res.status(404).json({ message: "المستخدم غير موجود" });
       }
 
+      const smsAllowed = smsSecondFactorAllowed(user.twoFactorMethod, (req.session as any).pending2FAFirstFactor);
       res.json({
-        method: user.twoFactorMethod || 'authenticator',
-        hasPhoneNumber: !!user.phoneNumber
+        method: smsAllowed ? user.twoFactorMethod : 'authenticator',
+        hasPhoneNumber: smsAllowed && !!user.phoneNumber
       });
     } catch (error) {
       console.error("Error getting pending 2FA method:", error);
@@ -418,6 +426,10 @@ export function registerTwoFactorRoutes(app: Express) {
         return res.status(400).json({ message: "رقم الجوال غير موجود" });
       }
 
+      if (!smsSecondFactorAllowed(user.twoFactorMethod, (req.session as any).pending2FAFirstFactor)) {
+        return res.status(403).json({ message: "استخدم تطبيق المصادقة أو رمز الاحتياط لهذا الحساب" });
+      }
+
       // Same per-account bound as the TOTP path — an SMS OTP is just as
       // guessable, and strictLimiter is keyed on a spoofable header.
       if (await isLockedOut(`2fa:${userId}`, 10)) {
@@ -443,6 +455,7 @@ export function registerTwoFactorRoutes(app: Express) {
 
         // Clear the pending 2FA userId from session
         delete (req.session as any).pending2FAUserId;
+        delete (req.session as any).pending2FAFirstFactor;
 
       res.json({ 
           message: "تم التحقق بنجاح",

@@ -10,6 +10,7 @@
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import { assertSafeImageUrl } from "../utils/safeImageUrl";
+import { downloadBoundedImage } from "../utils/boundedImageDownload";
 import { parseVisualAiJson } from "./visualAiJson";
 import { logUsage } from "../ai/gateway/usageLogger";
 import { normalizeProviderError } from "../ai/gateway/errors";
@@ -17,8 +18,6 @@ import { normalizeProviderError } from "../ai/gateway/errors";
 /** مفتاح سجلّ ai_usage_logs لاستدعاء نموذج صور الأخبار (Gemini) */
 const NEWS_IMAGE_FEATURE = "news-image-generation";
 import pRetry from "p-retry";
-import https from "https";
-import http from "http";
 
 export { parseVisualAiJson } from "./visualAiJson";
 
@@ -113,25 +112,8 @@ async function downloadImageToBase64(url: string): Promise<string> {
   // services or the cloud metadata endpoint (169.254.169.254). Only allowlisted
   // https media hosts pass; anything else throws (security audit S-02).
   const safeUrl = assertSafeImageUrl(url);
-  return new Promise((resolve, reject) => {
-    const client = safeUrl.startsWith('https') ? https : http;
-
-    client.get(safeUrl, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`Failed to download image: ${response.statusCode}`));
-        return;
-      }
-      
-      const chunks: Buffer[] = [];
-      response.on('data', (chunk) => chunks.push(chunk));
-      response.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-        const base64 = buffer.toString('base64');
-        resolve(base64);
-      });
-      response.on('error', reject);
-    }).on('error', reject);
-  });
+  const buffer = await downloadBoundedImage(safeUrl);
+  return buffer.toString('base64');
 }
 
 /**

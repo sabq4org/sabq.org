@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import crypto from "crypto";
 import multer from "multer";
 import { simpleParser } from "mailparser";
 import mammoth from "mammoth";
@@ -26,6 +25,7 @@ import {
   extractEmailAddress,
 } from "../services/emailAgentDedup";
 import { parsePage, parseLimit } from "../utils/pagination";
+import { emailTokenMatches, requireInboundWebhookSecret } from "../services/emailAgentAuth";
 
 const router = Router();
 
@@ -34,6 +34,9 @@ const upload = multer({
   limits: {
     fileSize: 25 * 1024 * 1024, // 25MB for file attachments (SendGrid's max)
     fieldSize: 50 * 1024 * 1024, // 50MB for raw MIME email field (increased to handle large emails with attachments)
+    files: 30,
+    fields: 100,
+    parts: 150,
   },
 });
 
@@ -481,63 +484,18 @@ function cleanupProcessedEmails() {
 
 setInterval(cleanupProcessedEmails, 5 * 60 * 1000);
 
-// Shared-secret check for the SendGrid Inbound Parse webhook.
-// SendGrid Inbound Parse does NOT sign its requests — it relies on URL
-// obscurity. We add a shared-secret token check (URL query OR header)
-// so anyone who guesses the URL still can't fabricate inbound mail.
-//
-// Set SENDGRID_INBOUND_SECRET on the backend, then configure SendGrid
-// Inbound Parse with either:
-//   - URL: https://api.sabq.org/api/email-agent/webhook?token=<secret>
-//   - or a custom header X-Webhook-Token: <secret>
-//
-// Backward compatibility: if SENDGRID_INBOUND_SECRET is unset, the
-// webhook still accepts (logs a critical warning) so existing
-// deployments keep working until the env var is added. Tighten to
-// "always reject" once the secret is deployed everywhere.
-//
-// (Security audit C6, 2026-05-11.)
+// Shared-secret check for the SendGrid Inbound Parse webhook lives in
+// services/emailAgentAuth.ts and runs before multer (Security audit C6).
 /** Safe JSON response — no-op if we already ACKed SendGrid after dedup claim. */
 function respondWebhook(res: Response, body: Record<string, unknown>, status = 200): void {
   if (res.headersSent) return;
   res.status(status).json(body);
 }
 
-function verifyInboundWebhookSecret(req: Request): { ok: boolean; reason?: string } {
-  const inboundSecret = process.env.SENDGRID_INBOUND_SECRET;
-  if (!inboundSecret) {
-    // The backward-compatibility window above is now closed in production:
-    // failing OPEN here meant an unauthenticated endpoint that accepts file
-    // uploads, writes to the database and spends GPT-4o Vision credit, gated
-    // on nothing but URL obscurity. Outside production the permissive path
-    // stays so local and preview runs don't need the secret.
-    if (process.env.NODE_ENV === "production") {
-      console.error("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — rejecting inbound webhook. Set this env var on the backend.");
-      return { ok: false, reason: "webhook secret not configured" };
-    }
-    console.warn("[Email Agent] SENDGRID_INBOUND_SECRET not set — accepting unauthenticated webhook (non-production only).");
-    return { ok: true };
-  }
-  const provided = String(req.query.token || req.get("x-webhook-token") || "");
-  if (!provided) {
-    return { ok: false, reason: "missing token" };
-  }
-  const a = Buffer.from(inboundSecret);
-  const b = Buffer.from(provided);
-  if (a.length !== b.length) return { ok: false, reason: "token length mismatch" };
-  if (!crypto.timingSafeEqual(a, b)) return { ok: false, reason: "invalid token" };
-  return { ok: true };
-}
 
-router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
+router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: Request, res: Response) => {
   let webhookLog: any = null; // Define outside try block so it's accessible in catch
   let dedupKey = ''; // Will be set after parsing
-
-  const secretCheck = verifyInboundWebhookSecret(req);
-  if (!secretCheck.ok) {
-    console.warn(`[Email Agent] Rejected inbound webhook: ${secretCheck.reason}`);
-    return res.status(401).json({ message: "Unauthorized" });
-  }
 
   try {
     console.log("[Email Agent] ============ WEBHOOK START ============");
@@ -850,6 +808,12 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       }
     }
     
+    // OCR واستخراج PDF مدفوعان (GPT-4o Vision): لا يُشغَّلان إلا لمرسل موثوق
+    // نشط برمز صحيح. البريد غير الموثوق يُرفض لاحقًا وتُحفظ مرفقاته خاصةً كما كانت.
+    const earlySender = attachments.length > 0 ? await storage.getTrustedSenderByEmail(senderEmailEarly) : null;
+    const allowPaidExtraction = !!earlySender && earlySender.status === "active" &&
+      emailTokenMatches(extractTokenFromText(subject) || extractTokenFromText(text) || extractTokenFromText(html), earlySender.token);
+
     if (attachments.length > 0) {
       console.log("[Email Agent] 📎 ============ PROCESSING ALL ATTACHMENTS (EARLY) ============");
       
@@ -905,7 +869,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
             // Extract text for AI analysis
             try {
               console.log(`[Email Agent] 📄 Starting PDF text extraction...`);
-              const extractedText = await extractTextFromPdf(attachment.buffer);
+              const extractedText = allowPaidExtraction ? await extractTextFromPdf(attachment.buffer) : "";
               console.log(`[Email Agent] 📄 PDF extraction result: ${extractedText ? extractedText.length : 0} chars`);
               
               if (extractedText && extractedText.length > 0) {
@@ -964,7 +928,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
             // 🔍 Run OCR on image to extract text (if any)
             try {
               console.log(`[Email Agent] 🔍 Starting OCR for image: ${attachment.originalname}`);
-              const ocrText = await extractTextFromImage(attachment.buffer, attachment.mimetype);
+              const ocrText = allowPaidExtraction ? await extractTextFromImage(attachment.buffer, attachment.mimetype) : "";
               console.log(`[Email Agent] 🔍 OCR result: ${ocrText ? ocrText.length : 0} chars`);
               if (ocrText && ocrText.length > 20) {
                 console.log(`[Email Agent] 🔍 OCR extracted text from image: ${ocrText.length} characters`);
@@ -1180,23 +1144,20 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       textPreview: text?.substring(0, 100),
     });
 
+    // لا تُسجَّل قيمة الرمز ولا جزء منها: الرمز سر نشر.
     console.log("[Email Agent] Token search results:", {
-      subject: tokenInSubject ? `✓ Found: ${tokenInSubject.substring(0, 8)}...` : "✗ Not found",
-      text: tokenInBody ? `✓ Found: ${tokenInBody.substring(0, 8)}...` : "✗ Not found",
-      html: tokenInHtml ? `✓ Found: ${tokenInHtml.substring(0, 8)}...` : "✗ Not found",
-      providedToken: providedToken ? `✓ Present: ${providedToken.substring(0, 8)}...` : "✗ Missing",
+      subject: !!tokenInSubject,
+      text: !!tokenInBody,
+      html: !!tokenInHtml,
     });
 
-    const storedToken = trustedSender.token?.toLowerCase();
-    const isTokenValid = providedToken && storedToken && providedToken === storedToken;
+    const isTokenValid = emailTokenMatches(providedToken, trustedSender.token);
 
     if (!isTokenValid) {
       console.log("[Email Agent] Token validation failed:", {
-        providedToken: providedToken || "null",
-        storedToken: storedToken || "null",
+        trustedSenderId: trustedSender.id,
+        tokenPresent: !!providedToken,
         providedLength: providedToken?.length || 0,
-        storedLength: storedToken?.length || 0,
-        match: providedToken === storedToken,
       });
       
       // SECURITY: Upload pending images to PRIVATE for editorial review

@@ -40,7 +40,7 @@ import { decideStatusDemotion, keepScheduledDate, resolveArticleEditFlags, submi
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError, isUniqueViolation } from "./utils/pgError";
 import { isLockedOut, recordFailure, clearFailures } from "./services/authAttemptGuard";
-import { deleteMediaBlob } from "./services/mediaStorage";
+import { deleteMediaBlobIfUnshared } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
@@ -718,7 +718,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (user.twoFactorEnabled) {
         if (process.env.NODE_ENV !== 'production') console.log("🔐 2FA required for user:", user.email);
         // Store userId in session temporarily for 2FA verification
-        (req.session as any).pending2FAUserId = user.id;
+        (req.session as any).pending2FAUserId = user.id; (req.session as any).pending2FAFirstFactor = "password";
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("❌ Session save error:", saveErr);
@@ -1093,7 +1093,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // phone step alone, which is a complete 2FA bypass for anyone who can
       // receive that number's SMS.
       if ((result.user as any).twoFactorEnabled) {
-        (req.session as any).pending2FAUserId = result.user.id;
+        (req.session as any).pending2FAUserId = result.user.id; (req.session as any).pending2FAFirstFactor = "phone";
         return req.session.save((saveErr) => {
           if (saveErr) {
             console.error("❌ phone login session save error:", saveErr);
@@ -2760,7 +2760,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // Remove the underlying blob from the correct backend (CF Images vs GCS/S3).
-      await deleteMediaBlob(existingMedia.url);
+      await deleteMediaBlobIfUnshared(existingMedia);
 
       // Delete from database
       await db.delete(mediaFiles).where(eq(mediaFiles.id, mediaId));
@@ -30865,7 +30865,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(403).json({ error: 'غير مصرح لك بتحديث حالة هذا التحليل' });
       }
 
-      // Update status
+      const denial = status !== analysis.status ? await denyPublish((req.user as any).id, status) : null; if (denial) return res.status(denial.httpStatus).json({ error: denial.message, code: denial.code });
       const updated = await storage.updateDeepAnalysis(req.params.id, { status });
       
       // Log activity
@@ -30990,13 +30990,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/omq - قائمة التحليلات المنشورة (public)
   app.get("/api/omq", async (req, res) => {
     try {
-      const { status, keyword, category, dateFrom, dateTo } = req.query;
+      const { keyword, category, dateFrom, dateTo } = req.query;
       const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true, defaultPage: 1 });
       if (!pg) return;
       
       // Parse filters
       const filters: any = {
-        status: status as string | undefined,
+        status: "published", // public list: ?status must not expose drafts/archived
         keyword: keyword as string | undefined,
         category: category as string | undefined,
         page: pg.page,
@@ -31243,7 +31243,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       }
       
-      // Update analysis
+      const denial = validation.data.status && validation.data.status !== analysis.status ? await denyPublish(userId, validation.data.status) : null; if (denial) return res.status(denial.httpStatus).json({ success: false, error: denial.message, code: denial.code });
       const updated = await storage.updateDeepAnalysis(id, validation.data);
       
       // Log activity

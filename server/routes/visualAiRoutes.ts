@@ -41,7 +41,7 @@ const router = Router();
  * POST /api/visual-ai/analyze
  * Analyze an image for quality, content, and generate Alt text
  */
-router.post("/analyze", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/analyze", isAuthenticated, requirePermission(PERMISSION_CODES.MEDIA_UPLOAD), async (req: Request, res: Response) => {
   try {
     const userId = (req.user as any)?.id;
     

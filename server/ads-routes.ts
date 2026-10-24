@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { canAcceptExternalSse, trackExternalSse, CACHE_TTL, withSWR } from "./memoryCache";
 import { db } from "./db";
 import { pickTableColumns } from "./utils/sanitizeBody";
+import { adGroupUpdateFields, creativeUpdateFields, isAdsAdminRole } from "./utils/adsUpdatePolicy";
 import { isUniqueViolation } from "./utils/pgError";
 import { 
   adAccounts, 
@@ -931,7 +932,7 @@ router.put("/ad-groups/:id", requireAdvertiser, async (req, res) => {
     const [updatedGroup] = await db
       .update(adGroups)
       .set({
-        ...pickTableColumns(adGroups, req.body),
+        ...adGroupUpdateFields(req.body),
         updatedAt: new Date()
       })
       .where(eq(adGroups.id, adGroupId))
@@ -1191,7 +1192,7 @@ router.put("/creatives/:id", requireAdvertiser, async (req, res) => {
     const [updatedCreative] = await db
       .update(creatives)
       .set({
-        ...pickTableColumns(creatives, req.body),
+        ...creativeUpdateFields(req.body, { isAdmin: isAdsAdminRole(userRole), currentStatus: existingCreative.status }),
         updatedAt: new Date()
       })
       .where(eq(creatives.id, creativeId))
@@ -2077,8 +2078,8 @@ router.get("/inventory-slots", requireAdvertiser, async (req, res) => {
   }
 });
 
-// إنشاء مكان ظهور جديد (للمعلنين والمشرفين)
-router.post("/inventory-slots", requireAdvertiser, async (req, res) => {
+// إنشاء مكان ظهور جديد (للمشرفين فقط — المخزون مشترك بين كل الحسابات)
+router.post("/inventory-slots", requireAdmin, async (req, res) => {
   try {
     const userId = (req.user as any).id;
     
@@ -2114,8 +2115,8 @@ router.post("/inventory-slots", requireAdvertiser, async (req, res) => {
   }
 });
 
-// تحديث مكان ظهور (للمعلنين والمشرفين)
-router.put("/inventory-slots/:id", requireAdvertiser, async (req, res) => {
+// تحديث مكان ظهور (للمشرفين فقط)
+router.put("/inventory-slots/:id", requireAdmin, async (req, res) => {
   try {
     const slotId = req.params.id;
     const userId = (req.user as any).id;
@@ -2160,8 +2161,8 @@ router.put("/inventory-slots/:id", requireAdvertiser, async (req, res) => {
   }
 });
 
-// حذف مكان ظهور (للمعلنين والمشرفين)
-router.delete("/inventory-slots/:id", requireAdvertiser, async (req, res) => {
+// حذف مكان ظهور (للمشرفين فقط)
+router.delete("/inventory-slots/:id", requireAdmin, async (req, res) => {
   try {
     const slotId = req.params.id;
     const userId = (req.user as any).id;
