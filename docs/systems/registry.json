@@ -439,7 +439,9 @@
         "server/services/staffAppService.ts",
         "server/services/staffAppPushService.ts",
         "docs/systems/editorial/STAFF_APP_API.md",
-        "tests/unit/staffAppMobile.test.ts"
+        "tests/unit/staffAppMobile.test.ts",
+        "sabq desk ios/**",
+        ".github/workflows/sabq-desk-ios-build.yml"
       ],
       "aiFeatureKeys": [
         "content-tools",

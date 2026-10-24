@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-24 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
+> آخر مراجعة: 2026-10-25 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
 
 ## الملخص
 
@@ -254,3 +254,25 @@ Content-Type: application/json
 
 ### ج) عزل إشعارات القارئ عن أجهزة الديسك
 تم تحديث `notifyEditorialEvent` في `server/services/editorialNotifications.ts` لفلترة أجهزة iOS حسب حزمة تطبيق القارئ (`bundleId = 'com.sabq.sabqorg'`) وتمرير `topic: 'com.sabq.sabqorg'` إلى APNs، مما يضمن عدم إرسال إشعارات القارئ/الكاتب إلى أجهزة `com.sabq.desk`.
+
+---
+
+## 5) تطبيق iOS «ديسك سبق» (`sabq desk ios/`)
+
+| الجزء | المسار |
+|-------|--------|
+| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي |
+| شاشات التطبيق | `sabq desk ios/SabqDesk/` — الدخول + 2FA، شاشة «فعّل المصادقة الثنائية»، تبويبا «الوارد» و«الإعدادات»، تفاصيل الاستفسار، تفاصيل مقترح النشر وورقتا الجدولة والرفض |
+| حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
+| الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
+| CI | `.github/workflows/sabq-desk-ios-build.yml` — بناء بلا توقيع + الاختبارات |
+
+**سلوك العميل:**
+- الجلسة في Keychain (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`)، وتُحذف محلياً عند أي `401`. `403 two_factor_required` لا يحذف الجلسة؛ يعرض التطبيق شاشة تشرح التفعيل من `https://sabq.org/settings/security` ثم «تحقّق الآن».
+- `X-Installation-Id` معرّف عشوائي لكل تثبيت (UserDefaults)، ويُرسل أيضاً مع `POST /api/v1/members/push-token` (`bundleId: "com.sabq.desk"`). عند الخروج يُلغى تسجيل الرمز بـ `DELETE /api/v1/members/push-token`.
+- تسجيل رمز الدفع مربوط بمعرّف المستخدم (`PushRegistrationState`): يُعاد التسجيل كلما اختلف المستخدم أو تغيّر الرمز، ويُصفَّر الربط عند الخروج وعند أي `401`، لأن الخادم يربط الرمز بآخر حساب سجّله (upsert على `deviceToken`).
+- الأرقام العربية-الهندية والفارسية (`١٢٣`، `۱۲۳`) تُحوَّل إلى ASCII قبل الإرسال (`DeskInput`): رمز 2FA (أرقام فقط)، والرمز الاحتياطي (مع تكبير الأحرف)، ورقم الجوال في الدخول.
+- الأزرار تتبع `capabilities` من `/me` وحالة المنشور كحراسة الخادم: النشر/الجدولة لـ `draft | scheduled | failed`، والرفض لـ `draft | scheduled`.
+- «انشر الآن» يمر بتأكيد، والجدولة تعرض ملخص الموعد بتوقيت الرياض قبل الإرسال (`scheduledAt` بإزاحة `+03:00`).
+- أسباب الرفض الجاهزة: لا يناسب سياسة الحساب، معلومة غير دقيقة، مكرر، يحتاج إعادة صياغة؛ مع ملاحظة اختيارية تُضم في `reason` (`<السبب> — <الملاحظة>`).
+- المعرّفات القادمة من رابط أو إشعار تُقبل فقط إن كانت `[A-Za-z0-9_-]{1,128}`؛ يقرأ التطبيق `deeplink` أولاً ثم `ticketId`/`postId`.
