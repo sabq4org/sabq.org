@@ -59,6 +59,28 @@ final class ClientTests: XCTestCase {
         XCTAssertNil(body["token"])
     }
 
+    func testVerifyTwoFactorSendsArabicIndicCodeAsASCII() async throws {
+        let (client, transport, _) = makeClient([.init(status: 200, body: Fixtures.loginSuccess)])
+        _ = try await client.verifyTwoFactor(challengeToken: "c", factor: .code("١٢٣ ٤٥٦"))
+        let body = jsonObject(transport.lastRequest?.httpBody)
+        XCTAssertEqual(body["token"] as? String, "123456")
+    }
+
+    func testVerifyWithBackupCodeNormalizesDigitsAndCase() async throws {
+        let (client, transport, _) = makeClient([.init(status: 200, body: Fixtures.loginSuccess)])
+        _ = try await client.verifyTwoFactor(challengeToken: "c", factor: .backupCode(" abcd-١٢٣٤ "))
+        let body = jsonObject(transport.lastRequest?.httpBody)
+        XCTAssertEqual(body["backupCode"] as? String, "ABCD-1234")
+    }
+
+    func testLoginWithArabicIndicPhoneSendsASCIIPhone() async throws {
+        let (client, transport, _) = makeClient([.init(status: 200, body: Fixtures.loginNeeds2FA)])
+        _ = try await client.login(identifier: " ٠٥٠٠٠٠٠٠٠٠ ", password: "pw")
+        let body = jsonObject(transport.lastRequest?.httpBody)
+        XCTAssertEqual(body["phone"] as? String, "0500000000")
+        XCTAssertNil(body["email"])
+    }
+
     func testWrongCodeSurfacesServerMessage() async {
         let (client, _, store) = makeClient([.init(status: 401, body: #"{"success":false,"message":"رمز التحقق غير صحيح"}"#)])
         do {

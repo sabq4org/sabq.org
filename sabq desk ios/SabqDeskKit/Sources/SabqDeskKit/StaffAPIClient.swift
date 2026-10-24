@@ -49,7 +49,7 @@ public struct StaffAPIClient: Sendable {
 
     /// `identifier` is an email when it contains `@`, otherwise a phone number.
     public func login(identifier: String, password: String) async throws -> StaffLoginResult {
-        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = DeskInput.loginIdentifier(identifier)
         let body = LoginBody(email: trimmed.contains("@") ? trimmed : nil,
                              phone: trimmed.contains("@") ? nil : trimmed,
                              password: password,
@@ -62,10 +62,10 @@ public struct StaffAPIClient: Sendable {
         let body: VerifyBody
         switch factor {
         case .code(let code):
-            body = VerifyBody(challengeToken: challengeToken, token: code.filter(\.isNumber), backupCode: nil, deviceInfo: deviceInfo)
+            body = VerifyBody(challengeToken: challengeToken, token: DeskInput.otpCode(code), backupCode: nil, deviceInfo: deviceInfo)
         case .backupCode(let code):
             body = VerifyBody(challengeToken: challengeToken, token: nil,
-                              backupCode: code.trimmingCharacters(in: .whitespacesAndNewlines), deviceInfo: deviceInfo)
+                              backupCode: DeskInput.backupCode(code), deviceInfo: deviceInfo)
         }
         let response: MemberAuthResponse = try await send("POST", "/api/v1/auth/verify-2fa", body: body, authorized: false)
         guard case .signedIn(let session) = try handleAuth(response) else {

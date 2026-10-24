@@ -131,12 +131,12 @@ struct LoginView: View {
         }
         .onAppear { focused = .code }
         .onChange(of: code) { _, value in
-            if !useBackupCode, value.filter(\.isNumber).count == 6, !isBusy { verify() }
+            if !useBackupCode, DeskInput.otpCode(value).count == 6, !isBusy { verify() }
         }
     }
 
     private var isCodeComplete: Bool {
-        useBackupCode ? code.trimmingCharacters(in: .whitespaces).count >= 6 : code.filter(\.isNumber).count == 6
+        useBackupCode ? code.trimmingCharacters(in: .whitespaces).count >= 6 : DeskInput.otpCode(code).count == 6
     }
 
     private func busyLabel(_ title: String) -> some View {
