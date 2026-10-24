@@ -40,7 +40,7 @@ import { decideStatusDemotion, keepScheduledDate, resolveArticleEditFlags, submi
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError, isUniqueViolation } from "./utils/pgError";
 import { isLockedOut, recordFailure, clearFailures } from "./services/authAttemptGuard";
-import { deleteMediaBlob } from "./services/mediaStorage";
+import { deleteMediaBlobIfUnshared } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
@@ -2760,7 +2760,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // Remove the underlying blob from the correct backend (CF Images vs GCS/S3).
-      await deleteMediaBlob(existingMedia.url);
+      await deleteMediaBlobIfUnshared(existingMedia);
 
       // Delete from database
       await db.delete(mediaFiles).where(eq(mediaFiles.id, mediaId));

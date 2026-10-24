@@ -2,7 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { mediaFiles, articleMediaAssets, mediaUsageLog, type MediaFile } from "@shared/schema";
 import { userHasPermission } from "../rbac";
-import { deleteMediaBlob } from "./mediaStorage";
+import { deleteMediaBlobIfUnshared } from "./mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./mediaAutoTagService";
 
 export type BulkMediaAction = "move" | "delete" | "favorite" | "unfavorite";
@@ -95,7 +95,7 @@ export async function bulkMediaOperation(
       result.blocked.push(t.id);
       continue;
     }
-    await deleteMediaBlob(t.url);
+    await deleteMediaBlobIfUnshared(t);
     await db.delete(mediaFiles).where(eq(mediaFiles.id, t.id));
     result.processed++;
   }
