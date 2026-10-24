@@ -25,6 +25,13 @@ import { suggestSocialPostForArticle } from "./socialPublishing/suggestService";
 import { listPublisherMembers, notifyAdmins, notifyPublisherMembers } from "./publisherPortalService";
 import { sendEditorWhatsAppNotice } from "./editorAlerts";
 import { button, emailShell, escapeHtml } from "./publisherRenewalService";
+import {
+  AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL,
+  buildDeskSocialProposalAlertEmail,
+  getAgencySocialAlertRecipients,
+  isMeaningfulProposalTextChange,
+  sendDeskAlertEmails,
+} from "./deskBotAlerts";
 
 export type AgencySocialMode = "off" | "approval" | "direct";
 export type AgencyMediaChoice = "article" | "images" | "video" | "none";
@@ -181,7 +188,7 @@ export type AgencySocialOutcome = "submitted" | "updated" | "published" | "sched
 
 const AGENCY_REQUESTS_URL = "https://sabq.org/dashboard/social-publishing?filter=agency";
 /** نسخة بريدية من تنبيه تغريدات الوكالات (طلب الإدارة، 6 أكتوبر 2026). */
-const AGENCY_SOCIAL_ALERT_EMAIL = "aalhazmi@sabq.org";
+export const AGENCY_SOCIAL_ALERT_EMAIL = AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL;
 
 /**
  * إنشاء أو تعديل تغريدة الوكالة لخبرها، ثم إرسالها للموافقة أو نشرها
@@ -225,6 +232,7 @@ export async function saveAgencySocialPost(
   const text = input.textSource === "title" ? status.article.title : input.text;
   const media = agencyPostMedia(input.media, input.mediaUrls, status.article.imageUrl);
   const pendingId = status.state === "pending" ? status.post?.id ?? null : null;
+  const pendingTextChanged = pendingId ? isMeaningfulProposalTextChange(status.post?.text, text) : true;
   const askedAt = input.action === "submit" ? requestedAt : null;
 
   let post: SocialPost;
@@ -252,20 +260,31 @@ export async function saveAgencySocialPost(
 
   const riyadh = (d: Date) =>
     d.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh", dateStyle: "medium", timeStyle: "short" });
+  const sendAgencyEmailNotice = async (headline: string, isUpdate = false) => {
+    const recipients = await getAgencySocialAlertRecipients();
+    const emailPayload = buildDeskSocialProposalAlertEmail({
+      postId: post.id,
+      proposalKind: "agency",
+      senderName: publisher.agencyName,
+      senderRole: "agency",
+      text,
+      articleTitle: status.article.title,
+      articleUrl: status.article.url,
+      dashboardUrl: AGENCY_REQUESTS_URL,
+      headline: `${headline.replace(/^\S+\s/, "")} · ${publisher.agencyName}`,
+      isUpdate,
+      occurredAt: now,
+    });
+    await sendDeskAlertEmails(recipients, emailPayload, "[Agency Social]");
+  };
   // واتساب رئيس التحرير ونسخة بالبريد: لا ينتظرهما الطلب، وفشلهما لا يُفشل التغريدة
   const whatsapp = (headline: string) => {
     void sendEditorWhatsAppNotice(
       `${headline}\nالوكالة: ${publisher.agencyName}\nالخبر: ${status.article.title}\nالتغريدة: ${text.slice(0, 200)}\n${AGENCY_REQUESTS_URL}`,
     ).catch((err) => console.error("[Agency Social] WhatsApp notice failed:", err));
-    void sendEmailNotification({
-      to: AGENCY_SOCIAL_ALERT_EMAIL,
-      subject: `سبق | ${headline.replace(/^\S+\s/, "")} · ${publisher.agencyName}`,
-      html: emailShell(`
-        <h3 style="margin:0 0 8px;color:#0f172a">${escapeHtml(headline)}</h3>
-        <p><strong>الوكالة:</strong> ${escapeHtml(publisher.agencyName)}<br><strong>الخبر:</strong> ${escapeHtml(status.article.title)}</p>
-        <p style="white-space:pre-wrap;background:#f1f5f9;border-radius:8px;padding:12px">${escapeHtml(text)}</p>
-        ${button(AGENCY_REQUESTS_URL, "طلبات الوكالات")}`),
-    }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+    void sendAgencyEmailNotice(headline, false).catch((err) =>
+      console.error("[Agency Social] email notice failed:", err),
+    );
   };
 
   if (input.action === "publish_now") {
@@ -294,6 +313,11 @@ export async function saveAgencySocialPost(
       deeplink: "/dashboard/social-publishing?filter=agency",
     });
     whatsapp(`🐦 طلب تغريدة من وكالة بانتظار موافقتك${askedAt ? ` (موعد مطلوب: ${riyadh(askedAt)})` : ""}`);
+  } else if (pendingTextChanged) {
+    void sendAgencyEmailNotice(
+      `🐦 تحديث طلب تغريدة من وكالة بانتظار موافقتك${askedAt ? ` (موعد مطلوب: ${riyadh(askedAt)})` : ""}`,
+      true,
+    ).catch((err) => console.error("[Agency Social] email notice failed:", err));
   }
   return { outcome: pendingId ? "updated" : "submitted", post };
 }

@@ -1,15 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb } = vi.hoisted(() => ({
+const { mockDb, mockSendEmailNotification } = vi.hoisted(() => ({
   mockDb: {
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
     execute: vi.fn(),
   },
+  mockSendEmailNotification: vi.fn(),
 }));
 
 vi.mock("../../server/db", () => ({ db: mockDb }));
+vi.mock("../../server/services/email", () => ({
+  sendEmailNotification: (...args: unknown[]) => mockSendEmailNotification(...args),
+}));
 
 import {
   createOrUpdateAuthorSocialProposal,
@@ -747,5 +751,146 @@ describe("opinionAuthorSocialProposal — إحصائيات لوحة التحكم
       pendingAuthorProposals: 0,
       pendingAgencyProposals: 0,
     });
+  });
+});
+
+describe("opinionAuthorSocialProposal — تنبيه البريد للديسك عند الإنشاء أو تغير النص", () => {
+  const authorId = "author-user-123";
+  const articleId = "article-op-789";
+  const nowTime = new Date("2026-08-18T12:00:00.000Z");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(nowTime);
+    vi.clearAllMocks();
+    mockSendEmailNotification.mockResolvedValue({ success: true });
+    vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org");
+    vi.stubEnv("DESK_BOT_ALERT_EMAILS", "sohba@mail.grokbot.com");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("يرسل بريد تنبيه بمعرّف قابل للتحليل آلياً عند إنشاء مقترح جديد", async () => {
+    const articleData = {
+      id: articleId,
+      title: "مقال رأي جديد",
+      slug: "new-opinion",
+      englishSlug: "new-opinion-en",
+      imageUrl: null,
+      status: "published",
+      articleType: "opinion",
+      authorId,
+      submitterId: authorId,
+      publishedAt: new Date(nowTime.getTime() - 60 * 60 * 1000),
+    };
+
+    mockDb.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([articleData]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: "acc-1" }]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: () => ({
+            limit: () =>
+              Promise.resolve([{ firstName: "أحمد", lastName: "الزهراني", email: "a@sabq.org", role: "opinion_author" }]),
+          }),
+        }),
+      });
+
+    mockDb.insert.mockReturnValueOnce({
+      values: () => ({
+        returning: () =>
+          Promise.resolve([
+            {
+              id: "post-new-101",
+              articleId,
+              status: "draft",
+              text: "نص المقترح الأول",
+              createdByUserId: authorId,
+            },
+          ]),
+      }),
+    });
+
+    await createOrUpdateAuthorSocialProposal({
+      articleId,
+      authorUserId: authorId,
+      text: "نص المقترح الأول",
+      textSource: "custom",
+    });
+
+    expect(mockSendEmailNotification).toHaveBeenCalledTimes(1);
+    expect(mockSendEmailNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "sohba@mail.grokbot.com",
+        subject: expect.stringContaining("[sabq-desk] type=social_proposal id=post-new-101"),
+        text: expect.stringContaining("أحمد الزهراني"),
+      }),
+    );
+  });
+
+  it("لا يرسل بريد تنبيه مكرر إذا أُعيد حفظ المسودة بنفس النص (منع السبام)", async () => {
+    const articleData = {
+      id: articleId,
+      title: "مقال رأي",
+      slug: "my-opinion",
+      englishSlug: null,
+      imageUrl: null,
+      status: "published",
+      articleType: "opinion",
+      authorId,
+      submitterId: authorId,
+      publishedAt: new Date(nowTime.getTime() - 60 * 60 * 1000),
+    };
+
+    mockDb.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([articleData]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: "acc-1" }]) }) }) })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: () => ({
+            limit: () =>
+              Promise.resolve([
+                {
+                  id: "post-existing-1",
+                  articleId,
+                  status: "draft",
+                  text: "نفس النص تماماً",
+                  accountId: "acc-1",
+                },
+              ]),
+          }),
+        }),
+      });
+
+    mockDb.update.mockReturnValueOnce({
+      set: () => ({
+        where: () => ({
+          returning: () =>
+            Promise.resolve([
+              {
+                id: "post-existing-1",
+                articleId,
+                status: "draft",
+                text: "نفس النص تماماً",
+                textSource: "custom",
+              },
+            ]),
+        }),
+      }),
+    });
+
+    await createOrUpdateAuthorSocialProposal({
+      articleId,
+      authorUserId: authorId,
+      text: "  نفس   النص تماماً ",
+      textSource: "custom",
+    });
+
+    expect(mockSendEmailNotification).not.toHaveBeenCalled();
   });
 });

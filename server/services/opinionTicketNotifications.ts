@@ -1,5 +1,5 @@
 /**
- * إشعار مسؤول/مدير النظام عند استفسار أو رسالة من المساهم (لا المحرر).
+ * إشعار مسؤول/مدير النظام وبوت الديسك عند استفسار أو رسالة من المساهم (لا المحرر).
  * الصندوق الداخلي عبر notifications_inbox (نفس جرس اللوحة)، والبريد عبر
  * sendEmailNotification إن كان مزود البريد مهيأً. فشل الإشعار لا يُفشل حفظ التذكرة.
  */
@@ -14,6 +14,10 @@ import {
   isOpinionTicketNotifyRecipient,
   type OpinionTicketNoticeKind,
 } from "./opinionTicketNotice";
+import {
+  buildDeskTicketAlertEmail,
+  getDeskBotAlertRecipients,
+} from "./deskBotAlerts";
 
 const NOTIFY_ROLE_NAMES = [...OPINION_TICKET_NOTIFY_ROLE_NAMES];
 
@@ -63,40 +67,62 @@ export async function notifyDeskOfWriterInquiry(input: {
   ticketId: string;
   title: string;
   writerName?: string | null;
+  writerRole?: string | null;
   message: string;
   senderId: string;
+  occurredAt?: Date;
 }): Promise<void> {
   const notice = buildOpinionTicketStaffNotice(input);
-  const recipients = await listOpinionDeskRecipients(input.senderId);
-  if (recipients.length === 0) return;
+  let recipients: Array<{ id: string; email: string | null }> = [];
+  try {
+    recipients = await listOpinionDeskRecipients(input.senderId);
+  } catch (err) {
+    console.error("[opinion-tickets] list recipients failed", err);
+  }
 
-  await Promise.all(
-    recipients.map(async (recipient) => {
-      try {
-        await storage.createNotification({
-          userId: recipient.id,
-          type: notice.type,
-          title: notice.title,
-          body: notice.body,
-          deeplink: notice.deeplink,
-          metadata: notice.metadata,
-        });
-      } catch (err) {
-        console.error("[opinion-tickets] inbox notify failed", err);
-      }
-    }),
-  );
+  if (recipients.length > 0) {
+    await Promise.all(
+      recipients.map(async (recipient) => {
+        try {
+          await storage.createNotification({
+            userId: recipient.id,
+            type: notice.type,
+            title: notice.title,
+            body: notice.body,
+            deeplink: notice.deeplink,
+            metadata: notice.metadata,
+          });
+        } catch (err) {
+          console.error("[opinion-tickets] inbox notify failed", err);
+        }
+      }),
+    );
+  }
+
+  const emailRecipients = await getDeskBotAlertRecipients({
+    extraEmails: recipients.map((r) => r.email),
+  });
+  if (emailRecipients.length === 0) return;
 
   const origin = (process.env.FRONTEND_URL || "https://sabq.org").replace(/\/$/, "");
-  const link = `${origin}${notice.deeplink}`;
-  const text = `${notice.body}\n\nافتح الاستفسار: ${link}`;
-  for (const recipient of recipients) {
-    const email = recipient.email?.trim();
-    if (!email) continue;
+  const deeplinkUrl = `${origin}${notice.deeplink}`;
+  const emailPayload = buildDeskTicketAlertEmail({
+    ticketId: input.ticketId,
+    kind: input.kind,
+    title: input.title,
+    senderName: input.writerName,
+    senderRole: input.writerRole || "writer",
+    message: input.message,
+    deeplinkUrl,
+    occurredAt: input.occurredAt,
+  });
+
+  for (const to of emailRecipients) {
     void sendEmailNotification({
-      to: email,
-      subject: notice.title,
-      text,
+      to,
+      subject: emailPayload.subject,
+      text: emailPayload.text,
+      html: emailPayload.html,
     }).catch((err) => {
       console.error("[opinion-tickets] email notify failed", err);
     });

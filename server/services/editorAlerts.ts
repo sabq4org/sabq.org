@@ -47,7 +47,7 @@ interface ArticlePublishData {
   language?: 'ar' | 'en' | 'ur'; // Language of the article for correct URL path
 }
 
-interface EditorAlertSettings {
+export interface EditorAlertSettings {
   enabled: boolean;
   email?: string;
   whatsappNumber?: string;
@@ -61,6 +61,12 @@ interface EditorAlertSettings {
    * Defaults on when a WhatsApp number is registered.
    */
   aiCriticalAlertsEnabled?: boolean;
+  /**
+   * Extra email recipients for Desk Bot notifications (contributor tickets,
+   * opinion author social proposals, and agency social proposals).
+   * Combined with `DESK_BOT_ALERT_EMAILS` env var.
+   */
+  deskBotAlertEmails?: string[];
 }
 
 const DEFAULT_SETTINGS: EditorAlertSettings = {
@@ -505,6 +511,12 @@ export async function updateEditorAlertSettings(settings: Partial<EditorAlertSet
       normalizedSettings.whatsappNumbers = Array.from(new Set(filtered));
       // Clear legacy single number field when using array
       normalizedSettings.whatsappNumber = undefined;
+    }
+    if (normalizedSettings.deskBotAlertEmails !== undefined) {
+      const filteredEmails = normalizedSettings.deskBotAlertEmails
+        .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
+        .filter((e) => Boolean(e) && e.includes("@"));
+      normalizedSettings.deskBotAlertEmails = Array.from(new Set(filteredEmails));
     }
     
     const newSettings: EditorAlertSettings = {

@@ -154,6 +154,8 @@ async function principalFromTokenRow(row: Awaited<ReturnType<typeof findActiveTo
   return {
     userId: row.user.id,
     tokenId: row.token.id,
+    tokenPrefix: row.token.tokenPrefix,
+    label: row.token.label ?? null,
     email: row.user.email ?? "",
     name: displayName(row.user),
     expiresAt: row.token.expiresAt,
