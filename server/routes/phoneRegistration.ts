@@ -82,7 +82,7 @@ router.post(
     try {
       const parsed = completeRegistrationSchema.safeParse(req.body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         return res.status(400).json({ message: firstError?.message || "البيانات غير صحيحة" });
       }
       const { registrationToken, firstName, lastName, email, password, confirmPassword } =
@@ -198,7 +198,7 @@ router.post(
 
       const parsed = completeProfileSchema.safeParse(req.body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         return res.status(400).json({ message: firstError?.message || "البيانات غير صحيحة" });
       }
       const { firstName, lastName, email, password } = parsed.data;

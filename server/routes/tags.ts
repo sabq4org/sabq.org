@@ -95,7 +95,7 @@ export function registerTagRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -152,7 +152,7 @@ export function registerTagRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 

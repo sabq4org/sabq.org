@@ -115,7 +115,7 @@ import {
 import { ImageUploadDialog } from "@/components/ImageUploadDialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertNativeAdSchema, type NativeAd, type Category } from "@shared/schema";
 import { z } from "zod";
@@ -559,7 +559,7 @@ export default function NativeAdsManagement() {
   }, []);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: {
       title: "",
       description: "",

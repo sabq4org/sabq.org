@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { apiRequest, apiUrl, getCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -57,7 +57,7 @@ const contactFormSchema = z.object({
     .regex(/^\+966[0-9]{9}$/, "رقم الهاتف يجب أن يبدأ بـ +966 متبوعاً بـ 9 أرقام"),
   email: z.string().email("البريد الإلكتروني غير صالح"),
   subject: z.enum(["استفسار عام", "شراكات إعلامية", "شكوى", "اقتراح", "أخرى"], {
-    required_error: "يرجى اختيار موضوع الرسالة",
+    error: (iss) => (iss.input === undefined ? "يرجى اختيار موضوع الرسالة" : undefined),
   }),
   message: z.string().min(10, "الرسالة يجب أن تكون 10 أحرف على الأقل"),
   captchaAnswer: z.string().min(1, "يرجى الإجابة على سؤال التحقق"),
@@ -131,7 +131,7 @@ export default function ContactPage() {
       if (csrfToken) {
         headers["x-csrf-token"] = csrfToken;
       }
-      const response = await fetch("/api/contact/upload", {
+      const response = await fetch(apiUrl("/api/contact/upload"), {
         method: "POST",
         body: formData,
         credentials: "include",

@@ -74,7 +74,7 @@ router.post("/api/opinion-author/notifications/read-all", async (req, res) => {
 });
 
 router.post("/api/opinion-author/notifications/:id/read", async (req, res) => {
-  const parsedId = z.string().uuid().safeParse(req.params.id);
+  const parsedId = z.string().guid().safeParse(req.params.id);
   if (!parsedId.success) return res.status(400).json({ message: "معرّف التنبيه غير صالح" });
   try {
     await markWriterEditorialNotificationRead(requestUserId(req), parsedId.data);
@@ -224,7 +224,7 @@ router.post("/api/opinion-author/articles/:articleId/social-proposal", async (re
   try {
     const parsed = authorProposalSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات المقترح غير صالحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || "بيانات المقترح غير صالحة" });
     }
     const post = await createOrUpdateAuthorSocialProposal({
       articleId: req.params.articleId,

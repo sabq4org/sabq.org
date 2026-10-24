@@ -34,7 +34,7 @@ router.post("/api/editorial-images/generations", async (req, res) => {
 });
 
 router.get("/api/editorial-images/generations/:id", async (req, res) => {
-  if (!z.string().uuid().safeParse(req.params.id).success) return res.status(400).json({ message: "معرّف العملية غير صالح." });
+  if (!z.string().guid().safeParse(req.params.id).success) return res.status(400).json({ message: "معرّف العملية غير صالح." });
   try {
     const job = await getEditorialImageJob((req.user as { id: string }).id, req.params.id);
     if (!job) return res.status(404).json({ message: "عملية التوليد غير موجودة." });

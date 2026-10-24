@@ -56,7 +56,7 @@ router.post(
     const parsed = taskBodySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة",
+        message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة",
       });
     }
     if (parsed.data.type === "merge" && !parsed.data.material2?.trim()) {

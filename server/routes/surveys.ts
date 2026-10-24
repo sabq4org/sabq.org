@@ -56,7 +56,7 @@ const surveySchema = z.object({
   questions: z.array(questionSchema).min(1).max(30),
 });
 
-const surveyIdParam = z.string().uuid();
+const surveyIdParam = z.string().guid();
 
 const analyzeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -284,7 +284,7 @@ router.post("/api/public/surveys/:token/submit", async (req, res) => {
   const parsedToken = tokenParam.safeParse(req.params.token);
   if (!parsedToken.success) return res.status(404).json({ message: "الرابط غير صالح" });
   const schema = z.object({
-    answers: z.record(z.union([z.number(), z.array(z.number()), z.string().max(5000)])),
+    answers: z.record(z.string(), z.union([z.number(), z.array(z.number()), z.string().max(5000)])),
     durationSeconds: z.number().int().min(0).max(24 * 60 * 60).optional(),
   });
   const parsed = schema.safeParse(req.body);

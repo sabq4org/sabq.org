@@ -214,7 +214,7 @@ router.post(
     try {
       const parsed = requestChangesSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
       }
 
       const result = await requestArticleChanges(
@@ -273,7 +273,7 @@ router.post(
     try {
       const parsed = addMemberSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
       }
 
       const result = parsed.data.mode === "link"
@@ -367,7 +367,7 @@ router.post("/api/admin/publishers/guide", requireAuth, requirePublisherManageme
   try {
     const parsed = guideSectionSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
     }
     const section = await createGuideSection((req.user as { id: string }).id, parsed.data);
     res.status(201).json(section);
@@ -392,7 +392,7 @@ router.patch("/api/admin/publishers/guide/:id", requireAuth, requirePublisherMan
   try {
     const parsed = guideSectionSchema.partial().safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
     }
     const section = await updateGuideSection((req.user as { id: string }).id, req.params.id, parsed.data);
     if (!section) return res.status(404).json({ message: "القسم غير موجود" });
@@ -437,7 +437,7 @@ router.post("/api/publisher/portal/requests", async (req, res) => {
   try {
     const parsed = portalRequestSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
     }
     const result = await createPublisherRequest(
       (req as any).publisher,
@@ -565,7 +565,7 @@ router.post("/api/publisher/portal/articles/:id/social", async (req, res) => {
   try {
     const parsed = agencySocialSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" });
     }
     const { requestedAt, ...input } = parsed.data;
     const result = await saveAgencySocialPost((req as any).publisher, requestUserId(req), req.params.id, {
@@ -684,7 +684,7 @@ router.post("/api/admin/publishers/requests/:id/offer", requireAuth, requirePubl
   try {
     const parsed = offerSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات العرض غير صحيحة" });
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات العرض غير صحيحة" });
     }
     const result = await sendRenewalOffer(req.params.id, (req.user as { id: string }).id, parsed.data, {
       notifyMembers: notifyPublisherMembers,

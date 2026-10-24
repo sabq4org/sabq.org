@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IFoxCategoryTemplate } from "@/components/admin/ifox/IFoxCategoryTemplate";
@@ -160,7 +160,7 @@ export default function IFoxInsights() {
   const [selectedChart, setSelectedChart] = useState<"line" | "bar" | "pie" | "area">("line");
 
   const form = useForm<ReportFormData>({
-    resolver: zodResolver(reportSchema),
+    resolver: zodResolver(reportSchema) as Resolver<ReportFormData>,
     defaultValues: {
       title: "",
       description: "",

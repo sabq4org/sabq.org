@@ -57,7 +57,7 @@ router.post("/register", async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+      return res.status(400).json({ error: error.issues[0].message });
     }
     console.error("Error registering advertiser:", error);
     res.status(500).json({ error: "حدث خطأ أثناء التسجيل" });
@@ -97,7 +97,7 @@ router.post("/login", async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+      return res.status(400).json({ error: error.issues[0].message });
     }
     console.error("Error logging in advertiser:", error);
     res.status(500).json({ error: "حدث خطأ أثناء تسجيل الدخول" });
@@ -157,7 +157,7 @@ router.put("/profile", requireAdvertiserAuth, async (req: Request, res: Response
     res.json(safeAdvertiser);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+      return res.status(400).json({ error: error.issues[0].message });
     }
     console.error("Error updating advertiser profile:", error);
     res.status(500).json({ error: "حدث خطأ أثناء التحديث" });

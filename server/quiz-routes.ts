@@ -50,7 +50,7 @@ router.post("/api/articles/:articleId/quiz", requireRole("editor"), async (req: 
 
     const parsed = createQuizSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0].message });
+      return res.status(400).json({ error: parsed.error.issues[0].message });
     }
 
     const { questions, ...quizData } = parsed.data;
@@ -250,7 +250,7 @@ router.post("/api/articles/:articleId/quiz/submit", async (req: Request, res: Re
 
     const parsed = submitQuizSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0].message });
+      return res.status(400).json({ error: parsed.error.issues[0].message });
     }
 
     const { answers, timeSpent, sessionId } = parsed.data;

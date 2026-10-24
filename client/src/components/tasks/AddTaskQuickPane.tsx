@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
@@ -110,7 +110,7 @@ export default function AddTaskQuickPane({
   const { user } = useAuth();
 
   const form = useForm<QuickTaskForm>({
-    resolver: zodResolver(quickTaskSchema),
+    resolver: zodResolver(quickTaskSchema) as Resolver<QuickTaskForm>,
     defaultValues: {
       title: "",
       description: "",

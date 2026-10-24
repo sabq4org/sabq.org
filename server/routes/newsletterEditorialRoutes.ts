@@ -105,7 +105,7 @@ router.get("/api/newsletter/editorial/:id", async (req, res) => {
 
 router.post("/api/newsletter/editorial/drafts", editorialDraftLimiter, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات غير صحيحة" });
+  if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message || "بيانات غير صحيحة" });
   try {
     const userId = actorId(req);
     const newsletter = await createNewsletterEditorialDraft({ ...parsed.data, userId });
@@ -132,7 +132,7 @@ router.post("/api/newsletter/editorial/drafts", editorialDraftLimiter, async (re
 
 router.patch("/api/newsletter/editorial/:id", async (req, res) => {
   const parsed = newsletterEditorialEditSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات غير صحيحة" });
+  if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message || "بيانات غير صحيحة" });
   try {
     const result = await updateNewsletterEditorialDraft(req.params.id, parsed.data, actorId(req));
     if (!result) return res.status(404).json({ message: "المسودة غير موجودة" });

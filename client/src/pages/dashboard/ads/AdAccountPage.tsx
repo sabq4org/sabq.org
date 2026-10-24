@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
@@ -91,7 +91,7 @@ export default function AdAccountPage() {
   });
 
   const form = useForm<AccountFormValues>({
-    resolver: zodResolver(accountFormSchema),
+    resolver: zodResolver(accountFormSchema) as Resolver<AccountFormValues>,
     defaultValues: {
       companyName: "",
       companyNameEn: "",

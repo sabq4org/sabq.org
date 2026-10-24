@@ -372,8 +372,8 @@ router.put("/edit/:commentId", async (req: Request, res: Response) => {
     const parsed = editCommentSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ 
-        error: parsed.error.errors[0].message,
-        field: parsed.error.errors[0].path[0]
+        error: parsed.error.issues[0].message,
+        field: parsed.error.issues[0].path[0]
       });
     }
 
@@ -419,8 +419,8 @@ router.delete("/delete/:commentId", async (req: Request, res: Response) => {
     const parsed = deleteCommentSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ 
-        error: parsed.error.errors[0].message,
-        field: parsed.error.errors[0].path[0]
+        error: parsed.error.issues[0].message,
+        field: parsed.error.issues[0].path[0]
       });
     }
 
@@ -530,8 +530,8 @@ router.post("/member/:memberId/bulk-action", async (req: Request, res: Response)
     const parsed = bulkActionSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ 
-        error: parsed.error.errors[0].message,
-        field: parsed.error.errors[0].path[0]
+        error: parsed.error.issues[0].message,
+        field: parsed.error.issues[0].path[0]
       });
     }
     
@@ -584,8 +584,8 @@ router.post("/member/:memberId/bulk-action-by-filter", async (req: Request, res:
     const parsed = bulkActionByFilterSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ 
-        error: parsed.error.errors[0].message,
-        field: parsed.error.errors[0].path[0]
+        error: parsed.error.issues[0].message,
+        field: parsed.error.issues[0].path[0]
       });
     }
     

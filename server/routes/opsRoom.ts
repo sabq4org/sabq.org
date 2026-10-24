@@ -67,7 +67,7 @@ const createSchema = z.object({
 router.post("/api/admin/ops-room/tasks", requirePermission(OPS_PERMISSIONS.create), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صالحة" });
+    res.status(400).json({ message: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" });
     return;
   }
   const b = parsed.data;
@@ -114,7 +114,7 @@ const actionSchema = z.object({
   stepId: z.string().max(64).optional(),
   stepKey: z.string().max(64).optional(),
   note: z.string().trim().max(4000).optional(),
-  editedResult: z.record(z.unknown()).optional(),
+  editedResult: z.record(z.string(), z.unknown()).optional(),
 });
 
 /** صلاحية كل إجراء — الفصل الذي يطلبه دستور الغرفة */
@@ -133,7 +133,7 @@ const ACTION_PERMISSION: Record<z.infer<typeof actionSchema>["action"], string> 
 router.post("/api/admin/ops-room/tasks/:id/actions", async (req, res, next) => {
   const parsed = actionSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.errors[0]?.message ?? "إجراء غير صالح" });
+    res.status(400).json({ message: parsed.error.issues[0]?.message ?? "إجراء غير صالح" });
     return;
   }
   // الصلاحية تُختار حسب الإجراء ثم يُنفَّذ

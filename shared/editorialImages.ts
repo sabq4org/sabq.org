@@ -8,7 +8,7 @@ export const EDITORIAL_IMAGE_MODELS = [
 ] as const;
 
 export const editorialImageRequestSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.string().guid(),
   prompt: z.string().trim().min(10, "اكتب وصفًا من 10 أحرف على الأقل").max(4000),
   model: z.enum(["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]),
   size: z.enum(["1536x864", "1024x1024", "1024x1536"]),

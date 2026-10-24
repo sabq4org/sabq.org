@@ -5,7 +5,7 @@ export const EDITORIAL_RESEARCH_FEATURE = "editorial-research";
 export const EDITORIAL_RESEARCH_ROLES = ["system_admin", "system.admin", "superadmin", "super_admin"] as const;
 export const EDITORIAL_RESEARCH_MODEL = "gpt-6-astra";
 export const researchRequestSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.string().guid(),
   topic: z.string().trim().min(20, "اكتب موضوعًا واضحًا من 20 حرفًا على الأقل.").max(2000),
 }).strict();
 export type ResearchRequest = z.infer<typeof researchRequestSchema>;

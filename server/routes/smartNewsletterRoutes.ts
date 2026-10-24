@@ -204,7 +204,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
         return res.status(400).json({ 
           success: false,
           message: 'بيانات غير صحيحة',
-          errors: error.errors 
+          errors: error.issues 
         });
       }
       if (error.message?.includes('unique')) {

@@ -249,7 +249,7 @@ export function registerThemeRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات السمة غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -274,7 +274,7 @@ export function registerThemeRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json({ 
           message: "بيانات السمة غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.issues 
         });
       }
 
@@ -592,7 +592,7 @@ export function registerThemeRoutes(app: Express) {
       if (!parseResult.success) {
         return res.status(400).json({
           message: "بيانات غير صالحة",
-          errors: parseResult.error.errors,
+          errors: parseResult.error.issues,
         });
       }
       const { enabled, intervalMinutes } = parseResult.data;
@@ -640,7 +640,7 @@ export function registerThemeRoutes(app: Express) {
       if (!parseResult.success) {
         return res.status(400).json({
           message: "بيانات غير صالحة",
-          errors: parseResult.error.errors,
+          errors: parseResult.error.issues,
         });
       }
       const { enabled, years } = parseResult.data;

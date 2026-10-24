@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -453,7 +453,7 @@ export default function DashboardMuqtarab() {
 
   // Form - MUST be before early returns
   const form = useForm<AngleFormValues>({
-    resolver: zodResolver(angleFormSchema),
+    resolver: zodResolver(angleFormSchema) as Resolver<AngleFormValues>,
     defaultValues: {
       nameAr: "",
       nameEn: "",

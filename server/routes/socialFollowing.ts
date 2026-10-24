@@ -61,7 +61,7 @@ router.post("/api/social/follow", followLimiter, requireAuth, async (req: any, r
   } catch (error) {
     console.error("Error following user:", error);
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+      return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.issues });
     }
     res.status(500).json({ message: "حدث خطأ أثناء متابعة المستخدم" });
   }

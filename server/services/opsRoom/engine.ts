@@ -394,7 +394,7 @@ export class OpsRoomEngine {
     // التحقق من مطابقة المخرج للعقد
     const parsed = handler.resultSchema.safeParse(result.output.result);
     if (!parsed.success) {
-      const reason = `مخرج لا يطابق العقد: ${parsed.error.errors[0]?.path.join(".") ?? ""} ${parsed.error.errors[0]?.message ?? ""}`.trim();
+      const reason = `مخرج لا يطابق العقد: ${parsed.error.issues[0]?.path.join(".") ?? ""} ${parsed.error.issues[0]?.message ?? ""}`.trim();
       await this.event(mainId, step.id, "system", "coordinator", "output_rejected", `رفض المنسق مخرج ${this.agentName(slug)} — ${reason}`);
       await this.failStep(mainId, step, reason, startedAt);
       return;

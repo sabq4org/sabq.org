@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IFoxCategoryTemplate } from "@/components/admin/ifox/IFoxCategoryTemplate";
@@ -120,7 +120,7 @@ export default function IFoxTools() {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
 
   const form = useForm<ToolFormData>({
-    resolver: zodResolver(toolSchema),
+    resolver: zodResolver(toolSchema) as Resolver<ToolFormData>,
     defaultValues: {
       name: "",
       shortDescription: "",

@@ -71,7 +71,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -155,7 +155,7 @@ export default function AnnouncementsManagement() {
   const announcements = Array.isArray(announcementsRaw) ? announcementsRaw : [];
 
   const form = useForm<AnnouncementFormValues>({
-    resolver: zodResolver(announcementFormSchema),
+    resolver: zodResolver(announcementFormSchema) as Resolver<AnnouncementFormValues>,
     defaultValues: {
       title: "",
       message: "",

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IFoxCategoryTemplate } from "@/components/admin/ifox/IFoxCategoryTemplate";
@@ -99,7 +99,7 @@ export default function IFoxVoice() {
   const [isUploading, setIsUploading] = useState(false);
 
   const form = useForm<PodcastFormData>({
-    resolver: zodResolver(podcastSchema),
+    resolver: zodResolver(podcastSchema) as Resolver<PodcastFormData>,
     defaultValues: {
       title: "",
       description: "",

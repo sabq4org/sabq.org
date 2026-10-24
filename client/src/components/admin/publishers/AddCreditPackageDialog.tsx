@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,10 +23,10 @@ const creditPackageSchema = z.object({
   isUnlimited: z.boolean().default(false),
   totalCredits: z.number().int().min(0),
   period: z.enum(["monthly", "quarterly", "yearly", "one-time"], {
-    required_error: "يرجى اختيار الفترة",
+    error: (iss) => (iss.input === undefined ? "يرجى اختيار الفترة" : undefined),
   }),
   startDate: z.date({
-    required_error: "تاريخ البداية مطلوب",
+    error: (iss) => (iss.input === undefined ? "تاريخ البداية مطلوب" : undefined),
   }),
   expiryDate: z.date().optional(),
   price: z.number().min(0).optional(),
@@ -92,7 +92,7 @@ export function AddCreditPackageDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CreditPackageFormData>({
-    resolver: zodResolver(creditPackageSchema),
+    resolver: zodResolver(creditPackageSchema) as Resolver<CreditPackageFormData>,
     defaultValues: {
       packageName: "",
       isUnlimited: false,

@@ -63,7 +63,7 @@ import {
   LayoutGrid,
   Search
 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -121,14 +121,14 @@ const availableSizes = [
 const formSchema = z.object({
   name: z.string().min(1, "اسم المكان مطلوب"),
   location: z.enum(["header", "sidebar", "footer", "inline", "between_articles"], {
-    required_error: "الموقع مطلوب"
+    error: (iss) => (iss.input === undefined ? "الموقع مطلوب" : undefined)
   }),
   size: z.string().min(1, "الحجم مطلوب"),
   pageType: z.enum(["all", "home", "article", "category"], {
-    required_error: "نوع الصفحة مطلوب"
+    error: (iss) => (iss.input === undefined ? "نوع الصفحة مطلوب" : undefined)
   }),
   deviceType: z.enum(["desktop", "mobile", "tablet", "all"], {
-    required_error: "نوع الجهاز مطلوب"
+    error: (iss) => (iss.input === undefined ? "نوع الجهاز مطلوب" : undefined)
   }).default("all"),
   floorPrice: z.coerce.number().min(0, "السعر يجب أن يكون صفراً أو أكثر").optional().default(0),
   isActive: z.boolean().default(true),
@@ -194,7 +194,7 @@ export default function InventorySlotsManagement() {
   }, []);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: {
       name: "",
       location: "header",

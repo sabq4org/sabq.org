@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { adminCreateUserSchema } from "@shared/schema";
@@ -36,7 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { Loader2, Copy, Check } from "lucide-react";
 import { ImageUpload } from "@/components/ImageUpload";
 
@@ -70,7 +70,7 @@ export function AddUserDialog({ open, onOpenChange }: AddUserDialogProps) {
     queryKey: ["/api/admin/roles"],
     enabled: open,
     queryFn: async () => {
-      const res = await fetch("/api/admin/roles");
+      const res = await fetch(apiUrl("/api/admin/roles"));
       if (!res.ok) return [];
       const data = await res.json();
       return Array.isArray(data) ? data : [];
@@ -79,7 +79,7 @@ export function AddUserDialog({ open, onOpenChange }: AddUserDialogProps) {
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
 
   const form = useForm<FormData>({
-    resolver: zodResolver(extendedCreateUserSchema),
+    resolver: zodResolver(extendedCreateUserSchema) as Resolver<FormData>,
     defaultValues: {
       email: "",
       firstName: "",

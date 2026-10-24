@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -89,7 +89,7 @@ export default function CorrespondentRegister() {
   const [cvFile, setCvFile] = useState<File | null>(null);
 
   const form = useForm<RegistrationFormData>({
-    resolver: zodResolver(registrationSchema),
+    resolver: zodResolver(registrationSchema) as Resolver<RegistrationFormData>,
     defaultValues: {
       arabicName: "",
       englishName: "",

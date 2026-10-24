@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IFoxCategoryTemplate } from "@/components/admin/ifox/IFoxCategoryTemplate";
@@ -159,7 +159,7 @@ export default function IFoxOpinions() {
   const [selectedOpinion, setSelectedOpinion] = useState<Opinion | null>(null);
 
   const opinionForm = useForm<OpinionFormData>({
-    resolver: zodResolver(opinionSchema),
+    resolver: zodResolver(opinionSchema) as Resolver<OpinionFormData>,
     defaultValues: {
       title: "",
       content: "",
@@ -174,7 +174,7 @@ export default function IFoxOpinions() {
   });
 
   const authorForm = useForm<AuthorFormData>({
-    resolver: zodResolver(authorSchema),
+    resolver: zodResolver(authorSchema) as Resolver<AuthorFormData>,
     defaultValues: {
       name: "",
       title: "",

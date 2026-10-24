@@ -88,7 +88,7 @@ router.post("/preferences", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Update preferences error:", error);
@@ -199,7 +199,7 @@ router.post("/templates", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Create template error:", error);
@@ -242,7 +242,7 @@ router.patch("/templates/:id", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Update template error:", error);
@@ -325,7 +325,7 @@ router.post("/workflows", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Create rule error:", error);
@@ -368,7 +368,7 @@ router.patch("/workflows/:id", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Update rule error:", error);
@@ -658,7 +658,7 @@ router.post("/calendar", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Create calendar entry error:", error);
@@ -706,7 +706,7 @@ router.patch("/calendar/:id", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation failed",
-        details: error.errors
+        details: error.issues
       });
     }
     console.error("Update calendar entry error:", error);

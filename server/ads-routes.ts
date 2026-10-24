@@ -257,7 +257,7 @@ router.post("/accounts", requireAdvertiser, async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -342,7 +342,7 @@ router.post("/campaigns", requireAdvertiser, async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -791,7 +791,7 @@ router.post("/ad-groups", requireAdvertiser, async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -1033,7 +1033,7 @@ router.post("/creatives", requireAdvertiser, async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -2087,7 +2087,7 @@ router.post("/inventory-slots", requireAdvertiser, async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -2311,7 +2311,7 @@ router.post("/creatives", requireAdvertiser, async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -2592,7 +2592,7 @@ router.post("/campaigns/:campaignId/placements", requireAdvertiser, requireAdmin
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     
@@ -2732,7 +2732,7 @@ router.put("/campaigns/:campaignId/placements/:placementId", requireAdvertiser, 
     if (!validation.success) {
       return res.status(400).json({ 
         error: "بيانات غير صحيحة", 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
     

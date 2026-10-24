@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { useAuth, hasRole } from "@/hooks/useAuth";
-import { getCsrfToken } from "@/lib/queryClient";
-import { useForm } from "react-hook-form";
+import { apiUrl, getCsrfToken } from "@/lib/queryClient";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -88,7 +88,7 @@ const topicFormSchema = insertTopicSchema.extend({
       alt: z.string().optional(),
       caption: z.string().optional(),
       level: z.number().optional(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
     })).optional(),
     rawHtml: z.string().optional(),
     plainText: z.string().optional(),
@@ -174,7 +174,7 @@ export default function TopicsManagement() {
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<TopicFormValues>({
-    resolver: zodResolver(topicFormSchema),
+    resolver: zodResolver(topicFormSchema) as Resolver<TopicFormValues>,
     defaultValues: {
       angleId: angleId || "",
       title: "",
@@ -462,7 +462,7 @@ export default function TopicsManagement() {
 
     try {
       const csrfToken = getCsrfToken();
-      const response = await fetch("/api/media/upload", {
+      const response = await fetch(apiUrl("/api/media/upload"), {
         method: "POST",
         body: formData,
         credentials: "include",

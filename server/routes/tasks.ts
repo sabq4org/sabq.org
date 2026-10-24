@@ -25,6 +25,7 @@ import {
 } from "@shared/schema";
 import { pickTableColumns } from "../utils/sanitizeBody";
 import { parsePage, parseLimit } from "../utils/pagination";
+import { partialWithoutDefaults } from "@shared/zodPartial";
 
 const taskLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -439,7 +440,7 @@ export function registerTaskRoutes(app: Express) {
       const oldTask = { ...task };
       
       // Validate PATCH body with partial schema
-      const updateSchema = insertTaskSchema.partial();
+      const updateSchema = partialWithoutDefaults(insertTaskSchema);
       const validatedData = updateSchema.parse(req.body);
 
       // Convert validated date strings to Date objects

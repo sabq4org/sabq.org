@@ -52,10 +52,10 @@ router.post('/', isAuthenticated, isAdmin, async (req: Request, res: Response) =
     res.status(201).json(task);
   } catch (error) {
     if (error instanceof ZodError) {
-      console.error('[AI Tasks API] ❌ Validation error:', JSON.stringify(error.errors, null, 2));
+      console.error('[AI Tasks API] ❌ Validation error:', JSON.stringify(error.issues, null, 2));
       return res.status(400).json({ 
         error: 'Validation error', 
-        details: error.errors 
+        details: error.issues 
       });
     }
     console.error('[AI Tasks API] Create task error:', error);
