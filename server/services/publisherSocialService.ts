@@ -28,9 +28,8 @@ import { button, emailShell, escapeHtml } from "./publisherRenewalService";
 import {
   AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL,
   buildDeskSocialProposalAlertEmail,
-  getAgencySocialAlertRecipients,
-  isMeaningfulProposalTextChange,
-  sendDeskAlertEmails,
+  loadDeskBotSettingEmails,
+  resolveAgencySocialAlertRecipients,
 } from "./deskBotAlerts";
 
 export type AgencySocialMode = "off" | "approval" | "direct";
@@ -232,7 +231,6 @@ export async function saveAgencySocialPost(
   const text = input.textSource === "title" ? status.article.title : input.text;
   const media = agencyPostMedia(input.media, input.mediaUrls, status.article.imageUrl);
   const pendingId = status.state === "pending" ? status.post?.id ?? null : null;
-  const pendingTextChanged = pendingId ? isMeaningfulProposalTextChange(status.post?.text, text) : true;
   const askedAt = input.action === "submit" ? requestedAt : null;
 
   let post: SocialPost;
@@ -260,8 +258,12 @@ export async function saveAgencySocialPost(
 
   const riyadh = (d: Date) =>
     d.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh", dateStyle: "medium", timeStyle: "short" });
-  const sendAgencyEmailNotice = async (headline: string, isUpdate = false) => {
-    const recipients = await getAgencySocialAlertRecipients();
+  // واتساب رئيس التحرير ونسخة بالبريد: لا ينتظرهما الطلب، وفشلهما لا يُفشل التغريدة
+  const whatsapp = (headline: string) => {
+    void sendEditorWhatsAppNotice(
+      `${headline}\nالوكالة: ${publisher.agencyName}\nالخبر: ${status.article.title}\nالتغريدة: ${text.slice(0, 200)}\n${AGENCY_REQUESTS_URL}`,
+    ).catch((err) => console.error("[Agency Social] WhatsApp notice failed:", err));
+
     const emailPayload = buildDeskSocialProposalAlertEmail({
       postId: post.id,
       proposalKind: "agency",
@@ -272,19 +274,31 @@ export async function saveAgencySocialPost(
       articleUrl: status.article.url,
       dashboardUrl: AGENCY_REQUESTS_URL,
       headline: `${headline.replace(/^\S+\s/, "")} · ${publisher.agencyName}`,
-      isUpdate,
+      isUpdate: false,
       occurredAt: now,
     });
-    await sendDeskAlertEmails(recipients, emailPayload, "[Agency Social]");
-  };
-  // واتساب رئيس التحرير ونسخة بالبريد: لا ينتظرهما الطلب، وفشلهما لا يُفشل التغريدة
-  const whatsapp = (headline: string) => {
-    void sendEditorWhatsAppNotice(
-      `${headline}\nالوكالة: ${publisher.agencyName}\nالخبر: ${status.article.title}\nالتغريدة: ${text.slice(0, 200)}\n${AGENCY_REQUESTS_URL}`,
-    ).catch((err) => console.error("[Agency Social] WhatsApp notice failed:", err));
-    void sendAgencyEmailNotice(headline, false).catch((err) =>
-      console.error("[Agency Social] email notice failed:", err),
-    );
+    const immediateRecipients = resolveAgencySocialAlertRecipients();
+    for (const to of immediateRecipients) {
+      void sendEmailNotification({
+        to,
+        subject: emailPayload.subject,
+        text: emailPayload.text,
+        html: emailPayload.html,
+      }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+    }
+    void loadDeskBotSettingEmails()
+      .then((settingEmails) => {
+        const extra = settingEmails.filter((e) => !immediateRecipients.includes(e));
+        for (const to of extra) {
+          void sendEmailNotification({
+            to,
+            subject: emailPayload.subject,
+            text: emailPayload.text,
+            html: emailPayload.html,
+          }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+        }
+      })
+      .catch(() => undefined);
   };
 
   if (input.action === "publish_now") {
@@ -313,11 +327,6 @@ export async function saveAgencySocialPost(
       deeplink: "/dashboard/social-publishing?filter=agency",
     });
     whatsapp(`🐦 طلب تغريدة من وكالة بانتظار موافقتك${askedAt ? ` (موعد مطلوب: ${riyadh(askedAt)})` : ""}`);
-  } else if (pendingTextChanged) {
-    void sendAgencyEmailNotice(
-      `🐦 تحديث طلب تغريدة من وكالة بانتظار موافقتك${askedAt ? ` (موعد مطلوب: ${riyadh(askedAt)})` : ""}`,
-      true,
-    ).catch((err) => console.error("[Agency Social] email notice failed:", err));
   }
   return { outcome: pendingId ? "updated" : "submitted", post };
 }
