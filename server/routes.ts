@@ -718,7 +718,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (user.twoFactorEnabled) {
         if (process.env.NODE_ENV !== 'production') console.log("🔐 2FA required for user:", user.email);
         // Store userId in session temporarily for 2FA verification
-        (req.session as any).pending2FAUserId = user.id;
+        (req.session as any).pending2FAUserId = user.id; (req.session as any).pending2FAFirstFactor = "password";
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("❌ Session save error:", saveErr);
@@ -1093,7 +1093,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // phone step alone, which is a complete 2FA bypass for anyone who can
       // receive that number's SMS.
       if ((result.user as any).twoFactorEnabled) {
-        (req.session as any).pending2FAUserId = result.user.id;
+        (req.session as any).pending2FAUserId = result.user.id; (req.session as any).pending2FAFirstFactor = "phone";
         return req.session.save((saveErr) => {
           if (saveErr) {
             console.error("❌ phone login session save error:", saveErr);
