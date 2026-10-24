@@ -1069,7 +1069,6 @@ describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
 
   it("POST /api/v1/members/push-token accepts com.sabq.desk and rejects unknown bundleIds", async () => {
     const deskRes = await call("POST", "/api/v1/members/push-token", {
-      token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       provider: "apns",
       platform: "ios",
       bundleId: "com.sabq.desk",
@@ -1081,7 +1080,6 @@ describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
     });
 
     const badRes = await call("POST", "/api/v1/members/push-token", {
-      token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       provider: "apns",
       platform: "ios",
       bundleId: "com.unknown.app",
