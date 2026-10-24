@@ -7,7 +7,15 @@ import { validateCsrfToken } from "../../server/csrf";
 
 const state = vi.hoisted(() => ({
   user: null as { id: string; role?: string } | null,
+  hasSession: true,
   advertiserId: null as string | null,
+  advertiserRow: {
+    id: "adv-1",
+    name: "Test Advertiser",
+    email: "adv@example.com",
+    password: "hashed-password",
+    isActive: true,
+  } as Record<string, any> | null,
   permissions: [] as string[],
   articleAccess: { ok: true, articleId: "art-1" } as { ok: boolean; articleId?: string; httpStatus?: number; message?: string },
   storyCard: null as { id: string; articleId: string | null; userId: string } | null,
@@ -145,11 +153,15 @@ vi.mock("../../server/db", () => {
         newsletterEmailCampaigns: {
           findFirst: async () => ({ id: "camp-1", subject: "Test", events: [] }),
         },
+        advertiserProfiles: {
+          findFirst: async () => state.advertiserRow,
+        },
       },
     },
   };
 });
 
+import advertiserAuthRouter, { requireAdvertiserAuth } from "../../server/routes/advertiserAuth";
 import advertiserPaymentsRouter from "../../server/routes/advertiserPayments";
 import newsletterAnalyticsRouter from "../../server/routes/newsletterAnalyticsRoutes";
 import smartClassificationRouter from "../../server/routes/smartClassificationRoutes";
@@ -171,13 +183,17 @@ describe("route access checks and advertiser payment settlement", () => {
     );
     app.use((req: any, _res, next) => {
       req.user = state.user;
-      req.session = {
-        advertiserId: state.advertiserId ?? undefined,
-        csrfToken: "csrf-fixed",
-      };
+      if (state.hasSession) {
+        req.session = {
+          advertiserId: state.advertiserId ?? undefined,
+          csrfToken: "csrf-fixed",
+          destroy: (cb: (err?: unknown) => void) => cb(),
+        };
+      }
       next();
     });
     app.use("/api", validateCsrfToken);
+    app.use("/api/advertiser", advertiserAuthRouter);
     app.use("/api/advertiser-payments", advertiserPaymentsRouter);
     app.use("/api/newsletter/analytics", newsletterAnalyticsRouter);
     app.use("/api/smart-classification", smartClassificationRouter);
@@ -197,7 +213,15 @@ describe("route access checks and advertiser payment settlement", () => {
   beforeEach(() => {
     vi.stubEnv("TAP_WEBHOOK_SECRET", tapWebhookPassphrase);
     state.user = { id: "user-1", role: "reader" };
+    state.hasSession = true;
     state.advertiserId = null;
+    state.advertiserRow = {
+      id: "adv-1",
+      name: "Test Advertiser",
+      email: "adv@example.com",
+      password: "hashed-password",
+      isActive: true,
+    };
     state.permissions = [];
     state.articleAccess = { ok: true, articleId: "art-1" };
     state.storyCard = { id: "card-1", articleId: "art-1", userId: "user-1" };
@@ -232,6 +256,42 @@ describe("route access checks and advertiser payment settlement", () => {
 
     const txRes = await fetch(`${origin}/api/advertiser-payments/transaction/tx-1`);
     expect(txRes.status).toBe(401);
+  });
+
+  it("returns 401 instead of crashing on /api/advertiser/* when req.session is missing or has no advertiserId, and passes with a valid advertiser session", async () => {
+    // 1. No session attached at all (e.g., anonymous GET /api/advertiser/me without connect.sid cookie)
+    state.hasSession = false;
+    const noSessionMeRes = await fetch(`${origin}/api/advertiser/me`);
+    expect(noSessionMeRes.status).toBe(401);
+    await expect(noSessionMeRes.json()).resolves.toEqual({ error: "يجب تسجيل الدخول" });
+
+    const next = vi.fn();
+    const resJson = vi.fn();
+    const resStatus = vi.fn(() => ({ json: resJson }));
+    requireAdvertiserAuth({} as any, { status: resStatus } as any, next);
+    expect(resStatus).toHaveBeenCalledWith(401);
+    expect(resJson).toHaveBeenCalledWith({ error: "يجب تسجيل الدخول" });
+    expect(next).not.toHaveBeenCalled();
+
+    // 2. Session exists, but without advertiser data
+    state.hasSession = true;
+    state.advertiserId = null;
+    const unauthMeRes = await fetch(`${origin}/api/advertiser/me`);
+    expect(unauthMeRes.status).toBe(401);
+    await expect(unauthMeRes.json()).resolves.toEqual({ error: "يجب تسجيل الدخول" });
+
+    // 3. Valid advertiser session passes and returns sanitized advertiser profile
+    state.advertiserId = "adv-1";
+    const validMeRes = await fetch(`${origin}/api/advertiser/me`);
+    expect(validMeRes.status).toBe(200);
+    const body = await validMeRes.json();
+    expect(body).toEqual({
+      id: "adv-1",
+      name: "Test Advertiser",
+      email: "adv@example.com",
+      isActive: true,
+    });
+    expect(body).not.toHaveProperty("password");
   });
 
   it("credits the advertiser wallet only once across concurrent verify and webhook settlements", async () => {

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db";
 import { eq, and, inArray } from "drizzle-orm";
 import { advertiserProfiles, insertAdvertiserProfileSchema, nativeAds, nativeAdDailySpend } from "@shared/schema";
@@ -18,8 +18,8 @@ const loginSchema = z.object({
   password: z.string().min(1, "كلمة المرور مطلوبة"),
 });
 
-export function requireAdvertiserAuth(req: Request, res: Response, next: Function) {
-  if (!req.session.advertiserId) {
+export function requireAdvertiserAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.advertiserId) {
     return res.status(401).json({ error: "يجب تسجيل الدخول" });
   }
   next();
@@ -105,6 +105,10 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 router.post("/logout", (req: Request, res: Response) => {
+  if (!req.session) {
+    res.clearCookie("connect.sid");
+    return res.json({ success: true });
+  }
   req.session.destroy((err) => {
     if (err) {
       console.error("Error destroying session:", err);
@@ -117,12 +121,19 @@ router.post("/logout", (req: Request, res: Response) => {
 
 router.get("/me", requireAdvertiserAuth, async (req: Request, res: Response) => {
   try {
+    const advertiserId = req.session?.advertiserId;
+    if (!advertiserId) {
+      return res.status(401).json({ error: "يجب تسجيل الدخول" });
+    }
+
     const advertiser = await db.query.advertiserProfiles.findFirst({
-      where: eq(advertiserProfiles.id, req.session.advertiserId!),
+      where: eq(advertiserProfiles.id, advertiserId),
     });
     
     if (!advertiser) {
-      req.session.advertiserId = undefined;
+      if (req.session) {
+        req.session.advertiserId = undefined;
+      }
       return res.status(401).json({ error: "الحساب غير موجود" });
     }
     
@@ -136,6 +147,11 @@ router.get("/me", requireAdvertiserAuth, async (req: Request, res: Response) => 
 
 router.put("/profile", requireAdvertiserAuth, async (req: Request, res: Response) => {
   try {
+    const advertiserId = req.session?.advertiserId;
+    if (!advertiserId) {
+      return res.status(401).json({ error: "يجب تسجيل الدخول" });
+    }
+
     const updateSchema = z.object({
       name: z.string().min(2).optional(),
       phone: z.string().optional(),
@@ -150,7 +166,7 @@ router.put("/profile", requireAdvertiserAuth, async (req: Request, res: Response
         ...validatedData,
         updatedAt: new Date(),
       })
-      .where(eq(advertiserProfiles.id, req.session.advertiserId!))
+      .where(eq(advertiserProfiles.id, advertiserId))
       .returning();
     
     const { password: _, ...safeAdvertiser } = updated;
@@ -166,9 +182,14 @@ router.put("/profile", requireAdvertiserAuth, async (req: Request, res: Response
 
 router.get("/ads", requireAdvertiserAuth, async (req: Request, res: Response) => {
   try {
+    const advertiserId = req.session?.advertiserId;
+    if (!advertiserId) {
+      return res.status(401).json({ error: "يجب تسجيل الدخول" });
+    }
+
     const ads = await db.select()
       .from(nativeAds)
-      .where(eq(nativeAds.advertiserId, req.session.advertiserId!))
+      .where(eq(nativeAds.advertiserId, advertiserId))
       .orderBy(nativeAds.createdAt);
     
     // Get today's date in Saudi Arabia timezone (UTC+3)
@@ -231,9 +252,14 @@ router.get("/ads", requireAdvertiserAuth, async (req: Request, res: Response) =>
 
 router.get("/stats", requireAdvertiserAuth, async (req: Request, res: Response) => {
   try {
+    const advertiserId = req.session?.advertiserId;
+    if (!advertiserId) {
+      return res.status(401).json({ error: "يجب تسجيل الدخول" });
+    }
+
     const ads = await db.select()
       .from(nativeAds)
-      .where(eq(nativeAds.advertiserId, req.session.advertiserId!));
+      .where(eq(nativeAds.advertiserId, advertiserId));
     
     const stats = {
       totalAds: ads.length,
