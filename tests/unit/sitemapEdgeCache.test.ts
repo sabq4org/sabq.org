@@ -5,7 +5,7 @@ import {
   isSitemapPath,
   sitemapEdgeCacheKey,
 } from "../../cloudflare-worker/sitemap-edge-cache.js";
-import { sitemapEdgeOrigin } from "../../functions/_middleware.js";
+import { fetchSitemapViaEdge, onRequest, sitemapEdgeService } from "../../functions/_middleware.js";
 
 function memoryCache() {
   const store = new Map<string, { body: ArrayBuffer; headers: Headers; status: number }>();
@@ -80,6 +80,17 @@ describe("shared sitemap edge copy", () => {
     expect(res?.headers.get("cache-control")).toBe("public, max-age=180, s-maxage=180");
   });
 
+  it("drops a crawler's conditional headers so the fill can be kept", async () => {
+    const serve = createSitemapEdgeCache();
+    const cache = memoryCache();
+    const fetchOrigin = vi.fn(async () => xml());
+    await run(serve, get("/sitemap-articles-164.xml", { "if-none-match": 'W/"abc"', "if-modified-since": "Fri, 23 Oct 2026 00:00:00 GMT" }), cache, fetchOrigin);
+    const sent = fetchOrigin.mock.calls[0][0] as Request;
+    expect(sent.headers.has("if-none-match")).toBe(false);
+    expect(sent.headers.has("if-modified-since")).toBe(false);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+  });
+
   it("shares one origin fetch between concurrent misses", async () => {
     const serve = createSitemapEdgeCache();
     const cache = memoryCache();
@@ -127,15 +138,42 @@ describe("shared sitemap edge copy", () => {
 });
 
 describe("Pages sends sitemaps through the shared Worker copy", () => {
-  it("uses api.sabq.org for sitemaps while the API origin is Render", () => {
-    expect(sitemapEdgeOrigin("/sitemap-articles-139.xml", "https://sabq-api-virginia.onrender.com")).toBe("https://api.sabq.org");
-    expect(sitemapEdgeOrigin("/api/categories", "https://sabq-api-virginia.onrender.com")).toBeNull();
+  const binding = { fetch: vi.fn(async () => xml()) };
+
+  it("uses the API_EDGE service binding for sitemaps only", () => {
+    expect(sitemapEdgeService("/sitemap-articles-139.xml", { API_EDGE: binding })).toBe(binding);
+    expect(sitemapEdgeService("/api/categories", { API_EDGE: binding })).toBeNull();
   });
 
-  it("is off when the API origin is already the Worker or the switch says off", () => {
-    expect(sitemapEdgeOrigin("/sitemap.xml", "https://api.sabq.org")).toBeNull();
-    expect(sitemapEdgeOrigin("/sitemap.xml", "https://sabq-api-virginia.onrender.com", { SITEMAP_EDGE_ORIGIN: "off" })).toBeNull();
-    expect(sitemapEdgeOrigin("/sitemap.xml", "https://render.example", { SITEMAP_EDGE_ORIGIN: "https://edge.example/" })).toBe("https://edge.example");
+  it("goes to the API origin without the binding or when switched off", () => {
+    // A same-zone fetch to api.sabq.org never runs the route Worker, so there
+    // is no URL fallback to it.
+    expect(sitemapEdgeService("/sitemap.xml", {})).toBeNull();
+    expect(sitemapEdgeService("/sitemap.xml", { API_EDGE: binding, SITEMAP_EDGE: "off" })).toBeNull();
+  });
+
+  it("asks the Worker for the api.sabq.org URL without cookies", async () => {
+    const service = { fetch: vi.fn(async (_req: Request) => xml()) };
+    const res = await fetchSitemapViaEdge(
+      new Request("https://sabq.org/sitemap-articles-7.xml?p=2", { headers: { cookie: "connect.sid=x", "cf-connecting-ip": "203.0.113.5" } }),
+      service,
+    );
+    expect(res?.status).toBe(200);
+    const sent = service.fetch.mock.calls[0][0];
+    expect(sent.url).toBe("https://api.sabq.org/sitemap-articles-7.xml?p=2");
+    expect(sent.headers.has("cookie")).toBe(false);
+    expect(sent.headers.get("cf-connecting-ip")).toBe("203.0.113.5");
+  });
+
+  it("hands a Worker failure back to the caller for the API origin", async () => {
+    const down = { fetch: vi.fn(async () => new Response("bad gateway", { status: 502 })) };
+    const thrown = { fetch: vi.fn(async () => { throw new Error("binding down"); }) };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await fetchSitemapViaEdge(new Request("https://sabq.org/sitemap.xml"), down)).toBeNull();
+    expect(await fetchSitemapViaEdge(new Request("https://sabq.org/sitemap.xml"), thrown)).toBeNull();
+    errors.mockRestore();
+    warns.mockRestore();
   });
 });
 
@@ -165,5 +203,41 @@ describe("api-origin-worker serves sitemaps from the shared copy", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toBe("https://origin.example/sitemap-articles-7.xml");
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get("x-sabq-proxy-signature")).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("Pages middleware sitemap route", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const context = (env: Record<string, unknown>) => ({
+    request: new Request("https://sabq.org/sitemap-articles-9.xml", { headers: { "user-agent": "Googlebot" } }),
+    env: { API_ORIGIN: "https://render.example", EDGE_PROXY_SHARED_SECRET: "s", ...env },
+    next: vi.fn(async () => new Response("shell")),
+    waitUntil: vi.fn(),
+  });
+
+  it("asks the bound Worker and not the API origin", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put: vi.fn(async () => {}), delete: vi.fn() } });
+    const fetchMock = vi.fn(async () => xml());
+    vi.stubGlobal("fetch", fetchMock);
+    const edge = { fetch: vi.fn(async () => xml("public, max-age=1200, s-maxage=1200")) };
+    const res = await onRequest(context({ API_EDGE: edge }));
+    expect(res.status).toBe(200);
+    expect(edge.fetch).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the API origin when the Worker fails", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put: vi.fn(async () => {}), delete: vi.fn() } });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => xml());
+    vi.stubGlobal("fetch", fetchMock);
+    const edge = { fetch: vi.fn(async () => new Response("down", { status: 503 })) };
+    const res = await onRequest(context({ API_EDGE: edge }));
+    expect(res.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://render.example/sitemap-articles-9.xml");
   });
 });

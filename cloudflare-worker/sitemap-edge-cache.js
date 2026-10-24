@@ -7,13 +7,15 @@
  * and pulled the file from Render: article sitemaps (~47 KB each) were ~31% of
  * Render's billed egress in a sample on 2026-10-24.
  *
- * Pages therefore fetches sitemaps through the api.sabq.org Worker, which runs
- * in one placed location (aws:us-east-1), and this module keeps the copy there:
- * one origin fetch per sitemap per TTL for the whole edge.
+ * Pages therefore fetches sitemaps from the api.sabq.org Worker through a
+ * service binding (a plain same-zone fetch would skip the Worker). The Worker
+ * runs in one placed location (aws:us-east-1), and this module keeps the copy
+ * there: one origin fetch per sitemap per TTL for the whole edge.
  *
  * Shared by the api.sabq.org Worker (api-origin-worker.js) and the sabq.org
  * Pages middleware (functions/_middleware.js, which imports isSitemapPath).
- * - GET only; cookies are dropped (sitemaps are the same for every reader).
+ * - GET only; cookies and conditional headers are dropped (sitemaps are the
+ *   same for every reader, and a 304 cannot be kept).
  * - Stores only a 200 XML answer that the origin calls public with a positive
  *   s-maxage, without Set-Cookie, at most SITEMAP_EDGE_MAX_BYTES. The copy is
  *   kept for min(s-maxage, SITEMAP_EDGE_MAX_TTL_S), so sitemap-news stays on
@@ -66,6 +68,9 @@ export function createSitemapEdgeCache() {
     const headers = new Headers(request.headers);
     headers.delete("cookie");
     headers.delete("range");
+    // A crawler's revalidation would bring back a 304, which cannot be kept.
+    headers.delete("if-none-match");
+    headers.delete("if-modified-since");
     const response = await fetchOrigin(new Request(request.url, { method: "GET", headers }));
     const ttl = originTtl(response);
     const length = Number(response.headers.get("content-length") || 0);
