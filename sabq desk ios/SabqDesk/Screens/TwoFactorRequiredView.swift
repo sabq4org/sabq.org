@@ -1,0 +1,44 @@
+import SabqDeskDesign
+import SabqDeskKit
+import SwiftUI
+
+/// Shown when the server answers `403 two_factor_required`. The session is
+/// kept so the editor can enable 2FA on the web and come straight back.
+struct TwoFactorRequiredView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    let message: String?
+
+    @State private var isChecking = false
+
+    private static let securitySettingsURL = URL(string: "https://sabq.org/settings/security")!
+
+    var body: some View {
+        DeskMessageView(systemImage: "lock.shield",
+                        title: "فعّل المصادقة الثنائية أولاً",
+                        message: message ?? "يلزم تفعيل المصادقة الثنائية (2FA) على حسابك للوصول إلى تطبيق الديسك. فعّلها من إعدادات الأمان في موقع سبق ثم ارجع هنا.") {
+            VStack(spacing: DeskLayout.space12) {
+                Button("فتح إعدادات الأمان") { openURL(Self.securitySettingsURL) }
+                    .buttonStyle(DeskPrimaryButtonStyle())
+                Button {
+                    isChecking = true
+                    Task {
+                        await model.reloadIdentity()
+                        isChecking = false
+                    }
+                } label: {
+                    HStack(spacing: DeskLayout.space8) {
+                        if isChecking { ProgressView() }
+                        Text("فعّلتها، تحقّق الآن")
+                    }
+                }
+                .buttonStyle(DeskSecondaryButtonStyle())
+                .disabled(isChecking)
+                Button("تسجيل الخروج") { Task { await model.signOut() } }
+                    .deskText(DeskType.metaEmphasis)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .padding(.top, DeskLayout.space8)
+            }
+        }
+    }
+}
