@@ -1447,6 +1447,8 @@
         "server/bootstrap.ts",
         "server/objectStorage.ts",
         "tests/unit/objectStoragePrivate*.test.ts",
+        "scripts/private-document-migration.mjs",
+        "tests/unit/privateDocumentMigration.test.ts",
         "server/leaderElection.ts",
         "server/leaderCron.ts",
         "server/shutdown.ts",
