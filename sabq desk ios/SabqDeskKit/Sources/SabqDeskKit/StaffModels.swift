@@ -23,10 +23,29 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
 
     public var canTickets: Bool
     public var canSocial: Social
+    /// «حالة النظام» (permission `ai_hub.view`). False when an older server omits it.
+    public var canSystemHealth: Bool
+    /// «تنبيهات الإدارة» (admins only). False when an older server omits it.
+    public var canAdminAlerts: Bool
 
-    public init(canTickets: Bool = false, canSocial: Social = Social()) {
+    private enum CodingKeys: String, CodingKey {
+        case canTickets, canSocial, canSystemHealth, canAdminAlerts
+    }
+
+    public init(canTickets: Bool = false, canSocial: Social = Social(),
+                canSystemHealth: Bool = false, canAdminAlerts: Bool = false) {
         self.canTickets = canTickets
         self.canSocial = canSocial
+        self.canSystemHealth = canSystemHealth
+        self.canAdminAlerts = canAdminAlerts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        canTickets = try container.decode(Bool.self, forKey: .canTickets)
+        canSocial = try container.decode(Social.self, forKey: .canSocial)
+        canSystemHealth = try container.decodeIfPresent(Bool.self, forKey: .canSystemHealth) ?? false
+        canAdminAlerts = try container.decodeIfPresent(Bool.self, forKey: .canAdminAlerts) ?? false
     }
 
     public static let none = StaffCapabilities()
@@ -43,10 +62,13 @@ public struct StaffMe: Codable, Sendable, Equatable {
     public var twoFactorEnabled: Bool?
     public var roles: [String]?
     public var capabilities: StaffCapabilities
+    /// Admins only; nil for everyone else and on older servers.
+    public var alertPrefs: StaffAlertPrefs?
 
     public init(id: String, email: String? = nil, name: String? = nil, firstName: String? = nil,
                 lastName: String? = nil, profileImageUrl: String? = nil, role: String? = nil,
-                twoFactorEnabled: Bool? = nil, roles: [String]? = nil, capabilities: StaffCapabilities = .none) {
+                twoFactorEnabled: Bool? = nil, roles: [String]? = nil, capabilities: StaffCapabilities = .none,
+                alertPrefs: StaffAlertPrefs? = nil) {
         self.id = id
         self.email = email
         self.name = name
@@ -57,6 +79,7 @@ public struct StaffMe: Codable, Sendable, Equatable {
         self.twoFactorEnabled = twoFactorEnabled
         self.roles = roles
         self.capabilities = capabilities
+        self.alertPrefs = alertPrefs
     }
 
     public var displayName: String {
@@ -167,6 +190,8 @@ public enum StaffSenderKind: String, Codable, Sendable {
     case writer
     case reporter
     case agency
+    /// Any other staff account (admin, editor, …): «حساب المؤسسة».
+    case organization
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -180,6 +205,8 @@ public struct StaffSender: Codable, Sendable, Equatable {
     public var name: String
     public var kind: StaffSenderKind
     public var roleKind: String?
+    /// Absolute https photo (person) or logo (agency). Absent on older servers.
+    public var avatarUrl: String?
 }
 
 public struct StaffArticleRef: Codable, Sendable, Equatable {
@@ -208,6 +235,9 @@ public struct StaffInboxItem: Codable, Sendable, Equatable, Identifiable {
     /// Social only: the rejection reason (`canceled`) or the last publish
     /// error (`failed`). Absent on older servers.
     public var lastError: String?
+    /// Social only, `canceled` posts: true when the sender withdrew it
+    /// themselves, false when an editor rejected it. Absent on older servers.
+    public var canceledBySelf: Bool?
 
     /// Stable across kinds: a ticket and a social post may share a UUID space.
     public var listID: String { "\(kind.rawValue):\(id)" }
@@ -356,6 +386,8 @@ public struct StaffSocialPost: Codable, Sendable, Equatable, Identifiable {
     public var lastError: String?
     public var createdAt: Date
     public var updatedAt: Date?
+    /// `canceled` only: true for a withdrawal by the sender. Absent on older servers.
+    public var canceledBySelf: Bool?
 }
 
 public struct StaffSocialPreview: Codable, Sendable, Equatable {
@@ -397,6 +429,10 @@ public struct StaffSocialDetail: Codable, Sendable, Equatable {
     public var sender: StaffSender?
     public var attempts: [StaffSocialAttempt]
     public var deeplink: String?
+    /// Same as `post.canceledBySelf`; either may be sent.
+    public var canceledBySelf: Bool?
+
+    public var isWithdrawnBySender: Bool { (canceledBySelf ?? post.canceledBySelf) == true }
 }
 
 public struct StaffSocialPostEnvelope: Codable, Sendable, Equatable {
