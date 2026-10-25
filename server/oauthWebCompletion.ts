@@ -1,7 +1,29 @@
-import type { Request, Response } from "express";
+import type { ErrorRequestHandler, Request, Response } from "express";
 
 type OAuthProvider = "google" | "apple";
 type OAuthUser = { id?: string; twoFactorEnabled?: boolean };
+
+function safeTokenErrorField(value: unknown, fallback: string): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value !== "string") return fallback;
+  const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+  return sanitized || fallback;
+}
+
+/** Handles only Apple's expired/replayed OAuth grant; all other errors continue. */
+export function createOAuthTokenErrorHandler(provider: OAuthProvider): ErrorRequestHandler {
+  const failure = `/ar/login?error=${provider}_auth_failed`;
+  return (error, _req, res, next) => {
+    const tokenError = error as { name?: unknown; code?: unknown; status?: unknown } | undefined;
+    if (provider !== "apple" || tokenError?.name !== "TokenError" || tokenError.code !== "invalid_grant") {
+      return next(error);
+    }
+    const code = safeTokenErrorField(tokenError.code, "unknown");
+    const status = safeTokenErrorField(tokenError.status, "unknown");
+    console.warn(`[${provider} OAuth TokenError] code=${code} status=${status}`);
+    return res.redirect(failure);
+  };
+}
 
 /**
  * يكمل callback الويب لـGoogle/Apple بعد `passport.authenticate({ session: false })`.

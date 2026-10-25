@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-10-24 (حفاظ المحرر/المسؤول ذي الدور الثانوي مراسل على كامل صلاحياته وواجهته) | المالك: platform
+> آخر مراجعة: 2026-10-25 (معالجة TokenError في OAuth الويب) | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -111,6 +111,7 @@
 - **مطابقة الجوال:** `phoneMatchSql` يطابق أرقام E.164 كاملة عبر `phoneMatchDigits`؛ الصيغ المحلية (`5XXXXXXXX`/`05XXXXXXXX`) مقبولة لأرقام `+966` فقط. مطابقة آخر 9 أرقام لأي رقم كانت تُدخل رقمًا أجنبيًا بنفس النهاية إلى حساب سعودي.
 - **سجل النشاط:** `logActivity` يحذف `passwordHash` و`twoFactorSecret` و`twoFactorBackupCodes` (وصيغها snake_case) من oldValue/newValue/metadata قبل الحفظ، ومسارات `/api/admin/activity-logs*` و`/api/profile/activity` تحذفها عند القراءة أيضًا لأن الصفوف القديمة ما زالت تحملها. مسح الصفوف القديمة تصحيح بيانات منفصل يحتاج اعتمادًا.
 - **OAuth على الويب و2FA:** استراتيجيتا Google/Apple تمرران `twoFactorEnabled` الحقيقي، والـcallback يعمل بـ`session: false` ثم `createOAuthWebCompletion` (`server/oauthWebCompletion.ts`): حساب 2FA يأخذ `pending2FAUserId` ويُحوّل إلى `/2fa-verify` بلا جلسة، وإلا `req.logIn` ثم الوجهة المعتادة.
+- خطأ `TokenError` ذي `code=invalid_grant` من تبادل Apple OAuth في callback الويب يُعالج بوسيط Express ضيق بعد `passport.authenticate`: يسجّل provider و`code/status` منظّفين فقط ثم يعيد التحويل إلى failure المقرر؛ `invalid_client` وبقية الأخطاء تمرّر إلى `next`، ولا يُضاف الوسيط لمسار Google.
 - **CSRF:** أُزيلت البادئات `/api/native-ads/` و`/api/muqtarab/topics/` و`/api/whatsapp/`. المستثنى الآن: نبضات الإعلانات (impression/click) ومسار المعلن العام (submit/upload/my-ads budget) وعدّاد مشاهدة موضوع مقترب كـregex مثبت، وwebhook وstatus-callback لـTwilio كمسارين محددين. إنشاء الإعلانات وتعديلها وتعليقات المواضيع ومسارات واتساب الإدارية محمية.
 - **تغيير الدور:** `storage.updateUserRole` يمر عبر `setUserSingleRole` (`services/userRoleSync.ts`): تحديث `users.role` واستبدال صفوف `user_roles` في معاملة واحدة. الإضافة وحدها كانت تُبقي صف `admin` القديم بعد التخفيض.
 

@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
 import * as Sentry from "@sentry/node";
-import { shouldSendServerEvent } from "./utils/sentryServerNoise";
+import { sanitizeServerEvent, shouldSendServerEvent } from "./utils/sentryServerNoise";
 // Sentry error monitoring — enabled only when SENTRY_DSN is set. Errors-only:
 // tracing/profiling/logs deliberately off (quota + overhead on a site this
 // size). exitEvenIfOtherHandlersAreRegistered=false preserves the
@@ -13,15 +13,30 @@ if (process.env.SENTRY_DSN) {
     dsn: process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV || "development",
     release: process.env.RENDER_GIT_COMMIT || process.env.RAILWAY_GIT_COMMIT_SHA || undefined,
+    sendDefaultPii: false,
     integrations: [
+      Sentry.requestDataIntegration({
+        include: {
+          cookies: false,
+          data: false,
+          headers: false,
+          ip: false,
+          query_string: false,
+          url: true,
+        },
+      }),
       Sentry.onUncaughtExceptionIntegration({ exitEvenIfOtherHandlersAreRegistered: false }),
     ],
     // قطعُ العميل للاتصال (read ECONNRESET الواصل عبر sentryErrorMiddleware)
     // ليس خللًا في التطبيق: لا سطر يُصلَح ولا مستخدم يُحمى. يُسقط بشرطين
     // معًا — توقيع القطع، وخلوّ المكدس من إطار من كودنا — حتى لا نخفي
     // ECONNRESET صادرًا من Postgres/Redis. التفصيل في utils/sentryServerNoise.ts.
-    beforeSend: (event, hint) =>
-      shouldSendServerEvent(event, hint?.originalException) ? event : null,
+    beforeSend: (event, hint) => {
+      const sanitizedEvent = sanitizeServerEvent(event);
+      return shouldSendServerEvent(sanitizedEvent, hint?.originalException)
+        ? sanitizedEvent
+        : null;
+    },
   });
   console.log("[Server] ✅ Sentry error monitoring enabled");
 } else {

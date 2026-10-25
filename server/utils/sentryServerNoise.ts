@@ -45,6 +45,130 @@ export interface MinimalServerEvent {
   } | null;
 }
 
+/**
+ * Request fields which must never be copied into an error event.  This is
+ * intentionally applied to arbitrary nested event data as well: integrations
+ * and route-specific capture code may put the same values in `extra`, tags,
+ * or contexts rather than under `request`.
+ */
+const SENSITIVE_FIELD_NAMES = new Set([
+  "auth",
+  "authorization",
+  "apikey",
+  "api-key",
+  "xapikey",
+  "cookie",
+  "cookies",
+  "set-cookie",
+  "token",
+  "accesstoken",
+  "refreshtoken",
+  "idtoken",
+  "password",
+  "secret",
+  "oauthcode",
+  "authcode",
+  "oauthstate",
+  "csrfstate",
+  "privatekey",
+  "email",
+  "phone",
+  "phonenumber",
+  "username",
+  "userid",
+  "ip",
+  "ipaddress",
+]);
+
+function isSensitiveFieldName(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return SENSITIVE_FIELD_NAMES.has(name.toLowerCase()) ||
+    SENSITIVE_FIELD_NAMES.has(normalized) ||
+    normalized.startsWith("password") ||
+    normalized.startsWith("secret") ||
+    normalized.startsWith("token") ||
+    normalized.endsWith("password") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("token");
+}
+
+function stripUrlQuery(url: unknown): unknown {
+  if (typeof url !== "string") return url;
+  const query = url.search(/[?#]/);
+  return query === -1 ? url : url.slice(0, query);
+}
+
+function cloneWithoutSensitiveFields(value: unknown, seen: WeakSet<object>): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) return "[Circular]";
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneWithoutSensitiveFields(entry, seen));
+  }
+
+  const output: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (
+      isSensitiveFieldName(key) ||
+      new Set([
+        "query",
+        "httpquery",
+        "querystring",
+        "queryparams",
+        "body",
+        "requestbody",
+        "httpbody",
+        "formdata",
+        "payload",
+      ]).has(normalizedKey)
+    ) continue;
+    if (["url", "requesturl", "httpurl"].includes(normalizedKey) && typeof entry === "string") {
+      output[key] = stripUrlQuery(entry);
+    } else {
+      output[key] = cloneWithoutSensitiveFields(entry, seen);
+    }
+  }
+  return output;
+}
+
+/**
+ * Return a copy safe for Sentry. Request bodies, cookies, query parameters,
+ * and credential-bearing headers are omitted rather than replaced with a
+ * placeholder, so the values cannot be serialized by a later SDK processor.
+ * The original event is not mutated.
+ */
+export function sanitizeServerEvent<T>(event: T): T {
+  if (!event || typeof event !== "object") return event;
+
+  const sanitized = cloneWithoutSensitiveFields(event, new WeakSet<object>()) as Record<string, unknown>;
+  delete sanitized.user;
+  const request = (event as { request?: unknown }).request;
+  if (request && typeof request === "object" && !Array.isArray(request)) {
+    const safeRequest: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(request)) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === "method") {
+        safeRequest.method = value;
+      } else if (lowerKey === "url") {
+        safeRequest[key] = stripUrlQuery(value);
+      } else if (lowerKey === "headers" && value && typeof value === "object") {
+        const safeHeaders: Record<string, unknown> = {};
+        for (const [header, headerValue] of Object.entries(value)) {
+          if (["content-type", "user-agent", "accept"].includes(header.toLowerCase())) {
+            safeHeaders[header] = headerValue;
+          }
+        }
+        safeRequest[key] = safeHeaders;
+      }
+    }
+    sanitized.request = safeRequest;
+  }
+
+  return sanitized as T;
+}
+
 export function hasFirstPartyFrame(event: MinimalServerEvent): boolean {
   const values = event.exception?.values;
   if (!values?.length) return false;

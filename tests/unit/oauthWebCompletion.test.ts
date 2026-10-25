@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createOAuthWebCompletion } from "../../server/oauthWebCompletion";
+import { createOAuthTokenErrorHandler, createOAuthWebCompletion } from "../../server/oauthWebCompletion";
 
 function fakeReqRes(user: any) {
   const session: any = { save: vi.fn((cb: (err?: unknown) => void) => cb()) };
@@ -9,6 +9,38 @@ function fakeReqRes(user: any) {
 }
 
 describe("createOAuthWebCompletion", () => {
+  it("redirects TokenError without description and logs only safe provider/code/status", () => {
+    const { req, res } = fakeReqRes(undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    createOAuthTokenErrorHandler("apple")(
+      { name: "TokenError", code: "invalid_grant", status: 400 },
+      req,
+      res,
+      vi.fn(),
+    );
+    expect(res.redirect).toHaveBeenCalledWith("/ar/login?error=apple_auth_failed");
+    expect(warn).toHaveBeenCalledWith("[apple OAuth TokenError] code=invalid_grant status=400");
+    warn.mockRestore();
+  });
+
+  it("passes invalid_client TokenError to next", () => {
+    const { req, res } = fakeReqRes(undefined);
+    const next = vi.fn();
+    const error = { name: "TokenError", code: "invalid_client", status: 401 };
+    createOAuthTokenErrorHandler("apple")(error, req, res, next);
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.redirect).not.toHaveBeenCalled();
+  });
+
+  it("passes unexpected errors to next", () => {
+    const { req, res } = fakeReqRes(undefined);
+    const next = vi.fn();
+    const error = new Error("unexpected");
+    createOAuthTokenErrorHandler("google")(error, req, res, next);
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.redirect).not.toHaveBeenCalled();
+  });
+
   it("does not create a session for a 2FA-enabled account and sends it to the 2FA challenge", () => {
     const landing = vi.fn();
     const { req, res, session } = fakeReqRes({ id: "u1", twoFactorEnabled: true });

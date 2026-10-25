@@ -94,7 +94,7 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { createOAuthWebCompletion } from "./oauthWebCompletion";
+import { createOAuthTokenErrorHandler, createOAuthWebCompletion } from "./oauthWebCompletion";
 import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isReaderLikeRole, mergeRoleSignals, pickPrimaryRoleRecord, primaryRoleKey } from "@shared/effectiveRoles";
@@ -819,7 +819,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       failureRedirect: "/ar/login?error=apple_auth_failed",
       failureMessage: true
     }),
-    oauthComplete("apple")
+    createOAuthTokenErrorHandler("apple"), oauthComplete("apple")
   );
 
   // Apple Sign-In — Mobile callback.
