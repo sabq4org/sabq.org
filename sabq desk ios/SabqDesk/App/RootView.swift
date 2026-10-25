@@ -4,8 +4,49 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(AppLockController.self) private var appLock
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var lockWindow = AppLockWindowPresenter()
 
     var body: some View {
+        content
+            .accessibilityHidden(appLock.isLocked)
+            // In-tree cover as a fallback; the window above also covers sheets.
+            .overlay { coverView }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                switch phase {
+                case .active: appLock.didBecomeActive()
+                case .background: appLock.didEnterBackground()
+                default: break
+                }
+            }
+            .onChange(of: model.phase) { _, phase in
+                if phase == .signedOut { appLock.sessionEnded() }
+            }
+            .onChange(of: cover, initial: true) { _, cover in
+                lockWindow.update(cover, model: model, lock: appLock)
+            }
+    }
+
+    /// The optional local Face ID lock sits above everything (including the
+    /// launch spinner) but never replaces the server login or 2FA screens.
+    private var cover: AppLockCover {
+        if appLock.isLocked { return .lock }
+        if scenePhase != .active, appLock.isGuarding, !appLock.isAuthenticating { return .privacy }
+        return .none
+    }
+
+    @ViewBuilder
+    private var coverView: some View {
+        switch cover {
+        case .lock: AppLockView()
+        case .privacy: AppPrivacyCover()
+        case .none: EmptyView()
+        }
+    }
+
+    private var content: some View {
         Group {
             switch model.phase {
             case .launching:

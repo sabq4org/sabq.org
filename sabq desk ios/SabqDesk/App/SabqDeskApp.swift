@@ -8,6 +8,7 @@ import UserNotifications
 struct SabqDeskApp: App {
     @UIApplicationDelegateAdaptor(DeskAppDelegate.self) private var appDelegate
     @State private var model = AppModel.shared
+    @State private var appLock = AppLockController(hasSession: { AppModel.shared.client.hasSession })
 
     init() {
         DeskFonts.registerAll()
@@ -17,6 +18,7 @@ struct SabqDeskApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(appLock)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, RiyadhTime.locale)
                 .tint(DeskTheme.primary)
