@@ -58,6 +58,28 @@ public enum DeskTheme {
     public static let groupedBackground = adaptive(0xEFF6FC, 0x0B121A)
     public static let cardBackground = surface
     public static let cardOutline = skyOutline
+
+    // Fixed spec colours of the bot-style desk (typography spec 2026-10-25,
+    // light theme only). `DeskInk` in the app forwards to these.
+
+    /// #0B6FA8 — links, selected tab, «SABQ DESK», the desk's chat bubble.
+    public static let link = rgb(0x0B6FA8)
+    /// #1E9BE6 — big buttons, send, the «new» dot.
+    public static let buttonBlue = rgb(0x1E9BE6)
+    /// #0F2233 — selected chip background.
+    public static let navy = rgb(0x0F2233)
+    /// #F1F5F9 — unselected chips, search field, the writer's bubble, secondary buttons.
+    public static let chipGrey = rgb(0xF1F5F9)
+    /// #EAF7FF — the assistant's bubble and quick replies.
+    public static let bubbleBlue = rgb(0xEAF7FF)
+    /// #EEF2F6 — hairlines between rows.
+    public static let hairline = rgb(0xEEF2F6)
+
+    private static func rgb(_ hex: UInt32) -> Color {
+        Color(red: Double((hex >> 16) & 255) / 255,
+              green: Double((hex >> 8) & 255) / 255,
+              blue: Double(hex & 255) / 255)
+    }
 }
 
 /// Semantic colour pairs for chips, badges and icon tiles. Text always uses
@@ -176,6 +198,14 @@ public enum DeskType {
     public static let statValue = DeskTextRole(size: 28, weight: .bold, style: .title, lineSpacing: 0)
     /// Avatar initials.
     public static let avatarInitials = DeskTextRole(size: 20, weight: .bold, style: .title3, lineSpacing: 0)
+    /// Sender avatar initials in lists (spec: 17 bold, colour per sender kind).
+    public static let listAvatarInitials = DeskTextRole(size: 17, weight: .bold, style: .body, lineSpacing: 0)
+    /// Account avatar initials at 96 pt (spec: 36 semibold, white on #0B6FA8).
+    public static let accountAvatarInitials = DeskTextRole(size: 36, weight: .semibold, style: .largeTitle, lineSpacing: 0)
+    /// Big filled button (spec: 18 semibold).
+    public static let bigButton = DeskTextRole(size: 18, weight: .semibold, style: .headline, lineSpacing: 0)
+    /// Scheduled timeline time (spec: 22 bold).
+    public static let timelineTime = DeskTextRole(size: 22, weight: .bold, style: .title2, lineSpacing: 0)
 }
 
 extension View {

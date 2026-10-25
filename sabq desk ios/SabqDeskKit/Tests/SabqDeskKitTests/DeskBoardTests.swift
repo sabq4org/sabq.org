@@ -72,7 +72,7 @@ final class DeskBoardTests: XCTestCase {
     }
 
     func testInitialsSkipTitles() {
-        XCTAssertEqual(DeskInitials.of("د. خالد العتيبي"), "خ\u{200C}ا")
+        XCTAssertEqual(DeskInitials.of("د. خالد العتيبي"), "خ\u{200C}ع")
         XCTAssertEqual(DeskInitials.of("وكالة"), "و")
         XCTAssertEqual(DeskInitials.of("  "), "؟")
     }
@@ -97,5 +97,79 @@ final class DeskBoardTests: XCTestCase {
         """
         let item = try StaffJSON.makeDecoder().decode(StaffInboxItem.self, from: Data(json.utf8))
         XCTAssertEqual(item.lastError, "مكرر")
+    }
+
+    func testGreetingKeepsOrganisationNamesAndHonorifics() {
+        XCTAssertEqual(DeskCount.greetingName("صحيفة سبق"), "صحيفة سبق")
+        XCTAssertEqual(DeskCount.greetingName("وكالة الأنباء السعودية"), "وكالة الأنباء السعودية")
+        XCTAssertEqual(DeskCount.greetingName("حساب النشر الآلي"), "حساب النشر الآلي")
+        XCTAssertEqual(DeskCount.greetingName("د. خالد العتيبي"), "د. خالد")
+        XCTAssertEqual(DeskCount.greetingName("أ.د. سارة الحربي"), "أ.د. سارة")
+        XCTAssertEqual(DeskCount.greetingName("م. فهد"), "م. فهد")
+        XCTAssertEqual(DeskCount.greetingName("د."), "د.")
+        XCTAssertEqual(DeskCount.greetingName("علي الحازمي"), "علي")
+        XCTAssertNil(DeskCount.greetingName("  "))
+        XCTAssertNil(DeskCount.greetingName(nil))
+        XCTAssertEqual(DeskCount.greeting(name: "صحيفة سبق", pendingTweets: 0, openMessages: 0,
+                                          showsTweets: true, showsMessages: true),
+                       "أهلًا صحيفة سبق، لا شيء ينتظرك الآن.")
+    }
+
+    func testInitialsSkipTheDefiniteArticle() {
+        XCTAssertEqual(DeskInitials.of("إبراهيم الروساء"), "إ\u{200C}ر")
+        XCTAssertEqual(DeskInitials.of("أ. نورة القحطاني"), "ن\u{200C}ق")
+        XCTAssertEqual(DeskInitials.of("الهلال"), "ه")
+        XCTAssertEqual(DeskInitials.of("صحيفة سبق"), "ص\u{200C}س")
+    }
+
+    func testPreviewDropsHandleLineAndBylinePrefix() {
+        XCTAssertEqual(DeskPreviewText.clean("@sabq_news\nسلمان الدوسري يكتب : الاقتصاد ينمو"), "الاقتصاد ينمو")
+        XCTAssertEqual(DeskPreviewText.clean("يكتب: نص قصير"), "نص قصير")
+        XCTAssertEqual(DeskPreviewText.clean("  نص عادي بلا مقدمة  "), "نص عادي بلا مقدمة")
+        XCTAssertEqual(DeskPreviewText.clean("@sabq شكرًا للمتابعة"), "@sabq شكرًا للمتابعة", "a mention inside the text stays")
+        XCTAssertEqual(DeskPreviewText.clean(nil), "")
+    }
+
+    func testRejectionNoteDistinguishesWithdrawalReasonAndNone() {
+        XCTAssertEqual(DeskRejectionNote(canceledBySelf: true, reason: "مكرر"), .withdrawn)
+        XCTAssertEqual(DeskRejectionNote(canceledBySelf: false, reason: " مكرر "), .reason("مكرر"))
+        XCTAssertEqual(DeskRejectionNote(canceledBySelf: nil, reason: nil), .noReason)
+        XCTAssertEqual(DeskRejectionNote.withdrawn.text, "سحبه صاحبه قبل النشر")
+        XCTAssertEqual(DeskRejectionNote.reason("مكرر").text, "السبب: مكرر")
+        XCTAssertEqual(DeskRejectionNote.noReason.text, "رُفض من لوحة التحرير · بلا سبب مسجّل")
+        XCTAssertTrue(DeskRejectionNote.reason("x").isReason)
+        XCTAssertFalse(DeskRejectionNote.noReason.isReason)
+    }
+
+    func testShortDatesPutTheDayFirstWithLatinDigits() throws {
+        let now = try date("2026-10-25T19:30:00Z")
+        let label = RiyadhTime.shortString(try date("2026-10-11T09:00:00Z"), relativeTo: now)
+        XCTAssertTrue(label.hasPrefix("11 "), label)
+        XCTAssertNil(label.rangeOfCharacter(from: CharacterSet(charactersIn: "٠١٢٣٤٥٦٧٨٩")), label)
+    }
+
+    func testSystemCopyUsesLatinDigitsAndPercent() {
+        XCTAssertEqual(DeskSystemCopy.usageLine(requests: 2471, failures: 0), "2471 طلبًا خلال 24 ساعة · بلا أخطاء")
+        XCTAssertEqual(DeskSystemCopy.usageLine(requests: 3, failures: 1), "1 فشل من 3 طلبات خلال 24 ساعة")
+        XCTAssertNil(DeskSystemCopy.usageLine(requests: nil, failures: nil))
+        XCTAssertEqual(DeskSystemCopy.budgetAmount(spent: 410.2, limit: 500), "410 من 500 دولار")
+        XCTAssertEqual(DeskSystemCopy.budgetTitle(label: "OpenAI", percent: 82), "OpenAI · 82%")
+        XCTAssertEqual(DeskSystemCopy.statusTitle(.down, quotaExceeded: true), "نفدت الحصة")
+        XCTAssertEqual(DeskSystemCopy.statusTitle(.degraded, quotaExceeded: false), "متدهور")
+    }
+
+    func testAlertTimeIsRelativeThenClockThenDate() throws {
+        let now = try date("2026-10-25T15:15:00Z") // 18:15 Riyadh
+        XCTAssertEqual(RiyadhTime.alertLabel(try date("2026-10-25T15:09:00Z"), now: now), .phrase("قبل 6 د"))
+        XCTAssertEqual(RiyadhTime.alertLabel(try date("2026-10-25T06:00:00Z"), now: now), .clock("09:00"))
+        XCTAssertEqual(RiyadhTime.alertLabel(try date("2026-10-24T10:00:00Z"), now: now), .phrase("أمس"))
+    }
+
+    func testAvatarURLsMustBeHTTPS() {
+        XCTAssertEqual(DeskAvatarURL.https("https://media.sabq.org/a.jpg")?.host, "media.sabq.org")
+        XCTAssertNil(DeskAvatarURL.https("http://media.sabq.org/a.jpg"))
+        XCTAssertNil(DeskAvatarURL.https("/uploads/a.jpg"))
+        XCTAssertNil(DeskAvatarURL.https(""))
+        XCTAssertNil(DeskAvatarURL.https(nil))
     }
 }

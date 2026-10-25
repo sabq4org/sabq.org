@@ -25,7 +25,7 @@ struct MessagesView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(DeskTheme.background)
-            .contentMargins(.bottom, DeskLayout.space24, for: .scrollContent)
+            .contentMargins(.bottom, DeskLayout.tabBarClearance, for: .scrollContent)
             .refreshable {
                 await model?.reload()
                 await app.refreshUnread()
@@ -157,7 +157,7 @@ private struct ConversationRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DeskLayout.space12) {
-            SenderAvatar(name: item.sender.name, kind: item.sender.kind, size: 48)
+            SenderAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl, size: 48)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.sender.name)
@@ -166,8 +166,12 @@ private struct ConversationRow: View {
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
                     Spacer(minLength: DeskLayout.space4)
-                    LTRText(text: RiyadhTime.ago(item.updatedAt), role: DeskType.timestamp,
-                            color: item.hasUnread ? DeskInk.link : DeskTheme.textSecondary)
+                    // «قبل 12 د» / «11 أكتوبر»: Arabic phrases, natural RTL order.
+                    Text(verbatim: RiyadhTime.ago(item.updatedAt))
+                        .deskText(DeskType.timestamp)
+                        .foregroundStyle(item.hasUnread ? DeskInk.link : DeskTheme.textSecondary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 Text(item.title)
                     .deskText(item.hasUnread ? DeskRowType.subject : DeskRowType.subjectRead)

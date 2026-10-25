@@ -143,9 +143,11 @@ public struct StaffAPIClient: Sendable {
         return envelope.post
     }
 
-    public func rejectSocialPost(id: String, reason: String?) async throws -> StaffSocialPost {
-        let trimmed = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = RejectBody(reason: (trimmed?.isEmpty ?? true) ? nil : String(trimmed!.prefix(1000)))
+    /// `reason` is required by the server unless the editor withdraws their own
+    /// post; a blank one is omitted so the server answers 400 `validation_error`.
+    public func rejectSocialPost(id: String, reason: String) async throws -> StaffSocialPost {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = RejectBody(reason: trimmed.isEmpty ? nil : String(trimmed.prefix(1000)))
         let envelope: StaffSocialPostEnvelope = try await send("POST", "/api/v1/staff/social/\(try pathID(id))/reject",
                                                                body: body)
         return envelope.post
@@ -157,6 +159,27 @@ public struct StaffAPIClient: Sendable {
         let envelope: StaffSocialPostEnvelope = try await send("POST", "/api/v1/staff/social/\(try pathID(id))/return-to-draft",
                                                                body: EmptyBody())
         return envelope.post
+    }
+
+    // MARK: - System (admins)
+
+    /// «حالة النظام»: AI model health and monthly budgets. 403 without `canSystemHealth`.
+    public func systemHealth() async throws -> StaffSystemHealth {
+        try await send("GET", "/api/v1/staff/system/health")
+    }
+
+    /// «تنبيهات الإدارة», urgent first. 403 without `canAdminAlerts`.
+    public func adminAlerts() async throws -> StaffAdminAlerts {
+        try await send("GET", "/api/v1/staff/alerts")
+    }
+
+    public func alertPrefs() async throws -> StaffAlertPrefs {
+        try await send("GET", "/api/v1/staff/me/alert-prefs")
+    }
+
+    /// Sends only the switches being changed; returns both as stored.
+    public func updateAlertPrefs(_ update: StaffAlertPrefsUpdate) async throws -> StaffAlertPrefs {
+        try await send("PUT", "/api/v1/staff/me/alert-prefs", body: update)
     }
 
     // MARK: - Push

@@ -13,6 +13,12 @@ public struct SocialActionSet: Sendable, Equatable {
 extension StaffCapabilities {
     public var canOpenInbox: Bool { canTickets || canSocial.view }
 
+    /// The «النظام» tab: system health and/or admin alerts.
+    public var canSystemTab: Bool { canSystemHealth || canAdminAlerts }
+
+    /// Anything to show besides «حسابي».
+    public var canOpenApp: Bool { canOpenInbox || canSystemTab }
+
     /// Segments the inbox shows; a single-domain account gets no «الكل».
     public var inboxFilters: [StaffInboxFilter] {
         switch (canTickets, canSocial.view) {

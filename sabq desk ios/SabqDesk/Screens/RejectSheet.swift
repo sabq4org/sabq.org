@@ -2,10 +2,12 @@ import SabqDeskDesign
 import SabqDeskKit
 import SwiftUI
 
-/// One of the approved preset reasons plus an optional note.
+/// One of the approved preset reasons and/or a note. A reason is required
+/// (the server refuses a blank one with 400), so confirm stays disabled
+/// until the preset or the note supplies it.
 struct RejectSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let onConfirm: (String?) -> Void
+    let onConfirm: (String) -> Void
 
     @State private var preset: SocialRejectionPreset?
     @State private var note = ""
@@ -35,10 +37,12 @@ struct RejectSheet: View {
                 } header: {
                     Text("سبب الرفض")
                 } footer: {
-                    Text("يصل السبب إلى الكاتب أو الوكالة مع إشعار الرفض.")
+                    Text("اختر سبباً أو اكتب ملاحظة — السبب مطلوب ويصل إلى الكاتب أو الوكالة مع إشعار الرفض.")
+                        .deskText(DeskType.meta)
+                        .foregroundStyle(DeskTheme.textSecondary)
                 }
 
-                Section("ملاحظة (اختيارية)") {
+                Section("ملاحظة") {
                     TextField("أضف توضيحاً لصاحب المقترح", text: $note, axis: .vertical)
                         .lineLimit(3...8)
                         .deskText(DeskType.excerpt)
@@ -49,6 +53,7 @@ struct RejectSheet: View {
 
                 Section {
                     Button("رفض المقترح") {
+                        guard let reason else { return }
                         onConfirm(reason)
                         dismiss()
                     }

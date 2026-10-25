@@ -17,6 +17,9 @@ struct DeskPreviewTransport: HTTPTransport {
         switch url.path {
         case "/api/v1/staff/inbox": body = emptyInbox ? Self.emptyInboxJSON : Self.inboxJSON
         case "/api/v1/staff/unread-counts": body = #"{"tickets":2,"social":3,"total":5}"#
+        case "/api/v1/staff/system/health": body = Self.systemHealthJSON
+        case "/api/v1/staff/alerts": body = Self.alertsJSON
+        case "/api/v1/staff/me/alert-prefs": body = #"{"aiAlerts":true,"adminAlerts":true}"#
         default: body = "{}"
         }
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
@@ -32,7 +35,7 @@ struct DeskPreviewTransport: HTTPTransport {
           "id": "preview-social-1", "kind": "social",
           "title": "انطلاق المؤتمر التقني بالرياض",
           "previewText": "تغريدة مقترحة حول افتتاح المؤتمر التقني اليوم",
-          "sender": { "id": "agency-1", "name": "وكالة الأفق", "kind": "agency" },
+          "sender": { "id": "agency-1", "name": "وكالة الأفق", "kind": "agency", "avatarUrl": null },
           "createdAt": "2026-10-25T06:00:00Z", "updatedAt": "2026-10-25T07:30:00Z",
           "status": "draft", "hasUnread": true
         },
@@ -60,6 +63,14 @@ struct DeskPreviewTransport: HTTPTransport {
           "status": "answered", "hasUnread": false
         },
         {
+          "id": "preview-social-4", "kind": "social",
+          "title": "مقترح سُحب",
+          "previewText": "@sabq\\nإبراهيم الروساء يكتب : نص تغريدة سحبها صاحبها",
+          "sender": { "id": "org-1", "name": "صحيفة سبق", "kind": "organization" },
+          "createdAt": "2026-10-11T08:00:00Z", "updatedAt": "2026-10-11T09:00:00Z",
+          "status": "canceled", "hasUnread": false, "canceledBySelf": true
+        },
+        {
           "id": "preview-social-3", "kind": "social",
           "title": "نتائج مباراة الهلال والنصر",
           "sender": { "id": "agency-2", "name": "وكالة الأنباء", "kind": "agency" },
@@ -71,6 +82,47 @@ struct DeskPreviewTransport: HTTPTransport {
       "hasMore": false
     }
     """
+
+    nonisolated static let systemHealthJSON = """
+    {
+      "generatedAt": "2026-10-25T15:13:40Z", "lastCheckAt": "2026-10-25T15:13:00Z",
+      "summary": { "status": "partial", "title": "تعطّل جزئي", "detail": "نموذج واحد متوقف ونموذج متدهور. التحويل التلقائي يعمل." },
+      "aiAlertsEnabled": true,
+      "models": [
+        { "provider": "anthropic", "providerLabel": "Anthropic", "modelId": "claude-sonnet-4-6",
+          "status": "down", "rawStatus": "quota_exceeded", "since": "2026-10-25T14:58:00Z",
+          "lastError": { "code": "QUOTA_EXCEEDED", "message": "quota exceeded" },
+          "requests24h": 120, "failures24h": 7 },
+        { "provider": "google", "providerLabel": "Google", "modelId": "gemini-2.5-flash",
+          "status": "degraded", "rawStatus": "degraded", "requests24h": 3, "failures24h": 1 },
+        { "provider": "openai", "providerLabel": "OpenAI", "modelId": "gpt-5.1",
+          "status": "up", "rawStatus": "healthy", "requests24h": 2471, "failures24h": 0 }
+      ],
+      "budgets": [
+        { "id": "b1", "label": "OpenAI", "limitUsd": 500, "spentUsd": 410.2, "percent": 82, "period": "monthly" }
+      ]
+    }
+    """
+
+    nonisolated static let alertsJSON = """
+    {
+      "generatedAt": "2026-10-25T15:15:00Z",
+      "counts": { "urgent": 1, "info": 2 },
+      "items": [
+        { "id": "social_failed:preview-social-3", "kind": "social_failed", "severity": "urgent",
+          "title": "فشل نشر تغريدة", "body": "«نتائج مباراة الهلال والنصر» رفضتها منصة X بعد 3 محاولات.",
+          "occurredAt": "2026-10-25T15:09:00Z", "deeplink": "sabqdesk://social/preview-social-3",
+          "action": { "type": "retry_social", "postId": "preview-social-3" } },
+        { "id": "agency_balance_low:1", "kind": "agency_balance_low", "severity": "info",
+          "title": "رصيد وكالة منخفض", "body": "«شركة أفق للإعلام» بقي لها رصيد منشورين.",
+          "occurredAt": "2026-10-25T06:00:00Z", "deeplink": null, "action": null },
+        { "id": "ai_incident:gemini", "kind": "ai_incident", "severity": "info",
+          "title": "نموذج متدهور", "body": "gemini-2.5-flash: فشل 1 من 3 طلبات.",
+          "occurredAt": "2026-10-25T05:40:00Z", "deeplink": "sabqdesk://system",
+          "action": { "type": "open_system" } }
+      ]
+    }
+    """
 }
 
 enum DeskPreviewFixtures {
@@ -78,7 +130,9 @@ enum DeskPreviewFixtures {
                             role: "editor", twoFactorEnabled: true, roles: ["editor"],
                             capabilities: StaffCapabilities(canTickets: true,
                                                             canSocial: .init(view: true, publish: true,
-                                                                             schedule: true, reject: false)))
+                                                                             schedule: true, reject: false),
+                                                            canSystemHealth: true, canAdminAlerts: true),
+                            alertPrefs: StaffAlertPrefs())
 
     static func client(emptyInbox: Bool) -> StaffAPIClient {
         StaffAPIClient(configuration: .init(installationID: "preview-installation", appVersion: "1.0.0"),

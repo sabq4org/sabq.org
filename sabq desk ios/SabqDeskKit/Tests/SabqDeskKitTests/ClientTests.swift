@@ -154,7 +154,7 @@ final class ClientTests: XCTestCase {
         let envelope = #"{"post":\#(Fixtures.socialPost)}"#
         let (client, transport, _) = makeClient([.init(status: 200, body: envelope), .init(status: 200, body: envelope)],
                                                 session: liveSession)
-        let reason = SocialRejectionPreset.composeReason(preset: .duplicate, note: "نُشر أمس")
+        let reason = try XCTUnwrap(SocialRejectionPreset.composeReason(preset: .duplicate, note: "نُشر أمس"))
         _ = try await client.rejectSocialPost(id: "social-post-uuid", reason: reason)
         XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/social/social-post-uuid/reject")
         XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["reason"] as? String, "مكرر — نُشر أمس")
@@ -164,7 +164,7 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["scheduledAt"] as? String, "2026-10-25T19:30:00+03:00")
     }
 
-    func testRejectWithoutReasonSendsEmptyBody() async throws {
+    func testRejectWithBlankReasonOmitsIt() async throws {
         let (client, transport, _) = makeClient([.init(status: 200, body: #"{"post":\#(Fixtures.socialPost)}"#)], session: liveSession)
         _ = try await client.rejectSocialPost(id: "social-post-uuid", reason: "   ")
         XCTAssertTrue(jsonObject(transport.lastRequest?.httpBody).isEmpty)
@@ -236,5 +236,41 @@ final class ClientTests: XCTestCase {
         // After enabling 2FA on the web, retrying me() with the kept session succeeds.
         let meAfterEnable = try await client.me()
         XCTAssertEqual(meAfterEnable.twoFactorEnabled, true)
+    }
+
+    func testSystemEndpointsUseTheContractPaths() async throws {
+        let (client, transport, _) = makeClient([
+            .init(status: 200, body: Fixtures.systemHealth),
+            .init(status: 200, body: Fixtures.adminAlerts),
+            .init(status: 200, body: #"{"aiAlerts":true,"adminAlerts":true}"#),
+            .init(status: 200, body: #"{"aiAlerts":false,"adminAlerts":true}"#),
+        ], session: liveSession)
+        _ = try await client.systemHealth()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/system/health")
+        _ = try await client.adminAlerts()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/alerts")
+        _ = try await client.alertPrefs()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/me/alert-prefs")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "GET")
+        let updated = try await client.updateAlertPrefs(StaffAlertPrefsUpdate(aiAlerts: false))
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(request.url?.path, "/api/v1/staff/me/alert-prefs")
+        let body = jsonObject(request.httpBody)
+        XCTAssertEqual(body["aiAlerts"] as? Bool, false)
+        XCTAssertNil(body["adminAlerts"], "unchanged switches are not sent")
+        XCTAssertEqual(updated, StaffAlertPrefs(aiAlerts: false, adminAlerts: true))
+    }
+
+    func testSystemHealthForbiddenSurfacesWithoutClearingTheSession() async {
+        let (client, _, store) = makeClient([.init(status: 403, body: #"{"code":"forbidden","message":"x"}"#)],
+                                            session: liveSession)
+        do {
+            _ = try await client.systemHealth()
+            XCTFail("expected failure")
+        } catch {
+            XCTAssertEqual(error as? StaffAPIError, .forbidden(message: "x"))
+        }
+        XCTAssertNotNil(store.load())
     }
 }

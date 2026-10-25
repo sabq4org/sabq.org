@@ -81,6 +81,7 @@ interface SocialPostRow {
   articleTitle?: string | null;
   articleImageUrl?: string | null;
   createdByName?: string | null;
+  createdByUserId?: string | null;
   publishedByName?: string | null;
   isAuthorProposal?: boolean;
   /** اسم الوكالة لتغريدة طلبتها وكالة لخبرها */
@@ -277,6 +278,16 @@ export default function SocialPublishingPage() {
   const [scheduledAtLocal, setScheduledAtLocal] = useState("");
   const [rejectingPost, setRejectingPost] = useState<SocialPostRow | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  // صاحب المنشور يسحبه بلا سبب؛ رفض منشور غيره يلزمه سبب (يفرضه الخادم أيضاً)
+  const isOwnPost = (p: SocialPostRow) => Boolean(user?.id && p.createdByUserId === user.id);
+  const requestCancel = (p: SocialPostRow) => {
+    if (isOwnPost(p)) {
+      cancelMutation.mutate(p.id);
+      return;
+    }
+    setRejectingPost(p);
+    setRejectReason("");
+  };
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // نتيجة ربط OAuth تصل عبر ?x=connected|denied|…
@@ -1388,13 +1399,7 @@ export default function SocialPublishingPage() {
                                 variant="ghost"
                                 className="no-min-touch-size h-8 text-xs text-red-600 hover:bg-red-500/10 rounded-xl"
                                 disabled={cancelMutation.isPending}
-                                onClick={() => {
-                                  if (p.agencyName) {
-                                    // الوكالة ترى الملاحظة في لوحتها وبريدها
-                                    setRejectingPost(p);
-                                    setRejectReason("");
-                                  } else cancelMutation.mutate(p.id);
-                                }}
+                                onClick={() => requestCancel(p)}
                                 data-testid={`button-log-cancel-${p.id}`}
                               >
                                 رفض المقترح
@@ -1409,7 +1414,7 @@ export default function SocialPublishingPage() {
                             variant="outline"
                             className="no-min-touch-size h-8 text-xs text-red-600 border-red-500/30 hover:bg-red-500/10 rounded-xl"
                             disabled={cancelMutation.isPending}
-                            onClick={() => cancelMutation.mutate(p.id)}
+                            onClick={() => requestCancel(p)}
                             data-testid={`button-log-cancel-${p.id}`}
                           >
                             إلغاء الجدولة
@@ -1600,8 +1605,18 @@ export default function SocialPublishingPage() {
       <Dialog open={Boolean(rejectingPost)} onOpenChange={(open) => !open && setRejectingPost(null)}>
         <DialogContent className="w-[calc(100vw-1.25rem)] max-w-md rounded-2xl p-4 sm:p-6" dir="rtl">
           <DialogHeader className="text-right">
-            <DialogTitle>رفض طلب {rejectingPost?.agencyName}</DialogTitle>
-            <DialogDescription>تصل الملاحظة للوكالة في لوحتها وبريدها، ويمكنها التعديل وإعادة الإرسال.</DialogDescription>
+            <DialogTitle>
+              {rejectingPost?.agencyName
+                ? `رفض طلب ${rejectingPost.agencyName}`
+                : rejectingPost?.status === "scheduled"
+                  ? "إلغاء جدولة المنشور"
+                  : "رفض المقترح"}
+            </DialogTitle>
+            <DialogDescription>
+              {rejectingPost?.agencyName
+                ? "تصل الملاحظة للوكالة في لوحتها وبريدها، ويمكنها التعديل وإعادة الإرسال."
+                : "اكتب سبب الرفض؛ يصل إلى صاحب المنشور."}
+            </DialogDescription>
           </DialogHeader>
           <Textarea
             value={rejectReason}
@@ -1616,15 +1631,15 @@ export default function SocialPublishingPage() {
             </Button>
             <Button
               variant="destructive"
-              disabled={cancelMutation.isPending}
+              disabled={cancelMutation.isPending || rejectReason.trim().length === 0}
               onClick={() => {
-                if (!rejectingPost) return;
-                cancelMutation.mutate({ postId: rejectingPost.id, reason: rejectReason.trim() || undefined });
+                if (!rejectingPost || rejectReason.trim().length === 0) return;
+                cancelMutation.mutate({ postId: rejectingPost.id, reason: rejectReason.trim() });
                 setRejectingPost(null);
               }}
               data-testid="button-confirm-reject"
             >
-              رفض الطلب
+              {rejectingPost?.agencyName ? "رفض الطلب" : "تأكيد الرفض"}
             </Button>
           </DialogFooter>
         </DialogContent>

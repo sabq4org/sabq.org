@@ -10,7 +10,7 @@ import { CircuitBreaker } from "./circuitBreaker";
 import { getFeatureConfig, getModel } from "./configStore";
 import { AIGateway } from "./gateway";
 import { loadBreakerStates, persistBreakerState } from "./healthStore";
-import { notifyIncident } from "./notifier";
+import { notifyIncident, setIncidentHandler } from "./notifier";
 import { getAdapter } from "./registry";
 import { logUsage } from "./usageLogger";
 
@@ -38,6 +38,18 @@ import("../../services/aiCriticalAlerts")
   })
   .catch((err) => {
     console.warn("[AI Hub] critical-alert wiring skipped:", (err as Error).message);
+  });
+
+// Phase 2 incident notifications: chain_exhausted → staff-app push for admins
+// (debounced per feature) + the /api/v1/staff/alerts ring buffer.
+import("../../services/staffAiAlertPush")
+  .then(({ handleAiGatewayIncident }) => {
+    setIncidentHandler((incident) => {
+      void handleAiGatewayIncident(incident);
+    });
+  })
+  .catch((err) => {
+    console.warn("[AI Hub] incident-handler wiring skipped:", (err as Error).message);
   });
 
 export const aiGateway = new AIGateway({

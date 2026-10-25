@@ -134,7 +134,10 @@ import mobileAccountHooksRouter from "../../server/routes/mobileAccountHooks";
 import { isCsrfExemptRequest } from "../../server/csrf";
 import { OpinionTicketServiceError } from "../../server/services/opinionTicketsService";
 import { notifyDeskOfWriterInquiry } from "../../server/services/opinionTicketNotifications";
-import { notifyDeskOfAuthorSocialProposal } from "../../server/services/socialPublishing/socialPublishingService";
+import {
+  CANCEL_REASON_REQUIRED_MESSAGE,
+  notifyDeskOfAuthorSocialProposal,
+} from "../../server/services/socialPublishing/socialPublishingService";
 import { notifyStaffDeskOfSocialProposal } from "../../server/services/staffAppService";
 import { notifyEditorialEvent } from "../../server/services/editorialNotifications";
 
@@ -388,8 +391,50 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
         schedule: true,
         reject: false,
       },
+      canSystemHealth: false,
+      canAdminAlerts: false,
     });
+    expect(body.alertPrefs).toBeNull();
     expect(mocks.invalidateUserPermissionCache).toHaveBeenCalledWith("staff-editor-1");
+  });
+
+  it("admin-only desk endpoints: /system/health, /alerts and /me/alert-prefs need ai_hub.view", async () => {
+    mocks.userHasPermission.mockImplementation(async (_uid: string, code: string) => code !== "ai_hub.view");
+    for (const [method, path, body] of [
+      ["GET", "/api/v1/staff/system/health", undefined],
+      ["GET", "/api/v1/staff/alerts", undefined],
+      ["GET", "/api/v1/staff/me/alert-prefs", undefined],
+      ["PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: false }],
+    ] as const) {
+      const res = await call(method, path, body);
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("forbidden");
+    }
+
+    // Admin: capabilities on, alertPrefs default ON when no row exists.
+    mocks.userHasPermission.mockResolvedValue(true);
+    mocks.dbSelect.mockImplementation(() => ({
+      from: (table: unknown) => ({
+        where: () => ({
+          limit: () =>
+            Promise.resolve(
+              table && typeof table === "object" && "twoFactorEnabled" in (table as object)
+                ? activeMockUser
+                  ? [activeMockUser]
+                  : []
+                : [],
+            ),
+        }),
+      }),
+    }));
+    const me = await (await call("GET", "/api/v1/staff/me")).json();
+    expect(me.capabilities).toMatchObject({ canSystemHealth: true, canAdminAlerts: true });
+    expect(me.alertPrefs).toEqual({ aiAlerts: true, adminAlerts: true });
+    const prefs = await call("GET", "/api/v1/staff/me/alert-prefs");
+    expect(prefs.status).toBe(200);
+    expect(await prefs.json()).toEqual({ aiAlerts: true, adminAlerts: true });
+    const bad = await call("PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: "off" });
+    expect(bad.status).toBe(400);
   });
 
   it("RBAC tickets: editor and admin can access tickets, reader cannot (403 forbidden)", async () => {
@@ -399,6 +444,7 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
         writerId: "w-1",
         writerName: "د. سعد",
         writerEmail: "saad@sabq.org",
+        writerProfileImageUrl: "https://media.sabq.org/avatars/w-1.jpg",
         authorKind: "opinion_author",
         title: "استفسار",
         status: "open",
@@ -411,6 +457,13 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
     mocks.canUserViewOpinionDesk.mockResolvedValue(true);
     const editorRes = await call("GET", "/api/v1/staff/tickets/t-1");
     expect(editorRes.status).toBe(200);
+    expect((await editorRes.json()).ticket.sender).toEqual({
+      id: "w-1",
+      name: "د. سعد",
+      kind: "writer",
+      roleKind: "opinion_author",
+      avatarUrl: "https://media.sabq.org/avatars/w-1.jpg",
+    });
 
     // 2) Admin -> allowed
     activeMockUser = { ...DEFAULT_STAFF_USER, id: "staff-admin-1", role: "admin" };
@@ -809,6 +862,57 @@ describe("Sabq Desk Staff API — Unified Inbox, Cursor Pagination & Unread Coun
     expect((await draftRes.json()).items[0].lastError).toBeNull();
   });
 
+  it("adds https-only sender avatars, sender kinds (incl. organization) and canceledBySelf", async () => {
+    mocks.listOpinionTickets.mockResolvedValue([
+      { ...sampleTickets[0], writerProfileImageUrl: "https://media.sabq.org/w/khalid.webp" },
+      { ...sampleTickets[1], writerProfileImageUrl: "/objects/avatars/fahad.png" },
+    ]);
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue([
+      { ...sampleSocialProposals[0], agencyLogoUrl: "https://media.sabq.org/logos/ofuq.png" },
+      {
+        ...sampleSocialProposals[1],
+        id: "social-org",
+        creatorRoles: ["system_admin"],
+        creatorProfileImageUrl: "http://insecure.example/a.png",
+      },
+      {
+        ...sampleSocialProposals[1],
+        id: "social-rep",
+        status: "canceled",
+        creatorRoles: ["reporter"],
+        creatorProfileImageUrl: "https://media.sabq.org/r.webp",
+        canceledByUserId: "writer-2",
+      },
+      {
+        ...sampleSocialProposals[1],
+        id: "social-rej",
+        status: "canceled",
+        creatorRoles: ["opinion_author"],
+        canceledByUserId: "editor-9",
+      },
+    ]);
+
+    const res = await call("GET", "/api/v1/staff/inbox?type=all&limit=50&status=open,answered,draft,canceled");
+    expect(res.status).toBe(200);
+    const items = (await res.json()).items as any[];
+    const byId = new Map(items.map((i) => [i.id, i]));
+    expect(byId.get("ticket-1").sender.avatarUrl).toBe("https://media.sabq.org/w/khalid.webp");
+    expect(byId.get("ticket-2").sender.avatarUrl).toBeNull();
+    expect(byId.get("social-1").sender).toMatchObject({
+      kind: "agency",
+      avatarUrl: "https://media.sabq.org/logos/ofuq.png",
+    });
+    expect(byId.get("social-1").canceledBySelf).toBeNull();
+    expect(byId.get("social-org").sender).toMatchObject({ kind: "organization", avatarUrl: null });
+    expect(byId.get("social-rep").sender).toMatchObject({
+      kind: "reporter",
+      avatarUrl: "https://media.sabq.org/r.webp",
+    });
+    expect(byId.get("social-rep").canceledBySelf).toBe(true);
+    expect(byId.get("social-rej").sender.kind).toBe("writer");
+    expect(byId.get("social-rej").canceledBySelf).toBe(false);
+  });
+
   it("GET /unread-counts keeps the social count draft-only (default pending filter)", async () => {
     mocks.getOpinionTicketsUnreadCounts.mockResolvedValue({ unreadCount: 0, unansweredCount: 0 });
     mocks.listPendingSocialProposalsForDesk.mockResolvedValue(sampleSocialProposals);
@@ -1041,6 +1145,52 @@ describe("Sabq Desk Staff API — Tickets, Social Actions, Schedule Validation, 
     expect(r2.status).toBe(200);
     expect(r3.status).toBe(429);
     expect((await r3.json()).code).toBe("rate_limited");
+  });
+
+  it("requires a rejection reason unless the staff user withdraws their own post", async () => {
+    const draftPost = {
+      id: "soc-reason",
+      articleId: "art-1",
+      platform: "x",
+      status: "draft",
+      text: "تغريدة",
+      textSource: "custom",
+      linkUrl: null,
+      createdByUserId: "w-1",
+      publisherId: null,
+    };
+    mocks.getPost.mockResolvedValue(draftPost);
+    mocks.cancelPost.mockResolvedValue({ ...draftPost, status: "canceled" });
+
+    // غير صاحب المنشور بلا جسم أو بسبب فارغ → 400 ولا يُلغى شيء.
+    for (const body of [undefined, {}, { reason: "   " }, { reason: null }]) {
+      const res = await call("POST", "/api/v1/staff/social/soc-reason/reject", body);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe("validation_error");
+      expect(json.message).toBe(CANCEL_REASON_REQUIRED_MESSAGE);
+    }
+    // المسار البديل /social/posts/:id/reject يطبّق القاعدة نفسها.
+    const postsAlias = await call("POST", "/api/v1/staff/social/posts/soc-reason/reject", {});
+    expect(postsAlias.status).toBe(400);
+    expect(mocks.cancelPost).not.toHaveBeenCalled();
+
+    // بسبب → 200 ويصل السبب المقلّم إلى cancelPost.
+    const withReason = await call("POST", "/api/v1/staff/social/soc-reason/reject", {
+      reason: "  صياغة غير مناسبة  ",
+    });
+    expect(withReason.status).toBe(200);
+    expect(mocks.cancelPost).toHaveBeenLastCalledWith(
+      "soc-reason",
+      DEFAULT_STAFF_USER.id,
+      "صياغة غير مناسبة",
+    );
+
+    // صاحب المنشور يسحبه بلا سبب → 200 والسبب null.
+    mocks.getPost.mockResolvedValue({ ...draftPost, createdByUserId: DEFAULT_STAFF_USER.id });
+    const ownWithdraw = await call("POST", "/api/v1/staff/social/soc-reason/reject", {});
+    expect(ownWithdraw.status).toBe(200);
+    expect(mocks.cancelPost).toHaveBeenLastCalledWith("soc-reason", DEFAULT_STAFF_USER.id, null);
   });
 });
 

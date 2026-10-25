@@ -72,6 +72,29 @@ struct SettingsView: View {
                     sectionHeader("الإشعارات والرسائل")
                 }
 
+                if model.capabilities.canSystemTab {
+                    Section {
+                        if model.capabilities.canAdminAlerts {
+                            Toggle(isOn: adminAlertsBinding) {
+                                RowLabel(title: "تنبيهات الإدارة الفورية", systemImage: "exclamationmark.bubble")
+                            }
+                            .tint(DeskInk.action)
+                        }
+                        if model.capabilities.canSystemHealth {
+                            Toggle(isOn: aiAlertsBinding) {
+                                RowLabel(title: "تنبيهات نماذج الذكاء الاصطناعي", systemImage: "cpu")
+                            }
+                            .tint(DeskInk.action)
+                        }
+                    } header: {
+                        sectionHeader("تنبيهات النظام")
+                    } footer: {
+                        Text(model.alertPrefsError ?? "تصلك على هذا الجهاز فور حدوث ما يحتاج تدخلك.")
+                            .deskText(DeskType.meta)
+                            .foregroundStyle(model.alertPrefsError == nil ? DeskTheme.textSecondary : DeskTheme.danger)
+                    }
+                }
+
                 Section {
                     HStack {
                         RowLabel(title: "الإصدار", systemImage: "info.circle")
@@ -99,11 +122,12 @@ struct SettingsView: View {
             .listRowSeparatorTint(DeskInk.hairline)
             .scrollContentBackground(.hidden)
             .background(DeskTheme.background)
-            .contentMargins(.bottom, DeskLayout.space24, for: .scrollContent)
+            .contentMargins(.bottom, DeskLayout.tabBarClearance, for: .scrollContent)
             .deskText(DeskType.excerpt)
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await model.reloadIdentity() }
             .onAppear { appLock.refreshAvailability() }
+            .task { await model.loadAlertPrefsIfNeeded() }
             .confirmationDialog("تسجيل الخروج من المكتب؟", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("تسجيل الخروج", role: .destructive) { Task { await model.signOut() } }
                 Button("إلغاء", role: .cancel) {}
@@ -133,6 +157,16 @@ struct SettingsView: View {
     private var appLockBinding: Binding<Bool> {
         Binding(get: { appLock.isEnabled },
                 set: { newValue in Task { await appLock.setEnabled(newValue) } })
+    }
+
+    private var adminAlertsBinding: Binding<Bool> {
+        Binding(get: { model.alertPrefs?.adminAlerts ?? true },
+                set: { value in Task { await model.updateAlertPrefs(StaffAlertPrefsUpdate(adminAlerts: value)) } })
+    }
+
+    private var aiAlertsBinding: Binding<Bool> {
+        Binding(get: { model.alertPrefs?.aiAlerts ?? true },
+                set: { value in Task { await model.updateAlertPrefs(StaffAlertPrefsUpdate(aiAlerts: value)) } })
     }
 
     private var appLockFooter: String {
@@ -180,23 +214,8 @@ private struct AccountHeader: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
     private var avatar: some View {
-        if let raw = me.profileImageUrl, let url = URL(string: raw), url.scheme == "https" {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    MemberAvatar(name: me.displayName, size: 96)
-                }
-            }
-            .frame(width: 96, height: 96)
-            .clipShape(Circle())
-            .accessibilityHidden(true)
-        } else {
-            MemberAvatar(name: me.displayName, size: 96)
-                .accessibilityHidden(true)
-        }
+        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 96)
     }
 
     private var permissionTags: [String] {
@@ -207,6 +226,8 @@ private struct AccountHeader: View {
         if caps.canSocial.schedule { tags.append("الجدولة") }
         if caps.canSocial.publish { tags.append("النشر الفوري") }
         if caps.canSocial.reject { tags.append("الرفض") }
+        if caps.canSystemHealth { tags.append("حالة النظام") }
+        if caps.canAdminAlerts { tags.append("تنبيهات الإدارة") }
         return tags.isEmpty ? ["لا صلاحيات في المكتب"] : tags
     }
 }

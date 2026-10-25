@@ -12,6 +12,7 @@ import { aiProviderHealth } from '../../shared/schema';
 import { isLeader } from '../leaderElection';
 import { aiGateway } from '../ai/gateway';
 import type { AIHubProvider } from '../ai/gateway';
+import { evaluateAiBudgetAlerts } from '../services/staffAiAlertPush';
 
 let isRunning = false;
 
@@ -47,6 +48,14 @@ async function recheckTrippedModels() {
     }
   } catch (error) {
     console.error('[AI Health Check] tick failed:', error);
+  }
+
+  // Budget thresholds (80% / 100%) → staff-app push, once per budget/month/level.
+  try {
+    const pushed = await evaluateAiBudgetAlerts();
+    if (pushed > 0) console.log(`[AI Health Check] budget alerts pushed: ${pushed}`);
+  } catch (error) {
+    console.error('[AI Health Check] budget evaluation failed:', error);
   } finally {
     isRunning = false;
   }

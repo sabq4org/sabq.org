@@ -123,12 +123,13 @@ export async function canUserViewOpinionDesk(
   return isAdmin;
 }
 
-export async function authorKindsForUserIds(
+/** اتحاد أدوار كل مستخدم: عمود users.role + أدوار user_roles (RBAC). */
+export async function roleNamesForUserIds(
   userIds: string[],
-): Promise<Map<string, TicketAuthorKind>> {
-  const map = new Map<string, TicketAuthorKind>();
+): Promise<Map<string, Set<string>>> {
+  const byUser = new Map<string, Set<string>>();
   const unique = [...new Set(userIds.filter(Boolean))];
-  if (unique.length === 0) return map;
+  if (unique.length === 0) return byUser;
 
   const userRows = await db
     .select({ id: users.id, role: users.role })
@@ -141,7 +142,6 @@ export async function authorKindsForUserIds(
     .innerJoin(roles, eq(userRoles.roleId, roles.id))
     .where(inArray(userRoles.userId, unique));
 
-  const byUser = new Map<string, Set<string>>();
   for (const u of userRows) {
     const set = byUser.get(u.id) ?? new Set<string>();
     if (u.role) set.add(u.role);
@@ -152,6 +152,17 @@ export async function authorKindsForUserIds(
     set.add(r.roleName);
     byUser.set(r.userId, set);
   }
+  return byUser;
+}
+
+export async function authorKindsForUserIds(
+  userIds: string[],
+): Promise<Map<string, TicketAuthorKind>> {
+  const map = new Map<string, TicketAuthorKind>();
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (unique.length === 0) return map;
+
+  const byUser = await roleNamesForUserIds(unique);
   for (const id of unique) {
     map.set(id, resolveAuthorKind(byUser.get(id) ?? new Set()));
   }
@@ -191,6 +202,7 @@ export async function listOpinionTickets(options: {
       writerFirstName: users.firstName,
       writerLastName: users.lastName,
       writerEmail: users.email,
+      writerProfileImageUrl: users.profileImageUrl,
     })
     .from(opinionTickets)
     .leftJoin(users, eq(users.id, opinionTickets.writerId))
@@ -244,11 +256,13 @@ export async function listOpinionTickets(options: {
       writerId: row.writerId,
       writerName,
       writerEmail: row.writerEmail,
+      writerProfileImageUrl: row.writerProfileImageUrl ?? null,
       authorKind,
       writer: {
         id: row.writerId,
         name: writerName,
         email: row.writerEmail,
+        profileImageUrl: row.writerProfileImageUrl ?? null,
         authorKind,
         roleKind: authorKind,
       },
@@ -461,6 +475,7 @@ export async function getOpinionTicketWithMessages(options: {
       writerFirstName: users.firstName,
       writerLastName: users.lastName,
       writerEmail: users.email,
+      writerProfileImageUrl: users.profileImageUrl,
     })
     .from(opinionTickets)
     .leftJoin(users, eq(users.id, opinionTickets.writerId))
@@ -539,11 +554,13 @@ export async function getOpinionTicketWithMessages(options: {
     updated_at: toIso(ticket.updatedAt),
     writerName,
     writerEmail: ticket.writerEmail,
+    writerProfileImageUrl: ticket.writerProfileImageUrl ?? null,
     authorKind,
     writer: {
       id: ticket.writerId,
       name: writerName,
       email: ticket.writerEmail,
+      profileImageUrl: ticket.writerProfileImageUrl ?? null,
       authorKind,
       roleKind: authorKind,
     },

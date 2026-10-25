@@ -20,6 +20,7 @@ import {
   listPostsForArticle,
   listRecentPosts,
   publishClaimedPost,
+  resolveCancelReason,
   saveConnectedAccount,
   schedulePost,
   SocialPublishValidationError,
@@ -471,9 +472,17 @@ router.post(
   ),
   async (req, res) => {
     try {
-      const parsed = cancelPostSchema.safeParse(req.body);
-      const reason = parsed.success ? parsed.data.reason : undefined;
-      const post = await cancelPost(req.params.id, requestUserId(req), reason);
+      const parsed = cancelPostSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "السبب طويل جداً" });
+      }
+      const existing = await getPost(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "المنشور غير موجود" });
+      }
+      const userId = requestUserId(req);
+      const reason = resolveCancelReason(existing, userId, parsed.data.reason);
+      const post = await cancelPost(req.params.id, userId, reason);
       res.json(post);
     } catch (error) {
       handleError(res, error, "تعذر الإلغاء");

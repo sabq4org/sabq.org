@@ -56,7 +56,8 @@ struct TicketDetailView: View {
 
     private func titleView(_ ticket: StaffTicket) -> some View {
         HStack(spacing: DeskLayout.space8) {
-            SenderAvatar(name: ticket.writerName, kind: ticket.sender?.kind ?? .unknown, size: 36)
+            SenderAvatar(name: ticket.writerName, kind: ticket.sender?.kind ?? .unknown,
+                         imageURL: ticket.sender?.avatarUrl, size: 36)
             VStack(alignment: .leading, spacing: 0) {
                 Text(ticket.writerName)
                     .deskText(DeskRowType.headerName)
@@ -114,7 +115,9 @@ struct TicketDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
                 SenderKindTag(kind: ticket.sender?.kind ?? .unknown)
-                LTRText(text: RiyadhTime.displayString(ticket.createdAt))
+                Text(verbatim: RiyadhTime.displayString(ticket.createdAt))
+                    .deskText(DeskType.timestamp)
+                    .foregroundStyle(DeskTheme.textTertiary)
             }
         }
         .frame(maxWidth: .infinity)

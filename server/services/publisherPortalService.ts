@@ -1053,6 +1053,67 @@ type PublisherAlertEvent = {
   email?: { subject: string; html: string };
 };
 
+/** قاعدة الرصيد المنخفض نفسها في التنبيهات اليومية: منتهٍ (≤0) أو منخفض (≤20%). */
+export function classifyPublisherCreditLevel(
+  credit: Pick<typeof publisherCredits.$inferSelect, "isUnlimited" | "remainingCredits" | "totalCredits">,
+): "exhausted" | "low" | null {
+  if (credit.isUnlimited) return null;
+  if (credit.remainingCredits <= 0) return "exhausted";
+  const ratio = credit.totalCredits > 0 ? credit.remainingCredits / credit.totalCredits : 0;
+  return ratio <= 0.2 ? "low" : null;
+}
+
+async function findActivePublisherCredit(publisherId: string, now: Date) {
+  const [activeCredit] = await db
+    .select()
+    .from(publisherCredits)
+    .where(
+      and(
+        eq(publisherCredits.publisherId, publisherId),
+        eq(publisherCredits.isActive, true),
+        lte(publisherCredits.startDate, now),
+        or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
+      ),
+    )
+    .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt))
+    .limit(1);
+  return activeCredit ?? null;
+}
+
+export interface PublisherLowBalanceItem {
+  publisherId: string;
+  agencyName: string;
+  creditId: string;
+  packageName: string;
+  level: "exhausted" | "low";
+  remainingCredits: number;
+  totalCredits: number;
+  updatedAt: Date | null;
+}
+
+/** الوكالات النشطة ذات الرصيد المنخفض/المنتهي (قراءة فقط، بلا إرسال). */
+export async function listPublishersWithLowBalance(now: Date = new Date()): Promise<PublisherLowBalanceItem[]> {
+  const activePublishers = await db.select().from(publishers).where(eq(publishers.isActive, true));
+  const out: PublisherLowBalanceItem[] = [];
+  for (const publisher of activePublishers) {
+    const credit = await findActivePublisherCredit(publisher.id, now);
+    if (!credit) continue;
+    const level = classifyPublisherCreditLevel(credit);
+    if (!level) continue;
+    out.push({
+      publisherId: publisher.id,
+      agencyName: publisher.agencyName,
+      creditId: credit.id,
+      packageName: credit.packageName,
+      level,
+      remainingCredits: credit.remainingCredits,
+      totalCredits: credit.totalCredits,
+      updatedAt: credit.updatedAt ?? credit.createdAt ?? null,
+    });
+  }
+  return out;
+}
+
 function collectAlertEvents(
   publisher: Publisher,
   activeCredit: typeof publisherCredits.$inferSelect | null,
@@ -1061,17 +1122,15 @@ function collectAlertEvents(
   const events: PublisherAlertEvent[] = [];
 
   if (activeCredit) {
-    const ratio = activeCredit.totalCredits > 0
-      ? activeCredit.remainingCredits / activeCredit.totalCredits
-      : 0;
-    if (!activeCredit.isUnlimited && activeCredit.remainingCredits <= 0) {
+    const level = classifyPublisherCreditLevel(activeCredit);
+    if (level === "exhausted") {
       events.push({
         alertKey: `credits_exhausted:${activeCredit.id}`,
         title: "نفد رصيد باقتكم",
         body: `استُهلك كامل رصيد باقة «${activeCredit.packageName}». لا يمكن نشر مواد جديدة حتى تجديد الباقة.`,
         cooldownDays: 7,
       });
-    } else if (!activeCredit.isUnlimited && ratio <= 0.2) {
+    } else if (level === "low") {
       events.push({
         alertKey: `credits_low:${activeCredit.id}`,
         title: "رصيد باقتكم يوشك على النفاد",
@@ -1119,21 +1178,9 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
 
   for (const publisher of activePublishers) {
     try {
-      const [activeCredit] = await db
-        .select()
-        .from(publisherCredits)
-        .where(
-          and(
-            eq(publisherCredits.publisherId, publisher.id),
-            eq(publisherCredits.isActive, true),
-            lte(publisherCredits.startDate, now),
-            or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
-          ),
-        )
-        .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt))
-        .limit(1);
+      const activeCredit = await findActivePublisherCredit(publisher.id, now);
 
-      const events = collectAlertEvents(publisher, activeCredit ?? null, now);
+      const events = collectAlertEvents(publisher, activeCredit, now);
       const reminder = renewalRemindersEnabled() ? await buildRenewalReminder(publisher, now) : null;
       if (reminder) {
         events.push({

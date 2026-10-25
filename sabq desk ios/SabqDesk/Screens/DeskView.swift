@@ -33,7 +33,7 @@ struct DeskView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(DeskTheme.background)
-            .contentMargins(.bottom, DeskLayout.space24, for: .scrollContent)
+            .contentMargins(.bottom, DeskLayout.tabBarClearance, for: .scrollContent)
             .refreshable {
                 await model?.reload()
                 await app.refreshUnread()
@@ -78,7 +78,9 @@ struct DeskView: View {
         VStack(alignment: .leading, spacing: DeskLayout.space16) {
             DeskScreenHeader(title: "مكتب سبق", subtitle: RiyadhTime.dayTitle(Date())) {
                 if let me = app.me {
-                    Button(action: openAccount) { MemberAvatar(name: me.displayName) }
+                    Button(action: openAccount) {
+                        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 44)
+                    }
                         .buttonStyle(.plain)
                         .accessibilityLabel("حسابي")
                 }
@@ -258,7 +260,7 @@ struct DeskView: View {
         await act(on: item) { try await app.client.scheduleSocialPost(id: item.id, at: date) }
     }
 
-    private func reject(_ item: StaffInboxItem, reason: String?) async {
+    private func reject(_ item: StaffInboxItem, reason: String) async {
         await act(on: item) { try await app.client.rejectSocialPost(id: item.id, reason: reason) }
     }
 
@@ -293,7 +295,7 @@ private struct SocialRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DeskLayout.space12) {
-            SenderAvatar(name: item.sender.name, kind: item.sender.kind)
+            SenderAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl)
             VStack(alignment: .leading, spacing: DeskLayout.space4) {
                 HStack(spacing: 6) {
                     if item.hasUnread {
@@ -306,12 +308,12 @@ private struct SocialRow: View {
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
                     Spacer(minLength: DeskLayout.space4)
-                    LTRText(text: trailingTime, role: DeskType.timestamp, color: DeskTheme.textSecondary)
+                    trailingTime
                 }
-                Text(item.previewText?.isEmpty == false ? item.previewText! : item.title)
+                Text(item.listPreview)
                     .deskText(DeskRowType.preview)
                     .foregroundStyle(DeskTheme.textSecondary)
-                    .lineLimit(3)
+                    .lineLimit(2)
                 footer
             }
         }
@@ -319,13 +321,30 @@ private struct SocialRow: View {
         .accessibilityHint(item.hasUnread ? "جديد" : "")
     }
 
-    private var trailingTime: String {
+    /// «قبل 12 د» and «11 أكتوبر» are Arabic phrases and keep the RTL order;
+    /// only a bare HH:mm is isolated left-to-right.
+    @ViewBuilder
+    private var trailingTime: some View {
         switch section {
-        case .pending: return RiyadhTime.ago(item.createdAt)
-        case .published: return RiyadhTime.shortString(item.publishedAt ?? item.updatedAt)
-        case .scheduled: return item.scheduledAt.map { RiyadhTime.timeString($0) } ?? ""
-        case .rejected: return RiyadhTime.shortString(item.updatedAt)
+        case .scheduled:
+            if let at = item.scheduledAt {
+                LTRText(text: RiyadhTime.timeString(at), role: DeskType.timestamp, color: DeskTheme.textSecondary)
+            }
+        case .pending:
+            timeText(RiyadhTime.ago(item.createdAt))
+        case .published:
+            timeText(RiyadhTime.shortString(item.publishedAt ?? item.updatedAt))
+        case .rejected:
+            timeText(RiyadhTime.shortString(item.updatedAt))
         }
+    }
+
+    private func timeText(_ text: String) -> some View {
+        Text(verbatim: text)
+            .deskText(DeskType.timestamp)
+            .foregroundStyle(DeskTheme.textSecondary)
+            .lineLimit(1)
+            .fixedSize()
     }
 
     @ViewBuilder
@@ -341,9 +360,10 @@ private struct SocialRow: View {
                 .deskText(DeskType.metaEmphasis)
                 .foregroundStyle(DeskInk.link)
         case .rejected:
-            Text(item.lastError.map { "السبب: \($0)" } ?? "رُفض دون ذكر سبب")
-                .deskText(DeskType.metaEmphasis)
-                .foregroundStyle(DeskTheme.danger)
+            let note = item.rejectionNote
+            Text(note.text)
+                .deskText(note.isReason ? DeskType.metaEmphasis : DeskType.meta)
+                .foregroundStyle(note.isReason ? DeskTheme.danger : DeskTheme.textTertiary)
                 .lineLimit(2)
         default:
             if let title = item.article?.title, !title.isEmpty, title != item.previewText {
@@ -363,7 +383,7 @@ private struct TimelineRow: View {
     let isFirst: Bool
     let isLast: Bool
 
-    private static let timeRole = DeskTextRole(size: 22, weight: .bold, style: .title2, lineSpacing: 0)
+    private static let timeRole = DeskType.timelineTime
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -394,10 +414,10 @@ private struct TimelineRow: View {
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
                 }
-                Text(item.previewText?.isEmpty == false ? item.previewText! : item.title)
+                Text(item.listPreview)
                     .deskText(DeskRowType.preview)
                     .foregroundStyle(DeskTheme.textSecondary)
-                    .lineLimit(3)
+                    .lineLimit(2)
             }
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)

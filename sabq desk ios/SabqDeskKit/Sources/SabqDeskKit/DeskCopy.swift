@@ -58,6 +58,7 @@ extension StaffSenderKind {
         case .writer: return "كاتب رأي"
         case .reporter: return "مراسل"
         case .agency: return "وكالة"
+        case .organization: return "حساب المؤسسة"
         case .unknown: return "مساهم"
         }
     }

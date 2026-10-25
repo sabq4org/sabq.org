@@ -80,6 +80,7 @@ interface SocialPostRow {
   text: string;
   textSource?: string;
   createdByName?: string | null;
+  createdByUserId?: string | null;
   isAuthorProposal?: boolean;
   scheduledAt: string | null;
   publishedAt: string | null;
@@ -129,6 +130,9 @@ export function SocialPublishDialog({
   const [scheduleMode, setScheduleMode] = useState(false);
   const [scheduledAtLocal, setScheduledAtLocal] = useState("");
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
+  // إلغاء منشور غيرك يلزمه سبب (يفرضه الخادم)؛ صاحب المنشور يسحبه بلا سبب
+  const [cancelingPost, setCancelingPost] = useState<SocialPostRow | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
 
   const timeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Riyadh",
@@ -305,8 +309,12 @@ export function SocialPublishDialog({
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async (postId: string) =>
-      apiRequest(`/api/social-publishing/posts/${postId}/cancel`, { method: "POST" }),
+    mutationFn: async ({ postId, reason }: { postId: string; reason?: string }) =>
+      apiRequest(`/api/social-publishing/posts/${postId}/cancel`, {
+        method: "POST",
+        headers: reason ? { "Content-Type": "application/json" } : undefined,
+        body: reason ? JSON.stringify({ reason }) : undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: postsQueryKey });
       toast({ title: "أُلغي المنشور المجدول" });
@@ -678,7 +686,14 @@ export function SocialPublishDialog({
                               size="sm"
                               variant="outline"
                               disabled={cancelMutation.isPending}
-                              onClick={() => cancelMutation.mutate(p.id)}
+                              onClick={() => {
+                                if (user?.id && p.createdByUserId === user.id) {
+                                  cancelMutation.mutate({ postId: p.id });
+                                } else {
+                                  setCancelingPost(p);
+                                  setCancelReason("");
+                                }
+                              }}
                               data-testid={`button-cancel-${p.id}`}
                             >
                               إلغاء
@@ -726,6 +741,41 @@ export function SocialPublishDialog({
           setLibraryOpen(false);
         }}
       />
+
+      {/* سبب إلغاء منشور مجدول أنشأه غيرك */}
+      <AlertDialog open={Boolean(cancelingPost)} onOpenChange={(o) => !o && setCancelingPost(null)}>
+        <AlertDialogContent className="w-[calc(100vw-1.25rem)] max-w-md rounded-lg" dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>إلغاء المنشور المجدول</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              اكتب سبب الرفض؛ يصل إلى صاحب المنشور.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={3}
+            maxLength={1000}
+            data-testid="input-cancel-reason"
+          />
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel disabled={cancelMutation.isPending}>تراجع</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                const reason = cancelReason.trim();
+                if (!cancelingPost || !reason) return;
+                cancelMutation.mutate({ postId: cancelingPost.id, reason });
+                setCancelingPost(null);
+              }}
+              disabled={cancelMutation.isPending || cancelReason.trim().length === 0}
+              data-testid="button-confirm-cancel"
+            >
+              تأكيد الإلغاء
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* تأكيد النشر الفوري */}
       <AlertDialog open={confirmPublishOpen} onOpenChange={setConfirmPublishOpen}>

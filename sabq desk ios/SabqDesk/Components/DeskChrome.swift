@@ -6,17 +6,17 @@ import SwiftUI
 // robot, the assistant's speech bubble, sender avatars and labels, and the
 // section chips. Light theme, no cards: rows sit on the page with hairlines.
 
-/// Mockup ink for the selected chip and strong text.
+/// Spec colours under their original desk names; the values live in `DeskTheme`.
 enum DeskInk {
-    static let strong = Color(red: 15 / 255, green: 34 / 255, blue: 51 / 255)
+    static let strong = DeskTheme.navy
     /// The assistant's bubble and the robot's halo.
-    static let bubble = Color(red: 234 / 255, green: 247 / 255, blue: 255 / 255)
-    static let chip = Color(red: 241 / 255, green: 245 / 255, blue: 249 / 255)
-    static let hairline = Color(red: 238 / 255, green: 242 / 255, blue: 246 / 255)
+    static let bubble = DeskTheme.bubbleBlue
+    static let chip = DeskTheme.chipGrey
+    static let hairline = DeskTheme.hairline
     /// Text-safe Sabq blue (AA on white) for links and selected tabs.
-    static let link = Color(red: 11 / 255, green: 111 / 255, blue: 168 / 255)
+    static let link = DeskTheme.link
     /// Bright Sabq blue for filled buttons and the desk's own bubbles.
-    static let action = Color(red: 30 / 255, green: 155 / 255, blue: 230 / 255)
+    static let action = DeskTheme.buttonBlue
 }
 
 /// Row and header type sizes from the approved mockup (IBM Plex Sans Arabic).
@@ -95,21 +95,76 @@ extension DeskScreenHeader where Trailing == EmptyView {
     }
 }
 
-/// Initials in a circle tinted by who sent it.
+/// The sender's photo (or agency logo) when the server sends an https URL,
+/// else initials in a circle tinted by who sent it.
 struct SenderAvatar: View {
     let name: String
     var kind: StaffSenderKind = .unknown
+    var imageURL: String?
     var size: CGFloat = 44
 
     var body: some View {
-        Text(verbatim: DeskInitials.of(name))
-            .font(DeskFonts.app(size: size * 0.36, weight: .bold))
-            .foregroundStyle(kind.tone.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .frame(width: size, height: size)
-            .background(kind.tone.tileFill, in: Circle())
-            .accessibilityHidden(true)
+        RemoteAvatar(url: DeskAvatarURL.https(imageURL), size: size) {
+            Text(verbatim: DeskInitials.of(name))
+                // Spec: 17 bold at list size (44–48), smaller avatars scale down.
+                .font(DeskFonts.app(size: DeskType.listAvatarInitials.size * min(1, size / 44),
+                                    weight: DeskType.listAvatarInitials.weight,
+                                    relativeTo: DeskType.listAvatarInitials.style))
+                .foregroundStyle(kind.tone.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(width: size, height: size)
+                .background(kind.tone.tileFill, in: Circle())
+        }
+    }
+}
+
+/// The signed-in member's photo, else white initials on Sabq link blue
+/// (spec: 36 semibold at 96 pt, scaled proportionally for smaller sizes).
+struct AccountAvatar: View {
+    let name: String
+    var imageURL: String?
+    var size: CGFloat = 44
+
+    var body: some View {
+        RemoteAvatar(url: DeskAvatarURL.https(imageURL), size: size) {
+            Text(verbatim: DeskInitials.of(name))
+                .font(DeskFonts.app(size: DeskType.accountAvatarInitials.size * size / 96,
+                                    weight: DeskType.accountAvatarInitials.weight,
+                                    relativeTo: DeskType.accountAvatarInitials.style))
+                .foregroundStyle(Color.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(width: size, height: size)
+                .background(DeskTheme.link, in: Circle())
+        }
+    }
+}
+
+/// A circular remote image with a fallback while loading, on failure, or
+/// when there is no URL. Decorative: the row's text names the person.
+struct RemoteAvatar<Fallback: View>: View {
+    let url: URL?
+    let size: CGFloat
+    @ViewBuilder var fallback: () -> Fallback
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        fallback()
+                    }
+                }
+            } else {
+                fallback()
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
     }
 }
 
@@ -134,7 +189,8 @@ extension StaffSenderKind {
         case .writer: return .info
         case .agency: return .warning
         case .reporter: return .teal
-        case .unknown: return .neutral
+        // The spec defines no colour for «حساب المؤسسة»: same grey as unknown.
+        case .organization, .unknown: return .neutral
         }
     }
 }
@@ -216,29 +272,13 @@ struct DeskEmptyState: View {
     }
 }
 
-/// Initials avatar of the signed-in member; opens the account tab.
-struct MemberAvatar: View {
-    let name: String
-    var size: CGFloat = 44
-
-    var body: some View {
-        Text(verbatim: DeskInitials.of(name))
-            .font(DeskFonts.app(size: size * 0.38, weight: .semibold))
-            .foregroundStyle(Color.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .frame(width: size, height: size)
-            .background(DeskInk.link, in: Circle())
-    }
-}
-
 /// Text-style filled button used on the lock and login screens.
 struct DeskBigButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(DeskFonts.app(size: 18, weight: .semibold, relativeTo: .headline))
+            .deskText(DeskType.bigButton)
             .foregroundStyle(isEnabled ? Color.white : DeskTheme.disabledInk)
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(isEnabled ? DeskInk.action : DeskTheme.disabledFill,

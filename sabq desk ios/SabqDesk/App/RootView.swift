@@ -69,15 +69,17 @@ struct RootView: View {
     }
 }
 
-/// Three tabs (approved redesign 2026-10-25): المكتب for tweet proposals,
-/// الرسائل for contributors' messages, حسابي for the account. A member sees
-/// only the tabs their permissions open.
+/// Up to four tabs (approved redesign 2026-10-25, desk v2): المكتب for tweet
+/// proposals, الرسائل for contributors' messages, النظام for admins (alerts
+/// and system health), حسابي for the account. A member sees only the tabs
+/// their permissions open.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
 
-    enum Tab: Hashable { case desk, messages, account }
+    enum Tab: Hashable { case desk, messages, system, account }
     @State private var tab: Tab = .desk
+    @State private var systemSection: SystemSection = .alerts
 
     var body: some View {
         TabView(selection: $tab) {
@@ -93,13 +95,20 @@ struct MainTabView: View {
                     .badge(model.unread.tickets)
                     .tag(Tab.messages)
             }
+            if model.capabilities.canSystemTab {
+                SystemView(section: $systemSection)
+                    .tabItem { Label("النظام", systemImage: "waveform.path.ecg") }
+                    .badge(model.urgentAlerts)
+                    .tag(Tab.system)
+            }
             SettingsView()
                 .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
                 .tag(Tab.account)
         }
         .tint(DeskInk.link)
         .onAppear {
-            if !model.capabilities.canSocial.view { tab = .messages }
+            tab = firstTab
+            if !model.capabilities.canAdminAlerts { systemSection = .health }
             route(model.pendingLink)
         }
         .onChange(of: model.pendingLink) { _, link in route(link) }
@@ -108,10 +117,32 @@ struct MainTabView: View {
         }
     }
 
+    private var firstTab: Tab {
+        let caps = model.capabilities
+        if caps.canSocial.view { return .desk }
+        if caps.canTickets { return .messages }
+        if caps.canSystemTab { return .system }
+        return .account
+    }
+
     private func route(_ link: DeskDeepLink?) {
+        let caps = model.capabilities
         switch link {
-        case .social?: if model.capabilities.canSocial.view { tab = .desk }
-        case .ticket?: if model.capabilities.canTickets { tab = .messages }
+        case .social?: if caps.canSocial.view { tab = .desk }
+        case .ticket?: if caps.canTickets { tab = .messages }
+        case .systemHealth?:
+            // Host-only links have no list screen to consume them.
+            model.pendingLink = nil
+            if caps.canSystemHealth {
+                systemSection = .health
+                tab = .system
+            }
+        case .alerts?:
+            model.pendingLink = nil
+            if caps.canAdminAlerts {
+                systemSection = .alerts
+                tab = .system
+            }
         case nil: break
         }
     }

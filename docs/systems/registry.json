@@ -152,7 +152,7 @@
       "nameEn": "Editorial / Newsroom",
       "status": "active",
       "category": "content",
-      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ؛ BotDrafts يعيد حقلي SEO canonical ويحافظ على ضوابط التوكن والملكية والحصة.",
+      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ؛ BotDrafts يعيد حقلي SEO canonical ويحافظ على ضوابط التوكن والملكية والحصة. تطبيق الديسك يضيف للمشرفين صحة النظام وتنبيهات الإدارة وتفضيلاتها (ai_hub.view).",
       "docPath": "docs/systems/editorial/SYSTEM.md",
       "relatedDocs": [
         "docs/editorial/sabq-unified-editorial-prompt.md",
@@ -441,7 +441,13 @@
         "docs/systems/editorial/STAFF_APP_API.md",
         "tests/unit/staffAppMobile.test.ts",
         "sabq desk ios/**",
-        ".github/workflows/sabq-desk-ios-build.yml"
+        ".github/workflows/sabq-desk-ios-build.yml",
+        "server/services/staffAlertPrefsService.ts",
+        "server/services/staffSystemHealthService.ts",
+        "server/services/staffAdminAlertsService.ts",
+        "server/services/staffAiAlertPush.ts",
+        "server/services/staffBreakingExpiryLog.ts",
+        "tests/unit/staffDeskV2.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",

@@ -36,7 +36,11 @@ import {
   isMeaningfulProposalTextChange,
   sendDeskAlertEmails,
 } from "../deskBotAlerts";
-import { notifyStaffDeskOfSocialProposal } from "../staffAppPushService";
+import {
+  notifyStaffAdminsOfSocialFailure,
+  notifyStaffDeskOfSocialProposal,
+} from "../staffAppPushService";
+import { roleNamesForUserIds } from "../opinionTicketsService";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -463,6 +467,25 @@ export async function schedulePost(
   return updated;
 }
 
+export const CANCEL_REASON_REQUIRED_MESSAGE = "اكتب سبب الرفض";
+
+/**
+ * قاعدة سبب الرفض: من يرفض منشور غيره يلزمه سبب غير فارغ؛ صاحب المنشور
+ * يسحبه بلا سبب. يعيد السبب بعد التقليم (أو null).
+ */
+export function resolveCancelReason(
+  post: { createdByUserId: string | null },
+  cancelerUserId: string,
+  rawReason: string | null | undefined,
+): string | null {
+  const reason = typeof rawReason === "string" ? rawReason.trim() : "";
+  const isOwner = Boolean(post.createdByUserId) && post.createdByUserId === cancelerUserId;
+  if (!isOwner && reason.length === 0) {
+    throw new SocialPublishValidationError(CANCEL_REASON_REQUIRED_MESSAGE, 400);
+  }
+  return reason.length > 0 ? reason : null;
+}
+
 export async function cancelPost(
   postId: string,
   canceledByUserId: string,
@@ -730,8 +753,22 @@ export async function recoverStaleProcessingPosts(): Promise<number> {
     WHERE status = 'processing'
       AND locked_at IS NOT NULL
       AND locked_at < now() - (${STALE_LOCK_MINUTES} * interval '1 minute')
+    RETURNING id, status, text, last_error
   `);
-  return result.rowCount ?? 0;
+  type RecoveredRow = { id: string; status: string; text: string; last_error: string | null };
+  const rawRows: unknown = (result as { rows?: unknown }).rows;
+  const rows = Array.isArray(rawRows) ? (rawRows as RecoveredRow[]) : [];
+  for (const row of rows) {
+    if (row.status !== "failed") continue;
+    void notifyStaffAdminsOfSocialFailure({
+      postId: row.id,
+      text: row.text,
+      error: row.last_error,
+    }).catch((pushErr) => {
+      console.error(`${LOG_PREFIX} فشل إشعار المشرفين بفشل النشر:`, pushErr);
+    });
+  }
+  return result.rowCount ?? rows.length;
 }
 
 // ── قرار ما بعد الفشل ──────────────────────────────────────────────
@@ -825,6 +862,16 @@ export async function publishClaimedPost(
         transition.terminal ? "نهائي" : "سيُعاد"
       }): ${providerErr.message}`,
     );
+    if (transition.terminal && updated) {
+      // تنبيه عاجل لمشرفي تطبيق الديسك (تفضيل adminAlerts) — لا يعطّل المسار
+      void notifyStaffAdminsOfSocialFailure({
+        postId: updated.id,
+        text: updated.text,
+        error: updated.lastError,
+      }).catch((pushErr) => {
+        console.error(`${LOG_PREFIX} فشل إشعار المشرفين بفشل النشر:`, pushErr);
+      });
+    }
     return updated ?? { ...claimed, status: transition.nextStatus, lastError: providerErr.message };
   };
 
@@ -1307,6 +1354,13 @@ export interface PendingSocialProposalItem {
   proposerName: string | null;
   createdByUserId: string;
   createdByName: string | null;
+  /** صورة منشئ المقترح (users.profile_image_url) كما هي في القاعدة. */
+  creatorProfileImageUrl: string | null;
+  /** اتحاد أدوار المنشئ (users.role + user_roles)؛ null إن تعذر جلبها. */
+  creatorRoles: string[] | null;
+  /** شعار الوكالة (publishers.logo_url) للمقترحات الواردة من وكالة. */
+  agencyLogoUrl: string | null;
+  canceledByUserId: string | null;
   publisherId: string | null;
   isAuthorProposal: boolean;
   isAgencyProposal: boolean;
@@ -1358,8 +1412,10 @@ export async function listPendingSocialProposalsForDesk(
       articleAuthorId: articles.authorId,
       articleSubmitterId: articles.submitterId,
       agencyName: publishers.agencyName,
+      agencyLogoUrl: publishers.logoUrl,
       creatorFirst: creator.firstName,
       creatorLast: creator.lastName,
+      creatorProfileImageUrl: creator.profileImageUrl,
     })
     .from(socialPosts)
     .leftJoin(articles, eq(socialPosts.articleId, articles.id))
@@ -1373,6 +1429,16 @@ export async function listPendingSocialProposalsForDesk(
     [first, last].filter(Boolean).join(" ").trim() || null;
   const toIso = (d: Date | string | null | undefined) =>
     d ? new Date(d).toISOString() : new Date(0).toISOString();
+
+  const personCreatorIds = rows
+    .filter((r) => !r.post.publisherId && r.post.createdByUserId)
+    .map((r) => r.post.createdByUserId);
+  let creatorRoleMap: Map<string, Set<string>> | null = null;
+  try {
+    creatorRoleMap = await roleNamesForUserIds(personCreatorIds);
+  } catch (err) {
+    console.error(`${LOG_PREFIX} تعذر جلب أدوار منشئي المقترحات:`, err);
+  }
 
   const out: PendingSocialProposalItem[] = [];
   for (const r of rows) {
@@ -1416,6 +1482,13 @@ export async function listPendingSocialProposalsForDesk(
       proposerName: isAgency ? agencyName ?? createdByName : createdByName,
       createdByUserId: r.post.createdByUserId,
       createdByName,
+      creatorProfileImageUrl: r.creatorProfileImageUrl ?? null,
+      creatorRoles: (() => {
+        const set = creatorRoleMap?.get(r.post.createdByUserId);
+        return set ? [...set] : null;
+      })(),
+      agencyLogoUrl: isAgency ? r.agencyLogoUrl ?? null : null,
+      canceledByUserId: r.post.canceledByUserId ?? null,
       publisherId: r.post.publisherId ?? null,
       isAuthorProposal: isAuthor,
       isAgencyProposal: isAgency,
