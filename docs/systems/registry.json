@@ -446,6 +446,10 @@
         "server/services/staffSystemHealthService.ts",
         "server/services/staffAdminAlertsService.ts",
         "server/services/staffAiAlertPush.ts",
+        "server/services/aiBalanceService.ts",
+        "server/services/aiBalanceMath.ts",
+        "tests/unit/aiBalanceService.test.ts",
+        "tests/unit/aiBalanceMath.test.ts",
         "server/services/staffBreakingExpiryLog.ts",
         "tests/unit/staffDeskV2.test.ts"
       ],
