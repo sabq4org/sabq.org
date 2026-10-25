@@ -1,0 +1,121 @@
+import SabqDeskDesign
+import SabqDeskKit
+import SwiftUI
+
+/// The two screens of «النظام».
+enum SystemSection: String, CaseIterable, Identifiable, Hashable {
+    case alerts
+    case health
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .alerts: return "التنبيهات"
+        case .health: return "حالة النظام"
+        }
+    }
+}
+
+/// «النظام» (admins only): «تنبيهات الإدارة» and «حالة النظام» behind two
+/// chips. A member with only one of the two permissions sees no chips.
+struct SystemView: View {
+    @Environment(AppModel.self) private var app
+    @Binding var section: SystemSection
+    @State private var path: [DeskDeepLink] = []
+
+    private var sections: [SystemSection] {
+        var result: [SystemSection] = []
+        if app.capabilities.canAdminAlerts { result.append(.alerts) }
+        if app.capabilities.canSystemHealth { result.append(.health) }
+        return result
+    }
+
+    private var shownSection: SystemSection {
+        sections.contains(section) ? section : (sections.first ?? .health)
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            VStack(spacing: 0) {
+                if sections.count > 1 {
+                    SectionChipBar(sections: sections, selection: $section,
+                                   title: \.title,
+                                   count: { $0 == .alerts ? app.urgentAlerts : 0 })
+                        .padding(.top, DeskLayout.space8)
+                        .padding(.bottom, DeskLayout.space4)
+                }
+                Group {
+                    switch shownSection {
+                    case .alerts:
+                        AdminAlertsView(openSystem: { section = .health }, open: { path = [$0] })
+                    case .health:
+                        SystemHealthView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(DeskTheme.background)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: DeskDeepLink.self) { link in
+                switch link {
+                case .social(let id):
+                    SocialDetailView(postID: id) { _ in }
+                case .ticket(let id):
+                    TicketDetailView(ticketID: id) { _ in }
+                case .systemHealth, .alerts:
+                    EmptyView()
+                }
+            }
+        }
+        .onChange(of: path) { _, newPath in
+            if newPath.isEmpty { Task { await app.refreshUnread() } }
+        }
+    }
+}
+
+/// Outlined group of rows on the white page (hairline #EEF2F6, no shadow).
+struct DeskOutlinedGroup: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: DeskRadius.large, style: .continuous)
+        content
+            .background(DeskTheme.background, in: shape)
+            .overlay(shape.stroke(DeskTheme.hairline, lineWidth: 1))
+    }
+}
+
+/// Section header above a group: 13 semibold #3E5063.
+struct DeskSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .deskText(DeskType.metaEmphasis)
+            .foregroundStyle(DeskTheme.textSecondary)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Compact action in an alert row (16 semibold): primary white on #1E9BE6,
+/// secondary #0B6FA8 on #F1F5F9.
+struct DeskPillButtonStyle: ButtonStyle {
+    var primary = true
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .deskText(DeskType.button)
+            .foregroundStyle(primary ? Color.white : DeskTheme.link)
+            .padding(.horizontal, 18)
+            .frame(minHeight: DeskLayout.touchTarget)
+            .background(primary ? DeskTheme.buttonBlue : DeskTheme.chipGrey, in: Capsule())
+            .opacity(configuration.isPressed ? 0.85 : (isEnabled ? 1 : 0.5))
+    }
+}
+
+#if DEBUG
+#Preview("النظام") {
+    SystemView(section: .constant(.alerts))
+        .deskPreviewEnvironment()
+}
+#endif
