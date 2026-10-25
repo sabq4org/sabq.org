@@ -16,16 +16,28 @@ struct SabqDeskApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(model)
-                .environment(appLock)
-                .environment(\.layoutDirection, .rightToLeft)
-                .environment(\.locale, RiyadhTime.locale)
-                .tint(DeskInk.link)
-                // The approved desk design is light only.
-                .preferredColorScheme(.light)
-                .onOpenURL { model.open($0) }
+            #if DEBUG
+            if let shot = DeskScreenshotScene.current {
+                DeskScreenshotHost(scene: shot)
+            } else {
+                app
+            }
+            #else
+            app
+            #endif
         }
+    }
+
+    private var app: some View {
+        RootView()
+            .environment(model)
+            .environment(appLock)
+            .environment(\.layoutDirection, .rightToLeft)
+            .environment(\.locale, RiyadhTime.locale)
+            .tint(DeskInk.link)
+            // The approved desk design is light only.
+            .preferredColorScheme(.light)
+            .onOpenURL { model.open($0) }
     }
 }
 

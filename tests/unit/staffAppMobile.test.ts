@@ -38,7 +38,22 @@ const mocks = vi.hoisted(() => ({
   sendPushNotification: vi.fn(),
   isApnsConfigured: vi.fn(),
   listOpinionDeskRecipients: vi.fn(),
+  getAllBalances: vi.fn(),
+  getProviderBalance: vi.fn(),
+  saveBalanceTopup: vi.fn(),
+  saveBalanceThreshold: vi.fn(),
 }));
+
+vi.mock("../../server/services/aiBalanceService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../server/services/aiBalanceService")>();
+  return {
+    ...actual,
+    getAllBalances: (...args: unknown[]) => mocks.getAllBalances(...args),
+    getProviderBalance: (...args: unknown[]) => mocks.getProviderBalance(...args),
+    saveBalanceTopup: (...args: unknown[]) => mocks.saveBalanceTopup(...args),
+    saveBalanceThreshold: (...args: unknown[]) => mocks.saveBalanceThreshold(...args),
+  };
+});
 
 vi.mock("../../server/db", () => ({
   db: {
@@ -393,18 +408,23 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
       },
       canSystemHealth: false,
       canAdminAlerts: false,
+      canManageBalances: false,
     });
     expect(body.alertPrefs).toBeNull();
     expect(mocks.invalidateUserPermissionCache).toHaveBeenCalledWith("staff-editor-1");
   });
 
-  it("admin-only desk endpoints: /system/health, /alerts and /me/alert-prefs need ai_hub.view", async () => {
+  it("admin-only desk endpoints: /system/health, /system/balances, /alerts and /me/alert-prefs need ai_hub.view", async () => {
     mocks.userHasPermission.mockImplementation(async (_uid: string, code: string) => code !== "ai_hub.view");
     for (const [method, path, body] of [
       ["GET", "/api/v1/staff/system/health", undefined],
       ["GET", "/api/v1/staff/alerts", undefined],
       ["GET", "/api/v1/staff/me/alert-prefs", undefined],
       ["PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: false }],
+      ["GET", "/api/v1/staff/system/balances", undefined],
+      ["GET", "/api/v1/staff/system/balances/openai", undefined],
+      ["POST", "/api/v1/staff/system/balances/openai/topup", { mode: "add", amountUsd: 500 }],
+      ["PUT", "/api/v1/staff/system/balances/openai/threshold", { threshold: 100 }],
     ] as const) {
       const res = await call(method, path, body);
       expect(res.status).toBe(403);
@@ -428,13 +448,58 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
       }),
     }));
     const me = await (await call("GET", "/api/v1/staff/me")).json();
-    expect(me.capabilities).toMatchObject({ canSystemHealth: true, canAdminAlerts: true });
+    expect(me.capabilities).toMatchObject({ canSystemHealth: true, canAdminAlerts: true, canManageBalances: true });
     expect(me.alertPrefs).toEqual({ aiAlerts: true, adminAlerts: true });
     const prefs = await call("GET", "/api/v1/staff/me/alert-prefs");
     expect(prefs.status).toBe(200);
     expect(await prefs.json()).toEqual({ aiAlerts: true, adminAlerts: true });
     const bad = await call("PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: "off" });
     expect(bad.status).toBe(400);
+  });
+
+  it("model balances: reads need ai_hub.view; top-up and threshold writes also need ai_hub.manage", async () => {
+    const openai = { provider: "openai", label: "OpenAI", kind: "estimated", unit: "usd", state: "low", amount: 86.3 };
+    mocks.getAllBalances.mockResolvedValue({
+      generatedAt: "2026-10-25T09:00:00.000Z",
+      summary: { critical: 0, low: 1, notConfigured: 0, attention: 1, text: "" },
+      providers: [openai],
+    });
+    mocks.getProviderBalance.mockResolvedValue({ ...openai, series: [], topups: [] });
+    const writeResult = { before: {}, after: { threshold: 100 }, balance: { ...openai, series: [], topups: [] } };
+    mocks.saveBalanceTopup.mockResolvedValue(writeResult);
+    mocks.saveBalanceThreshold.mockResolvedValue(writeResult);
+
+    // View-only supervisor: ai_hub.view without ai_hub.manage.
+    mocks.userHasPermission.mockImplementation(async (_uid: string, code: string) => code !== "ai_hub.manage");
+    const me = await (await call("GET", "/api/v1/staff/me")).json();
+    expect(me.capabilities).toMatchObject({ canSystemHealth: true, canManageBalances: false });
+    const list = await call("GET", "/api/v1/staff/system/balances");
+    expect(list.status).toBe(200);
+    expect((await list.json()).canManage).toBe(false);
+    const detail = await call("GET", "/api/v1/staff/system/balances/openai");
+    expect(detail.status).toBe(200);
+    expect((await detail.json()).canManage).toBe(false);
+    for (const [method, path, body] of [
+      ["POST", "/api/v1/staff/system/balances/openai/topup", { mode: "add", amountUsd: 500 }],
+      ["PUT", "/api/v1/staff/system/balances/openai/threshold", { threshold: 100 }],
+    ] as const) {
+      const res = await call(method, path, body);
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("forbidden");
+    }
+    expect(mocks.saveBalanceTopup).not.toHaveBeenCalled();
+    expect(mocks.saveBalanceThreshold).not.toHaveBeenCalled();
+
+    // Manager: both permissions.
+    mocks.userHasPermission.mockResolvedValue(true);
+    expect((await (await call("GET", "/api/v1/staff/system/balances")).json()).canManage).toBe(true);
+    const topup = await call("POST", "/api/v1/staff/system/balances/openai/topup", { mode: "add", amountUsd: 500 });
+    expect(topup.status).toBe(200);
+    expect((await topup.json()).canManage).toBe(true);
+    const threshold = await call("PUT", "/api/v1/staff/system/balances/openai/threshold", { threshold: 100 });
+    expect(threshold.status).toBe(200);
+    expect(mocks.saveBalanceTopup).toHaveBeenCalledTimes(1);
+    expect(mocks.saveBalanceThreshold).toHaveBeenCalledTimes(1);
   });
 
   it("RBAC tickets: editor and admin can access tickets, reader cannot (403 forbidden)", async () => {

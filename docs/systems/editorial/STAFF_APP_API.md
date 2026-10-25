@@ -11,6 +11,7 @@
 4. **مقترحات النشر الاجتماعي على X (`Social`):** معاينة التغريدة المقترحة والكاتب/الوكالة وسجل المحاولات، والنشر الفوري (`publish`) أو الجدولة (`schedule`) أو الرفض (`reject` مع سبب إلزامي إلا عند سحب صاحب المقترح لمقترحه).
 5. **إشعارات الدفع الفوري الموجهة لتطبيق الديسك (`com.sabq.desk`):** إرسال إشعارات APNs/FCM عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` مع روابط عميقة `sabqdesk://ticket/<id>` و`sabqdesk://social/<id>` عند وصول تذكرة/رسالة جديدة أو مقترح نشر اجتماعي من كاتب رأي أو وكالة، مع عزل تام لإشعارات تطبيق القارئ (`com.sabq.sabqorg`).
 6. **أدوات المشرفين (`ai_hub.view`) — 2026-10-25:** صحة النظام (`GET /system/health`)، تنبيهات الإدارة (`GET /alerts`)، وتفضيلات التنبيهات (`GET|PUT /me/alert-prefs`)، مع إشعارات دفع لتغيّر حالة نماذج الذكاء الاصطناعي وحدود الميزانية وفشل نشر التغريدات.
+7. **أرصدة النماذج (`ai_hub.view`، والكتابة `ai_hub.manage`) — 2026-10-25:** `GET /system/balances` و`GET /system/balances/:provider` و`POST /system/balances/:provider/topup` و`PUT /system/balances/:provider/threshold` (§2-10)، مع إشعار دفع واحد عند عبور الرصيد إلى «منخفض» أو «حرج» ورابط `sabqdesk://balances/<provider>`.
 
 ---
 
@@ -55,7 +56,8 @@ Content-Type: application/json
 | **نشر المقترح فوراً** | `POST /social/:id/publish` | `social_publish.publish_now` |
 | **جدولة المقترح** | `POST /social/:id/schedule` | `social_publish.schedule` |
 | **رفض المقترح** | `POST /social/:id/reject` | `social_publish.manage_scheduled` **أو** `social_publish.create` |
-| **صحة النظام وتنبيهات الإدارة وتفضيلاتها** | `GET /system/health`، `GET /alerts`، `GET`/`PUT /me/alert-prefs` | `ai_hub.view` (`capabilities.canSystemHealth` / `canAdminAlerts`)؛ بدونها `403 forbidden` |
+| **صحة النظام وتنبيهات الإدارة وتفضيلاتها وأرصدة النماذج** | `GET /system/health`، `GET /alerts`، `GET`/`PUT /me/alert-prefs`، `GET /system/balances[/:provider]` | `ai_hub.view` (`capabilities.canSystemHealth` / `canAdminAlerts`)؛ بدونها `403 forbidden` |
+| **حفظ شحنة/ميزانية أو حد تنبيه رصيد** | `POST /system/balances/:provider/topup`، `PUT /system/balances/:provider/threshold` | `ai_hub.view` + `ai_hub.manage` (`capabilities.canManageBalances`)؛ من يملك العرض فقط يرد `403 forbidden` برسالة «تحديث الأرصدة وحدود التنبيه يتطلب صلاحية إدارة مركز الذكاء الاصطناعي» |
 
 ### د) سجل التدقيق (`activity_logs`) ومحددات المعدل
 - **التدقيق:** تُسجَّل كل عملية كتابة (`ticket_reply`, `ticket_status_update`, `social_post_publish`, `social_post_schedule`, `social_post_reject`, `staff_alert_prefs_update`) في جدول `activity_logs` مع:
@@ -101,12 +103,14 @@ Content-Type: application/json
       "reject": true
     },
     "canSystemHealth": true,
-    "canAdminAlerts": true
+    "canAdminAlerts": true,
+    "canManageBalances": true
   },
   "alertPrefs": { "aiAlerts": true, "adminAlerts": false }
 }
 ```
 - `canSystemHealth` و`canAdminAlerts` كلاهما = `ai_hub.view`.
+- `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
 - `alertPrefs` يُعاد فقط لمن يملك `canAdminAlerts`، وإلا `null`. إن تعذّرت قراءته يُعاد `{ aiAlerts: true, adminAlerts: true }` بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
@@ -269,6 +273,55 @@ Content-Type: application/json
 
 ---
 
+### 10. أرصدة النماذج `/api/v1/staff/system/balances*` (القراءة `ai_hub.view`، الكتابة `ai_hub.manage`)
+الخدمة: `server/services/aiBalanceService.ts` (الجلب والتخزين) و`server/services/aiBalanceMath.ts` (حساب نقي مختبَر). القراءة محروسة مثل `/system/health` (`capabilities.canSystemHealth`)؛ وحفظ الشحنة/الميزانية وحد التنبيه يتطلب أيضاً `ai_hub.manage` (`capabilities.canManageBalances`) وإلا `403 forbidden`. كل استجابة (القائمة، التفاصيل، الكتابة) تحمل `canManage` للمستخدم الحالي، فيخفي التطبيق «تحديث الرصيد» و«تعديل الميزانية» و«اضبطه» و«حدود التنبيه» و«تعديل» الحد حين تكون `false`. والمزوّد خارج القائمة البيضاء (`deepseek | openai | anthropic | gemini | elevenlabs`) يرد `404 not_found`.
+
+| المزوّد | `kind` | المصدر | المفتاح |
+|---|---|---|---|
+| DeepSeek | `actual` | `GET https://api.deepseek.com/user/balance` (رصيد فعلي بالدولار، وCNY إن لم يوجد دولار) | `DEEPSEEK_API_KEY` |
+| ElevenLabs | `actual` (`unit: "characters"`) | `GET https://api.elevenlabs.io/v1/user/subscription` (الأحرف المتبقية وموعد التجدد) | `ELEVENLABS_API_KEY` |
+| OpenAI | `estimated` | آخر شحنة/رصيد أدخله المدير − الصرف منذه. الصرف من `GET https://api.openai.com/v1/organization/costs` (`Bearer OPENAI_ADMIN_KEY`، `spendSource: "provider_admin_api"`)، وعند غياب المفتاح أو فشل الطلب من تكاليف سبق المسجّلة (`ai_usage_logs` / `ai_usage_daily`، `spendSource: "tracked"`) | `OPENAI_ADMIN_KEY` (الإنتاج على Render) |
+| Anthropic | `estimated` | الشحنة − الصرف المسجّل في سبق فقط (حساب Individual Org بلا مفتاح إداري). يبقى دعم اختياري لـ `ANTHROPIC_ADMIN_KEY` عبر `cost_report` إن ضُبط مستقبلاً | — (اختياري `ANTHROPIC_ADMIN_KEY`) |
+| Gemini | `budget` | الصرف المسجّل في سبق هذا الشهر مقابل ميزانية شهرية يضعها المدير (ليس فوترة Google Cloud) | — |
+
+وجود مفتاح المزوّد العادي (`*_API_KEY`) يحدد فقط إن كان المزوّد مفعّلاً؛ لا تُسجَّل قيم المفاتيح ولا تُعاد، وأخطاء المزوّد تُختصر بحجب ما يشبه المفاتيح (`error`، 120 حرفاً).
+
+**التخزين (بلا جداول ولا ترحيلات)** في `system_settings` بفئة `staff_app`: `staff_app.ai_balance:<provider>` (الحد، خط الأساس، الميزانية، سجل الشحنات)، `staff_app.ai_balance_snapshots:deepseek` (آخر رصيد لكل يوم لاستنتاج الصرف اليومي)، `staff_app.ai_balance_alert:<provider>` (آخر مستوى أُشعر به). ذاكرة مؤقتة 10 دقائق لكل مزوّد، وتُحدَّث فوراً بعد أي كتابة.
+
+- **`GET /api/v1/staff/system/balances`**
+```json
+{
+  "generatedAt": "2026-10-25T09:00:00.000Z",
+  "canManage": true,
+  "summary": { "critical": 1, "low": 1, "notConfigured": 1, "attention": 3, "text": "رصيد DeepSeek شبه نافد، وOpenAI تحت حدّك. Anthropic لم يُضبط رصيده بعد." },
+  "providers": [
+    {
+      "provider": "openai", "label": "OpenAI", "kind": "estimated", "unit": "usd",
+      "state": "low", "reason": null,
+      "amount": 86.3, "total": 500, "fraction": 0.17, "remaining": null,
+      "threshold": { "low": 100, "critical": 25, "presets": [50, 100, 200], "isDefault": false },
+      "todaySpend": 14.2, "monthSpend": 380.4, "spendUnit": "usd", "spentSinceBaseline": 413.7,
+      "daysLeft": 6.1, "resetsAt": null,
+      "baseline": { "amount": 500, "at": "2026-10-02T09:00:00.000Z" },
+      "lastTopup": { "mode": "add", "amount": 500, "topupAt": "2026-10-02T09:00:00.000Z", "byName": "..." },
+      "spendSource": "provider_admin_api", "canUpdateBalance": true,
+      "fetchedAt": "2026-10-25T09:00:00.000Z", "error": null
+    }
+  ]
+}
+```
+  - `state`: `healthy | low | critical | not_configured | unavailable`، و`reason`: `missing_key | no_topup | no_budget | fetch_failed | null`. الترتيب: حرج ثم منخفض ثم غير مضبوط ثم غير متاح ثم جيد.
+  - `amount`: المتبقي (فعلي/تقديري)، وللميزانية المصروف هذا الشهر؛ `remaining` للميزانية فقط (الميزانية − المصروف) وعليه تُقاس الحالة.
+  - `threshold.low` بوحدة المزوّد (دولار، أو أحرف لـ ElevenLabs)، و`critical` = ربع الحد.
+  - `daysLeft` بمعدل الصرف اليومي الأخير؛ `resetsAt` لتجدد باقة ElevenLabs.
+- **`GET /api/v1/staff/system/balances/:provider`** — الشكل نفسه مع `series` (آخر 30 يوماً `[{ "date": "2026-10-25", "value": 14.2 }]` بتوقيت UTC اليومي وبوحدة `spendUnit`) و`topups` (سجل الشحنات `{ mode, amountUsd, topupAt, savedAt, byUserId, byName, balanceAfterUsd }`).
+- **`POST /api/v1/staff/system/balances/:provider/topup`**
+  الجسم (`strict`): `{ "mode": "add" | "set" | "budget", "amountUsd": 500, "topupAt": "2026-10-25T12:00:00+03:00"?, "threshold": 100? }`. `add` يضيف شحنة إلى الرصيد التقديري الحالي، و`set` يضبط الرصيد الحالي كما في لوحة المزوّد (OpenAI/Anthropic فقط)، و`budget` يضبط ميزانية Gemini الشهرية. وضع غير مناسب للمزوّد يرد `400 validation_error` مع `details.reason`. يعيد عرض المزوّد المحدّث، ويُسجَّل في التدقيق بـ `ai_balance_topup`.
+- **`PUT /api/v1/staff/system/balances/:provider/threshold`**
+  الجسم (`strict`): `{ "threshold": 100 }` بوحدة المزوّد. يعيد عرض المزوّد المحدّث، ويُسجَّل بـ `ai_balance_threshold`.
+
+**التنبيهات:** وظيفة `aiProviderHealthCheck` (القائد فقط، كل 5 دقائق) تستدعي `evaluateAiBalanceAlerts` في `staffAiAlertPush.ts`: إشعار واحد لكل عبور إلى `low` أو `critical` (المستوى يُحجز ذرياً حتى لا ترسله نسختان)، والعودة إلى «جيد» تعيد التسليح. التفضيل `aiAlerts`، `type: "ai_status"`، الرابط `sabqdesk://balances/<provider>`، `collapseId: desk-ai-balance-<provider>`، و`time-sensitive` للحرج. أول تقييم لمزوّد لا صف تنبيه له (أول تشغيل بعد النشر، أو أول ضبط لمزوّد كان غير مضبوط) يخزّن مستواه الحالي بصمت دون إشعار، فلا يصل سيل إشعارات لمزوّدين منخفضين أصلاً؛ الإشعار يبدأ من العبور التالي. ما يزال الرصيد المنخفض ظاهراً في القائمة وشريط التنبيه داخل التطبيق.
+
 ## 3) صيغة الأخطاء الموحدة (Error Format)
 
 تعيد جميع مسارات `/api/v1/staff/*` الأخطاء بصيغة JSON موحدة `{ code, message }`:
@@ -332,6 +385,7 @@ Content-Type: application/json
 | تغيّر حالة نموذج (`down` / `degraded` / `quota_exceeded` / تعافٍ) | `aiAlerts` | `notifyStaffOfAiStatusChange` من `aiCriticalAlerts` (تهدئة 15 دقيقة لكل مزود:نموذج:حالة) | `ai_status` | `sabqdesk://system` | `desk-ai-<provider>-<modelId>` |
 | استنفاد سلسلة البدائل (`chain_exhausted`) | `aiAlerts` | `handleAiGatewayIncident` عبر `setIncidentHandler` في بوابة الذكاء (تهدئة ≥ 10 دقائق لكل `featureKey`؛ مخزن دائري بالذاكرة لكل نسخة تقرؤه `/alerts`) | `ai_status` | `sabqdesk://system` | `desk-ai-chain-<featureKey>` |
 | بلوغ ميزانية 80% / 100% | `aiAlerts` | وظيفة `aiProviderHealthCheck` (مرة لكل ميزانية/شهر/حد بعلامة في `system_settings`) | `ai_status` | `sabqdesk://system` | `desk-ai-budget-<budgetId>` |
+| رصيد نموذج «منخفض» / «حرج» (عبور المستوى) | `aiAlerts` | `evaluateAiBalanceAlerts` من وظيفة `aiProviderHealthCheck` (المستوى المخزَّن في `staff_app.ai_balance_alert:<provider>`) | `ai_status` | `sabqdesk://balances/<provider>` | `desk-ai-balance-<provider>` |
 | فشل نشر تغريدة فشلاً نهائياً | `adminAlerts` | `notifyStaffAdminsOfSocialFailure` من `socialPublishingService` | `admin_alert` (`data.postId`) | `sabqdesk://alerts` | `desk-social-failed-<postId>` |
 
 الكود: `server/services/staffAiAlertPush.ts`، `staffAlertPrefsService.ts`، `staffSystemHealthService.ts`، `staffAdminAlertsService.ts`، `staffBreakingExpiryLog.ts`.
@@ -345,7 +399,7 @@ Content-Type: application/json
 
 | الجزء | المسار |
 |-------|--------|
-| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.1.0 ورقم البناء `2026102602` |
+| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.1.0 ورقم البناء `2026102605` |
 | شاشات التطبيق | `sabq desk ios/SabqDesk/` — تصميم «تطبيقات البوت» المعتمد 2026-10-25: الروبوت (`DeskMascot`) كبير في الدخول وقفل Face ID، ثلاثة تبويبات «المكتب» (`DeskView`: بانتظارك/مجدول/منشور/مرفوض، والمجدول خط زمني بالأيام) و«الرسائل» (`MessagesView`: تنتظر ردك/تم الرد/مغلقة مع بحث) و«حسابي» (`SettingsView` مع الآفاتار والصلاحيات والردود السريعة)؛ محادثة الرسالة (`TicketDetailView`: فقاعات، فواصل أيام، «ردًا على» عبر `parentMessageId`)، تفاصيل المقترح، ورقة الجدولة (أوقات سريعة + تنبيه تعارض ±30 دقيقة) وورقة الرفض. المكوّنات المشتركة في `Components/DeskChrome.swift` والمنطق القابل للاختبار في `SabqDeskKit/DeskBoard.swift` |
 | حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تسميات الأدوار العربية `StaffRoleLabel`، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
 | الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
@@ -362,4 +416,5 @@ Content-Type: application/json
 - الأزرار تتبع `capabilities` من `/me` وحالة المنشور كحراسة الخادم: النشر/الجدولة لـ `draft | scheduled | failed`، والرفض لـ `draft | scheduled`.
 - «انشر الآن» يمر بتأكيد، والجدولة تعرض ملخص الموعد بتوقيت الرياض قبل الإرسال (`scheduledAt` بإزاحة `+03:00`).
 - أسباب الرفض الجاهزة: لا يناسب سياسة الحساب، معلومة غير دقيقة، مكرر، يحتاج إعادة صياغة؛ مع ملاحظة تُضم في `reason` (`<السبب> — <الملاحظة>`)؛ يكفي السبب الجاهز أو الملاحظة، وزر التأكيد معطّل حتى يتوفر أحدهما.
+- «أرصدة النماذج» (للمشرفين، `canSystemHealth`): صف «أرصدة النماذج» مع عدّاد ما يحتاج انتباهاً في «حالة النظام»، وشريط تنبيه داخل التطبيق لأخطر رصيد مع «افتح الأرصدة» و«ذكّرني بعد ساعة» (إخفاء محلي يعود عند تغيّر المستوى). الشاشات: `ModelBalancesView` (القائمة)، `ProviderBalanceDetailView` (مخطط صرف 30 يوماً بـ Swift Charts وسجل الشحنات)، `UpdateBalanceSheet` (تحديث الرصيد/الميزانية وحدود التنبيه). أدوات التعديل تظهر فقط حين `canManage` في الاستجابة (أو `capabilities.canManageBalances` إن غاب)، ومن يملك العرض فقط يرى الأرصدة للقراءة. الروابط العميقة `sabqdesk://balances` و`sabqdesk://balances/<provider>` (قائمة بيضاء للمزوّدين) تفتح تبويب النظام.
 - المعرّفات القادمة من رابط أو إشعار تُقبل فقط إن كانت `[A-Za-z0-9_-]{1,128}`؛ يقرأ التطبيق `deeplink` أولاً ثم `ticketId`/`postId`.

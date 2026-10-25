@@ -182,6 +182,34 @@ public struct StaffAPIClient: Sendable {
         try await send("PUT", "/api/v1/staff/me/alert-prefs", body: update)
     }
 
+    // MARK: - Model balances (admins)
+
+    /// «أرصدة النماذج», most urgent first. 403 without `canSystemHealth`.
+    public func systemBalances() async throws -> StaffAIBalances {
+        try await send("GET", "/api/v1/staff/system/balances")
+    }
+
+    /// One provider with its 30-day series and top-up history.
+    public func systemBalance(provider: String) async throws -> StaffAIBalance {
+        try await send("GET", "/api/v1/staff/system/balances/\(try balanceProvider(provider))")
+    }
+
+    /// «احفظ الرصيد»: a new top-up, the dashboard balance, or Gemini's budget.
+    public func topUpBalance(provider: String, _ topup: StaffBalanceTopup) async throws -> StaffAIBalance {
+        try await send("POST", "/api/v1/staff/system/balances/\(try balanceProvider(provider))/topup", body: topup)
+    }
+
+    /// «حدود التنبيه»: the low threshold (critical is a quarter of it).
+    public func updateBalanceThreshold(provider: String, threshold: Double) async throws -> StaffAIBalance {
+        try await send("PUT", "/api/v1/staff/system/balances/\(try balanceProvider(provider))/threshold",
+                       body: StaffBalanceThresholdUpdate(threshold: threshold))
+    }
+
+    private func balanceProvider(_ provider: String) throws -> String {
+        guard DeskBalanceCopy.isKnownProvider(provider) else { throw StaffAPIError.notFound(message: nil) }
+        return provider
+    }
+
     // MARK: - Push
 
     public func registerPushToken(_ token: String, deviceName: String?, osVersion: String?) async throws {

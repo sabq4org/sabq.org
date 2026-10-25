@@ -143,6 +143,14 @@ struct MainTabView: View {
                 systemSection = .alerts
                 tab = .system
             }
+        case .balances?, .balance?:
+            // SystemView consumes the link and pushes the balance screens.
+            if caps.canSystemHealth {
+                systemSection = .health
+                tab = .system
+            } else {
+                model.pendingLink = nil
+            }
         case nil: break
         }
     }

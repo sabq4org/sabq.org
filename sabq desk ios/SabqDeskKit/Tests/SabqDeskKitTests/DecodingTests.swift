@@ -165,6 +165,7 @@ final class DecodingTests: XCTestCase {
         let me = try decoder.decode(StaffMe.self, from: Fixtures.me.data)
         XCTAssertFalse(me.capabilities.canSystemHealth)
         XCTAssertFalse(me.capabilities.canAdminAlerts)
+        XCTAssertFalse(me.capabilities.canManageBalances)
         XCTAssertFalse(me.capabilities.canSystemTab)
         XCTAssertNil(me.alertPrefs)
     }

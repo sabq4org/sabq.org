@@ -27,17 +27,22 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
     public var canSystemHealth: Bool
     /// «تنبيهات الإدارة» (admins only). False when an older server omits it.
     public var canAdminAlerts: Bool
+    /// Save a top-up, budget or alert threshold in «أرصدة النماذج»
+    /// (`ai_hub.view` + `ai_hub.manage`). False when an older server omits it.
+    public var canManageBalances: Bool
 
     private enum CodingKeys: String, CodingKey {
-        case canTickets, canSocial, canSystemHealth, canAdminAlerts
+        case canTickets, canSocial, canSystemHealth, canAdminAlerts, canManageBalances
     }
 
     public init(canTickets: Bool = false, canSocial: Social = Social(),
-                canSystemHealth: Bool = false, canAdminAlerts: Bool = false) {
+                canSystemHealth: Bool = false, canAdminAlerts: Bool = false,
+                canManageBalances: Bool = false) {
         self.canTickets = canTickets
         self.canSocial = canSocial
         self.canSystemHealth = canSystemHealth
         self.canAdminAlerts = canAdminAlerts
+        self.canManageBalances = canManageBalances
     }
 
     public init(from decoder: Decoder) throws {
@@ -46,6 +51,7 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
         canSocial = try container.decode(Social.self, forKey: .canSocial)
         canSystemHealth = try container.decodeIfPresent(Bool.self, forKey: .canSystemHealth) ?? false
         canAdminAlerts = try container.decodeIfPresent(Bool.self, forKey: .canAdminAlerts) ?? false
+        canManageBalances = try container.decodeIfPresent(Bool.self, forKey: .canManageBalances) ?? false
     }
 
     public static let none = StaffCapabilities()

@@ -16,6 +16,9 @@ import {
   STAFF_APP_AUDIT_CHANNEL,
   STAFF_APP_BASE_PATH,
   staffAlertPrefsUpdateSchema,
+  staffAiBalanceProviderSchema,
+  staffAiBalanceThresholdSchema,
+  staffAiBalanceTopupSchema,
   staffInboxQuerySchema,
   staffSocialPublishSchema,
   staffSocialRejectSchema,
@@ -48,6 +51,14 @@ import { SocialProviderError } from "../services/socialPublishing/types";
 import { getStaffAdminAlerts } from "../services/staffAdminAlertsService";
 import { getStaffAlertPrefs, updateStaffAlertPrefs } from "../services/staffAlertPrefsService";
 import { getStaffSystemHealth } from "../services/staffSystemHealthService";
+import {
+  AiBalanceInputError,
+  auditSnapshot as auditBalanceSnapshot,
+  getAllBalances,
+  getProviderBalance,
+  saveBalanceThreshold,
+  saveBalanceTopup,
+} from "../services/aiBalanceService";
 import {
   StaffInboxCursorError,
   buildStaffTicketDetailSender,
@@ -265,7 +276,7 @@ function handleSocialError(res: Response, error: unknown, fallback: string): voi
 
 // ── 1) الهوية والقدرات (/me) ─────────────────────────────────────────
 
-function requireAdminCapability(key: "canSystemHealth" | "canAdminAlerts") {
+function requireAdminCapability(key: "canSystemHealth" | "canAdminAlerts" | "canManageBalances") {
   return (req: StaffRequest, res: Response, next: NextFunction) => {
     const ctx = req.staffAuth;
     if (!ctx) {
@@ -274,7 +285,10 @@ function requireAdminCapability(key: "canSystemHealth" | "canAdminAlerts") {
     if (!ctx.capabilities[key]) {
       return sendError(res, 403, {
         code: "forbidden",
-        message: "هذه الخدمة متاحة للمشرفين فقط",
+        message:
+          key === "canManageBalances"
+            ? "تحديث الأرصدة وحدود التنبيه يتطلب صلاحية إدارة مركز الذكاء الاصطناعي"
+            : "هذه الخدمة متاحة للمشرفين فقط",
       });
     }
     return next();
@@ -394,6 +408,122 @@ subRouter.get(
     } catch (error) {
       console.error("[StaffApp alerts] error:", error);
       sendError(res, 500, { code: "server_error", message: "تعذر جلب التنبيهات" });
+    }
+  },
+);
+
+// ── 1-د) أرصدة النماذج (/system/balances) — بنفس حراسة صحة النظام ──────
+
+function parseBalanceProvider(req: StaffRequest, res: Response) {
+  const parsed = staffAiBalanceProviderSchema.safeParse(req.params.provider);
+  if (!parsed.success) {
+    sendError(res, 404, { code: "not_found", message: "مزوّد غير معروف" });
+    return null;
+  }
+  return parsed.data;
+}
+
+function balanceInputError(res: Response, error: unknown): boolean {
+  if (error instanceof AiBalanceInputError) {
+    sendError(res, 400, { code: "validation_error", message: error.message, details: { reason: error.code } });
+    return true;
+  }
+  return false;
+}
+
+subRouter.get(
+  "/system/balances",
+  requireStaffAuth,
+  requireAdminCapability("canSystemHealth"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      // نسخة سطحية: القائمة قد تأتي من الذاكرة المؤقتة المشتركة بين المستخدمين.
+      res.json({ ...(await getAllBalances()), canManage: req.staffAuth!.capabilities.canManageBalances });
+    } catch (error) {
+      console.error("[StaffApp system/balances] error:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب أرصدة النماذج" });
+    }
+  },
+);
+
+subRouter.get(
+  "/system/balances/:provider",
+  requireStaffAuth,
+  requireAdminCapability("canSystemHealth"),
+  async (req: StaffRequest, res: Response) => {
+    const provider = parseBalanceProvider(req, res);
+    if (!provider) return;
+    try {
+      res.json({ ...(await getProviderBalance(provider)), canManage: req.staffAuth!.capabilities.canManageBalances });
+    } catch (error) {
+      console.error("[StaffApp system/balances/:provider] error:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب رصيد المزوّد" });
+    }
+  },
+);
+
+subRouter.post(
+  "/system/balances/:provider/topup",
+  requireStaffAuth,
+  requireAdminCapability("canSystemHealth"),
+  requireAdminCapability("canManageBalances"),
+  async (req: StaffRequest, res: Response) => {
+    const provider = parseBalanceProvider(req, res);
+    if (!provider) return;
+    const parsed = staffAiBalanceTopupSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, 400, { code: "validation_error", message: "بيانات غير صالحة", details: parsed.error.flatten() });
+      return;
+    }
+    const ctx = req.staffAuth!;
+    try {
+      const result = await saveBalanceTopup(provider, parsed.data, { id: ctx.user.id, name: ctx.user.name });
+      await auditStaffAppWrite(req, {
+        action: "ai_balance_topup",
+        entityType: "ai_balance",
+        entityId: provider,
+        oldValue: auditBalanceSnapshot(result.before),
+        newValue: auditBalanceSnapshot(result.after),
+        extraMetadata: { mode: parsed.data.mode, amountUsd: parsed.data.amountUsd, byName: ctx.user.name },
+      });
+      res.json({ ...result.balance, canManage: true });
+    } catch (error) {
+      if (balanceInputError(res, error)) return;
+      console.error("[StaffApp system/balances topup] error:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر حفظ الرصيد" });
+    }
+  },
+);
+
+subRouter.put(
+  "/system/balances/:provider/threshold",
+  requireStaffAuth,
+  requireAdminCapability("canSystemHealth"),
+  requireAdminCapability("canManageBalances"),
+  async (req: StaffRequest, res: Response) => {
+    const provider = parseBalanceProvider(req, res);
+    if (!provider) return;
+    const parsed = staffAiBalanceThresholdSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, 400, { code: "validation_error", message: "بيانات غير صالحة", details: parsed.error.flatten() });
+      return;
+    }
+    const ctx = req.staffAuth!;
+    try {
+      const result = await saveBalanceThreshold(provider, parsed.data.threshold, { id: ctx.user.id, name: ctx.user.name });
+      await auditStaffAppWrite(req, {
+        action: "ai_balance_threshold",
+        entityType: "ai_balance",
+        entityId: provider,
+        oldValue: auditBalanceSnapshot(result.before),
+        newValue: auditBalanceSnapshot(result.after),
+        extraMetadata: { byName: ctx.user.name },
+      });
+      res.json({ ...result.balance, canManage: true });
+    } catch (error) {
+      if (balanceInputError(res, error)) return;
+      console.error("[StaffApp system/balances threshold] error:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر حفظ حد التنبيه" });
     }
   },
 );

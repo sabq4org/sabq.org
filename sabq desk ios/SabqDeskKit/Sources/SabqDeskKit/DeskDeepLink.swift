@@ -2,7 +2,8 @@ import Foundation
 
 /// `sabqdesk://ticket/<id>`, `sabqdesk://social/<id>`, and the host-only
 /// admin screens `sabqdesk://system` and `sabqdesk://alerts`, from a URL or a
-/// push payload.
+/// push payload. `sabqdesk://balances` and `sabqdesk://balances/<provider>`
+/// open «أرصدة النماذج».
 public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case ticket(id: String)
     case social(id: String)
@@ -10,6 +11,10 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case systemHealth
     /// «تنبيهات الإدارة».
     case alerts
+    /// «أرصدة النماذج».
+    case balances
+    /// One provider's balance (`deepseek`, `openai`, …).
+    case balance(provider: String)
 
     public static let scheme = "sabqdesk"
 
@@ -19,6 +24,8 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case .social(let id): return URL(string: "\(Self.scheme)://social/\(id)")!
         case .systemHealth: return URL(string: "\(Self.scheme)://system")!
         case .alerts: return URL(string: "\(Self.scheme)://alerts")!
+        case .balances: return URL(string: "\(Self.scheme)://balances")!
+        case .balance(let provider): return URL(string: "\(Self.scheme)://balances/\(provider)")!
         }
     }
 
@@ -39,11 +46,18 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
             switch kind {
             case "system": self = .systemHealth
             case "alerts": self = .alerts
+            case "balances": self = .balances
             default: return nil
             }
             return
         }
         guard segments.count == 1, let id = segments.first, Self.isValidID(id) else { return nil }
+        if kind == "balances" {
+            let provider = id.lowercased()
+            guard DeskBalanceCopy.isKnownProvider(provider) else { return nil }
+            self = .balance(provider: provider)
+            return
+        }
         switch kind {
         case "ticket": self = .ticket(id: id)
         case "social": self = .social(id: id)

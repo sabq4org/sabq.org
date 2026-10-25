@@ -10,6 +10,12 @@ struct SystemHealthView: View {
 
     @State private var health: StaffSystemHealth?
     @State private var loadError: String?
+    /// «أرصدة النماذج»; stays nil (section hidden) if the call fails.
+    @State private var balances: StaffAIBalances?
+    /// «ذكّرني بعد ساعة»: seconds since 1970 until which the banner hides.
+    @AppStorage("desk.balanceBanner.snoozeUntil") private var bannerSnoozeUntil: Double = 0
+    /// «×»: the provider:level that was dismissed; a new crossing shows again.
+    @AppStorage("desk.balanceBanner.dismissed") private var bannerDismissed: String = ""
 
     var body: some View {
         ScrollView {
@@ -18,11 +24,17 @@ struct SystemHealthView: View {
                     DeskScreenHeader(title: "حالة النظام", subtitle: subtitle)
                     if let picker { picker }
                 }
+                if let banner = bannerBalance {
+                    balanceBanner(banner)
+                }
                 if let loadError {
                     ErrorLine(message: loadError)
                 }
                 if let health {
                     summaryCard(health)
+                    if let balances {
+                        balancesSection(balances)
+                    }
                     modelsSection(health.models ?? [])
                     budgetsSection(health.budgets ?? [])
                 } else if loadError == nil {
@@ -100,6 +112,118 @@ struct SystemHealthView: View {
                 set: { value in Task { await app.updateAlertPrefs(StaffAlertPrefsUpdate(aiAlerts: value)) } })
     }
 
+    // MARK: - Balances
+
+    /// The most urgent provider under its alert limit, unless snoozed or
+    /// dismissed at this level.
+    private var bannerBalance: StaffAIBalance? {
+        guard let urgent = balances?.mostUrgent else { return nil }
+        guard Date().timeIntervalSince1970 >= bannerSnoozeUntil else { return nil }
+        guard bannerDismissed != DeskBalanceCopy.bannerSignature(urgent) else { return nil }
+        return urgent
+    }
+
+    /// Tinted banner at the top of «حالة النظام» (concept 04, in-app).
+    private func balanceBanner(_ balance: StaffAIBalance) -> some View {
+        let tone: DeskTone = balance.effectiveState == .critical ? .danger : .warning
+        let shape = RoundedRectangle(cornerRadius: DeskRadius.large, style: .continuous)
+        return HStack(alignment: .top, spacing: DeskLayout.space12) {
+            Text(verbatim: "!")
+                .deskText(DeskType.sectionHeading)
+                .foregroundStyle(Color.white)
+                .frame(width: 30, height: 30)
+                .background(tone.ink, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: DeskLayout.space4) {
+                Text(DeskBalanceCopy.bannerTitle(balance))
+                    .deskText(DeskType.rowTitle)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(DeskBalanceCopy.bannerBody(balance))
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: DeskLayout.space16) {
+                    NavigationLink(value: DeskDeepLink.balances) {
+                        Text("افتح الأرصدة")
+                            .deskText(DeskType.metaEmphasis)
+                            .foregroundStyle(DeskTheme.link)
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        bannerSnoozeUntil = Date().addingTimeInterval(3600).timeIntervalSince1970
+                    } label: {
+                        Text("ذكّرني بعد ساعة")
+                            .deskText(DeskType.metaEmphasis)
+                            .foregroundStyle(DeskTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(minHeight: 32)
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+            Button {
+                bannerDismissed = DeskBalanceCopy.bannerSignature(balance)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("إخفاء التنبيه")
+            .padding(.top, -6)
+            .padding(.trailing, -6)
+        }
+        .padding(DeskLayout.cardInset)
+        .background(tone.fill, in: shape)
+        .overlay(shape.stroke(tone.ink.opacity(0.25), lineWidth: 1))
+    }
+
+    /// «الأرصدة»: one row into «أرصدة النماذج» with the attention count.
+    private func balancesSection(_ balances: StaffAIBalances) -> some View {
+        let count = balances.attentionCount
+        return VStack(alignment: .leading, spacing: DeskLayout.space8) {
+            DeskSectionHeader(title: "الأرصدة")
+            NavigationLink(value: DeskDeepLink.balances) {
+                HStack(spacing: DeskLayout.space12) {
+                    DeskIconTile(systemImage: "wallet.bifold")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("أرصدة النماذج")
+                            .deskText(DeskType.rowTitle)
+                            .foregroundStyle(DeskTheme.textPrimary)
+                        Text(DeskBalanceCopy.countsLine(balances))
+                            .deskText(DeskType.meta)
+                            .foregroundStyle(DeskTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: DeskLayout.space8)
+                    if count > 0 {
+                        Text(verbatim: "\(count)")
+                            .deskText(DeskType.metaEmphasis)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white)
+                            .frame(minWidth: 24, minHeight: 24)
+                            .padding(.horizontal, count > 9 ? 4 : 0)
+                            .background(DeskTheme.danger, in: Capsule())
+                    }
+                    Image(systemName: "chevron.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(DeskTheme.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                .padding(DeskLayout.cardInset)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .modifier(DeskOutlinedGroup())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("أرصدة النماذج، \(DeskBalanceCopy.countsLine(balances))")
+        }
+    }
+
     // MARK: - Models
 
     @ViewBuilder
@@ -158,6 +282,13 @@ struct SystemHealthView: View {
             if !app.handle(error) {
                 loadError = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
             }
+        }
+        // The balances are optional here: on any failure the banner and the
+        // «الأرصدة» row simply stay hidden.
+        if let result = try? await app.client.systemBalances() {
+            balances = result
+        } else if !Task.isCancelled {
+            balances = nil
         }
     }
 }
@@ -325,5 +456,20 @@ extension StaffModelStatus {
 #Preview("حالة النظام") {
     SystemHealthView()
         .deskPreviewEnvironment()
+}
+
+#Preview("حالة النظام · تنبيه الرصيد") {
+    NavigationStack {
+        SystemHealthView()
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: DeskDeepLink.self) { link in
+                if case .balance(let provider) = link {
+                    ProviderBalanceDetailView(provider: provider)
+                } else {
+                    ModelBalancesView()
+                }
+            }
+    }
+    .deskPreviewEnvironment()
 }
 #endif
