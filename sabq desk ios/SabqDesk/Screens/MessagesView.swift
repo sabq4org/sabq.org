@@ -8,6 +8,8 @@ struct MessagesView: View {
 
     @State private var section: DeskTicketSection = .awaiting
     @State private var search = ""
+    @State private var isSearching = false
+    @FocusState private var searchFocused: Bool
     @State private var model: InboxModel?
     @State private var path: [DeskDeepLink] = []
 
@@ -61,10 +63,39 @@ struct MessagesView: View {
         }
     }
 
+    /// The search is a round button beside the title; tapping it swaps the
+    /// title row for the field until «إلغاء».
     private var header: some View {
-        VStack(alignment: .leading, spacing: DeskLayout.space12) {
-            DeskScreenHeader(title: "رسائل المساهمين", subtitle: subtitle)
-                .padding(.horizontal, DeskLayout.pageMargin + 4)
+        VStack(alignment: .leading, spacing: DeskLayout.space16) {
+            Group {
+                if isSearching {
+                    searchRow
+                } else {
+                    DeskScreenHeader(title: "رسائل المساهمين", subtitle: subtitle) {
+                        Button {
+                            isSearching = true
+                            searchFocused = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(DeskTheme.textSecondary)
+                                .frame(width: 44, height: 44)
+                                .background(DeskInk.chip, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("بحث")
+                    }
+                }
+            }
+            .padding(.horizontal, DeskLayout.pageMargin + 4)
+            SectionChipBar(sections: DeskTicketSection.allCases, selection: $section,
+                           title: \.title,
+                           count: { $0 == .awaiting ? app.unread.tickets : 0 })
+        }
+    }
+
+    private var searchRow: some View {
+        HStack(spacing: DeskLayout.space12) {
             HStack(spacing: DeskLayout.space8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(DeskTheme.textSecondary)
@@ -73,6 +104,7 @@ struct MessagesView: View {
                     .deskText(DeskType.excerpt)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
+                    .focused($searchFocused)
                 if !search.isEmpty {
                     Button { search = "" } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(DeskTheme.textTertiary)
@@ -84,11 +116,15 @@ struct MessagesView: View {
             .padding(.horizontal, DeskLayout.space12)
             .frame(minHeight: 44)
             .background(DeskInk.chip, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .padding(.horizontal, DeskLayout.pageMargin + 4)
-            SectionChipBar(sections: DeskTicketSection.allCases, selection: $section,
-                           title: \.title,
-                           count: { $0 == .awaiting ? app.unread.tickets : 0 })
+            Button("إلغاء") {
+                search = ""
+                searchFocused = false
+                isSearching = false
+            }
+            .deskText(DeskType.button)
+            .foregroundStyle(DeskInk.link)
         }
+        .frame(minHeight: 52)
     }
 
     private var subtitle: String {
@@ -119,11 +155,14 @@ struct MessagesView: View {
             }
         } else {
             ForEach(model.items, id: \.listID) { item in
-                NavigationLink(value: DeskDeepLink.ticket(id: item.id)) {
-                    ConversationRow(item: item)
+                Button { path.append(.ticket(id: item.id)) } label: {
+                    ConversationRow(item: item,
+                                    isFirst: item.listID == model.items.first?.listID,
+                                    isLast: item.listID == model.items.last?.listID)
                 }
-                .listRowInsets(EdgeInsets(top: 14, leading: DeskLayout.pageMargin + 4, bottom: 14, trailing: DeskLayout.pageMargin + 4))
-                .listRowSeparatorTint(DeskInk.hairline)
+                .buttonStyle(.plain)
+                .listRowInsets(EdgeInsets(top: 0, leading: DeskLayout.pageMargin + 4, bottom: 0, trailing: DeskLayout.pageMargin + 4))
+                .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .task { await model.loadMoreIfNeeded(after: item) }
             }
@@ -151,21 +190,32 @@ struct MessagesView: View {
     }
 }
 
-/// Chat-list row: avatar, name and label, time, subject, last message, unread dot.
+/// Chat-list row on the rail: avatar, name and label, time and unread dot,
+/// subject, last message.
 private struct ConversationRow: View {
     let item: StaffInboxItem
+    let isFirst: Bool
+    let isLast: Bool
+
+    private static let verticalPadding: CGFloat = 16
 
     var body: some View {
-        HStack(alignment: .top, spacing: DeskLayout.space12) {
-            SenderAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl, size: 48)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 14) {
+            RailAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl)
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(item.sender.name)
                         .deskText(item.hasUnread ? DeskRowType.name : DeskRowType.nameRead)
                         .foregroundStyle(DeskTheme.textPrimary)
                         .lineLimit(1)
-                    SenderKindTag(kind: item.sender.kind)
+                    SenderKindLabel(kind: item.sender.kind)
                     Spacer(minLength: DeskLayout.space4)
+                    if item.hasUnread {
+                        Circle()
+                            .fill(DeskInk.action)
+                            .frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
+                    }
                     // «قبل 12 د» / «11 أكتوبر»: Arabic phrases, natural RTL order.
                     Text(verbatim: RiyadhTime.ago(item.updatedAt))
                         .deskText(DeskType.timestamp)
@@ -174,24 +224,19 @@ private struct ConversationRow: View {
                         .fixedSize()
                 }
                 Text(item.title)
-                    .deskText(item.hasUnread ? DeskRowType.subject : DeskRowType.subjectRead)
+                    .deskText(item.hasUnread ? DeskRowType.subjectStrong : DeskRowType.subjectPlain)
                     .foregroundStyle(DeskTheme.textPrimary)
                     .lineLimit(1)
-                HStack(spacing: DeskLayout.space8) {
-                    Text(item.previewText ?? "")
-                        .deskText(DeskType.meta)
-                        .foregroundStyle(DeskTheme.textSecondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    if item.hasUnread {
-                        Circle()
-                            .fill(DeskInk.action)
-                            .frame(width: 10, height: 10)
-                            .accessibilityHidden(true)
-                    }
-                }
+                Text(item.previewText ?? "")
+                    .deskText(DeskRowType.preview)
+                    .foregroundStyle(DeskTheme.textTertiary)
+                    .lineLimit(1)
             }
         }
+        .padding(.vertical, Self.verticalPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .deskRail(isFirst: isFirst, isLast: isLast, topPadding: Self.verticalPadding)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.hasUnread ? "غير مقروءة" : "")
     }

@@ -130,6 +130,24 @@ final class DeskBoardTests: XCTestCase {
         XCTAssertEqual(DeskPreviewText.clean(nil), "")
     }
 
+    func testLinkedTitleThatRepeatsTheTweetIsDetected() {
+        let tweet = "\"أومودا\" و\"جايكو\" تبنيان منظومة عالمية جديدة للتنقل الذكي والصديق للبيئة"
+        XCTAssertTrue(DeskPreviewText.repeats("«أومودا» و«جايكو» تبنيان منظومة عالمية جديدة للتنقل الذكي والصديق للبيئة", in: tweet))
+        XCTAssertTrue(DeskPreviewText.repeats("أومودا وجايكو تبنيان منظومة عالمية جديدة", in: "أومودا وجايكو تبنيان منظومة عالمية جديدة للتنقل"),
+                      "a title that is the start of the tweet adds nothing")
+        XCTAssertTrue(DeskPreviewText.repeats("التحالف يعترض ويدمر طائرة مسيرة بمنطقة الرياض",
+                                              in: "التحالف: اعتراض ويدمر طائرة مسيرة بمنطقة الرياض"),
+                      "one changed word out of seven still repeats")
+    }
+
+    func testLinkedTitleThatAddsInformationIsKept() {
+        XCTAssertFalse(DeskPreviewText.repeats("\"آل مفرح\" تستعد لإطلاق مشاريع عقارية جديدة في جدة",
+                                               in: "بخبرة تتجاوز 5 سنوات ومحفظة تضم أكثر من 30 مشروعًا، تستعد #آل_مفرح لمرحلة جديدة"))
+        XCTAssertFalse(DeskPreviewText.repeats("يوسف الدموخ.. شيخٌ تُترجم أخلاقه مكانته", in: "…"))
+        XCTAssertFalse(DeskPreviewText.repeats("", in: "نص"))
+        XCTAssertFalse(DeskPreviewText.repeats("عاجل الآن", in: "عاجل اليوم"), "short titles need containment, not word overlap")
+    }
+
     func testRejectionNoteDistinguishesWithdrawalReasonAndNone() {
         XCTAssertEqual(DeskRejectionNote(canceledBySelf: true, reason: "مكرر"), .withdrawn)
         XCTAssertEqual(DeskRejectionNote(canceledBySelf: false, reason: " مكرر "), .reason("مكرر"))
@@ -139,6 +157,9 @@ final class DeskBoardTests: XCTestCase {
         XCTAssertEqual(DeskRejectionNote.noReason.text, "رُفض من لوحة التحرير · بلا سبب مسجّل")
         XCTAssertTrue(DeskRejectionNote.reason("x").isReason)
         XCTAssertFalse(DeskRejectionNote.noReason.isReason)
+        XCTAssertEqual(DeskRejectionNote.reason("مكرر").listText, "مكرر", "the row labels the reason itself")
+        XCTAssertEqual(DeskRejectionNote.noReason.listText, "بلا سبب مسجّل")
+        XCTAssertEqual(DeskRejectionNote.withdrawn.listText, "سحبه صاحبه قبل النشر")
     }
 
     func testShortDatesPutTheDayFirstWithLatinDigits() throws {

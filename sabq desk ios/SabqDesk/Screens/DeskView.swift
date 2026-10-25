@@ -158,11 +158,14 @@ struct DeskView: View {
     private func row(_ item: StaffInboxItem, model: InboxModel) -> some View {
         let caps = app.capabilities.canSocial
         let status = StaffSocialStatus(rawValue: item.status) ?? .unknown
-        return NavigationLink(value: DeskDeepLink.social(id: item.id)) {
-            SocialRow(item: item, section: section)
+        return Button { path.append(.social(id: item.id)) } label: {
+            SocialRow(item: item, section: section,
+                      isFirst: item.listID == model.items.first?.listID,
+                      isLast: item.listID == model.items.last?.listID)
         }
-        .listRowInsets(EdgeInsets(top: 14, leading: DeskLayout.pageMargin + 4, bottom: 14, trailing: DeskLayout.pageMargin + 4))
-        .listRowSeparatorTint(DeskInk.hairline)
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 0, leading: DeskLayout.pageMargin + 4, bottom: 0, trailing: DeskLayout.pageMargin + 4))
+        .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .disabled(busyRow == item.listID)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -287,15 +290,25 @@ struct DeskView: View {
 
 /// Tweet proposal row: avatar, name and label, the tweet, then one line
 /// that depends on the tab (linked article, failure, publish time, reason).
+/// Rows are separated by space, with a rail running behind the avatars.
 private struct SocialRow: View {
     let item: StaffInboxItem
     let section: DeskSocialSection
+    let isFirst: Bool
+    let isLast: Bool
+
+    private static let verticalPadding: CGFloat = 16
 
     private var status: StaffSocialStatus { StaffSocialStatus(rawValue: item.status) ?? .unknown }
 
+    private var badge: RailAvatar.Badge? {
+        guard section == .rejected else { return nil }
+        return item.rejectionNote == .withdrawn ? .withdrawn : .rejected
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: DeskLayout.space12) {
-            SenderAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl)
+        HStack(alignment: .top, spacing: 14) {
+            RailAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl, badge: badge)
             VStack(alignment: .leading, spacing: DeskLayout.space4) {
                 HStack(spacing: 6) {
                     if item.hasUnread {
@@ -306,17 +319,22 @@ private struct SocialRow: View {
                         .deskText(DeskRowType.nameRead)
                         .foregroundStyle(DeskTheme.textPrimary)
                         .lineLimit(1)
-                    SenderKindTag(kind: item.sender.kind)
+                    SenderKindLabel(kind: item.sender.kind)
                     Spacer(minLength: DeskLayout.space4)
                     trailingTime
                 }
                 Text(item.listPreview)
-                    .deskText(DeskRowType.preview)
-                    .foregroundStyle(DeskTheme.textSecondary)
+                    .deskText(DeskRowType.tweet)
+                    // Not published: a step lighter, so the reason under it leads.
+                    .foregroundStyle(section == .rejected ? DeskTheme.textSecondary : DeskTheme.textPrimary)
                     .lineLimit(2)
                 footer
             }
         }
+        .padding(.vertical, Self.verticalPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .deskRail(isFirst: isFirst, isLast: isLast, topPadding: Self.verticalPadding)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.hasUnread ? "جديد" : "")
     }
@@ -360,19 +378,58 @@ private struct SocialRow: View {
                 .deskText(DeskType.metaEmphasis)
                 .foregroundStyle(DeskInk.link)
         case .rejected:
-            let note = item.rejectionNote
-            Text(note.text)
-                .deskText(note.isReason ? DeskType.metaEmphasis : DeskType.meta)
-                .foregroundStyle(note.isReason ? DeskTheme.danger : DeskTheme.textTertiary)
-                .lineLimit(2)
+            switch item.rejectionNote {
+            case .reason(let reason):
+                RejectionReasonBubble(reason: reason)
+                    .padding(.top, 6)
+            case .withdrawn:
+                QuietLine(systemImage: "arrow.uturn.backward", text: DeskRejectionNote.withdrawn.listText)
+                    .padding(.top, 2)
+            case .noReason:
+                QuietLine(systemImage: "minus.circle", text: DeskRejectionNote.noReason.listText)
+                    .padding(.top, 2)
+            }
         default:
-            if let title = item.article?.title, !title.isEmpty, title != item.previewText {
-                Text("مرتبط بـ «\(title)»")
-                    .deskText(DeskType.meta)
-                    .foregroundStyle(DeskTheme.textTertiary)
-                    .lineLimit(1)
+            if let title = item.linkedArticleTitle {
+                HStack(spacing: DeskLayout.space4) {
+                    Image(systemName: "link").imageScale(.small)
+                    Text(title).lineLimit(1)
+                }
+                .deskText(DeskType.meta)
+                .foregroundStyle(DeskInk.link)
+                .padding(.top, 2)
+                .accessibilityLabel("مرتبط بـ «\(title)»")
             }
         }
+    }
+}
+
+/// «سبب الرفض» and the editor's reason on a light red bubble.
+private struct RejectionReasonBubble: View {
+    let reason: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: DeskLayout.space8) {
+            Image(systemName: "xmark.circle.fill")
+                .imageScale(.small)
+                .foregroundStyle(DeskTheme.danger)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("سبب الرفض")
+                    .deskText(DeskType.tag)
+                    .foregroundStyle(DeskTheme.danger)
+                Text(reason)
+                    .deskText(DeskRowType.preview)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                    .lineLimit(3)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DeskLayout.space12)
+        .padding(.vertical, 10)
+        .background(DeskTone.danger.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 

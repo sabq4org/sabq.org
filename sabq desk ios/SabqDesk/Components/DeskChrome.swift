@@ -4,7 +4,8 @@ import SwiftUI
 
 // Building blocks of the bot-style desk (approved mockup 2026-10-25): the
 // robot, the assistant's speech bubble, sender avatars and labels, and the
-// section chips. Light theme, no cards: rows sit on the page with hairlines.
+// section chips. Light theme, no cards: list rows sit on the page, separated
+// by space, with a rail running behind the avatars.
 
 /// Spec colours under their original desk names; the values live in `DeskTheme`.
 enum DeskInk {
@@ -27,8 +28,13 @@ enum DeskRowType {
     /// Message subject under the name: 14 semibold / 14 medium.
     static let subject = DeskTextRole(size: 14, weight: .semibold, style: .subheadline, lineSpacing: 0)
     static let subjectRead = DeskTextRole(size: 14, weight: .medium, style: .subheadline, lineSpacing: 0)
+    /// Subject in the rail message list: 15 semibold unread, 15 medium read.
+    static let subjectStrong = DeskTextRole(size: 15, weight: .semibold, style: .subheadline, lineSpacing: 0)
+    static let subjectPlain = DeskTextRole(size: 15, weight: .medium, style: .subheadline, lineSpacing: 0)
     /// Tweet preview in the desk lists.
     static let preview = DeskTextRole(size: 14, weight: .regular, style: .subheadline, lineSpacing: 3)
+    /// Tweet in the «المكتب» rows, where it is the row's main content.
+    static let tweet = DeskTextRole(size: 15, weight: .regular, style: .subheadline, lineSpacing: 4)
     /// Name at the top of a conversation.
     static let headerName = DeskTextRole(size: 16, weight: .bold, style: .headline, lineSpacing: 0)
 }
@@ -119,6 +125,73 @@ struct SenderAvatar: View {
     }
 }
 
+/// A sender avatar in a rail list: a hairline border, a ring of page colour
+/// that breaks the rail behind it, and an optional state badge.
+struct RailAvatar: View {
+    enum Badge { case rejected, withdrawn }
+
+    let name: String
+    var kind: StaffSenderKind = .unknown
+    var imageURL: String?
+    var badge: Badge?
+
+    static let size: CGFloat = 44
+
+    var body: some View {
+        SenderAvatar(name: name, kind: kind, imageURL: imageURL, size: Self.size)
+            .overlay(Circle().strokeBorder(DeskTheme.separator, lineWidth: 1))
+            .background(Circle().fill(DeskTheme.background).padding(-4))
+            .overlay(alignment: .bottomTrailing) {
+                if let badge {
+                    Image(systemName: badge == .rejected ? "xmark" : "arrow.uturn.backward")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 19, height: 19)
+                        .background(badge == .rejected ? DeskTheme.danger : DeskTheme.textTertiary, in: Circle())
+                        .overlay(Circle().stroke(DeskTheme.background, lineWidth: 2))
+                        .offset(x: 3, y: 3)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
+extension View {
+    /// Draws the list rail behind a row whose `RailAvatar` sits `topPadding`
+    /// below the row's top. It starts at the first avatar's centre and stops
+    /// at the last one's.
+    func deskRail(isFirst: Bool, isLast: Bool, topPadding: CGFloat) -> some View {
+        let center = topPadding + RailAvatar.size / 2
+        return background(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                DeskTheme.separator.opacity(isFirst ? 0 : 1).frame(height: center)
+                if !isLast { DeskTheme.separator }
+            }
+            .frame(width: 2)
+            .padding(.leading, RailAvatar.size / 2 - 1)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// A short grey fact under a row, led by a small symbol.
+struct QuietLine: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .imageScale(.small)
+                .accessibilityHidden(true)
+            Text(text)
+                .lineLimit(1)
+        }
+        .deskText(DeskType.meta)
+        .foregroundStyle(DeskTheme.textTertiary)
+    }
+}
+
 /// The signed-in member's photo, else white initials on Sabq link blue
 /// (spec: 36 semibold at 96 pt, scaled proportionally for smaller sizes).
 struct AccountAvatar: View {
@@ -179,6 +252,19 @@ struct SenderKindTag: View {
             .padding(.horizontal, DeskLayout.space8)
             .padding(.vertical, 2)
             .background(kind.tone.fill, in: RoundedRectangle(cornerRadius: DeskRadius.small, style: .continuous))
+            .fixedSize()
+    }
+}
+
+/// The same label as plain tinted text, for rows where a filled tag is too loud.
+struct SenderKindLabel: View {
+    let kind: StaffSenderKind
+
+    var body: some View {
+        Text(kind.title)
+            .deskText(DeskType.tag)
+            .foregroundStyle(kind.tone.ink)
+            .lineLimit(1)
             .fixedSize()
     }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 /// errors, and the monthly budgets, with the switch for instant AI alerts.
 struct SystemHealthView: View {
     @Environment(AppModel.self) private var app
+    var picker: SystemSectionPicker?
 
     @State private var health: StaffSystemHealth?
     @State private var loadError: String?
@@ -13,7 +14,10 @@ struct SystemHealthView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DeskLayout.space24) {
-                DeskScreenHeader(title: "حالة النظام", subtitle: subtitle)
+                VStack(alignment: .leading, spacing: DeskLayout.space16) {
+                    DeskScreenHeader(title: "حالة النظام", subtitle: subtitle)
+                    if let picker { picker }
+                }
                 if let loadError {
                     ErrorLine(message: loadError)
                 }
@@ -101,6 +105,10 @@ struct SystemHealthView: View {
     @ViewBuilder
     private func modelsSection(_ models: [StaffModelHealth]) -> some View {
         if !models.isEmpty {
+            // Stopped models first, then degraded, each group in server order.
+            let models = models.enumerated().sorted { a, b in
+                (a.element.severity, a.offset) < (b.element.severity, b.offset)
+            }.map(\.element)
             VStack(alignment: .leading, spacing: DeskLayout.space8) {
                 DeskSectionHeader(title: "نماذج الذكاء الاصطناعي")
                 VStack(spacing: 0) {
@@ -154,7 +162,7 @@ struct SystemHealthView: View {
     }
 }
 
-/// One model: status dot, id and provider, usage, last error, status tag.
+/// One model: id and provider, usage, last error, and the status as tinted text.
 private struct ModelRow: View {
     let model: StaffModelHealth
 
@@ -180,11 +188,6 @@ private struct ModelRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DeskLayout.space12) {
-            Circle()
-                .fill(tone.ink)
-                .frame(width: 10, height: 10)
-                .padding(.top, 7)
-                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DeskLayout.space4) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(verbatim: model.modelId)
@@ -217,8 +220,17 @@ private struct ModelRow: View {
                 }
             }
             Spacer(minLength: DeskLayout.space4)
-            StatusChip(title: DeskSystemCopy.statusTitle(model.effectiveStatus, quotaExceeded: model.isQuotaExceeded),
-                       tone: tone)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(tone.ink)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(DeskSystemCopy.statusTitle(model.effectiveStatus, quotaExceeded: model.isQuotaExceeded))
+                    .deskText(DeskType.metaEmphasis)
+                    .foregroundStyle(tone.ink)
+                    .fixedSize()
+            }
+            .padding(.top, 3)
         }
         .padding(DeskLayout.cardInset)
         .accessibilityElement(children: .combine)
@@ -282,6 +294,18 @@ extension StaffSystemStatus {
         case .partial: return "تعطّل جزئي"
         case .down: return "النماذج متوقفة"
         case .unknown: return "حالة النظام غير معروفة"
+        }
+    }
+}
+
+private extension StaffModelHealth {
+    /// 0 stopped or out of quota, 1 degraded or unknown, 2 up.
+    var severity: Int {
+        if isQuotaExceeded { return 0 }
+        switch effectiveStatus {
+        case .down: return 0
+        case .degraded, .unknown: return 1
+        case .up: return 2
         }
     }
 }

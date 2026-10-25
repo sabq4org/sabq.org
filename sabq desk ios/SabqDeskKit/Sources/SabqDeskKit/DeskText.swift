@@ -20,6 +20,27 @@ public enum DeskPreviewText {
         guard line.hasPrefix("@"), line.count > 1 else { return false }
         return line.dropFirst().allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }
     }
+
+    /// True when `title` adds nothing to `tweet`: one contains the other once
+    /// quotes, punctuation and spacing are ignored, or at least 80% of the
+    /// shorter one's words appear in the other.
+    public static func repeats(_ title: String, in tweet: String) -> Bool {
+        let a = comparable(title), b = comparable(tweet)
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        if a.contains(b) || b.contains(a) { return true }
+        let wordsA = Set(a.split(separator: " ")), wordsB = Set(b.split(separator: " "))
+        let shorter = min(wordsA.count, wordsB.count)
+        guard shorter >= 4 else { return false }
+        return Double(wordsA.intersection(wordsB).count) / Double(shorter) >= 0.8
+    }
+
+    static func comparable(_ text: String) -> String {
+        let kept = text.lowercased().unicodeScalars.map { scalar -> Character in
+            CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar)
+                ? Character(scalar) : " "
+        }
+        return String(kept).split(separator: " ").joined(separator: " ")
+    }
 }
 
 /// Remote avatars are shown only from https URLs.
@@ -60,6 +81,15 @@ public enum DeskRejectionNote: Sendable, Equatable {
         }
     }
 
+    /// List rows: the reason on its own (under a «سبب الرفض» label), else a short fact.
+    public var listText: String {
+        switch self {
+        case .withdrawn: return "سحبه صاحبه قبل النشر"
+        case .reason(let reason): return reason
+        case .noReason: return "بلا سبب مسجّل"
+        }
+    }
+
     /// Only a recorded reason is shown in red; the other two are neutral facts.
     public var isReason: Bool {
         if case .reason = self { return true }
@@ -76,6 +106,13 @@ extension StaffInboxItem {
     public var listPreview: String {
         let cleaned = DeskPreviewText.clean(previewText)
         return cleaned.isEmpty ? title : cleaned
+    }
+
+    /// The linked article's title for the row, unless the tweet already says it.
+    public var linkedArticleTitle: String? {
+        guard let title = article?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty,
+              !DeskPreviewText.repeats(title, in: listPreview) else { return nil }
+        return title
     }
 }
 

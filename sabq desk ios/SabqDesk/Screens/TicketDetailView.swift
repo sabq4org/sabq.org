@@ -57,16 +57,12 @@ struct TicketDetailView: View {
     private func titleView(_ ticket: StaffTicket) -> some View {
         HStack(spacing: DeskLayout.space8) {
             SenderAvatar(name: ticket.writerName, kind: ticket.sender?.kind ?? .unknown,
-                         imageURL: ticket.sender?.avatarUrl, size: 36)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(ticket.writerName)
-                    .deskText(DeskRowType.headerName)
-                    .foregroundStyle(DeskTheme.textPrimary)
-                    .lineLimit(1)
-                Text(ticket.status.title)
-                    .deskText(DeskType.tag)
-                    .foregroundStyle(ticket.status.tint)
-            }
+                         imageURL: ticket.sender?.avatarUrl, size: 32)
+                .overlay(Circle().strokeBorder(DeskTheme.separator, lineWidth: 1))
+            Text(ticket.writerName)
+                .deskText(DeskRowType.headerName)
+                .foregroundStyle(DeskTheme.textPrimary)
+                .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
     }
@@ -77,7 +73,9 @@ struct TicketDetailView: View {
                 LazyVStack(alignment: .leading, spacing: DeskLayout.space8) {
                     subjectHeader(detail.ticket)
                     ForEach(Array(detail.messages.enumerated()), id: \.element.id) { index, message in
-                        if index == 0 || RiyadhTime.dayKey(detail.messages[index - 1].createdAt) != RiyadhTime.dayKey(message.createdAt) {
+                        // The subject line already carries the opening date.
+                        let previous = index == 0 ? detail.ticket.createdAt : detail.messages[index - 1].createdAt
+                        if RiyadhTime.dayKey(previous) != RiyadhTime.dayKey(message.createdAt) {
                             DaySeparator(date: message.createdAt)
                         }
                         ChatBubble(message: message,
@@ -106,22 +104,27 @@ struct TicketDetailView: View {
         }
     }
 
+    /// The subject as the page title, then one line: who, when, and the status.
     private func subjectHeader(_ ticket: StaffTicket) -> some View {
-        VStack(spacing: DeskLayout.space4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(ticket.title)
-                .deskText(DeskType.rowTitle)
+                .deskText(DeskTextRole(size: 21, weight: .bold, style: .title3, lineSpacing: 2))
                 .foregroundStyle(DeskTheme.textPrimary)
-                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
             HStack(spacing: 6) {
-                SenderKindTag(kind: ticket.sender?.kind ?? .unknown)
-                Text(verbatim: RiyadhTime.displayString(ticket.createdAt))
-                    .deskText(DeskType.timestamp)
+                SenderKindLabel(kind: ticket.sender?.kind ?? .unknown)
+                Text(verbatim: "· \(RiyadhTime.displayString(ticket.createdAt))")
+                    .deskText(DeskType.meta)
                     .foregroundStyle(DeskTheme.textTertiary)
+                    .lineLimit(1)
+                StatusChip(title: ticket.status.title, tone: ticket.status.tone,
+                           systemImage: ticket.status == .closed ? "lock.fill" : nil)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.bottom, DeskLayout.space8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .padding(.bottom, DeskLayout.space16)
     }
 
     @ViewBuilder
@@ -129,16 +132,25 @@ struct TicketDetailView: View {
         VStack(alignment: .leading, spacing: DeskLayout.space8) {
             if let actionError { ErrorLine(message: actionError) }
             if ticket.status == .closed {
-                HStack {
-                    Text("الرسالة مغلقة")
-                        .deskText(DeskType.meta)
+                HStack(spacing: DeskLayout.space8) {
+                    Image(systemName: "lock.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(DeskTheme.textTertiary)
+                        .accessibilityHidden(true)
+                    Text("الرسالة مغلقة، لا يمكن الرد")
+                        .deskText(DeskType.excerpt)
                         .foregroundStyle(DeskTheme.textSecondary)
                     Spacer()
                     Button("إعادة فتح") { Task { await setStatus(.open) } }
-                        .deskText(DeskType.metaEmphasis)
+                        .deskText(DeskType.button)
                         .foregroundStyle(DeskInk.link)
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 40)
+                        .background(DeskInk.chip, in: Capsule())
+                        .buttonStyle(.plain)
                         .disabled(isUpdatingStatus)
                 }
+                .padding(.vertical, 4)
             } else {
                 if !quickReplies.isEmpty, draft.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -332,13 +344,13 @@ private struct ChatBubble: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background(isDesk ? DeskInk.link : DeskInk.chip,
-                        in: UnevenRoundedRectangle(topLeadingRadius: 18,
-                                                   bottomLeadingRadius: isDesk ? 18 : 6,
-                                                   bottomTrailingRadius: isDesk ? 6 : 18,
-                                                   topTrailingRadius: 18,
+                        in: UnevenRoundedRectangle(topLeadingRadius: 22,
+                                                   bottomLeadingRadius: isDesk ? 22 : 6,
+                                                   bottomTrailingRadius: isDesk ? 6 : 22,
+                                                   topTrailingRadius: 22,
                                                    style: .continuous))
             .contextMenu {
                 if canReply {
