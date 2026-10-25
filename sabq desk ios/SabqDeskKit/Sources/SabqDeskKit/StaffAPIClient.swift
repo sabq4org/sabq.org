@@ -143,9 +143,11 @@ public struct StaffAPIClient: Sendable {
         return envelope.post
     }
 
-    public func rejectSocialPost(id: String, reason: String?) async throws -> StaffSocialPost {
-        let trimmed = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = RejectBody(reason: (trimmed?.isEmpty ?? true) ? nil : String(trimmed!.prefix(1000)))
+    /// `reason` is required by the server unless the editor withdraws their own
+    /// post; a blank one is omitted so the server answers 400 `validation_error`.
+    public func rejectSocialPost(id: String, reason: String) async throws -> StaffSocialPost {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = RejectBody(reason: trimmed.isEmpty ? nil : String(trimmed.prefix(1000)))
         let envelope: StaffSocialPostEnvelope = try await send("POST", "/api/v1/staff/social/\(try pathID(id))/reject",
                                                                body: body)
         return envelope.post

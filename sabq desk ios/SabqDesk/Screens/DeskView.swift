@@ -260,7 +260,7 @@ struct DeskView: View {
         await act(on: item) { try await app.client.scheduleSocialPost(id: item.id, at: date) }
     }
 
-    private func reject(_ item: StaffInboxItem, reason: String?) async {
+    private func reject(_ item: StaffInboxItem, reason: String) async {
         await act(on: item) { try await app.client.rejectSocialPost(id: item.id, reason: reason) }
     }
 

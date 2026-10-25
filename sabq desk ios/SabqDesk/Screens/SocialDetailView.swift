@@ -270,7 +270,7 @@ struct SocialDetailView: View {
         }
     }
 
-    private func reject(_ reason: String?) async {
+    private func reject(_ reason: String) async {
         await run(.reject, success: "رُفض المقترح وأُبلغ صاحبه") {
             try await app.client.rejectSocialPost(id: postID, reason: reason)
         }
