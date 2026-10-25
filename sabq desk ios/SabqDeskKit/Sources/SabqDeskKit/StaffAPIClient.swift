@@ -159,6 +159,27 @@ public struct StaffAPIClient: Sendable {
         return envelope.post
     }
 
+    // MARK: - System (admins)
+
+    /// «حالة النظام»: AI model health and monthly budgets. 403 without `canSystemHealth`.
+    public func systemHealth() async throws -> StaffSystemHealth {
+        try await send("GET", "/api/v1/staff/system/health")
+    }
+
+    /// «تنبيهات الإدارة», urgent first. 403 without `canAdminAlerts`.
+    public func adminAlerts() async throws -> StaffAdminAlerts {
+        try await send("GET", "/api/v1/staff/alerts")
+    }
+
+    public func alertPrefs() async throws -> StaffAlertPrefs {
+        try await send("GET", "/api/v1/staff/me/alert-prefs")
+    }
+
+    /// Sends only the switches being changed; returns both as stored.
+    public func updateAlertPrefs(_ update: StaffAlertPrefsUpdate) async throws -> StaffAlertPrefs {
+        try await send("PUT", "/api/v1/staff/me/alert-prefs", body: update)
+    }
+
     // MARK: - Push
 
     public func registerPushToken(_ token: String, deviceName: String?, osVersion: String?) async throws {
