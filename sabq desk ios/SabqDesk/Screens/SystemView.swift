@@ -52,6 +52,8 @@ struct SystemView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DeskTheme.background)
+            // Read by the back button of pushed screens; the bar itself is hidden here.
+            .navigationTitle("النظام")
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: DeskDeepLink.self) { link in
                 switch link {
@@ -59,6 +61,10 @@ struct SystemView: View {
                     SocialDetailView(postID: id) { _ in }
                 case .ticket(let id):
                     TicketDetailView(ticketID: id) { _ in }
+                case .balances:
+                    ModelBalancesView()
+                case .balance(let provider):
+                    ProviderBalanceDetailView(provider: provider)
                 case .systemHealth, .alerts:
                     EmptyView()
                 }
@@ -66,6 +72,23 @@ struct SystemView: View {
         }
         .onChange(of: path) { _, newPath in
             if newPath.isEmpty { Task { await app.refreshUnread() } }
+        }
+        // «أرصدة النماذج» links (push / banner) are consumed here; RootView
+        // has already switched to this tab.
+        .onChange(of: app.pendingLink, initial: true) { _, link in
+            guard app.capabilities.canSystemHealth else { return }
+            switch link {
+            case .balances?:
+                section = .health
+                path = [.balances]
+                app.pendingLink = nil
+            case .balance(let provider)?:
+                section = .health
+                path = [.balances, .balance(provider: provider)]
+                app.pendingLink = nil
+            default:
+                break
+            }
         }
     }
 }

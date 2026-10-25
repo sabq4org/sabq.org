@@ -166,6 +166,12 @@ struct AdminAlertsView: View {
         case .ticket(let id)?:
             guard app.capabilities.canTickets else { return nil }
             return { open(.ticket(id: id)) }
+        case .balances?:
+            guard app.capabilities.canSystemHealth else { return nil }
+            return { open(.balances) }
+        case .balance(let provider)?:
+            guard app.capabilities.canSystemHealth else { return nil }
+            return { open(.balance(provider: provider)) }
         case .systemHealth?, .alerts?, nil:
             return nil
         }
