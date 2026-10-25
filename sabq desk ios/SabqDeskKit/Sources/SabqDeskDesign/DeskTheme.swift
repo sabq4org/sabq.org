@@ -42,11 +42,74 @@ public enum DeskTheme {
     public static let danger = adaptive(0xBF3038, 0xFF9297)
     public static let disabledFill = adaptive(0xE6EAEE, 0x2A3644)
     public static let disabledInk = adaptive(0x55626F, 0xA3B1BF)
+
+    // Copied verbatim from `SabqDesignSystem.swift` (skyTint, skyOutline, teal, shadow).
+
+    /// خلفية البطاقات المميزة بالهوية السماوية الهادئة.
+    public static let skyTint = adaptive(0xF3F8FD, 0x13202E)
+    /// إطار سماوي ناعم للبطاقات.
+    public static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
+    public static let teal = adaptive(0x08785F, 0x70DCC0)
+    public static let shadow = Color.black.opacity(0.03)
+
+    // Semantic roles for the grouped desk screens, built from the palette above.
+
+    /// Page behind cards and grouped lists: muted sky in light, the page colour in dark.
+    public static let groupedBackground = adaptive(0xEFF6FC, 0x0B121A)
+    public static let cardBackground = surface
+    public static let cardOutline = skyOutline
+}
+
+/// Semantic colour pairs for chips, badges and icon tiles. Text always uses
+/// the palette ink on a low-opacity fill of the same ink, which keeps AA
+/// contrast in both modes.
+public enum DeskTone: Sendable, Hashable {
+    case neutral, info, success, warning, danger, teal
+
+    public var ink: Color {
+        switch self {
+        case .neutral: return DeskTheme.textSecondary
+        case .info: return DeskTheme.primary
+        case .success: return DeskTheme.success
+        case .warning: return DeskTheme.warning
+        case .danger: return DeskTheme.danger
+        case .teal: return DeskTheme.teal
+        }
+    }
+
+    /// Chip / badge background behind `ink` text.
+    public var fill: Color {
+        switch self {
+        case .neutral: return DeskTheme.surfaceMuted
+        default: return ink.opacity(0.10)
+        }
+    }
+
+    /// Rounded-square background behind a decorative SF Symbol drawn in `ink`.
+    public var tileFill: Color {
+        switch self {
+        case .neutral: return DeskTheme.surfaceStrong
+        default: return ink.opacity(0.14)
+        }
+    }
 }
 
 public enum DeskRadius {
     public static let small: CGFloat = 8
     public static let medium: CGFloat = 12
+    /// Desk-only: hero cards (account header, inbox summary).
+    public static let large: CGFloat = 16
+}
+
+/// Soft card elevation, using the reader app's `shadow` colour.
+public struct DeskShadowStyle: Sendable {
+    public let color: Color
+    public let radius: CGFloat
+    public let y: CGFloat
+}
+
+public enum DeskShadow {
+    public static let card = DeskShadowStyle(color: DeskTheme.shadow, radius: 8, y: 2)
 }
 
 public enum DeskLayout {
@@ -61,6 +124,13 @@ public enum DeskLayout {
     public static let touchTarget: CGFloat = 44
     /// Bottom clearance so scrollable list and detail content clears the floating tab bar.
     public static let tabBarClearance: CGFloat = 88
+    /// Inner padding of a card (reader app `cardInset`).
+    public static let cardInset: CGFloat = 16
+    /// Vertical gap between two stacked cards in a list.
+    public static let cardGap: CGFloat = 12
+    /// Base sizes for `@ScaledMetric` in views.
+    public static let iconTile: CGFloat = 30
+    public static let avatar: CGFloat = 56
 }
 
 /// One step of the reader app's type scale.
@@ -95,11 +165,38 @@ public enum DeskType {
     public static let tag = DeskTextRole(size: 12, weight: .semibold, style: .caption, lineSpacing: 0)
     public static let timestamp = DeskTextRole(size: 11, weight: .regular, style: .caption2, lineSpacing: 0)
     public static let button = DeskTextRole(size: 16, weight: .semibold, style: .callout, lineSpacing: 0)
+    /// Large count in a summary tile.
+    public static let statValue = DeskTextRole(size: 28, weight: .bold, style: .title, lineSpacing: 0)
+    /// Avatar initials.
+    public static let avatarInitials = DeskTextRole(size: 20, weight: .bold, style: .title3, lineSpacing: 0)
 }
 
 extension View {
     public func deskText(_ role: DeskTextRole) -> some View {
         font(role.font).lineSpacing(role.lineSpacing)
+    }
+}
+
+/// Card surface: rounded fill, hairline sky outline and a soft shadow.
+public struct DeskCardBackground: View {
+    private let radius: CGFloat
+
+    public init(radius: CGFloat = DeskRadius.medium) {
+        self.radius = radius
+    }
+
+    public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        shape.fill(DeskTheme.cardBackground)
+            .overlay(shape.stroke(DeskTheme.cardOutline, lineWidth: 1))
+            .shadow(color: DeskShadow.card.color, radius: DeskShadow.card.radius, y: DeskShadow.card.y)
+    }
+}
+
+extension View {
+    /// Pads the content and puts it on a `DeskCardBackground`.
+    public func deskCard(radius: CGFloat = DeskRadius.medium, padding: CGFloat = DeskLayout.cardInset) -> some View {
+        self.padding(padding).background(DeskCardBackground(radius: radius))
     }
 }
 
