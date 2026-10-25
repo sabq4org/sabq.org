@@ -129,6 +129,9 @@ import { buildArabicPassport, buildEnglishPassport, buildUrduPassport, isStaffRo
 import { generateArticleThumbnail } from "./services/thumbnailService";
 import { liveVisitorTracker } from "./services/liveVisitorTracker";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "./utils/suspiciousWordsChecker";
+import { COPIED_HOLD_REASON, evaluateCommentSubmission } from "./services/commentQuality";
+import { syncCommentPoints } from "./services/commentLoyalty";
+import { hideCommentsFromInactiveAuthors } from "./services/commentVisibility";
 import {
   adminUpdateTopicCommentContent,
   adminSetTopicCommentStatus,
@@ -13697,7 +13700,7 @@ Respond in valid JSON format only:
       const cacheKey = `article:comments:${slug}`;
       if (!showPending) {
         const comments = await withCache(cacheKey, CACHE_TTL.SHORT, async () => {
-          return storage.getCommentsByArticle(articleInfo.id, false);
+          return hideCommentsFromInactiveAuthors(await storage.getCommentsByArticle(articleInfo.id, false));
         });
         // Only anonymous, approved comments on a published article can opt in
         // to the short edge burst cache. Staff/pending responses stay private.
@@ -14518,6 +14521,13 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Invalid comment data" });
       }
 
+      // بوابة الجودة قبل الإدراج (أرقام/رموز، قِصر، حدود المعدل) — services/commentQuality.ts
+      const quality = await evaluateCommentSubmission({ userId, content: parsed.data.content, article });
+      if (!quality.ok) {
+        if (quality.retryAfterSeconds) res.set("Retry-After", String(quality.retryAfterSeconds));
+        return res.status(quality.httpStatus).json({ message: quality.messageAr, code: quality.code });
+      }
+
       // فحص الكلمات المشبوهة قبل إنشاء التعليق
       const suspiciousCheck = await checkTextForSuspiciousWords(parsed.data.content);
       let blockedBySuspiciousWords = false;
@@ -14569,19 +14579,7 @@ Respond in valid JSON format only:
         );
       }
 
-      // إضافة نقطة ولاء للتعليق
-      try {
-        await awardPoints({
-          userId,
-          action: LOYALTY_ACTIONS.COMMENT,
-          source: article.id,
-          metadata: { articleId: article.id, commentId: comment.id },
-        });
-      } catch (error) {
-        console.error("Error recording loyalty points:", error);
-      }
-
-
+      // نقاط الولاء تُمنح عند الاعتماد فقط (services/commentLoyalty.ts)، لا عند الإنشاء.
       // AI Moderation + sentiment - الخط الموحّد للتحليل (background task)
       const commentId = comment.id;
       const commentContent = comment.content;
@@ -14597,6 +14595,8 @@ Respond in valid JSON format only:
             content: commentContent,
             userId,
             articleId: articleIdForPipeline,
+            article: { title: article.title, excerpt: article.excerpt },
+            qualityHoldReason: quality.flags.copied ? COPIED_HOLD_REASON : undefined,
             suspiciousHeld: !!suspiciousWordsData && !suspiciousWordsData.shouldAutoReject,
             suspiciousAutoRejected: suspiciousWordsData?.shouldAutoReject,
             suspiciousWordsNote: suspiciousWordsData?.foundWords.length
@@ -16947,6 +16947,7 @@ Respond in valid JSON format only:
         if (!deletedTopic) {
           return res.status(404).json({ message: "التعليق غير موجود" });
         }
+        syncCommentPoints(id, "deleted", "topic");
         return res.json({ message: "تم حذف التعليق بنجاح" });
       }
 
@@ -16958,6 +16959,7 @@ Respond in valid JSON format only:
       if (!deleted) {
         return res.status(404).json({ message: "التعليق غير موجود" });
       }
+      syncCommentPoints(id, "deleted");
 
       res.json({ message: "تم حذف التعليق بنجاح" });
     } catch (error) {
@@ -16982,6 +16984,7 @@ Respond in valid JSON format only:
         if (!approvedTopic) {
           return res.status(404).json({ message: "التعليق غير موجود" });
         }
+        syncCommentPoints(id, "approved", "topic");
         return res.json({ message: "تمت الموافقة على التعليق", comment: approvedTopic });
       }
 
@@ -16998,6 +17001,7 @@ Respond in valid JSON format only:
       if (!updated) {
         return res.status(404).json({ message: "التعليق غير موجود" });
       }
+      syncCommentPoints(id, "approved");
 
       res.json({ message: "تمت الموافقة على التعليق", comment: updated });
     } catch (error) {
@@ -17024,6 +17028,7 @@ Respond in valid JSON format only:
         if (!rejectedTopic) {
           return res.status(404).json({ message: "التعليق غير موجود" });
         }
+        syncCommentPoints(id, "rejected", "topic");
         return res.json({ message: "تم رفض التعليق", comment: rejectedTopic });
       }
 
@@ -17041,6 +17046,7 @@ Respond in valid JSON format only:
       if (!updated) {
         return res.status(404).json({ message: "التعليق غير موجود" });
       }
+      syncCommentPoints(id, "rejected");
 
       res.json({ message: "تم رفض التعليق", comment: updated });
     } catch (error) {
@@ -25302,7 +25308,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // For regular users, show only approved comments
       const showPending = userRole === 'admin' || userRole === 'editor';
       const comments = await storage.getCommentsByArticle(article.id, showPending);
-      res.json(comments);
+      res.json(showPending ? comments : await hideCommentsFromInactiveAuthors(comments));
     } catch (error) {
       console.error("Error fetching opinion comments:", error);
       res.status(500).json({ message: "Failed to fetch comments" });
