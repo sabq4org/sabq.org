@@ -1,7 +1,7 @@
 // تفضيلات تنبيهات تطبيق الديسك لكل مشرف — مخزنة في system_settings
 // (مفتاح staff_app.alert_prefs:<userId>) دون أي تغيير في المخطط.
 // غياب الصف يعني أن التنبيهين مفعّلان.
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { systemSettings } from "@shared/schema";
 import { DEFAULT_STAFF_ALERT_PREFS, type StaffAlertPrefs } from "@shared/staffApp";
@@ -51,26 +51,35 @@ export async function getStaffAlertPrefsForUsers(
   return out;
 }
 
+/**
+ * يدمج الحقول المرسلة فقط في القيمة المخزنة بعملية upsert واحدة ذرية،
+ * فلا يعيد طلبان متزامنان يعطّل كل منهما مفتاحاً مختلفاً تفعيلَ الآخر.
+ */
 export async function updateStaffAlertPrefs(
   userId: string,
   patch: Partial<StaffAlertPrefs>,
 ): Promise<StaffAlertPrefs> {
-  const current = await getStaffAlertPrefs(userId);
-  const next: StaffAlertPrefs = {
-    aiAlerts: typeof patch.aiAlerts === "boolean" ? patch.aiAlerts : current.aiAlerts,
-    adminAlerts: typeof patch.adminAlerts === "boolean" ? patch.adminAlerts : current.adminAlerts,
-  };
-  await db
+  const changes: Partial<StaffAlertPrefs> = {};
+  if (typeof patch.aiAlerts === "boolean") changes.aiAlerts = patch.aiAlerts;
+  if (typeof patch.adminAlerts === "boolean") changes.adminAlerts = patch.adminAlerts;
+  if (Object.keys(changes).length === 0) return getStaffAlertPrefs(userId);
+
+  const rows = await db
     .insert(systemSettings)
     .values({
       key: staffAlertPrefsKey(userId),
-      value: next,
+      value: { ...DEFAULT_STAFF_ALERT_PREFS, ...changes },
       category: STAFF_APP_SETTINGS_CATEGORY,
       isPublic: false,
     })
     .onConflictDoUpdate({
       target: systemSettings.key,
-      set: { value: next, updatedAt: new Date() },
-    });
-  return next;
+      set: {
+        // صف تالف (غير كائن) يُعامل ككائن فارغ قبل الدمج.
+        value: sql`(CASE WHEN jsonb_typeof(${systemSettings.value}) = 'object' THEN ${systemSettings.value} ELSE '{}'::jsonb END) || ${JSON.stringify(changes)}::jsonb`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ value: systemSettings.value });
+  return normalizeStaffAlertPrefs(rows[0]?.value);
 }

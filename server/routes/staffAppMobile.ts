@@ -49,11 +49,11 @@ import { getStaffAlertPrefs, updateStaffAlertPrefs } from "../services/staffAler
 import { getStaffSystemHealth } from "../services/staffSystemHealthService";
 import {
   StaffInboxCursorError,
+  buildStaffTicketDetailSender,
   getStaffSocialPostDetail,
   getStaffUnreadCounts,
   getStaffUserAccount,
   listStaffUnifiedInbox,
-  mapTicketAuthorKindToSenderKind,
   resolveStaffCapabilitiesAndRoles,
   type StaffAuthContext,
 } from "../services/staffAppService";
@@ -491,21 +491,10 @@ subRouter.get(
         viewerId: req.staffAuth!.user.id,
         isAdmin: true,
       });
-      const senderKind = mapTicketAuthorKindToSenderKind(detail.ticket.authorKind);
-      const senderName =
-        detail.ticket.writerName ??
-        detail.ticket.writer?.name ??
-        detail.ticket.writerEmail ??
-        "مساهم";
       res.json({
         ticket: {
           ...detail.ticket,
-          sender: {
-            id: detail.ticket.writerId ?? null,
-            name: senderName,
-            kind: senderKind,
-            roleKind: detail.ticket.authorKind,
-          },
+          sender: buildStaffTicketDetailSender(detail.ticket),
           deeplink: `sabqdesk://ticket/${detail.ticket.id}`,
         },
         messages: detail.messages,

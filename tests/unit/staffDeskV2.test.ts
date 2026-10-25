@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const mocks = vi.hoisted(() => ({
   dbSelect: vi.fn(),
+  dbInsert: vi.fn(),
   sendStaffAdminPush: vi.fn(),
 }));
 
 vi.mock("../../server/db", () => ({
   db: {
     select: (...args: unknown[]) => mocks.dbSelect(...args),
+    insert: (...args: unknown[]) => mocks.dbInsert(...args),
   },
 }));
 
@@ -35,7 +38,9 @@ import {
   getStaffAlertPrefs,
   normalizeStaffAlertPrefs,
   staffAlertPrefsKey,
+  updateStaffAlertPrefs,
 } from "../../server/services/staffAlertPrefsService";
+import { buildStaffTicketDetailSender } from "../../server/services/staffAppService";
 import {
   mapAiModelStatus,
   summarizeAiHealth,
@@ -60,6 +65,7 @@ import { formatRiyadhTime } from "../../server/services/staffAppPushService";
 
 beforeEach(() => {
   mocks.dbSelect.mockReset();
+  mocks.dbInsert.mockReset();
   mocks.sendStaffAdminPush.mockReset();
   mocks.sendStaffAdminPush.mockResolvedValue(1);
   __resetStaffAiAlertStateForTests();
@@ -159,6 +165,70 @@ describe("alert prefs defaults (contract §3)", () => {
       from: () => ({ where: () => ({ limit: () => Promise.resolve([{ value: { aiAlerts: false } }]) }) }),
     }));
     await expect(getStaffAlertPrefs("admin-1")).resolves.toEqual({ aiAlerts: false, adminAlerts: true });
+  });
+
+  it("updates atomically: one upsert that merges only the sent toggle into the stored jsonb", async () => {
+    const calls: { values?: any; conflict?: any } = {};
+    mocks.dbInsert.mockImplementation(() => ({
+      values: (v: unknown) => {
+        calls.values = v;
+        return {
+          onConflictDoUpdate: (c: unknown) => {
+            calls.conflict = c;
+            return { returning: () => Promise.resolve([{ value: { aiAlerts: true, adminAlerts: false } }]) };
+          },
+        };
+      },
+    }));
+    await expect(updateStaffAlertPrefs("admin-1", { adminAlerts: false })).resolves.toEqual({
+      aiAlerts: true,
+      adminAlerts: false,
+    });
+    expect(mocks.dbSelect).not.toHaveBeenCalled();
+    expect(calls.values).toMatchObject({
+      key: "staff_app.alert_prefs:admin-1",
+      value: { aiAlerts: true, adminAlerts: false },
+    });
+    // The conflict branch is SQL (stored || patch), and the patch carries only adminAlerts.
+    const merge = new PgDialect().sqlToQuery(calls.conflict.set.value);
+    expect(merge.sql).toContain('"system_settings"."value"');
+    expect(merge.sql).toContain("||");
+    expect(merge.params).toEqual([JSON.stringify({ adminAlerts: false })]);
+  });
+
+  it("skips the write and returns stored prefs when no boolean field is sent", async () => {
+    mocks.dbSelect.mockImplementation(() => ({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([{ value: { aiAlerts: false } }]) }) }),
+    }));
+    await expect(
+      updateStaffAlertPrefs("admin-1", { aiAlerts: "off" } as unknown as { aiAlerts: boolean }),
+    ).resolves.toEqual({ aiAlerts: false, adminAlerts: true });
+    expect(mocks.dbInsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("ticket detail sender", () => {
+  it("carries the writer avatar like the inbox list", () => {
+    expect(
+      buildStaffTicketDetailSender({
+        writerId: "w-1",
+        writerName: "د. سعد",
+        authorKind: "opinion_author",
+        writerProfileImageUrl: "https://media.sabq.org/avatars/w-1.jpg",
+      }),
+    ).toEqual({
+      id: "w-1",
+      name: "د. سعد",
+      kind: "writer",
+      roleKind: "opinion_author",
+      avatarUrl: "https://media.sabq.org/avatars/w-1.jpg",
+    });
+    const fallback = buildStaffTicketDetailSender({
+      writerEmail: "x@sabq.org",
+      authorKind: "reporter",
+      writer: { profileImageUrl: "javascript:alert(1)" },
+    });
+    expect(fallback).toMatchObject({ id: null, name: "x@sabq.org", kind: "reporter", avatarUrl: null });
   });
 });
 

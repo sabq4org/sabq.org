@@ -190,6 +190,24 @@ export function mapTicketAuthorKindToSenderKind(
   return "writer";
 }
 
+/** مرسل استفسار المساهم في شاشة التفاصيل — نفس الاسم والصورة التي يعرضها الصندوق. */
+export function buildStaffTicketDetailSender(ticket: {
+  writerId?: string | null;
+  writerName?: string | null;
+  writerEmail?: string | null;
+  writerProfileImageUrl?: string | null;
+  authorKind?: string | null;
+  writer?: { name?: string | null; profileImageUrl?: string | null } | null;
+}) {
+  return {
+    id: ticket.writerId ?? null,
+    name: ticket.writerName ?? ticket.writer?.name ?? ticket.writerEmail ?? "مساهم",
+    kind: mapTicketAuthorKindToSenderKind(ticket.authorKind),
+    roleKind: ticket.authorKind,
+    avatarUrl: safeStaffAvatarUrl(ticket.writerProfileImageUrl ?? ticket.writer?.profileImageUrl),
+  };
+}
+
 function senderRoleKind(kind: StaffSenderKind): string {
   if (kind === "reporter") return "reporter";
   if (kind === "organization") return "organization";
