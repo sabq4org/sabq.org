@@ -100,6 +100,11 @@ export const LOYALTY_ACTIONS = {
    *  الازدواج ممنوع بثلاث طبقات: قيد فريد على ledger_id في الصندوق، dedup
    *  المحفظة على source، وقيد السجل الفريد نفسه. */
   PREDICTION_WIN: "PREDICTION_WIN",
+  /** سحب نقاط تعليق: قيد سالب يُكتب مرة واحدة لكل تعليق حين يُرفض أو يُحذف
+   *  تعليق سبق أن نال نقطة COMMENT. لا يمر عبر awardPoints (النقاط = 0 فيرفضها
+   *  حارس NEGATIVE_POINTS) — يكتبه revokeCommentPoints في
+   *  server/services/commentLoyalty.ts مباشرة، ولا يقبله /api/v1/loyalty/events. */
+  COMMENT_REVOKED: "COMMENT_REVOKED",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -138,6 +143,7 @@ export const LOYALTY_ACTION_META: Record<string, LoyaltyActionMeta> = {
   SPORTS_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع رياضي طويل المدى", icon: "🏆", category: "sports" },
   SPORTS_SCORER_PREDICTION_WIN: { labelAr: "فوز بتوقّع الهدّاف", icon: "⚽", category: "sports" },
   ADMIN_ADJUSTMENT: { labelAr: "تعديل إداري", icon: "±", category: "admin" },
+  COMMENT_REVOKED: { labelAr: "سحب نقاط تعليق", icon: "↩", category: "admin" },
 };
 
 export function getLoyaltyActionMeta(action: string): LoyaltyActionMeta {
@@ -192,6 +198,9 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   // Nominal default only — the outbox ALWAYS overrides this with wallet_points
   // (base share × loyalty-tier multiplier) computed at settlement time.
   PREDICTION_WIN: 100,
+  // Never awarded through awardPoints (0 is rejected there); the clawback
+  // writes the negative amount of the original award directly.
+  COMMENT_REVOKED: 0,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -202,7 +211,8 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   READ_DEEP: 30,
   LIKE: 50,
   SHARE: 20,
-  COMMENT: 10,
+  // Anti-farming (2026-10): at most 5 paid comments a day, awarded on approval only.
+  COMMENT: 5,
   NOTIFICATION_OPEN: 20,
   DAILY_LOGIN: 1,
   // One-time bonuses cap at 1 — combined with a long dedup window they
@@ -234,6 +244,7 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   // No daily cap — a ledger entry pays at most once (unique outbox row +
   // lifetime dedup on source=prediction:<ledgerId> below).
   PREDICTION_WIN: null,
+  COMMENT_REVOKED: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -249,7 +260,10 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   // user farm up to the daily cap by spamming like/unlike on one article.
   LIKE: 100000,
   SHARE: 4,
-  COMMENT: null,
+  // One paid comment per user per article (source = articleId, or topicId for
+  // Muqtarab topics) over a 5-year window — further comments on the same
+  // article publish normally but earn nothing.
+  COMMENT: 24 * 365 * 5,
   NOTIFICATION_OPEN: 1,
   DAILY_LOGIN: null,
   // One-time-only — dedup checks fall back to source-keyed lookup; since
@@ -282,7 +296,22 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   // Lifetime, source=prediction:<ledgerId> dedup — a ledger entry pays at most
   // once even if the outbox worker retries after a crash mid-delivery.
   PREDICTION_WIN: 100000,
+  COMMENT_REVOKED: null,
 };
+
+/**
+ * Engagement actions the mobile client may report via POST /api/v1/loyalty/events.
+ * COMMENT is deliberately absent: comment points are server-awarded only when
+ * the comment is approved (server/services/commentLoyalty.ts). Accepting it
+ * here let a client mint COMMENT points with no comment behind them.
+ */
+export const MOBILE_CLIENT_LOYALTY_ACTIONS: readonly LoyaltyAction[] = [
+  LOYALTY_ACTIONS.READ_OPEN,
+  LOYALTY_ACTIONS.READ_DEEP,
+  LOYALTY_ACTIONS.LIKE,
+  LOYALTY_ACTIONS.SHARE,
+  LOYALTY_ACTIONS.NOTIFICATION_OPEN,
+];
 
 // ----------------------------------------------------------------------------
 // Streak bonus multipliers — applied to DAILY_LOGIN points based on the
