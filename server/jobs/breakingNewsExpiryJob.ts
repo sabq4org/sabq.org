@@ -1,11 +1,17 @@
 import cron from '../leaderCron';
 import { expireStaleBreakingArticles } from '../services/breakingNewsService';
+import { recordExpiredBreakingArticles } from '../services/staffBreakingExpiryLog';
 
 async function expireBreakingNews() {
   try {
-    const { ar, en, ur } = await expireStaleBreakingArticles();
+    const expired = await expireStaleBreakingArticles();
+    const { ar, en, ur } = expired;
     const total = ar.length + en.length + ur.length;
     if (total > 0) {
+      // سجل قصير لتنبيهات تطبيق الديسك؛ فشله لا يمس الانتهاء نفسه
+      await recordExpiredBreakingArticles(expired).catch((err) => {
+        console.warn('[Breaking News Expiry] staff alert log failed:', (err as Error).message);
+      });
       console.log(
         `[Breaking News Expiry] Demoted ${total} breaking article(s) to regular (ar=${ar.length}, en=${en.length}, ur=${ur.length})`,
       );
