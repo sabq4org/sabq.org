@@ -81,11 +81,12 @@ import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { ModerationAdvancedSearch } from "@/components/ModerationAdvancedSearch";
+import { SuspiciousAccountsCard } from "@/components/moderation/SuspiciousAccountsCard";
 
 interface ModerationResult {
   commentId: string;
   moderationScore: number;
-  aiClassification: 'safe' | 'flagged' | 'spam' | 'harmful';
+  aiClassification: 'safe' | 'flagged' | 'spam' | 'harmful' | 'low_value';
   detectedIssues: string[];
   aiModerationAnalyzedAt: string;
   comment: {
@@ -139,7 +140,7 @@ interface MemberComment {
   articleTitle?: string;
   articleSlug?: string;
   moderationScore?: number;
-  aiClassification?: 'safe' | 'flagged' | 'spam' | 'harmful';
+  aiClassification?: 'safe' | 'flagged' | 'spam' | 'harmful' | 'low_value';
 }
 
 interface MemberProfile {
@@ -219,6 +220,13 @@ const classificationColors: Record<
     accent: "border-r-rose-500",
     icon: ShieldX,
   },
+  low_value: {
+    bg: "bg-slate-500/10",
+    text: "text-slate-600 dark:text-slate-400",
+    border: "border-slate-500/20",
+    accent: "border-r-slate-500",
+    icon: Shield,
+  },
 };
 
 const classificationLabels: Record<string, string> = {
@@ -226,6 +234,7 @@ const classificationLabels: Record<string, string> = {
   flagged: "مشكوك فيه",
   spam: "سبام",
   harmful: "ضار",
+  low_value: "بلا قيمة",
 };
 
 const issueLabels: Record<string, string> = {
@@ -239,6 +248,7 @@ const issueLabels: Record<string, string> = {
   personal_attack: "هجوم شخصي",
   off_topic: "خارج الموضوع",
   self_promotion: "ترويج ذاتي",
+  low_value: "بلا قيمة",
 };
 
 const SectionHeader = ({
@@ -1183,6 +1193,9 @@ export default function AIModerationDashboard() {
             )}
           </>
         )}
+
+        {/* Comment-farming accounts */}
+        <SuspiciousAccountsCard />
 
         {/* Advanced Search Section */}
         <div className="space-y-3">

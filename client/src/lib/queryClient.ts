@@ -303,9 +303,19 @@ async function throwIfResNotOk(res: Response, silent = false) {
     }
 
     if (res.status === 429) {
+      // حدود التعليقات (COMMENT_RATE_LIMIT / COMMENT_COOLDOWN) تحمل رسالة عربية
+      // ودّية للقارئ؛ بقية حالات 429 تبقى "RATE_LIMITED" كما يتوقعها المستدعون.
+      try {
+        const data = JSON.parse(text);
+        if (typeof data?.code === "string" && data.code.startsWith("COMMENT_") && data.message) {
+          throw new Error(data.message);
+        }
+      } catch (e) {
+        if (e instanceof Error && !(e instanceof SyntaxError)) throw e;
+      }
       throw new Error("RATE_LIMITED");
     }
-    
+
     if (res.status === 502 || res.status === 503 || res.status === 504) {
       throw new Error("الخادم غير متاح مؤقتاً، يرجى المحاولة مرة أخرى");
     }
