@@ -23,6 +23,46 @@ enum Fixtures {
     }
     """
 
+    static let inboxScheduled = """
+    {
+      "items": [
+        {
+          "id": "social-scheduled",
+          "kind": "social",
+          "title": "مقترح مجدول",
+          "previewText": "نص التغريدة",
+          "preview": "نص التغريدة",
+          "sender": { "id": "pub-uuid", "name": "وكالة الأفق", "kind": "agency", "roleKind": "agency" },
+          "createdAt": "2026-10-25T10:49:11.123Z",
+          "updatedAt": "2026-10-25T10:51:17.759Z",
+          "status": "scheduled",
+          "hasUnread": false,
+          "deeplink": "sabqdesk://social/social-scheduled",
+          "scheduledAt": "2026-10-25T11:05:00.000Z",
+          "publishedAt": null,
+          "article": null
+        },
+        {
+          "id": "social-published",
+          "kind": "social",
+          "title": "مقترح منشور",
+          "previewText": "نص منشور",
+          "preview": "نص منشور",
+          "sender": { "id": "writer-uuid", "name": "أ. نورة القحطاني", "kind": "writer", "roleKind": "opinion_author" },
+          "createdAt": "2026-10-25T08:00:00.000Z",
+          "updatedAt": "2026-10-25T09:00:03.000Z",
+          "status": "published",
+          "hasUnread": false,
+          "deeplink": "sabqdesk://social/social-published",
+          "scheduledAt": "2026-10-25T09:00:00.000Z",
+          "publishedAt": "2026-10-25T09:00:03.000Z"
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+    """
+
     static let inbox = """
     {
       "items": [

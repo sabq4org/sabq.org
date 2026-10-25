@@ -99,6 +99,28 @@ final class DecodingTests: XCTestCase {
         XCTAssertNotEqual(ticket.listID, social.listID)
     }
 
+    func testInboxDecodesScheduledAndPublishedTimesWithChips() throws {
+        let page = try decoder.decode(StaffInboxPage.self, from: Fixtures.inboxScheduled.data)
+        XCTAssertEqual(page.items.count, 2)
+
+        let scheduled = page.items[0]
+        XCTAssertEqual(scheduled.status, "scheduled")
+        XCTAssertFalse(scheduled.hasUnread)
+        XCTAssertEqual(scheduled.scheduledAt, StaffJSON.parseDate("2026-10-25T11:05:00Z"))
+        XCTAssertNil(scheduled.publishedAt)
+        XCTAssertEqual(scheduled.statusChipTitle, "مجدول · 14:05")
+
+        let published = page.items[1]
+        XCTAssertEqual(published.publishedAt, StaffJSON.parseDate("2026-10-25T09:00:03Z"))
+        XCTAssertEqual(published.statusChipTitle, "منشورة · 12:00")
+
+        // Older servers omit the fields: decoding still works and the chip falls back.
+        let legacy = try decoder.decode(StaffInboxPage.self, from: Fixtures.inbox.data)
+        XCTAssertNil(legacy.items[0].scheduledAt)
+        XCTAssertNil(legacy.items[0].publishedAt)
+        XCTAssertEqual(legacy.items[0].statusChipTitle, "بانتظار القرار")
+    }
+
     func testUnknownSenderKindDoesNotBreakDecoding() throws {
         let json = Fixtures.inbox.replacingOccurrences(of: "\"kind\": \"agency\"", with: "\"kind\": \"newsroom\"")
         let page = try decoder.decode(StaffInboxPage.self, from: json.data)
