@@ -33,6 +33,20 @@ enum DeskRowType {
     static let headerName = DeskTextRole(size: 16, weight: .bold, style: .headline, lineSpacing: 0)
 }
 
+/// Row and header type sizes from the approved mockup (IBM Plex Sans Arabic).
+enum DeskRowType {
+    /// Sender name in lists: 15 bold when unread, 15 semibold otherwise.
+    static let name = DeskTextRole(size: 15, weight: .bold, style: .subheadline, lineSpacing: 0)
+    static let nameRead = DeskTextRole(size: 15, weight: .semibold, style: .subheadline, lineSpacing: 0)
+    /// Message subject under the name: 14 semibold / 14 medium.
+    static let subject = DeskTextRole(size: 14, weight: .semibold, style: .subheadline, lineSpacing: 0)
+    static let subjectRead = DeskTextRole(size: 14, weight: .medium, style: .subheadline, lineSpacing: 0)
+    /// Tweet preview in the desk lists.
+    static let preview = DeskTextRole(size: 14, weight: .regular, style: .subheadline, lineSpacing: 3)
+    /// Name at the top of a conversation.
+    static let headerName = DeskTextRole(size: 16, weight: .bold, style: .headline, lineSpacing: 0)
+}
+
 /// The desk robot (asset `DeskMascot`), decorative.
 struct DeskMascot: View {
     var size: CGFloat = 52
