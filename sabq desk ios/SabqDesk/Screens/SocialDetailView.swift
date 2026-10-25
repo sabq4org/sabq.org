@@ -107,7 +107,7 @@ struct SocialDetailView: View {
         let name = detail.sender?.name ?? detail.agency?.name ?? detail.author?.name ?? "—"
         let kind = detail.sender?.kind ?? .unknown
         return HStack(spacing: DeskLayout.space12) {
-            SenderAvatar(name: name, kind: kind, size: 44)
+            SenderAvatar(name: name, kind: kind, imageURL: detail.sender?.avatarUrl, size: 44)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(name)
@@ -165,9 +165,17 @@ struct SocialDetailView: View {
                 }
             }
         case .canceled:
-            InfoLine(systemImage: "xmark.circle.fill", tone: .danger,
-                     title: "رُفض المقترح",
-                     detail: post.lastError.map { "السبب: \($0)" } ?? "دون ذكر سبب")
+            switch DeskRejectionNote(canceledBySelf: post.canceledBySelf ?? detail?.canceledBySelf, reason: post.lastError) {
+            case .withdrawn:
+                InfoLine(systemImage: "arrow.uturn.backward.circle.fill", tone: .neutral,
+                         title: DeskRejectionNote.withdrawn.text, detail: nil)
+            case .reason(let reason):
+                InfoLine(systemImage: "xmark.circle.fill", tone: .danger,
+                         title: "رُفض المقترح", detail: DeskRejectionNote.reason(reason).text)
+            case .noReason:
+                InfoLine(systemImage: "xmark.circle.fill", tone: .neutral,
+                         title: "رُفض المقترح", detail: DeskRejectionNote.noReason.text)
+            }
         case .failed:
             InfoLine(systemImage: "exclamationmark.triangle.fill", tone: .danger,
                      title: "فشلت محاولة النشر",
@@ -390,7 +398,9 @@ private struct AttemptsList: View {
                                 .deskText(DeskType.metaEmphasis)
                                 .foregroundStyle(attempt.outcome == "failed" ? DeskTheme.danger : DeskTheme.textSecondary)
                             Spacer()
-                            LTRText(text: RiyadhTime.shortString(attempt.createdAt))
+                            Text(verbatim: RiyadhTime.shortString(attempt.createdAt))
+                                .deskText(DeskType.timestamp)
+                                .foregroundStyle(DeskTheme.textTertiary)
                         }
                         if let message = attempt.errorMessage ?? attempt.errorCode {
                             Text(message)
