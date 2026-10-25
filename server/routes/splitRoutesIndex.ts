@@ -77,6 +77,7 @@ import { registerSportsNamesRoutes } from "./sportsNames";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
 import commentAppealsRouter from "./commentAppeals";
+import commentFarmingRouter from "./commentFarming";
 import topicSummaryAudioRouter from "./topicSummaryAudio";
 import wcPredictionsRouter from "./wcPredictions";
 import predictionsCoreRouter from "./predictionsCore";
@@ -219,6 +220,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(readerInboxMobileRouter);
   app.use(topicCommentsRouter);
   app.use(commentAppealsRouter);
+  app.use(commentFarmingRouter);
   app.use(topicSummaryAudioRouter);
   app.use(wcPredictionsRouter);
   app.use(predictionsCoreRouter);

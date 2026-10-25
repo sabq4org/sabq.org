@@ -4292,7 +4292,7 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
 
     const slug = req.params.slug;
     const [article] = await db
-      .select({ id: articles.id, slug: articles.slug, englishSlug: articles.englishSlug })
+      .select({ id: articles.id, slug: articles.slug, englishSlug: articles.englishSlug, title: articles.title, excerpt: articles.excerpt, content: articles.content })
       .from(articles)
       .where(eq(articles.slug, slug))
       .limit(1);
@@ -4317,6 +4317,14 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
     });
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid comment data" });
+    }
+
+    // Quality gate before insert (numeric/symbols, too short, rate limits) — services/commentQuality.ts
+    const { evaluateCommentSubmission, COPIED_HOLD_REASON } = await import("../services/commentQuality");
+    const quality = await evaluateCommentSubmission({ userId: session.userId, content: parsed.data.content, article });
+    if (!quality.ok) {
+      const { messageAr: message, code, retryAfterSeconds } = quality;
+      return res.status(quality.httpStatus).json({ success: false, message, code, retryAfterSeconds });
     }
 
     // Mirror the public route: pre-flight suspicious-words check forces a
@@ -4384,6 +4392,8 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
           content: commentContent,
           userId: session.userId,
           articleId: article.id,
+          article: { title: article.title, excerpt: article.excerpt },
+          qualityHoldReason: quality.flags.copied ? COPIED_HOLD_REASON : undefined,
           suspiciousHeld: blockedBySuspiciousWords && !suspiciousCheck.shouldAutoReject,
           suspiciousAutoRejected: blockedBySuspiciousWords && suspiciousCheck.shouldAutoReject,
           suspiciousWordsNote: suspiciousCheck.foundWords.length
@@ -6841,7 +6851,7 @@ router.get("/loyalty/me", async (req: Request, res: Response) => {
 
 // POST /api/v1/loyalty/events
 // iOS batches loyalty events (READ_OPEN / READ_DEEP / LIKE / SHARE /
-// COMMENT / NOTIFICATION_OPEN) and flushes every ~30s or on app
+// NOTIFICATION_OPEN; COMMENT → "SERVER_AWARDED") and flushes every ~30s or on app
 // background. The server-side daily cap and dedup in awardPoints()
 // make this idempotent enough that the iOS queue can retry on
 // network failure without producing duplicate points.
@@ -6857,23 +6867,20 @@ router.post("/loyalty/events", async (req: Request, res: Response) => {
     }
 
     const { awardPoints } = await import("../services/loyalty");
-    const { LOYALTY_ACTIONS } = await import("@shared/loyalty");
-    // Client-reportable engagement actions ONLY. Sports prediction wins,
-    // account milestones, and admin adjustments are always granted
-    // server-side; accepting their codes here would let a client mint
-    // uncapped high-value points with arbitrary dedup sources.
-    const validActions = new Set<string>([
-      LOYALTY_ACTIONS.READ_OPEN,
-      LOYALTY_ACTIONS.READ_DEEP,
-      LOYALTY_ACTIONS.LIKE,
-      LOYALTY_ACTIONS.SHARE,
-      LOYALTY_ACTIONS.COMMENT,
-      LOYALTY_ACTIONS.NOTIFICATION_OPEN,
-    ]);
+    const { LOYALTY_ACTIONS, MOBILE_CLIENT_LOYALTY_ACTIONS } = await import("@shared/loyalty");
+    // Client-reportable engagement actions ONLY (no COMMENT: comment points are
+    // server-awarded on approval). Prediction wins, account milestones and
+    // admin adjustments are server-side too; accepting them here would let a
+    // client mint points with arbitrary dedup sources.
+    const validActions = new Set<string>(MOBILE_CLIENT_LOYALTY_ACTIONS);
 
     const results = [] as Array<{ action: string; outcome: string; points?: number }>;
     for (const evt of events) {
       const action = String(evt?.action ?? "");
+      if (action === LOYALTY_ACTIONS.COMMENT) {
+        results.push({ action, outcome: "SERVER_AWARDED" });
+        continue;
+      }
       if (!validActions.has(action as any)) {
         results.push({ action, outcome: "INVALID_ACTION" });
         continue;

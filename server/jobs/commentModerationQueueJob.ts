@@ -13,6 +13,8 @@ import { db } from "../db";
 import { comments, users } from "@shared/schema";
 import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { log } from "../utils/logger";
+import { COPIED_HOLD_REASON } from "../services/commentQuality";
+import { awardCommentPointsOnApproval } from "../services/commentLoyalty";
 
 let isProcessing = false;
 
@@ -54,12 +56,17 @@ async function retryFailedAnalyses(): Promise<number> {
     if (!c.userId) continue;
     // A suspicious-words hold must stay pending regardless of the AI verdict.
     const suspiciousHeld = !!c.moderationReason?.includes("كلمات مشبوهة");
+    // A copied-from-article hold likewise stays with a human.
+    const qualityHoldReason = c.moderationReason?.includes(COPIED_HOLD_REASON)
+      ? COPIED_HOLD_REASON
+      : undefined;
     await runCommentModerationPipeline({
       commentId: c.id,
       content: c.content,
       userId: c.userId,
       articleId: c.articleId,
       suspiciousHeld,
+      qualityHoldReason,
     });
     processed++;
   }
@@ -93,6 +100,7 @@ async function autoApproveAgedFlagged(): Promise<number> {
   for (const c of candidates) {
     // Suspicious-word holds and severe issues always wait for a human.
     if (c.moderationReason?.includes("كلمات مشبوهة")) continue;
+    if (c.moderationReason?.includes(COPIED_HOLD_REASON)) continue;
     const detected = Array.isArray(c.detected) ? (c.detected as string[]) : [];
     if (hasSevereIssue(detected)) continue;
     if (detected.some((d) => typeof d === "string" && d.includes("كلمات مشبوهة"))) continue;
@@ -105,6 +113,7 @@ async function autoApproveAgedFlagged(): Promise<number> {
         moderationReason: `نُشر تلقائياً بعد ${REVIEW_WINDOW_HOURS} ساعة دون مراجعة بشرية (درجة أمان ${c.score} ولا مخالفات جسيمة)`,
       })
       .where(eq(comments.id, c.id));
+    await awardCommentPointsOnApproval(c.id, "article");
     approved++;
   }
   return approved;

@@ -173,6 +173,7 @@ const classificationConfig: Record<string, { bg: string; text: string; icon: typ
   flagged: { bg: "bg-yellow-500/10", text: "text-yellow-600 dark:text-yellow-400", icon: ShieldAlert, label: "مشكوك فيه" },
   spam: { bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400", icon: Shield, label: "سبام" },
   harmful: { bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", icon: ShieldX, label: "ضار" },
+  low_value: { bg: "bg-slate-500/10", text: "text-slate-600 dark:text-slate-400", icon: Shield, label: "بلا قيمة" },
 };
 
 const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
@@ -532,6 +533,7 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
                               <SelectItem value="flagged">مشكوك فيه</SelectItem>
                               <SelectItem value="spam">سبام</SelectItem>
                               <SelectItem value="harmful">ضار</SelectItem>
+                              <SelectItem value="low_value">بلا قيمة</SelectItem>
                             </SelectContent>
                           </Select>
                         </FormItem>

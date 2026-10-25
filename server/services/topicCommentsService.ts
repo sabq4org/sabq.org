@@ -22,13 +22,15 @@ import {
   type TopicCommentWithUser,
 } from "@shared/schema";
 import { userPublicSelect } from "../selectHelpers";
+import { visibleCommentAuthorCondition } from "./commentVisibility";
 
-/** Returns the topic row (id + status) or undefined — used to 404 on POST. */
+/** Returns the topic row (id + status + title/excerpt for the comment quality
+ * and AI relevance checks) or undefined — used to 404 on POST. */
 export async function getTopicForComment(
   topicId: string,
-): Promise<{ id: string; status: string } | undefined> {
+): Promise<{ id: string; status: string; title: string; excerpt: string | null } | undefined> {
   const [row] = await db
-    .select({ id: topics.id, status: topics.status })
+    .select({ id: topics.id, status: topics.status, title: topics.title, excerpt: topics.excerpt })
     .from(topics)
     .where(eq(topics.id, topicId))
     .limit(1);
@@ -47,6 +49,8 @@ export async function getTopicComments(
   const conditions = [eq(topicComments.topicId, topicId)];
   if (!showPending) {
     conditions.push(eq(topicComments.status, "approved"));
+    // Public view hides banned/suspended/deleted authors (expired bans show again).
+    conditions.push(visibleCommentAuthorCondition());
   }
 
   const results = await db

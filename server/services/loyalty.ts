@@ -11,9 +11,21 @@ import {
   type LoyaltyAction,
 } from "@shared/loyalty";
 
+import { isUserFrozen } from "./commentSuspicion";
+
 export type AwardOutcome =
   | { awarded: true;  points: number; totalPoints: number; rankChanged: boolean; newRank?: string }
-  | { awarded: false; reason: "DAILY_CAP" | "DEDUP" | "NEGATIVE_POINTS" };
+  | { awarded: false; reason: "DAILY_CAP" | "DEDUP" | "NEGATIVE_POINTS" | "FROZEN" };
+
+/** Engagement actions withheld from accounts frozen for comment farming
+ *  (server/services/commentSuspicion.ts). Never prediction/account/admin. */
+export const FREEZE_GUARDED_ACTIONS: ReadonlySet<string> = new Set<string>([
+  LOYALTY_ACTIONS.READ_OPEN,
+  LOYALTY_ACTIONS.READ_DEEP,
+  LOYALTY_ACTIONS.LIKE,
+  LOYALTY_ACTIONS.SHARE,
+  LOYALTY_ACTIONS.COMMENT,
+]);
 
 export type AwardInput = {
   userId: string;
@@ -111,6 +123,9 @@ export async function finalizeAwardPoints(userId: string, action: LoyaltyAction)
 }
 
 export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
+  if (FREEZE_GUARDED_ACTIONS.has(input.action) && (await isUserFrozen(input.userId))) {
+    return { awarded: false, reason: "FROZEN" };
+  }
   const outcome = await db.transaction((tx) => awardPointsInTransaction(tx, input));
   if (outcome.awarded) await finalizeAwardPoints(input.userId, input.action);
   return outcome;

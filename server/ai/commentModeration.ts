@@ -6,7 +6,7 @@ export type CommentSentiment = "positive" | "neutral" | "negative";
 
 export interface ModerationResult {
   score: number; // 0-100
-  classification: "safe" | "flagged" | "spam" | "harmful";
+  classification: "safe" | "flagged" | "spam" | "harmful" | "low_value";
   detected: string[]; // toxicity, hate_speech, spam, etc.
   reason: string;
   sentiment: CommentSentiment;
@@ -36,12 +36,18 @@ const MODERATION_PROMPT = `أنت نظام رقابة تعليقات لموقع 
    - flagged (مشكوك فيه - يحتاج مراجعة بشرية)
    - spam (محتوى مزعج أو ترويج ذاتي)
    - harmful (ضار - يحتوي خطاب كراهية أو عنف أو تحرش)
+   - low_value (تعليق بلا قيمة أو خارج الموضوع: أرقام، حروف عشوائية، نسخ من نص الخبر، كلام لا صلة له بالخبر)
+
+   الحكم على الصلة بالخبر: إن وصلك «عنوان الخبر» ومقتطف منه فاحكم هل التعليق يتفاعل مع موضوعه.
+   التعليق الذي لا يضيف رأياً ولا تفاعلاً (رقم، رمز، حروف مكررة، جملة منسوخة من نص الخبر، نص عام يُلصق على أي خبر) هو low_value مع detected: ["low_value"] أو ["off_topic"].
+   لكن العبارات القصيرة المعتادة المناسبة لسياق الخبر ليست low_value: التعزية والدعاء على أخبار الوفاة، والتهنئة على أخبار الإنجاز، والدعاء بالشفاء على أخبار المرض — كلها safe.
 
 3. أرجع درجة رقمية من 0 إلى 100:
    - 80–100 → safe (آمن)
    - 60–79  → flagged (مشكوك فيه)
    - 40–59  → spam (سبام)
    - 0–39   → harmful (ضار)
+   - low_value: استخدم درجة 50–70 (ليس ضاراً لكنه لا يستحق النشر التلقائي)
 
 4. حلّل أيضاً مشاعر التعليق تجاه موضوع الخبر:
    - sentiment: positive (إيجابي) أو neutral (محايد) أو negative (سلبي)
@@ -62,13 +68,16 @@ const MODERATION_PROMPT = `أنت نظام رقابة تعليقات لموقع 
 - "الله يحفظ الوطن... وبالمناسبة ساهمت في بنك X للاستثمار وأرباحي الشهرية ممتازة أنصحكم فيه" → spam (45): ترويج مالي مقنّع.
 - "يا كلب يا حقير أنت وأمثالك" → harmful (20): سبّ صريح.
 - "فلان الفلاني معروف أنه حرامي وسارق أموال الناس" → flagged (65): اتهام جنائي محدد لشخص مسمّى يحتاج مراجعة.
+- "إنا لله وإنا إليه راجعون" على خبر وفاة → safe (90): تعزية مناسبة للخبر رغم قصرها.
+- "65" أو "..." أو "ههههه" على أي خبر → low_value (55): لا رأي ولا تفاعل مع الخبر.
+- جملة منقولة حرفياً من عنوان الخبر أو نصه دون إضافة → low_value (55): نسخ من نص الخبر.
 
 5. أعد النتيجة فقط بصيغة JSON بهذا الشكل:
 
 {
   "score": رقم,
-  "classification": "safe | flagged | spam | harmful",
-  "detected": ["hate_speech", "profanity", "spam", "harassment", "violence", "misinformation", "personal_attack", "adult_content", "off_topic", "self_promotion"],
+  "classification": "safe | flagged | spam | harmful | low_value",
+  "detected": ["hate_speech", "profanity", "spam", "harassment", "violence", "misinformation", "personal_attack", "adult_content", "off_topic", "self_promotion", "low_value"],
   "reason": "شرح قصير جداً يوضح السبب",
   "sentiment": "positive | neutral | negative",
   "sentiment_confidence": رقم من 0 إلى 1
@@ -82,6 +91,35 @@ export interface ModerateCommentOptions {
    * (feedback loop). Appended to the system prompt when provided.
    */
   calibrationExamples?: string;
+  /**
+   * The commented article, so the model can judge relevance (a bare "65" or a
+   * line copied from the body is low_value; a condolence on death news is
+   * safe). Adds roughly 200-300 input tokens per call (title + ≤ 400-char
+   * excerpt) on the mini-tier model.
+   */
+  article?: { title?: string | null; excerpt?: string | null };
+}
+
+const ARTICLE_EXCERPT_MAX_CHARS = 400;
+
+/** User message: the comment, prefixed with the article context when known. */
+export function buildModerationUserMessage(
+  commentText: string,
+  article?: ModerateCommentOptions["article"],
+): string {
+  const title = article?.title?.replace(/\s+/g, " ").trim();
+  if (!title) return `"${commentText}"`;
+  const excerpt = (article?.excerpt ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, ARTICLE_EXCERPT_MAX_CHARS);
+  return [
+    `عنوان الخبر: ${title}`,
+    ...(excerpt ? [`مقتطف من الخبر: ${excerpt}`] : []),
+    "",
+    `التعليق: "${commentText}"`,
+  ].join("\n");
 }
 
 function fallbackResult(reason: string): ModerationResult {
@@ -115,7 +153,7 @@ export async function moderateComment(
         },
         {
           role: "user",
-          content: `"${commentText}"`
+          content: buildModerationUserMessage(commentText, opts?.article)
         }
       ],
       options: { jsonMode: true, temperature: 0.1, maxTokens: 500 },
@@ -131,7 +169,7 @@ export async function moderateComment(
     const result = JSON.parse(content) as ModerationResult & { sentiment_confidence?: number };
 
     // Validate and normalize the result
-    const validClassifications = ["safe", "flagged", "spam", "harmful"];
+    const validClassifications = ["safe", "flagged", "spam", "harmful", "low_value"];
     const validSentiments: CommentSentiment[] = ["positive", "neutral", "negative"];
     const rawConfidence = result.sentimentConfidence ?? result.sentiment_confidence;
     const normalizedResult: ModerationResult = {
@@ -167,6 +205,9 @@ export function getStatusFromClassification(classification: string): "approved" 
       return "rejected";
     case "spam":
       return "rejected";
+    // بلا قيمة / خارج الموضوع: لا يُنشر تلقائياً ولا يُرفض آلياً — يحسمه مشرف،
+    // ولا يكسب نقاطاً حتى لو اعتُمد (commentLoyalty.commentAwardBlocker).
+    case "low_value":
     case "flagged":
     default:
       return "pending";

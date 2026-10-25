@@ -25,6 +25,9 @@ import {
 import type { SuspiciousWordMatch } from "../utils/suspiciousWordsChecker";
 import { detectLanguage } from "../sentiment-analyzer";
 import { storage } from "../storage";
+import { lowValueShare, TRUST_MAX_LOW_VALUE_SHARE } from "./commentQuality";
+import { isUserFrozen } from "./commentSuspicion";
+import { awardCommentPointsOnApproval } from "./commentLoyalty";
 
 /** Issues that must never be auto-published without a human decision. */
 export const SEVERE_ISSUES = [
@@ -162,6 +165,10 @@ export interface CommenterTrust {
  * A commenter with a long clean history earns the fast lane: their
  * borderline-"flagged" comments (score ≥ 60, no severe issues) publish
  * immediately instead of rotting in the review queue.
+ *
+ * Anti-farming: approved counts were inflated by auto-approved junk ("1",
+ * "."), so the lane also requires < 30% low-value among the last 50 approved
+ * comments and an account that is not frozen for comment farming.
  */
 export async function getCommenterTrust(userId: string): Promise<CommenterTrust> {
   const [row] = await db
@@ -175,7 +182,19 @@ export async function getCommenterTrust(userId: string): Promise<CommenterTrust>
   const approvedCount = Number(row?.approvedCount ?? 0);
   const rejectedCount = Number(row?.rejectedCount ?? 0);
   const total = approvedCount + rejectedCount;
-  const trusted = approvedCount >= 30 && (total === 0 || rejectedCount / total < 0.05);
+  let trusted = approvedCount >= 30 && (total === 0 || rejectedCount / total < 0.05);
+
+  if (trusted) {
+    const lastApproved = await db
+      .select({ content: comments.content })
+      .from(comments)
+      .where(and(eq(comments.userId, userId), eq(comments.status, "approved")))
+      .orderBy(desc(comments.createdAt))
+      .limit(50);
+    trusted =
+      lowValueShare(lastApproved.map((c) => c.content)) < TRUST_MAX_LOW_VALUE_SHARE &&
+      !(await isUserFrozen(userId));
+  }
   return { approvedCount, rejectedCount, trusted };
 }
 
@@ -401,6 +420,13 @@ export interface ModerationPipelineParams {
   suspiciousAutoRejected?: boolean;
   /** Human-readable list of matched suspicious words (for the audit note). */
   suspiciousWordsNote?: string;
+  /**
+   * Submit-time quality hold (e.g. COPIED_HOLD_REASON): the comment stays
+   * pending for a human regardless of the AI verdict, with this reason.
+   */
+  qualityHoldReason?: string;
+  /** Article context for the AI relevance check; loaded by articleId when omitted. */
+  article?: { title?: string | null; excerpt?: string | null };
   /** Called after the comment status changes (e.g. to invalidate caches). */
   onStatusChange?: (status: "approved" | "rejected" | "pending") => void | Promise<void>;
 }
@@ -414,7 +440,25 @@ export interface ModerationPipelineOutcome {
     | "suspicious_words"
     | "ai"
     | "trusted_fast_lane"
+    | "quality_hold"
     | "ai_error";
+}
+
+async function loadArticleForModeration(
+  articleId: string,
+): Promise<{ title: string; excerpt: string | null } | undefined> {
+  try {
+    const [row] = await db
+      .select({ title: articles.title, excerpt: articles.excerpt })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    return row;
+  } catch (error) {
+    // Non-fatal: moderation still runs on the comment text alone.
+    console.error("[Comment Insights] Failed to load article context:", error);
+    return undefined;
+  }
 }
 
 /**
@@ -468,7 +512,8 @@ export async function runCommentModerationPipeline(
 
     // 2. AI moderation + sentiment (single call), calibrated by human feedback.
     const calibrationExamples = await getCalibrationExamples();
-    const result = await moderateComment(params.content, { calibrationExamples });
+    const article = params.article ?? (await loadArticleForModeration(params.articleId));
+    const result = await moderateComment(params.content, { calibrationExamples, article });
     await persistCommentAnalysis(params.commentId, params.content, result);
 
     // 3. Suspicious-words note (kept from the legacy flow).
@@ -493,6 +538,14 @@ export async function runCommentModerationPipeline(
       // Word filter demands a human look regardless of the AI verdict.
       return { status: "pending", result, decisionPath: "suspicious_words" };
     }
+    if (params.qualityHoldReason) {
+      // e.g. copied from the article body: a human decides; never auto-published.
+      await db
+        .update(comments)
+        .set({ status: "pending", moderationReason: params.qualityHoldReason })
+        .where(eq(comments.id, params.commentId));
+      return { status: "pending", result, decisionPath: "quality_hold" };
+    }
 
     const aiError = result.detected.includes("ai_error");
     let status = getStatusFromClassification(result.classification);
@@ -507,6 +560,7 @@ export async function runCommentModerationPipeline(
     if (
       !aiError &&
       status === "pending" &&
+      result.classification !== "low_value" &&
       result.score >= 60 &&
       !hasSevereIssue(result.detected)
     ) {
@@ -534,6 +588,9 @@ export async function runCommentModerationPipeline(
           reason: result.reason,
           automated: true,
         });
+      } else {
+        // Points are earned on approval only (never at creation).
+        await awardCommentPointsOnApproval(params.commentId, "article");
       }
       await params.onStatusChange?.(status);
     }

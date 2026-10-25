@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { articles, comments, users } from "@shared/schema";
+import { visibleCommentAuthorCondition } from "./commentVisibility";
 
 /**
  * شجرة التعليقات المعتمدة لمقال (مستوى رد واحد) كما يعرضها تطبيق الجوال.
@@ -32,7 +33,14 @@ export async function getApprovedCommentTree(slug: string) {
     })
     .from(comments)
     .leftJoin(users, eq(comments.userId, users.id))
-    .where(and(eq(comments.articleId, article.id), eq(comments.status, "approved")))
+    .where(
+      and(
+        eq(comments.articleId, article.id),
+        eq(comments.status, "approved"),
+        // Hide banned/suspended/deleted authors (expired bans show again).
+        visibleCommentAuthorCondition(),
+      ),
+    )
     .orderBy(comments.createdAt);
 
   type CommentNode = (typeof rows)[number]["comment"] & {
