@@ -128,6 +128,8 @@ export async function getStaffUserAccount(userId: string): Promise<StaffUserAcco
 
 /** صحة النظام وتنبيهات الإدارة للمشرفين فقط (المستخدم الخارق يمر عبر userHasPermission). */
 export const STAFF_SYSTEM_HEALTH_PERMISSION = "ai_hub.view";
+/** حفظ شحنة رصيد أو حد تنبيه من تطبيق الديسك (قرار المالك 2026-10-25). */
+export const STAFF_BALANCE_MANAGE_PERMISSION = "ai_hub.manage";
 
 export async function resolveStaffCapabilitiesAndRoles(
   userId: string,
@@ -147,6 +149,7 @@ export async function resolveStaffCapabilitiesAndRoles(
     canManageScheduledSocial,
     canCreateSocial,
     canAiHubView,
+    canAiHubManage,
   ] = await Promise.all([
     typeof getUserRoleNames === "function"
       ? getUserRoleNames(userId).catch(() => (legacyRole ? [legacyRole] : []))
@@ -158,6 +161,7 @@ export async function resolveStaffCapabilitiesAndRoles(
     userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
     userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_CREATE),
     userHasPermission(userId, STAFF_SYSTEM_HEALTH_PERMISSION),
+    userHasPermission(userId, STAFF_BALANCE_MANAGE_PERMISSION),
   ]);
 
   const roleList =
@@ -179,6 +183,7 @@ export async function resolveStaffCapabilitiesAndRoles(
       },
       canSystemHealth: Boolean(canAiHubView),
       canAdminAlerts: Boolean(canAiHubView),
+      canManageBalances: Boolean(canAiHubView && canAiHubManage),
     },
   };
 }

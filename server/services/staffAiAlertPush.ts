@@ -7,6 +7,8 @@
 //    مخزن دائري بالذاكرة تقرؤه /api/v1/staff/alerts.
 //  - حدود الميزانية (80% / 100%): تُقيَّم في وظيفة aiProviderHealthCheck،
 //    وتُرسل مرة واحدة لكل ميزانية/شهر/حد بعلامة في system_settings.
+//  - «أرصدة النماذج» (منخفض/حرج): تُقيَّم في الوظيفة نفسها، إشعار واحد عند
+//    العبور إلى مستوى أشد، ويُعاد التسليح بالتعافي أو بحفظ شحنة جديدة.
 //
 // كل الدوال هنا لا ترمي — الفشل يُسجَّل فقط ولا يمس مسار الذكاء الاصطناعي.
 import { eq } from "drizzle-orm";
@@ -293,6 +295,57 @@ export async function evaluateAiBudgetAlerts(now: Date = new Date()): Promise<nu
       interruptionLevel: level === 100 ? "time-sensitive" : "active",
     });
     pushed++;
+  }
+  return pushed;
+}
+
+// ── 4) أرصدة النماذج (منخفض / حرج) ──────────────────────────────────
+
+const BALANCES_DEEPLINK = "sabqdesk://balances";
+
+/**
+ * يقرأ الأرصدة (من الذاكرة المؤقتة ~10 دقائق) ويرسل إشعاراً واحداً لكل عبور
+ * إلى «منخفض» أو «حرج». المستوى المخزَّن يُكتب ذرياً (setWhere) فلا تُرسل
+ * نسختان الإشعار نفسه، والعودة إلى «جيد» تخزّن none فتعيد التسليح.
+ */
+export async function evaluateAiBalanceAlerts(now: Date = new Date()): Promise<number> {
+  const svc = await import("./aiBalanceService");
+  const { decideBalanceAlert, buildBalancePush } = await import("./aiBalanceMath");
+  const list = await svc.getAllBalances({ now });
+  let pushed = 0;
+  for (const b of list.providers) {
+    try {
+      const stored = await svc.readAlertLevel(b.provider);
+      const decision = decideBalanceAlert(stored, b.state);
+      if (!decision.store) continue;
+      const claimed = await svc.claimAlertLevel(b.provider, decision.store, now);
+      if (!claimed || !decision.push) continue;
+      const measured = b.kind === "budget" ? b.remaining : b.amount;
+      if (measured == null) continue;
+      const copy = buildBalancePush({
+        provider: b.provider,
+        label: b.label,
+        kind: b.kind,
+        unit: b.unit,
+        level: decision.push,
+        amount: measured,
+        total: b.total,
+        threshold: b.threshold.low,
+        daysLeft: b.daysLeft,
+        resetsAt: b.resetsAt,
+      });
+      await sendStaffAdminPush("aiAlerts", {
+        title: copy.title,
+        body: copy.body,
+        type: "ai_status",
+        deeplink: `${BALANCES_DEEPLINK}/${b.provider}`,
+        collapseId: `desk-ai-balance-${b.provider}`.slice(0, 64),
+        interruptionLevel: decision.push === "critical" ? "time-sensitive" : "active",
+      });
+      pushed++;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} balance alert failed for ${b.provider}:`, shortenAiError(String(err)));
+    }
   }
   return pushed;
 }
