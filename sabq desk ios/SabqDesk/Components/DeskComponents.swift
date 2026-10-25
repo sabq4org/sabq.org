@@ -50,6 +50,53 @@ struct StatusPill: View {
     }
 }
 
+/// Status chip with a semantic tone: palette ink on a low-opacity fill of the
+/// same ink (AA in light and dark). Optionally led by a small symbol.
+struct StatusChip: View {
+    let title: String
+    var tone: DeskTone = .neutral
+    var systemImage: String?
+
+    var body: some View {
+        HStack(spacing: DeskLayout.space4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+            }
+            Text(title)
+        }
+        .deskText(DeskType.tag)
+        .foregroundStyle(tone.ink)
+        .padding(.horizontal, DeskLayout.space8)
+        .padding(.vertical, DeskLayout.space4)
+        .background(tone.fill, in: Capsule())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// iOS Settings-style SF Symbol inside a tinted rounded square. Decorative:
+/// hidden from VoiceOver, the row's text carries the meaning.
+struct DeskIconTile: View {
+    let systemImage: String
+    var tone: DeskTone = .info
+    @ScaledMetric(relativeTo: .body) private var side: CGFloat = DeskLayout.iconTile
+
+    init(systemImage: String, tone: DeskTone = .info) {
+        self.systemImage = systemImage
+        self.tone = tone
+    }
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: side * 0.5, weight: .semibold))
+            .foregroundStyle(tone.ink)
+            .frame(width: side, height: side)
+            .background(tone.tileFill, in: RoundedRectangle(cornerRadius: DeskRadius.small, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
 /// Inline error line shown above a form or action bar.
 struct ErrorLine: View {
     let message: String
@@ -99,11 +146,56 @@ extension StaffSocialStatus {
     }
 }
 
+extension StaffTicketStatus {
+    var tone: DeskTone {
+        switch self {
+        case .open: return .warning
+        case .answered: return .success
+        case .closed: return .neutral
+        }
+    }
+}
+
+extension StaffSocialStatus {
+    var tone: DeskTone {
+        switch self {
+        case .draft: return .warning
+        case .scheduled, .processing: return .info
+        case .published: return .success
+        case .failed: return .danger
+        case .canceled, .unknown: return .neutral
+        }
+    }
+}
+
 extension StaffInboxItem {
     var statusTint: Color {
         switch kind {
         case .ticket: return StaffTicketStatus(rawValue: status)?.tint ?? DeskTheme.textTertiary
         case .social: return StaffSocialStatus(rawValue: status)?.tint ?? DeskTheme.textTertiary
+        }
+    }
+
+    var statusTone: DeskTone {
+        switch kind {
+        case .ticket: return StaffTicketStatus(rawValue: status)?.tone ?? .neutral
+        case .social: return StaffSocialStatus(rawValue: status)?.tone ?? .neutral
+        }
+    }
+}
+
+extension StaffInboxKind {
+    var systemImage: String {
+        switch self {
+        case .ticket: return "bubble.left.and.bubble.right.fill"
+        case .social: return "paperplane.fill"
+        }
+    }
+
+    var tone: DeskTone {
+        switch self {
+        case .ticket: return .info
+        case .social: return .teal
         }
     }
 }

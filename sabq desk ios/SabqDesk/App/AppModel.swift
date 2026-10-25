@@ -154,3 +154,16 @@ final class AppModel {
         }
     }
 }
+
+#if DEBUG
+extension AppModel {
+    /// SwiftUI previews only: a signed-in model with fixed counts, no `/me`
+    /// round-trip, no push registration.
+    static func preview(me: StaffMe, unread: StaffUnreadCounts, client: StaffAPIClient) -> AppModel {
+        let model = AppModel(client: client)
+        model.phase = .ready(me)
+        model.unread = unread
+        return model
+    }
+}
+#endif
