@@ -58,4 +58,31 @@ final class DeepLinkAndRulesTests: XCTestCase {
         XCTAssertTrue(RiyadhTime.isSchedulable(earliest, now: now))
         XCTAssertFalse(RiyadhTime.isSchedulable(now, now: now))
     }
+
+    func testParsesHostOnlyAdminLinks() {
+        XCTAssertEqual(DeskDeepLink(url: URL(string: "sabqdesk://system")!), .systemHealth)
+        XCTAssertEqual(DeskDeepLink(url: URL(string: "SABQDESK://alerts")!), .alerts)
+        XCTAssertEqual(DeskDeepLink.systemHealth.url.absoluteString, "sabqdesk://system")
+        XCTAssertEqual(DeskDeepLink.alerts.url.absoluteString, "sabqdesk://alerts")
+        XCTAssertEqual(DeskDeepLink(url: DeskDeepLink.alerts.url), .alerts)
+        for raw in ["sabqdesk://system/x", "sabqdesk://alerts/1", "sabqdesk://social", "sabqdesk://ticket", "sabqdesk://other"] {
+            XCTAssertNil(DeskDeepLink(url: URL(string: raw)!), raw)
+        }
+    }
+
+    func testPushTypesRouteToTheAdminScreens() {
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "ai_status"]), .systemHealth)
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "admin_alert", "postId": "p1"]), .alerts)
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "admin_alert", "deeplink": "sabqdesk://alerts", "postId": "p1"]), .alerts)
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "ai_status", "deeplink": "sabqdesk://system"]), .systemHealth)
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "social_new", "postId": "p2"]), .social(id: "p2"))
+    }
+
+    func testSystemTabCapabilities() {
+        XCTAssertFalse(StaffCapabilities.none.canSystemTab)
+        XCTAssertTrue(StaffCapabilities(canSystemHealth: true).canSystemTab)
+        XCTAssertTrue(StaffCapabilities(canAdminAlerts: true).canSystemTab)
+        XCTAssertTrue(StaffCapabilities(canAdminAlerts: true).canOpenApp)
+        XCTAssertFalse(StaffCapabilities(canAdminAlerts: true).canOpenInbox)
+    }
 }

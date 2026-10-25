@@ -23,6 +23,12 @@ final class AppModel {
     private(set) var phase: Phase = .launching
     private(set) var unread = StaffUnreadCounts()
     var pendingLink: DeskDeepLink?
+    /// Admins: the push switches for AI status and admin alerts.
+    private(set) var alertPrefs: StaffAlertPrefs?
+    /// Last failure saving `alertPrefs`, shown under the toggles.
+    private(set) var alertPrefsError: String?
+    /// Admins: urgent «تنبيهات الإدارة», the badge on «النظام».
+    private(set) var urgentAlerts = 0
 
     let client: StaffAPIClient
     private var push = PushRegistrationState()
@@ -65,8 +71,9 @@ final class AppModel {
     /// `phase` by the caller through `handle(_:)`.
     func loadIdentity() async throws {
         let me = try await client.me()
-        phase = me.capabilities.canOpenInbox ? .ready(me) : .noAccess
-        guard me.capabilities.canOpenInbox else { return }
+        phase = me.capabilities.canOpenApp ? .ready(me) : .noAccess
+        guard me.capabilities.canOpenApp else { return }
+        alertPrefs = me.alertPrefs ?? alertPrefs
         await refreshUnread()
         await requestPushAuthorization()
         await registerPushTokenIfNeeded()
@@ -80,6 +87,9 @@ final class AppModel {
         await client.logout()
         unread = StaffUnreadCounts()
         pendingLink = nil
+        alertPrefs = nil
+        alertPrefsError = nil
+        urgentAlerts = 0
         phase = .signedOut
         try? await UNUserNotificationCenter.current().setBadgeCount(0)
     }
@@ -103,12 +113,60 @@ final class AppModel {
     }
 
     func refreshUnread() async {
-        guard me != nil else { return }
+        guard let me else { return }
+        if me.capabilities.canOpenInbox {
+            do {
+                unread = try await client.unreadCounts()
+                try? await UNUserNotificationCenter.current().setBadgeCount(unread.total)
+            } catch {
+                handle(error)
+            }
+        }
+        if me.capabilities.canAdminAlerts {
+            await refreshUrgentAlerts()
+        }
+    }
+
+    // MARK: - System (admins)
+
+    func refreshUrgentAlerts() async {
+        guard capabilities.canAdminAlerts else { return }
         do {
-            unread = try await client.unreadCounts()
-            try? await UNUserNotificationCenter.current().setBadgeCount(unread.total)
+            urgentAlerts = try await client.adminAlerts().urgentCount
         } catch {
             handle(error)
+        }
+    }
+
+    /// Called by the alerts screen after its own load, so the badge matches the list.
+    func setUrgentAlerts(_ count: Int) {
+        urgentAlerts = max(count, 0)
+    }
+
+    func loadAlertPrefsIfNeeded() async {
+        guard alertPrefs == nil, capabilities.canSystemTab else { return }
+        do {
+            alertPrefs = try await client.alertPrefs()
+        } catch {
+            handle(error)
+        }
+    }
+
+    /// Applies the change at once and rolls it back if the server refuses.
+    func updateAlertPrefs(_ update: StaffAlertPrefsUpdate) async {
+        let previous = alertPrefs
+        var optimistic = alertPrefs ?? StaffAlertPrefs()
+        if let value = update.aiAlerts { optimistic.aiAlerts = value }
+        if let value = update.adminAlerts { optimistic.adminAlerts = value }
+        alertPrefs = optimistic
+        alertPrefsError = nil
+        do {
+            alertPrefs = try await client.updateAlertPrefs(update)
+        } catch {
+            alertPrefs = previous
+            if !handle(error) {
+                alertPrefsError = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
+            }
         }
     }
 

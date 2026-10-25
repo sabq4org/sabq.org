@@ -173,6 +173,80 @@ enum Fixtures {
     }
     """
 
+    static let meAdmin = """
+    {
+      "id": "admin-uuid", "email": "admin@sabq.org", "name": "صحيفة سبق", "role": "system_admin",
+      "profileImageUrl": "https://media.sabq.org/avatars/admin.jpg", "twoFactorEnabled": true,
+      "roles": ["system_admin"],
+      "capabilities": {
+        "canTickets": true,
+        "canSocial": { "view": true, "publish": true, "schedule": true, "reject": true },
+        "canSystemHealth": true, "canAdminAlerts": true
+      },
+      "alertPrefs": { "aiAlerts": true, "adminAlerts": false }
+    }
+    """
+
+    static let inboxV2 = """
+    {
+      "items": [
+        {
+          "id": "social-org", "kind": "social", "title": "مقترح من حساب المؤسسة",
+          "previewText": "@sabq\\nسلمان الدوسري يكتب : نص التغريدة",
+          "sender": { "id": "u-1", "name": "صحيفة سبق", "kind": "organization", "roleKind": "system_admin",
+                      "avatarUrl": "https://media.sabq.org/avatars/u-1.jpg" },
+          "createdAt": "2026-10-25T10:00:00.000Z", "updatedAt": "2026-10-25T11:00:00.000Z",
+          "status": "canceled", "hasUnread": false, "lastError": null, "canceledBySelf": true
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+    """
+
+    static let systemHealth = """
+    {
+      "generatedAt": "2026-10-25T15:13:40.000Z",
+      "lastCheckAt": "2026-10-25T15:13:00.000Z",
+      "summary": { "status": "partial", "title": "تعطّل جزئي", "detail": "نموذج واحد متوقف." },
+      "aiAlertsEnabled": true,
+      "models": [
+        { "provider": "anthropic", "providerLabel": "Anthropic", "modelId": "claude-sonnet-4-6",
+          "status": "down", "rawStatus": "quota_exceeded", "lastCheckAt": "2026-10-25T15:13:00.000Z",
+          "since": "2026-10-25T14:58:00.000Z", "cooldownUntil": "2026-10-25T15:40:00.000Z",
+          "lastError": { "code": "QUOTA_EXCEEDED", "message": "quota exceeded" },
+          "requests24h": 120, "failures24h": 7 },
+        { "provider": "openai", "providerLabel": "OpenAI", "modelId": "gpt-5.1",
+          "status": "up", "rawStatus": "healthy", "lastCheckAt": null, "since": null, "cooldownUntil": null,
+          "lastError": null, "requests24h": 2471, "failures24h": 0 },
+        { "provider": "google", "modelId": "gemini-2.5-flash", "status": "sleeping" }
+      ],
+      "budgets": [
+        { "id": "b1", "label": "OpenAI", "limitUsd": 500, "spentUsd": 410.2, "percent": 82, "period": "monthly" }
+      ]
+    }
+    """
+
+    static let adminAlerts = """
+    {
+      "generatedAt": "2026-10-25T15:15:00.000Z",
+      "counts": { "urgent": 1, "info": 2 },
+      "items": [
+        { "id": "social_failed:post-1", "kind": "social_failed", "severity": "urgent",
+          "title": "فشل نشر تغريدة", "body": "رفضتها منصة X بعد 3 محاولات.",
+          "occurredAt": "2026-10-25T15:09:00.000Z", "deeplink": "sabqdesk://social/post-1",
+          "action": { "type": "retry_social", "postId": "post-1" } },
+        { "id": "ai_incident:gemini", "kind": "ai_incident", "severity": "info",
+          "title": "نموذج متدهور", "body": "gemini-2.5-flash",
+          "occurredAt": "2026-10-25T14:00:00.000Z", "deeplink": "sabqdesk://system",
+          "action": { "type": "open_system" } },
+        { "id": "future:1", "kind": "something_new", "severity": "critical",
+          "title": "نوع جديد", "body": null, "occurredAt": null, "deeplink": null,
+          "action": { "type": "launch_rocket" } }
+      ]
+    }
+    """
+
     static let loginSuccess = """
     {
       "success": true,
