@@ -161,7 +161,7 @@ private struct ConversationRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.sender.name)
-                        .deskText(item.hasUnread ? DeskType.metaEmphasis : DeskType.meta)
+                        .deskText(item.hasUnread ? DeskRowType.name : DeskRowType.nameRead)
                         .foregroundStyle(DeskTheme.textPrimary)
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
@@ -170,7 +170,7 @@ private struct ConversationRow: View {
                             color: item.hasUnread ? DeskInk.link : DeskTheme.textSecondary)
                 }
                 Text(item.title)
-                    .deskText(item.hasUnread ? DeskType.metaEmphasis : DeskType.meta)
+                    .deskText(item.hasUnread ? DeskRowType.subject : DeskRowType.subjectRead)
                     .foregroundStyle(DeskTheme.textPrimary)
                     .lineLimit(1)
                 HStack(spacing: DeskLayout.space8) {

@@ -301,7 +301,7 @@ private struct SocialRow: View {
                             .accessibilityHidden(true)
                     }
                     Text(item.sender.name)
-                        .deskText(DeskType.metaEmphasis)
+                        .deskText(DeskRowType.nameRead)
                         .foregroundStyle(DeskTheme.textPrimary)
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
@@ -309,7 +309,7 @@ private struct SocialRow: View {
                     LTRText(text: trailingTime, role: DeskType.timestamp, color: DeskTheme.textSecondary)
                 }
                 Text(item.previewText?.isEmpty == false ? item.previewText! : item.title)
-                    .deskText(DeskType.excerpt)
+                    .deskText(DeskRowType.preview)
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(3)
                 footer
@@ -389,13 +389,13 @@ private struct TimelineRow: View {
             VStack(alignment: .leading, spacing: DeskLayout.space4) {
                 HStack(spacing: 6) {
                     Text(item.sender.name)
-                        .deskText(DeskType.metaEmphasis)
+                        .deskText(DeskRowType.nameRead)
                         .foregroundStyle(DeskTheme.textPrimary)
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
                 }
                 Text(item.previewText?.isEmpty == false ? item.previewText! : item.title)
-                    .deskText(DeskType.excerpt)
+                    .deskText(DeskRowType.preview)
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(3)
             }
