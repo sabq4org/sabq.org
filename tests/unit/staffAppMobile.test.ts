@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   claimPostForImmediatePublish: vi.fn(),
   publishClaimedPost: vi.fn(),
   schedulePost: vi.fn(),
+  returnPostToDraft: vi.fn(),
   sendEmailNotification: vi.fn(),
   createNotification: vi.fn(),
   sendPushToUserApp: vi.fn(),
@@ -93,6 +94,7 @@ vi.mock("../../server/services/socialPublishing/socialPublishingService", async 
       mocks.claimPostForImmediatePublish(...args),
     publishClaimedPost: (...args: unknown[]) => mocks.publishClaimedPost(...args),
     schedulePost: (...args: unknown[]) => mocks.schedulePost(...args),
+    returnPostToDraft: (...args: unknown[]) => mocks.returnPostToDraft(...args),
   };
 });
 
@@ -752,6 +754,61 @@ describe("Sabq Desk Staff API — Unified Inbox, Cursor Pagination & Unread Coun
     expect(unreadIds).toEqual(["social-1", "social-2"]);
   });
 
+  it("serves the full published/canceled history when the desk asks for that status, with the rejection reason", async () => {
+    mocks.listOpinionTickets.mockResolvedValue([]);
+    const rejected = {
+      ...sampleSocialProposals[0],
+      id: "social-rejected",
+      status: "canceled",
+      lastError: "مكرر — نُشر الخبر قبل ساعة",
+      updatedAt: "2026-10-20T08:00:00.000Z",
+      updated_at: "2026-10-20T08:00:00.000Z",
+    };
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue([rejected]);
+
+    const res = await call("GET", "/api/v1/staff/inbox?type=social&status=canceled");
+    expect(res.status).toBe(200);
+    const [, , filter] = mocks.listPendingSocialProposalsForDesk.mock.calls[0];
+    expect(filter).toEqual({ statuses: ["canceled"] });
+    const body = await res.json();
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]).toMatchObject({
+      id: "social-rejected",
+      status: "canceled",
+      lastError: "مكرر — نُشر الخبر قبل ساعة",
+    });
+
+    mocks.listPendingSocialProposalsForDesk.mockClear();
+    await call("GET", "/api/v1/staff/inbox?type=social&status=published");
+    expect(mocks.listPendingSocialProposalsForDesk.mock.calls[0][2]).toEqual({
+      statuses: ["published"],
+    });
+
+    // A comma list keeps the active query and filters after the merge.
+    mocks.listPendingSocialProposalsForDesk.mockClear();
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue([
+      { ...sampleSocialProposals[0], id: "p-draft", status: "draft" },
+      { ...sampleSocialProposals[0], id: "p-failed", status: "failed", lastError: "rate limit" },
+      { ...sampleSocialProposals[0], id: "p-sched", status: "scheduled" },
+    ]);
+    const multi = await call("GET", "/api/v1/staff/inbox?type=social&status=draft,processing,failed");
+    expect(mocks.listPendingSocialProposalsForDesk.mock.calls[0][2].statuses).toEqual([
+      "draft",
+      "scheduled",
+      "processing",
+    ]);
+    const multiItems = (await multi.json()).items;
+    expect(multiItems.map((i: any) => i.id).sort()).toEqual(["p-draft", "p-failed"]);
+    expect(multiItems.find((i: any) => i.id === "p-failed").lastError).toBe("rate limit");
+
+    // A draft keeps no reason even if an old error is stored on the row.
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue([
+      { ...sampleSocialProposals[0], lastError: "قديم" },
+    ]);
+    const draftRes = await call("GET", "/api/v1/staff/inbox?type=social");
+    expect((await draftRes.json()).items[0].lastError).toBeNull();
+  });
+
   it("GET /unread-counts keeps the social count draft-only (default pending filter)", async () => {
     mocks.getOpinionTicketsUnreadCounts.mockResolvedValue({ unreadCount: 0, unansweredCount: 0 });
     mocks.listPendingSocialProposalsForDesk.mockResolvedValue(sampleSocialProposals);
@@ -907,6 +964,55 @@ describe("Sabq Desk Staff API — Tickets, Social Actions, Schedule Validation, 
         }),
       }),
     );
+  });
+
+  it("returns a scheduled post to draft with schedule permission and a rejected one with reject permission", async () => {
+    const base = {
+      id: "soc-back",
+      articleId: "art-1",
+      platform: "x",
+      text: "تغريدة",
+      textSource: "custom",
+      linkUrl: null,
+      createdByUserId: "w-1",
+      publisherId: null,
+    };
+    mocks.returnPostToDraft.mockResolvedValue({ ...base, status: "draft", scheduledAt: null });
+
+    // Scheduled: schedule permission only → 200; reject permission only → 403.
+    mocks.getPost.mockResolvedValue({ ...base, status: "scheduled", scheduledAt: new Date() });
+    mocks.userHasPermission.mockImplementation(
+      async (_uid: string, code: string) => code === PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    );
+    const ok = await call("POST", "/api/v1/staff/social/soc-back/return-to-draft", {});
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).post.status).toBe("draft");
+    expect(mocks.returnPostToDraft).toHaveBeenCalledWith("soc-back");
+    expect(mocks.logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "social_post_return_to_draft", entityId: "soc-back" }),
+    );
+
+    mocks.userHasPermission.mockImplementation(
+      async (_uid: string, code: string) => code === PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    );
+    expect((await call("POST", "/api/v1/staff/social/soc-back/return-to-draft", {})).status).toBe(403);
+
+    // Canceled: reject permission → 200.
+    mocks.getPost.mockResolvedValue({ ...base, status: "canceled", lastError: "مكرر" });
+    expect((await call("POST", "/api/v1/staff/social/soc-back/return-to-draft", {})).status).toBe(200);
+
+    // Published: never goes back → 409 without touching the row.
+    mocks.returnPostToDraft.mockClear();
+    mocks.getPost.mockResolvedValue({ ...base, status: "published" });
+    const conflict = await call("POST", "/api/v1/staff/social/soc-back/return-to-draft", {});
+    expect(conflict.status).toBe(409);
+    expect((await conflict.json()).code).toBe("conflict");
+    expect(mocks.returnPostToDraft).not.toHaveBeenCalled();
+
+    // The body must be empty.
+    expect(
+      (await call("POST", "/api/v1/staff/social/soc-back/return-to-draft", { status: "draft" })).status,
+    ).toBe(400);
   });
 
   it("rate limits social publish/schedule/reject per user (429 rate_limited)", async () => {

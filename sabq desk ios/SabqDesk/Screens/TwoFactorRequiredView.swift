@@ -15,9 +15,8 @@ struct TwoFactorRequiredView: View {
     private static let securitySettingsURL = URL(string: "https://sabq.org/settings/security")!
 
     var body: some View {
-        DeskMessageView(systemImage: "lock.shield",
-                        title: "فعّل المصادقة الثنائية أولاً",
-                        message: message ?? "يلزم تفعيل المصادقة الثنائية (2FA) على حسابك للوصول إلى تطبيق الديسك. فعّلها من إعدادات الأمان في موقع سبق ثم ارجع هنا.") {
+        DeskMessageView(title: "فعّل المصادقة الثنائية أولاً",
+                        message: message ?? "يلزم تفعيل المصادقة الثنائية (2FA) على حسابك للوصول إلى مكتب سبق. فعّلها من إعدادات الأمان في موقع سبق ثم ارجع هنا.") {
             VStack(spacing: DeskLayout.space12) {
                 Button("فتح إعدادات الأمان") { openURL(Self.securitySettingsURL) }
                     .buttonStyle(DeskPrimaryButtonStyle())

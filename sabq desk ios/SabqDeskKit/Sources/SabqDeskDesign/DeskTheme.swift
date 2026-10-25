@@ -142,6 +142,13 @@ public struct DeskTextRole: Sendable {
 
     public enum Weight: Sendable { case regular, medium, semibold, bold }
 
+    public init(size: CGFloat, weight: Weight, style: Font.TextStyle, lineSpacing: CGFloat) {
+        self.size = size
+        self.weight = weight
+        self.style = style
+        self.lineSpacing = lineSpacing
+    }
+
     public var font: Font { .custom(postScriptName, size: size, relativeTo: style) }
 
     private var postScriptName: String {

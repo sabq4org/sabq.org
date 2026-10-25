@@ -2,9 +2,8 @@ import SabqDeskDesign
 import SabqDeskKit
 import SwiftUI
 
-/// Full-screen state: an icon, a title, an explanation and actions.
+/// Full-screen state: the desk robot, a title, an explanation and actions.
 struct DeskMessageView<Actions: View>: View {
-    let systemImage: String
     let title: String
     let message: String
     @ViewBuilder var actions: () -> Actions
@@ -12,10 +11,7 @@ struct DeskMessageView<Actions: View>: View {
     var body: some View {
         VStack(spacing: DeskLayout.space16) {
             Spacer()
-            Image(systemName: systemImage)
-                .font(.system(size: 40, weight: .regular))
-                .foregroundStyle(DeskTheme.primary)
-                .accessibilityHidden(true)
+            DeskMascot(size: 120)
             Text(title)
                 .deskText(DeskType.sectionHeading)
                 .foregroundStyle(DeskTheme.textPrimary)

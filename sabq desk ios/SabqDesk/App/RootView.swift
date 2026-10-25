@@ -69,29 +69,50 @@ struct RootView: View {
     }
 }
 
-/// Two tabs only (decision 2026-10-24): الوارد and الإعدادات.
+/// Three tabs (approved redesign 2026-10-25): المكتب for tweet proposals,
+/// الرسائل for contributors' messages, حسابي for the account. A member sees
+/// only the tabs their permissions open.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
 
-    enum Tab: Hashable { case inbox, settings }
-    @State private var tab: Tab = .inbox
+    enum Tab: Hashable { case desk, messages, account }
+    @State private var tab: Tab = .desk
 
     var body: some View {
         TabView(selection: $tab) {
-            InboxView()
-                .tabItem { Label("الوارد", systemImage: "tray") }
-                .badge(model.unread.total)
-                .tag(Tab.inbox)
+            if model.capabilities.canSocial.view {
+                DeskView(openAccount: { tab = .account })
+                    .tabItem { Label("المكتب", systemImage: "tray.full") }
+                    .badge(model.unread.social)
+                    .tag(Tab.desk)
+            }
+            if model.capabilities.canTickets {
+                MessagesView()
+                    .tabItem { Label("الرسائل", systemImage: "bubble.left.and.bubble.right") }
+                    .badge(model.unread.tickets)
+                    .tag(Tab.messages)
+            }
             SettingsView()
-                .tabItem { Label("الإعدادات", systemImage: "gearshape") }
-                .tag(Tab.settings)
+                .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
+                .tag(Tab.account)
         }
-        .onChange(of: model.pendingLink) { _, link in
-            if link != nil { tab = .inbox }
+        .tint(DeskInk.link)
+        .onAppear {
+            if !model.capabilities.canSocial.view { tab = .messages }
+            route(model.pendingLink)
         }
+        .onChange(of: model.pendingLink) { _, link in route(link) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refreshUnread() } }
+        }
+    }
+
+    private func route(_ link: DeskDeepLink?) {
+        switch link {
+        case .social?: if model.capabilities.canSocial.view { tab = .desk }
+        case .ticket?: if model.capabilities.canTickets { tab = .messages }
+        case nil: break
         }
     }
 }
@@ -100,8 +121,7 @@ struct NoAccessView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        DeskMessageView(systemImage: "lock",
-                        title: "لا تملك صلاحية الديسك",
+        DeskMessageView(title: "لا تملك صلاحية المكتب",
                         message: "يحتاج حسابك صلاحية الاستفسارات أو سجل النشر الاجتماعي. تواصل مع مدير النظام.") {
             Button("تسجيل الخروج") { Task { await model.signOut() } }
                 .buttonStyle(DeskSecondaryButtonStyle())
@@ -114,7 +134,7 @@ struct LaunchFailedView: View {
     let message: String
 
     var body: some View {
-        DeskMessageView(systemImage: "wifi.exclamationmark", title: "تعذر التحميل", message: message) {
+        DeskMessageView(title: "تعذر التحميل", message: message) {
             VStack(spacing: DeskLayout.space12) {
                 Button("إعادة المحاولة") { Task { await model.reloadIdentity() } }
                     .buttonStyle(DeskPrimaryButtonStyle())

@@ -494,6 +494,32 @@ export async function cancelPost(
   return updated;
 }
 
+/**
+ * يعيد مقترحاً مجدولاً أو مرفوضاً إلى «بانتظار القرار» (draft): يمسح موعد
+ * الجدولة وسبب الرفض. المنشور أو الجاري نشره لا يُمس (الشرط ذري في WHERE).
+ */
+export async function returnPostToDraft(postId: string): Promise<SocialPost> {
+  const [updated] = await db
+    .update(socialPosts)
+    .set({
+      status: "draft",
+      scheduledAt: null,
+      canceledByUserId: null,
+      lastError: null,
+      attempts: 0,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(socialPosts.id, postId), inArray(socialPosts.status, ["scheduled", "canceled"])))
+    .returning();
+  if (!updated) {
+    throw new SocialPublishValidationError(
+      "تعذرت الإعادة — المنشور نُشر أو دخل مرحلة النشر بالفعل",
+      409,
+    );
+  }
+  return updated;
+}
+
 // ── الاستعلام ──────────────────────────────────────────────────────
 
 export async function getPost(postId: string): Promise<SocialPost | null> {
@@ -1274,6 +1300,8 @@ export interface PendingSocialProposalItem {
   requestedAt: string | null;
   scheduledAt: string | null;
   publishedAt: string | null;
+  /** سبب الرفض (canceled) أو آخر خطأ نشر (failed). */
+  lastError: string | null;
   authorName: string | null;
   agencyName: string | null;
   proposerName: string | null;
@@ -1382,6 +1410,7 @@ export async function listPendingSocialProposalsForDesk(
       requestedAt: r.post.requestedAt ? new Date(r.post.requestedAt).toISOString() : null,
       scheduledAt: r.post.scheduledAt ? new Date(r.post.scheduledAt).toISOString() : null,
       publishedAt: r.post.publishedAt ? new Date(r.post.publishedAt).toISOString() : null,
+      lastError: r.post.lastError ?? null,
       authorName: isAuthor ? createdByName : null,
       agencyName,
       proposerName: isAgency ? agencyName ?? createdByName : createdByName,
