@@ -12,7 +12,7 @@ import { aiProviderHealth } from '../../shared/schema';
 import { isLeader } from '../leaderElection';
 import { aiGateway } from '../ai/gateway';
 import type { AIHubProvider } from '../ai/gateway';
-import { evaluateAiBudgetAlerts } from '../services/staffAiAlertPush';
+import { evaluateAiBalanceAlerts, evaluateAiBudgetAlerts } from '../services/staffAiAlertPush';
 
 let isRunning = false;
 
@@ -56,6 +56,14 @@ async function recheckTrippedModels() {
     if (pushed > 0) console.log(`[AI Health Check] budget alerts pushed: ${pushed}`);
   } catch (error) {
     console.error('[AI Health Check] budget evaluation failed:', error);
+  }
+
+  // Model balances (low / critical) → one staff-app push per level crossing.
+  try {
+    const pushed = await evaluateAiBalanceAlerts();
+    if (pushed > 0) console.log(`[AI Health Check] balance alerts pushed: ${pushed}`);
+  } catch (error) {
+    console.error('[AI Health Check] balance evaluation failed:', error);
   } finally {
     isRunning = false;
   }

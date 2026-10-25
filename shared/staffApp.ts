@@ -112,6 +112,8 @@ export interface StaffCapabilities {
   canSystemHealth: boolean;
   /** تنبيهات الإدارة — القاعدة نفسها (ai_hub.view). */
   canAdminAlerts: boolean;
+  /** تحديث أرصدة النماذج وحدود تنبيهها (ai_hub.view + ai_hub.manage). القراءة تكفيها canSystemHealth. */
+  canManageBalances: boolean;
 }
 
 export interface StaffAlertPrefs {
@@ -125,6 +127,34 @@ export const staffAlertPrefsUpdateSchema = z
   .object({
     aiAlerts: z.boolean().optional(),
     adminAlerts: z.boolean().optional(),
+  })
+  .strict();
+
+// ── أرصدة النماذج (للمدراء) ─────────────────────────────────────────
+export const STAFF_AI_BALANCE_PROVIDERS = ["deepseek", "openai", "anthropic", "gemini", "elevenlabs"] as const;
+export const staffAiBalanceProviderSchema = z.enum(STAFF_AI_BALANCE_PROVIDERS);
+export type StaffAiBalanceProvider = z.infer<typeof staffAiBalanceProviderSchema>;
+
+/**
+ * POST /system/balances/:provider/topup
+ *  - add: «أضفتُ شحنة جديدة» (amountUsd = مبلغ الشحنة، topupAt = تاريخها).
+ *  - set: «الرصيد الحالي في اللوحة» (amountUsd = الرصيد المعروض الآن).
+ *  - budget: الميزانية الشهرية لـ Gemini.
+ * threshold اختياري يحفظ حد التنبيه في الطلب نفسه.
+ */
+export const staffAiBalanceTopupSchema = z
+  .object({
+    mode: z.enum(["add", "set", "budget"]),
+    amountUsd: z.number().positive().max(1_000_000),
+    topupAt: z.string().datetime({ offset: true }).optional().nullable(),
+    threshold: z.number().positive().max(100_000_000).optional().nullable(),
+  })
+  .strict();
+
+/** PUT /system/balances/:provider/threshold — الحد بوحدة المزوّد (دولار، أو أحرف لـ ElevenLabs). */
+export const staffAiBalanceThresholdSchema = z
+  .object({
+    threshold: z.number().positive().max(100_000_000),
   })
   .strict();
 
