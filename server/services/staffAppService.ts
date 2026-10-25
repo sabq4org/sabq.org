@@ -22,6 +22,7 @@ import {
 import { composeXPostText, validateXPostText } from "@shared/socialPostText";
 import {
   STAFF_APP_BUNDLE_ID,
+  computeStaffCanceledBySelf,
   decodeStaffInboxCursor,
   encodeStaffInboxCursor,
   type StaffCapabilities,
@@ -29,6 +30,8 @@ import {
   type StaffInboxItem,
   type StaffInboxType,
   type StaffSenderKind,
+  resolveStaffSocialSenderKind,
+  safeStaffAvatarUrl,
 } from "@shared/staffApp";
 import {
   getUserRoleNames,
@@ -42,6 +45,7 @@ import {
   fullName,
   getOpinionTicketsUnreadCounts,
   listOpinionTickets,
+  roleNamesForUserIds,
 } from "./opinionTicketsService";
 import {
   buildArticleUrl,
@@ -122,6 +126,9 @@ export async function getStaffUserAccount(userId: string): Promise<StaffUserAcco
   };
 }
 
+/** صحة النظام وتنبيهات الإدارة للمشرفين فقط (المستخدم الخارق يمر عبر userHasPermission). */
+export const STAFF_SYSTEM_HEALTH_PERMISSION = "ai_hub.view";
+
 export async function resolveStaffCapabilitiesAndRoles(
   userId: string,
   legacyRole?: string | null,
@@ -139,6 +146,7 @@ export async function resolveStaffCapabilitiesAndRoles(
     canScheduleSocial,
     canManageScheduledSocial,
     canCreateSocial,
+    canAiHubView,
   ] = await Promise.all([
     typeof getUserRoleNames === "function"
       ? getUserRoleNames(userId).catch(() => (legacyRole ? [legacyRole] : []))
@@ -149,6 +157,7 @@ export async function resolveStaffCapabilitiesAndRoles(
     userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE),
     userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
     userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_CREATE),
+    userHasPermission(userId, STAFF_SYSTEM_HEALTH_PERMISSION),
   ]);
 
   const roleList =
@@ -168,6 +177,8 @@ export async function resolveStaffCapabilitiesAndRoles(
         schedule: Boolean(canScheduleSocial),
         reject: Boolean(canManageScheduledSocial || canCreateSocial),
       },
+      canSystemHealth: Boolean(canAiHubView),
+      canAdminAlerts: Boolean(canAiHubView),
     },
   };
 }
@@ -177,6 +188,12 @@ export function mapTicketAuthorKindToSenderKind(
 ): StaffSenderKind {
   if (authorKind === "reporter") return "reporter";
   return "writer";
+}
+
+function senderRoleKind(kind: StaffSenderKind): string {
+  if (kind === "reporter") return "reporter";
+  if (kind === "organization") return "organization";
+  return "opinion_author";
 }
 
 function compareInboxItemsDesc(a: StaffInboxItem, b: StaffInboxItem): number {
@@ -356,6 +373,7 @@ export async function listStaffUnifiedInbox(options: {
         name: senderName,
         kind: senderKind,
         roleKind: t.authorKind ?? "other",
+        avatarUrl: safeStaffAvatarUrl(t.writerProfileImageUrl ?? t.writer?.profileImageUrl),
       },
       createdAt,
       updatedAt,
@@ -369,7 +387,7 @@ export async function listStaffUnifiedInbox(options: {
     const createdAt = toIsoString(s.createdAt ?? s.created_at);
     const updatedAt = toIsoString(s.updatedAt ?? s.updated_at ?? s.createdAt ?? s.created_at);
     const isAgency = s.kind === "agency" || Boolean(s.isAgencyProposal || s.publisherId);
-    const senderKind: StaffSenderKind = isAgency ? "agency" : "writer";
+    const senderKind = resolveStaffSocialSenderKind({ isAgency, roles: s.creatorRoles });
     const senderName =
       s.proposerName ??
       (isAgency ? s.agencyName : s.authorName) ??
@@ -389,7 +407,8 @@ export async function listStaffUnifiedInbox(options: {
         id: s.publisherId ?? s.createdByUserId ?? null,
         name: senderName,
         kind: senderKind,
-        roleKind: isAgency ? "agency" : "opinion_author",
+        roleKind: isAgency ? "agency" : senderRoleKind(senderKind),
+        avatarUrl: safeStaffAvatarUrl(isAgency ? s.agencyLogoUrl : s.creatorProfileImageUrl),
       },
       createdAt,
       updatedAt,
@@ -399,6 +418,7 @@ export async function listStaffUnifiedInbox(options: {
       scheduledAt: s.scheduledAt ?? null,
       publishedAt: s.publishedAt ?? null,
       lastError: s.status === "canceled" || s.status === "failed" ? s.lastError ?? null : null,
+      canceledBySelf: computeStaffCanceledBySelf(s),
       article: s.article ?? null,
     });
   }
@@ -485,7 +505,9 @@ export interface StaffSocialDetailResult {
     id: string | null;
     name: string;
     kind: StaffSenderKind;
+    avatarUrl: string | null;
   };
+  canceledBySelf: boolean | null;
   attempts: SocialPostAttempt[];
 }
 
@@ -499,7 +521,10 @@ export async function getStaffSocialPostDetail(
 
   let authorName: string | null = null;
   let authorEmail: string | null = null;
+  let authorImageUrl: string | null = null;
+  let authorRoles: string[] | undefined;
   let agencyName: string | null = null;
+  let agencyLogoUrl: string | null = null;
   let articleInfo: {
     id: string;
     title: string | null;
@@ -514,6 +539,7 @@ export async function getStaffSocialPostDetail(
           firstName: users.firstName,
           lastName: users.lastName,
           email: users.email,
+          profileImageUrl: users.profileImageUrl,
         })
         .from(users)
         .where(eq(users.id, post.createdByUserId))
@@ -522,18 +548,25 @@ export async function getStaffSocialPostDetail(
       if (u) {
         authorName = fullName(u.firstName, u.lastName);
         authorEmail = u.email ?? null;
+        authorImageUrl = u.profileImageUrl ?? null;
+      }
+      if (!post.publisherId) {
+        const roleMap = await roleNamesForUserIds([post.createdByUserId]);
+        const set = roleMap.get(post.createdByUserId);
+        if (set) authorRoles = [...set];
       }
     }
 
     if (post.publisherId) {
       const pubRows = await db
-        .select({ agencyName: publishers.agencyName })
+        .select({ agencyName: publishers.agencyName, logoUrl: publishers.logoUrl })
         .from(publishers)
         .where(eq(publishers.id, post.publisherId))
         .limit(1);
       const p = Array.isArray(pubRows) ? pubRows[0] : undefined;
       if (p) {
         agencyName = p.agencyName ?? null;
+        agencyLogoUrl = p.logoUrl ?? null;
       }
     }
 
@@ -567,7 +600,7 @@ export async function getStaffSocialPostDetail(
   const validation = validateXPostText(post.text ?? "", effectiveLinkUrl);
   const composedText = composeXPostText(post.text ?? "", effectiveLinkUrl);
   const isAgency = Boolean(post.publisherId);
-  const senderKind: StaffSenderKind = isAgency ? "agency" : "writer";
+  const senderKind = resolveStaffSocialSenderKind({ isAgency, roles: authorRoles });
   const senderName = isAgency
     ? agencyName ?? authorName ?? "وكالة"
     : authorName ?? authorEmail ?? "كاتب رأي";
@@ -605,7 +638,9 @@ export async function getStaffSocialPostDetail(
       id: post.publisherId ?? post.createdByUserId ?? null,
       name: senderName,
       kind: senderKind,
+      avatarUrl: safeStaffAvatarUrl(isAgency ? agencyLogoUrl : authorImageUrl),
     },
+    canceledBySelf: computeStaffCanceledBySelf(post),
     attempts,
   };
 }
