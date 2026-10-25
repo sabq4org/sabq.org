@@ -8,6 +8,7 @@ import {
   getSentimentInsights,
   notifyCommentOwnerRejected,
 } from "../services/commentInsightsService";
+import { syncCommentPoints } from "../services/commentLoyalty";
 import { z } from "zod";
 import { db } from "../db";
 import { userRoles, roles, users, comments } from "@shared/schema";
@@ -265,6 +266,7 @@ router.post("/approve/:commentId", async (req: Request, res: Response) => {
       moderatedBy: userId,
       moderatedAt: new Date(),
     });
+    syncCommentPoints(commentId, "approved");
 
     res.json({ success: true });
   } catch (error) {
@@ -286,6 +288,7 @@ router.post("/reject/:commentId", async (req: Request, res: Response) => {
       moderatedAt: new Date(),
       moderationReason: reason,
     });
+    syncCommentPoints(commentId, "rejected");
 
     await notifyCommentOwnerRejected(commentId, reason);
 
@@ -316,6 +319,7 @@ router.post("/bulk", async (req: Request, res: Response) => {
       for (const commentId of commentIds) {
         try {
           await storage.deleteCommentWithLog(commentId, userId, reason || "حذف جماعي من البحث");
+          syncCommentPoints(commentId, "deleted");
           deleted++;
         } catch (err: any) {
           failed.push({ id: commentId, error: err?.message || String(err) });
@@ -337,6 +341,7 @@ router.post("/bulk", async (req: Request, res: Response) => {
         moderatedAt: new Date(),
         moderationReason: action === "reject" ? reason : undefined,
       });
+      syncCommentPoints(commentId, status);
       if (action === "reject") {
         await notifyCommentOwnerRejected(commentId, reason);
       }
@@ -433,6 +438,7 @@ router.delete("/delete/:commentId", async (req: Request, res: Response) => {
     }
     
     await storage.deleteCommentWithLog(commentId, userId, reason?.trim());
+    syncCommentPoints(commentId, "deleted");
 
     res.json({ success: true });
   } catch (error) {
@@ -551,6 +557,7 @@ router.post("/member/:memberId/bulk-action", async (req: Request, res: Response)
             ? 'تم الاعتماد الجماعي' 
             : 'تم الرفض الجماعي'),
         });
+        syncCommentPoints(commentId, newStatus);
         results.success++;
       } catch {
         results.failed++;
@@ -632,6 +639,7 @@ router.post("/member/:memberId/bulk-action-by-filter", async (req: Request, res:
             ? 'تم الاعتماد الجماعي' 
             : 'تم الرفض الجماعي'),
         });
+        syncCommentPoints(commentId, newStatus);
         results.success++;
       } catch {
         results.failed++;
@@ -658,7 +666,7 @@ const searchCommentsSchema = z.object({
   query: z.string().optional(),
   userId: z.string().optional(),
   status: z.enum(['pending', 'approved', 'rejected', 'flagged']).optional(),
-  aiClassification: z.enum(['safe', 'flagged', 'spam', 'harmful']).optional(),
+  aiClassification: z.enum(['safe', 'flagged', 'spam', 'harmful', 'low_value']).optional(),
   dateFrom: z.string().optional().transform(val => val ? new Date(val) : undefined),
   dateTo: z.string().optional().transform(val => val ? new Date(val) : undefined),
   sortBy: z.enum(['relevance', 'date', 'score']).optional().default('date'),

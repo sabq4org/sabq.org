@@ -8,15 +8,16 @@
  *   GET    /api/muqtarab/topics/:topicId/comments/my-likes   liked ids overlay (auth)
  *
  * The POST flow mirrors the article comment route (server/routes.ts) exactly:
- * suspicious-words gate → insert (pending) → loyalty → background AI moderation.
+ * quality gate → suspicious-words gate → insert (pending) → background AI
+ * moderation; loyalty points are awarded on approval only.
  * Drizzle queries live in topicCommentsService per ADR-001.
  */
 import { Router } from "express";
 import { insertTopicCommentSchema } from "@shared/schema";
 import { requireAuth } from "../rbac";
 import { checkUserStatus } from "../userStatusMiddleware";
-import { awardPoints } from "../services/loyalty";
-import { LOYALTY_ACTIONS } from "@shared/loyalty";
+import { COPIED_HOLD_REASON, evaluateCommentSubmission } from "../services/commentQuality";
+import { awardCommentPointsOnApproval } from "../services/commentLoyalty";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "../utils/suspiciousWordsChecker";
 import { moderateComment, getStatusFromClassification } from "../ai/commentModeration";
 import {
@@ -92,6 +93,17 @@ router.post(
         return res.status(400).json({ message: "Invalid comment data" });
       }
 
+      // بوابة الجودة قبل الإدراج (أرقام/رموز، قِصر، حدود المعدل) — لا يُنشأ صف عند الرفض.
+      const quality = await evaluateCommentSubmission({
+        userId,
+        content: parsed.data.content,
+        article: { id: topicId, title: topic.title, excerpt: topic.excerpt },
+      });
+      if (!quality.ok) {
+        if (quality.retryAfterSeconds) res.set("Retry-After", String(quality.retryAfterSeconds));
+        return res.status(quality.httpStatus).json({ message: quality.messageAr, code: quality.code });
+      }
+
       // فحص الكلمات المشبوهة قبل إنشاء التعليق
       const suspiciousCheck = await checkTextForSuspiciousWords(parsed.data.content);
       const blockedBySuspiciousWords = suspiciousCheck.hasSuspiciousWords;
@@ -115,17 +127,9 @@ router.post(
         await incrementSuspiciousWordFlagCount(suspiciousCheck.foundWords.map((w) => w.wordId));
       }
 
-      // نقطة ولاء للتعليق
-      try {
-        await awardPoints({
-          userId,
-          action: LOYALTY_ACTIONS.COMMENT,
-          source: topicId,
-          metadata: { topicId, topicCommentId: comment.id },
-        });
-      } catch (error) {
-        console.error("Error recording loyalty points:", error);
-      }
+      // نقاط الولاء لا تُمنح عند الإنشاء — تُمنح عند الاعتماد فقط
+      // (awardCommentPointsOnApproval)، والمنسوخ من نص الموضوع يُعلَّق لمراجعة بشرية.
+      const copiedHold = quality.flags.copied;
 
       // AI Moderation في الخلفية (نفس منطق تعليقات المقالات)
       const commentId = comment.id;
@@ -133,7 +137,9 @@ router.post(
       const suspiciousWordsData = blockedBySuspiciousWords ? suspiciousCheck : null;
       (async () => {
         try {
-          const moderationResult = await moderateComment(commentContent);
+          const moderationResult = await moderateComment(commentContent, {
+            article: { title: topic.title, excerpt: topic.excerpt },
+          });
           await updateTopicCommentModeration(commentId, {
             aiModerationScore: moderationResult.score,
             aiClassification: moderationResult.classification,
@@ -144,7 +150,11 @@ router.post(
 
           const aiStatus = getStatusFromClassification(moderationResult.classification);
           const wasAutoRejected = suspiciousWordsData?.shouldAutoReject;
-          const newStatus = wasAutoRejected ? "rejected" : suspiciousWordsData ? "pending" : aiStatus;
+          const newStatus =
+            wasAutoRejected ? "rejected" : suspiciousWordsData || copiedHold ? "pending" : aiStatus;
+          if (copiedHold && !suspiciousWordsData) {
+            await updateTopicCommentStatus(commentId, { status: "pending", moderationReason: COPIED_HOLD_REASON });
+          }
           if (newStatus !== "pending" && !wasAutoRejected) {
             await updateTopicCommentStatus(commentId, {
               status: newStatus,
@@ -154,6 +164,7 @@ router.post(
                   ? "تم الاعتماد تلقائياً بواسطة الذكاء الاصطناعي"
                   : `تم الرفض تلقائياً - ${moderationResult.reason}`,
             });
+            if (newStatus === "approved") await awardCommentPointsOnApproval(commentId, "topic");
           }
 
           if (suspiciousWordsData && suspiciousWordsData.foundWords.length > 0) {
