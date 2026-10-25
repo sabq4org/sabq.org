@@ -267,7 +267,7 @@ Content-Type: application/json
 
 | الجزء | المسار |
 |-------|--------|
-| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.1.0 ورقم البناء `2026102601` |
+| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.1.0 ورقم البناء `2026102602` |
 | شاشات التطبيق | `sabq desk ios/SabqDesk/` — تصميم «تطبيقات البوت» المعتمد 2026-10-25: الروبوت (`DeskMascot`) كبير في الدخول وقفل Face ID، ثلاثة تبويبات «المكتب» (`DeskView`: بانتظارك/مجدول/منشور/مرفوض، والمجدول خط زمني بالأيام) و«الرسائل» (`MessagesView`: تنتظر ردك/تم الرد/مغلقة مع بحث) و«حسابي» (`SettingsView` مع الآفاتار والصلاحيات والردود السريعة)؛ محادثة الرسالة (`TicketDetailView`: فقاعات، فواصل أيام، «ردًا على» عبر `parentMessageId`)، تفاصيل المقترح، ورقة الجدولة (أوقات سريعة + تنبيه تعارض ±30 دقيقة) وورقة الرفض. المكوّنات المشتركة في `Components/DeskChrome.swift` والمنطق القابل للاختبار في `SabqDeskKit/DeskBoard.swift` |
 | حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تسميات الأدوار العربية `StaffRoleLabel`، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
 | الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
