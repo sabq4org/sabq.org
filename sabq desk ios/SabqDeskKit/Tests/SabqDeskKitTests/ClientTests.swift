@@ -237,4 +237,40 @@ final class ClientTests: XCTestCase {
         let meAfterEnable = try await client.me()
         XCTAssertEqual(meAfterEnable.twoFactorEnabled, true)
     }
+
+    func testSystemEndpointsUseTheContractPaths() async throws {
+        let (client, transport, _) = makeClient([
+            .init(status: 200, body: Fixtures.systemHealth),
+            .init(status: 200, body: Fixtures.adminAlerts),
+            .init(status: 200, body: #"{"aiAlerts":true,"adminAlerts":true}"#),
+            .init(status: 200, body: #"{"aiAlerts":false,"adminAlerts":true}"#),
+        ], session: liveSession)
+        _ = try await client.systemHealth()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/system/health")
+        _ = try await client.adminAlerts()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/alerts")
+        _ = try await client.alertPrefs()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/me/alert-prefs")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "GET")
+        let updated = try await client.updateAlertPrefs(StaffAlertPrefsUpdate(aiAlerts: false))
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(request.url?.path, "/api/v1/staff/me/alert-prefs")
+        let body = jsonObject(request.httpBody)
+        XCTAssertEqual(body["aiAlerts"] as? Bool, false)
+        XCTAssertNil(body["adminAlerts"], "unchanged switches are not sent")
+        XCTAssertEqual(updated, StaffAlertPrefs(aiAlerts: false, adminAlerts: true))
+    }
+
+    func testSystemHealthForbiddenSurfacesWithoutClearingTheSession() async {
+        let (client, _, store) = makeClient([.init(status: 403, body: #"{"code":"forbidden","message":"x"}"#)],
+                                            session: liveSession)
+        do {
+            _ = try await client.systemHealth()
+            XCTFail("expected failure")
+        } catch {
+            XCTAssertEqual(error as? StaffAPIError, .forbidden(message: "x"))
+        }
+        XCTAssertNotNil(store.load())
+    }
 }

@@ -113,11 +113,25 @@ public enum DeskCount {
         }
     }
 
+    /// Words that open an organisation's name («صحيفة سبق»): greet it by the full name.
+    static let organisationWords: Set<String> = ["صحيفة", "جريدة", "مجلة", "شركة", "وكالة", "مؤسسة", "فريق", "حساب"]
+
+    /// How the greeting addresses the member: the first name, the honorific
+    /// with the name after it («د. خالد»), or an organisation's full name.
+    public static func greetingName(_ name: String?) -> String? {
+        let words = (name ?? "").split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let first = words.first else { return nil }
+        if organisationWords.contains(first) { return words.joined(separator: " ") }
+        if DeskInitials.honorifics.contains(first) {
+            return words.count > 1 ? "\(first) \(words[1])" : first
+        }
+        return first
+    }
+
     /// The assistant's opening line on the desk and lock screens.
     public static func greeting(name: String?, pendingTweets: Int, openMessages: Int,
                                 showsTweets: Bool, showsMessages: Bool) -> String {
-        let firstName = name?.split(separator: " ").first.map(String.init)
-        let hello = firstName.map { "أهلًا \($0)، " } ?? "أهلًا، "
+        let hello = greetingName(name).map { "أهلًا \($0)، " } ?? "أهلًا، "
         var parts: [String] = []
         if showsTweets, pendingTweets > 0 { parts.append("\(tweets(pendingTweets)) بانتظار قرارك") }
         if showsMessages, openMessages > 0 { parts.append("\(messages(openMessages)) من المساهمين") }
@@ -225,14 +239,22 @@ public enum ScheduleClash {
 }
 
 /// Up to two initials for an avatar; ZWNJ keeps Arabic letters unjoined.
+/// Honorifics are skipped and the definite article «ال» is not an initial
+/// («إبراهيم الروساء» → «إ ر»).
 public enum DeskInitials {
+    static let honorifics: Set<String> = ["د.", "د", "أ.", "م.", "أ.د."]
+
     public static func of(_ name: String) -> String {
-        let skip: Set<String> = ["د.", "أ.", "م.", "د", "أ.د."]
         let words = name.split(whereSeparator: { $0.isWhitespace || $0 == "@" })
             .map(String.init)
-            .filter { !skip.contains($0) }
-        let letters = words.prefix(2).compactMap { $0.first }.map { String($0) }
+            .filter { !honorifics.contains($0) }
+        let letters = words.prefix(2).compactMap(initial(of:)).map { String($0) }
         return letters.isEmpty ? "؟" : letters.joined(separator: "\u{200C}")
+    }
+
+    static func initial(of word: String) -> Character? {
+        if word.count > 2, word.hasPrefix("ال") { return word.dropFirst(2).first }
+        return word.first
     }
 }
 

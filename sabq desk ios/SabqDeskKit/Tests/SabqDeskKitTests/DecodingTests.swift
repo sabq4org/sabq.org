@@ -157,4 +157,100 @@ final class DecodingTests: XCTestCase {
         let post = try decoder.decode(StaffSocialPost.self, from: json.data)
         XCTAssertEqual(post.status, .unknown)
     }
+
+    // MARK: - Desk v2 (sender photos, organization kind, admin screens)
+
+    func testOlderMeDefaultsTheNewCapabilitiesToFalse() throws {
+        let me = try decoder.decode(StaffMe.self, from: Fixtures.me.data)
+        XCTAssertFalse(me.capabilities.canSystemHealth)
+        XCTAssertFalse(me.capabilities.canAdminAlerts)
+        XCTAssertFalse(me.capabilities.canSystemTab)
+        XCTAssertNil(me.alertPrefs)
+    }
+
+    func testAdminMeDecodesSystemCapabilitiesAndPrefs() throws {
+        let me = try decoder.decode(StaffMe.self, from: Fixtures.meAdmin.data)
+        XCTAssertTrue(me.capabilities.canSystemHealth)
+        XCTAssertTrue(me.capabilities.canAdminAlerts)
+        XCTAssertTrue(me.capabilities.canOpenApp)
+        XCTAssertEqual(me.alertPrefs, StaffAlertPrefs(aiAlerts: true, adminAlerts: false))
+        XCTAssertEqual(me.profileImageUrl, "https://media.sabq.org/avatars/admin.jpg")
+    }
+
+    func testAlertPrefsDefaultToOnWhenKeysAreMissing() throws {
+        XCTAssertEqual(try decoder.decode(StaffAlertPrefs.self, from: "{}".data), StaffAlertPrefs(aiAlerts: true, adminAlerts: true))
+        XCTAssertEqual(try decoder.decode(StaffAlertPrefs.self, from: #"{"aiAlerts":false}"#.data),
+                       StaffAlertPrefs(aiAlerts: false, adminAlerts: true))
+    }
+
+    func testInboxDecodesOrganizationSenderAvatarAndWithdrawal() throws {
+        let page = try decoder.decode(StaffInboxPage.self, from: Fixtures.inboxV2.data)
+        let item = try XCTUnwrap(page.items.first)
+        XCTAssertEqual(item.sender.kind, .organization)
+        XCTAssertEqual(item.sender.kind.title, "حساب المؤسسة")
+        XCTAssertEqual(item.sender.avatarUrl, "https://media.sabq.org/avatars/u-1.jpg")
+        XCTAssertEqual(item.canceledBySelf, true)
+        XCTAssertEqual(item.rejectionNote, .withdrawn)
+        XCTAssertEqual(item.listPreview, "نص التغريدة")
+    }
+
+    func testOlderPayloadsLeaveTheNewFieldsNil() throws {
+        let page = try decoder.decode(StaffInboxPage.self, from: Fixtures.inbox.data)
+        XCTAssertNil(page.items[0].sender.avatarUrl)
+        XCTAssertNil(page.items[0].canceledBySelf)
+        let detail = try decoder.decode(StaffSocialDetail.self, from: Fixtures.socialDetail.data)
+        XCTAssertNil(detail.post.canceledBySelf)
+        XCTAssertNil(detail.sender?.avatarUrl)
+        XCTAssertFalse(detail.isWithdrawnBySender)
+    }
+
+    func testSystemHealthDecodesModelsBudgetsAndUnknownStatus() throws {
+        let health = try decoder.decode(StaffSystemHealth.self, from: Fixtures.systemHealth.data)
+        XCTAssertEqual(health.summary?.status, .partial)
+        XCTAssertEqual(health.aiAlertsEnabled, true)
+        let models = try XCTUnwrap(health.models)
+        XCTAssertEqual(models.count, 3)
+        XCTAssertEqual(models[0].effectiveStatus, .down)
+        XCTAssertTrue(models[0].isQuotaExceeded)
+        XCTAssertEqual(models[0].lastError?.code, "QUOTA_EXCEEDED")
+        XCTAssertNil(models[1].lastError)
+        XCTAssertEqual(models[1].requests24h, 2471)
+        XCTAssertEqual(models[2].effectiveStatus, .unknown)
+        XCTAssertNil(models[2].providerLabel)
+        let budget = try XCTUnwrap(health.budgets?.first)
+        XCTAssertEqual(budget.percent, 82)
+        XCTAssertEqual(budget.fraction, 0.82, accuracy: 0.0001)
+        XCTAssertEqual(RiyadhTime.timeString(try XCTUnwrap(health.lastCheckAt)), "18:13")
+    }
+
+    func testEmptySystemHealthStillDecodes() throws {
+        let health = try decoder.decode(StaffSystemHealth.self, from: #"{"budgets":[]}"#.data)
+        XCTAssertNil(health.summary)
+        XCTAssertNil(health.models)
+        XCTAssertEqual(health.budgets, [])
+    }
+
+    func testAdminAlertsDecodeActionsLinksAndUnknownKinds() throws {
+        let alerts = try decoder.decode(StaffAdminAlerts.self, from: Fixtures.adminAlerts.data)
+        XCTAssertEqual(alerts.urgentCount, 1)
+        let items = try XCTUnwrap(alerts.items)
+        XCTAssertEqual(items[0].kind, .socialFailed)
+        XCTAssertTrue(items[0].isUrgent)
+        XCTAssertEqual(items[0].retryPostID, "post-1")
+        XCTAssertEqual(items[0].link, .social(id: "post-1"))
+        XCTAssertEqual(items[1].action?.type, .openSystem)
+        XCTAssertNil(items[1].retryPostID)
+        XCTAssertEqual(items[1].link, .systemHealth)
+        XCTAssertEqual(items[2].kind, .unknown)
+        XCTAssertEqual(items[2].severity, .unknown)
+        XCTAssertFalse(items[2].isUrgent)
+        XCTAssertEqual(items[2].action?.type, .unknown)
+        XCTAssertNil(items[2].occurredAt)
+        XCTAssertNil(items[2].link)
+    }
+
+    func testUrgentCountFallsBackToItemsWithoutCounts() throws {
+        let json = #"{"items":[{"id":"a","severity":"urgent","title":"x"},{"id":"b","severity":"info","title":"y"}]}"#
+        XCTAssertEqual(try decoder.decode(StaffAdminAlerts.self, from: json.data).urgentCount, 1)
+    }
 }
