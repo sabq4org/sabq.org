@@ -2,6 +2,7 @@ import { registerShutdownHook } from "./shutdown";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
 import { setArticleDerivedFields, articleWriteConflict, refreshArticleLiteImage } from "./services/articleDerivedWrites";
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { getActiveBreakingTicker, getBreakingTickerHeadlines } from "./services/breakingTickerHeadlines";
 import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import { coalesceArticleReadOverlay } from "./services/articleReadOverlay";
@@ -35375,7 +35376,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const cc = String(req.headers?.["cache-control"] ?? "").toLowerCase();
       const fresh = req.query?._nc != null || req.query?._t != null || cc.includes("no-cache") || cc.includes("no-store");
-      const data = await withSWR("breaking-ticker-active", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, () => storage.getActiveBreakingTicker(), fresh);
+      const data = await withSWR("breaking-ticker-active", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, () => getActiveBreakingTicker(), fresh);
       res.json(data ?? null);
     } catch (error) {
       console.error("Error fetching breaking ticker:", error);
@@ -35406,7 +35407,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!topic) {
         return res.status(404).json({ message: "الموضوع غير موجود" });
       }
-      const headlines = await storage.getBreakingTickerHeadlines(id);
+      const headlines = await getBreakingTickerHeadlines(id);
       res.json({ topic, headlines });
     } catch (error) {
       console.error("Error fetching breaking ticker topic:", error);
