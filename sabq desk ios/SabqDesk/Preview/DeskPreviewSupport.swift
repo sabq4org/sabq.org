@@ -20,6 +20,11 @@ struct DeskPreviewTransport: HTTPTransport {
         case "/api/v1/staff/system/health": body = Self.systemHealthJSON
         case "/api/v1/staff/alerts": body = Self.alertsJSON
         case "/api/v1/staff/me/alert-prefs": body = #"{"aiAlerts":true,"adminAlerts":true}"#
+        case "/api/v1/staff/system/balances": body = Self.balancesJSON
+        case let path where path.hasPrefix("/api/v1/staff/system/balances/"):
+            // GET …/balances/<p>, POST …/<p>/topup and PUT …/<p>/threshold all answer the detail.
+            let provider = path.dropFirst("/api/v1/staff/system/balances/".count).split(separator: "/").first
+            body = Self.balanceDetailJSON(provider: provider.map(String.init) ?? "")
         default: body = "{}"
         }
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
@@ -123,15 +128,109 @@ struct DeskPreviewTransport: HTTPTransport {
       ]
     }
     """
+
+    /// «أرصدة النماذج» with the concept's figures (22:20 Riyadh).
+    nonisolated static let balancesJSON = """
+    {
+      "generatedAt": "2026-10-25T19:20:00.000Z",
+      "canManage": true,
+      "summary": { "critical": 1, "low": 1, "notConfigured": 1, "attention": 3,
+                   "text": "رصيد DeepSeek شبه نافد، وOpenAI تحت حدّك. Anthropic لم يُضبط رصيده بعد." },
+      "providers": [
+        { "provider": "deepseek", "label": "DeepSeek", "kind": "actual", "unit": "usd", "state": "critical",
+          "amount": 1.85, "fraction": 0.06,
+          "threshold": { "low": 20, "critical": 5, "presets": [10, 20, 50], "isDefault": true },
+          "todaySpend": 0.41, "monthSpend": 11.6, "spendUnit": "usd", "daysLeft": 4.2,
+          "spendSource": "balance_snapshots", "canUpdateBalance": false,
+          "fetchedAt": "2026-10-25T19:20:00.000Z" },
+        { "provider": "openai", "label": "OpenAI", "kind": "estimated", "unit": "usd", "state": "low",
+          "amount": 86.3, "total": 500, "fraction": 0.1726,
+          "threshold": { "low": 100, "critical": 25, "presets": [50, 100, 200], "isDefault": true },
+          "todaySpend": 14.2, "monthSpend": 413.7, "spendUnit": "usd", "spentSinceBaseline": 413.7,
+          "daysLeft": 5.2, "baseline": { "amount": 500, "at": "2026-10-02T09:00:00.000Z" },
+          "lastTopup": { "mode": "add", "amount": 500, "topupAt": "2026-10-02T09:00:00.000Z", "byName": "علي" },
+          "spendSource": "provider_admin_api", "canUpdateBalance": true,
+          "fetchedAt": "2026-10-25T19:15:00.000Z" },
+        { "provider": "anthropic", "label": "Anthropic", "kind": "estimated", "unit": "usd",
+          "state": "not_configured", "reason": "no_topup",
+          "threshold": { "low": 100, "critical": 25, "presets": [50, 100, 200], "isDefault": true },
+          "todaySpend": 3.1, "monthSpend": 40.2, "spendUnit": "usd", "spendSource": "sabq_tracked",
+          "canUpdateBalance": true, "fetchedAt": "2026-10-25T19:20:00.000Z" },
+        { "provider": "gemini", "label": "Gemini", "kind": "budget", "unit": "usd", "state": "healthy",
+          "amount": 46.2, "total": 120, "fraction": 0.385, "remaining": 73.8,
+          "threshold": { "low": 20, "critical": 5, "presets": [10, 20, 50], "isDefault": true },
+          "todaySpend": 1.9, "monthSpend": 46.2, "spendUnit": "usd", "spendSource": "sabq_tracked",
+          "canUpdateBalance": true, "fetchedAt": "2026-10-25T19:20:00.000Z" },
+        { "provider": "elevenlabs", "label": "ElevenLabs", "kind": "actual", "unit": "characters",
+          "state": "healthy", "amount": 182400, "total": 500000, "fraction": 0.3648,
+          "threshold": { "low": 50000, "critical": 12500, "presets": [25000, 50000, 100000], "isDefault": true },
+          "todaySpend": 6200, "monthSpend": 317600, "spendUnit": "characters",
+          "resetsAt": "2026-11-03T00:00:00.000Z", "spendSource": "provider",
+          "canUpdateBalance": false, "fetchedAt": "2026-10-25T19:20:00.000Z" }
+      ]
+    }
+    """
+
+    /// The list row plus 30 days of daily spend (26 Sep → today) and, for
+    /// estimated providers, the top-up history.
+    nonisolated static func balanceDetailJSON(provider: String) -> String {
+        guard let list = try? JSONSerialization.jsonObject(with: Data(balancesJSON.utf8)) as? [String: Any],
+              let providers = list["providers"] as? [[String: Any]],
+              var detail = providers.first(where: { $0["provider"] as? String == provider }) else {
+            return "{}"
+        }
+        let scale: Double
+        switch provider {
+        case "openai": scale = 1
+        case "anthropic": scale = 0.15
+        case "deepseek": scale = 0.03
+        case "gemini": scale = 0.09
+        default: scale = 450
+        }
+        let pattern: [Double] = [19, 22, 17, 24, 21, 15, 12, 20, 23, 18]
+        var series: [[String: Any]] = []
+        for offset in 0..<30 {
+            // 2026-09-26 … 2026-10-25
+            let day = offset < 5 ? String(format: "2026-09-%02d", 26 + offset) : String(format: "2026-10-%02d", offset - 4)
+            let value = offset == 29 ? 14.2 : pattern[offset % pattern.count]
+            series.append(["date": day, "value": (value * scale * 100).rounded() / 100])
+        }
+        detail["series"] = series
+        detail["canManage"] = true
+        if provider == "openai" {
+            detail["topups"] = [
+                ["mode": "add", "amountUsd": 500, "topupAt": "2026-10-02T09:00:00.000Z",
+                 "savedAt": "2026-10-02T09:01:00.000Z", "byName": "علي", "balanceAfterUsd": 500],
+                ["mode": "add", "amountUsd": 300, "topupAt": "2026-09-03T10:30:00.000Z",
+                 "savedAt": "2026-09-03T10:31:00.000Z", "byName": "علي", "balanceAfterUsd": 312.4],
+            ]
+        } else if provider == "gemini" {
+            detail["topups"] = [
+                ["mode": "budget", "amountUsd": 120, "savedAt": "2026-10-01T08:00:00.000Z",
+                 "byName": "علي", "balanceAfterUsd": 120],
+            ]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: detail) else { return "{}" }
+        return String(decoding: data, as: UTF8.self)
+    }
 }
 
 enum DeskPreviewFixtures {
+    static let balances: StaffAIBalances = {
+        (try? StaffJSON.makeDecoder().decode(StaffAIBalances.self, from: Data(DeskPreviewTransport.balancesJSON.utf8)))
+            ?? StaffAIBalances(providers: [])
+    }()
+
+    static let openAIBalance = balances.items.first { $0.provider == "openai" } ?? StaffAIBalance(provider: "openai")
+    static let geminiBalance = balances.items.first { $0.provider == "gemini" } ?? StaffAIBalance(provider: "gemini")
+
     static let me = StaffMe(id: "preview-user", email: "editor@sabq.org", name: "نورة القحطاني",
                             role: "editor", twoFactorEnabled: true, roles: ["editor"],
                             capabilities: StaffCapabilities(canTickets: true,
                                                             canSocial: .init(view: true, publish: true,
                                                                              schedule: true, reject: false),
-                                                            canSystemHealth: true, canAdminAlerts: true),
+                                                            canSystemHealth: true, canAdminAlerts: true,
+                                                            canManageBalances: true),
                             alertPrefs: StaffAlertPrefs())
 
     static func client(emptyInbox: Bool) -> StaffAPIClient {
@@ -175,6 +274,44 @@ extension View {
     @MainActor
     func deskPreviewEnvironment(emptyInbox: Bool = false) -> some View {
         DeskPreviewHost(emptyInbox: emptyInbox, content: self)
+    }
+}
+
+/// Simulator screenshots with the preview fixtures: launch a Debug build with
+/// `SIMCTL_CHILD_DESK_SHOT=<scene>` and the app opens the tabs on canned data
+/// instead of the real session. Release builds never compile this.
+enum DeskScreenshotScene: String {
+    case balances, openai, update, banner
+
+    static let current = ProcessInfo.processInfo.environment["DESK_SHOT"].flatMap(Self.init(rawValue:))
+
+    var link: DeskDeepLink {
+        switch self {
+        case .balances: return .balances
+        case .openai, .update: return .balance(provider: "openai")
+        case .banner: return .systemHealth
+        }
+    }
+}
+
+struct DeskScreenshotHost: View {
+    let scene: DeskScreenshotScene
+
+    var body: some View {
+        DeskScreenshotRouter(scene: scene)
+            .deskPreviewEnvironment()
+            .preferredColorScheme(.light)
+    }
+}
+
+private struct DeskScreenshotRouter: View {
+    @Environment(AppModel.self) private var model
+    let scene: DeskScreenshotScene
+
+    var body: some View {
+        MainTabView()
+            .background(DeskTheme.background)
+            .task { model.pendingLink = scene.link }
     }
 }
 #endif
