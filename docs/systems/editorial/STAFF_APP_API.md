@@ -105,9 +105,11 @@ Content-Type: application/json
 ### 2. `GET /api/v1/staff/inbox`
 يعيد قائمة موحدة من التذاكر ومقترحات النشر الاجتماعي مرتبة من الأحدث إلى الأقدم (`updatedAt DESC`).
 
+مقترحات النشر المعروضة: `draft | scheduled | processing` دائماً، و`published | failed` لآخر 24 ساعة؛ المرفوض (`canceled`) لا يظهر. عناصر النشر تحمل `scheduledAt` و`publishedAt` (ISO أو `null`). `hasUnread` وعدّاد `social` في `/unread-counts` للمسودات (`draft`) فقط.
+
 **معاملات الاستعلام (Query Parameters):**
 - `type`: `all | ticket | social` (افتراضي `all`)
-- `status`: فلتر اختياري بالحالة (`open | answered | closed | draft`)
+- `status`: فلتر اختياري بالحالة (`open | answered | closed | draft | scheduled | processing | published | failed`)
 - `unread`: فلتر اختياري بغير المقروء (`true | false | 1 | 0`)
 - `q`: بحث نصي اختياري في العنوان/المعاينة/اسم المرسل
 - `cursor`: مؤشر معتم (`opaque base64url cursor`) للصفحة التالية
@@ -134,6 +136,8 @@ Content-Type: application/json
       "status": "draft",
       "hasUnread": true,
       "deeplink": "sabqdesk://social/social-post-uuid",
+      "scheduledAt": null,
+      "publishedAt": null,
       "article": {
         "id": "art-uuid",
         "title": "انطلاق المؤتمر التقني بالرياض",

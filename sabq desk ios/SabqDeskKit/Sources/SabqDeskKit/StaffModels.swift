@@ -201,6 +201,10 @@ public struct StaffInboxItem: Codable, Sendable, Equatable, Identifiable {
     public var hasUnread: Bool
     public var deeplink: String?
     public var article: StaffArticleRef?
+    /// Social only: when a `scheduled` post will go out. Absent on older servers.
+    public var scheduledAt: Date?
+    /// Social only: when a `published` post went out. Absent on older servers.
+    public var publishedAt: Date?
 
     /// Stable across kinds: a ticket and a social post may share a UUID space.
     public var listID: String { "\(kind.rawValue):\(id)" }

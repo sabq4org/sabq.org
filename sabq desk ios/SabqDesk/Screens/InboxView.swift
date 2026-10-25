@@ -333,7 +333,7 @@ private struct InboxRow: View {
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(2)
             }
-            StatusChip(title: item.statusTitle, tone: item.statusTone)
+            StatusChip(title: item.statusChipTitle, tone: item.statusTone)
                 .padding(.top, 2)
         }
         .accessibilityElement(children: .combine)

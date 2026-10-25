@@ -258,6 +258,10 @@ export class StaffInboxCursorError extends Error {
   }
 }
 
+export const STAFF_INBOX_SOCIAL_ACTIVE_STATUSES = ["draft", "scheduled", "processing"] as const;
+export const STAFF_INBOX_SOCIAL_RECENT_STATUSES = ["published", "failed"] as const;
+export const STAFF_INBOX_SOCIAL_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export async function listStaffUnifiedInbox(options: {
   userId: string;
   canTickets: boolean;
@@ -296,7 +300,13 @@ export async function listStaffUnifiedInbox(options: {
         })
       : Promise.resolve([]),
     includeSocial
-      ? listPendingSocialProposalsForDesk("all", 200)
+      ? listPendingSocialProposalsForDesk("all", 200, {
+          // المجدول والجاري نشره يظلان ظاهرين حتى النشر، والمنشور/الفاشل آخر 24 ساعة.
+          // المرفوض (canceled) مستبعد. العدّاد و hasUnread يبقيان للمسودات فقط.
+          statuses: [...STAFF_INBOX_SOCIAL_ACTIVE_STATUSES],
+          recentStatuses: [...STAFF_INBOX_SOCIAL_RECENT_STATUSES],
+          recentSince: new Date(Date.now() - STAFF_INBOX_SOCIAL_RECENT_WINDOW_MS),
+        })
       : Promise.resolve([]),
   ]);
 
@@ -360,6 +370,8 @@ export async function listStaffUnifiedInbox(options: {
       status: s.status,
       hasUnread,
       deeplink: `sabqdesk://social/${s.id}`,
+      scheduledAt: s.scheduledAt ?? null,
+      publishedAt: s.publishedAt ?? null,
       article: s.article ?? null,
     });
   }

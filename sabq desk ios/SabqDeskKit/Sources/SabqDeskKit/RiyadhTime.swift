@@ -33,6 +33,15 @@ public enum RiyadhTime {
         return formatter.string(from: date)
     }
 
+    /// `14:05` — 24-hour clock in Riyadh time, Latin digits.
+    public static func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
     public static func shortString(_ date: Date, relativeTo now: Date = Date()) -> String {
         let formatter = DateFormatter()
         formatter.locale = locale
