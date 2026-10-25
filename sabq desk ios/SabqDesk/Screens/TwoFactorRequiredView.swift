@@ -7,6 +7,7 @@ import SwiftUI
 struct TwoFactorRequiredView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     let message: String?
 
     @State private var isChecking = false
@@ -20,13 +21,7 @@ struct TwoFactorRequiredView: View {
             VStack(spacing: DeskLayout.space12) {
                 Button("فتح إعدادات الأمان") { openURL(Self.securitySettingsURL) }
                     .buttonStyle(DeskPrimaryButtonStyle())
-                Button {
-                    isChecking = true
-                    Task {
-                        await model.reloadIdentity()
-                        isChecking = false
-                    }
-                } label: {
+                Button(action: checkNow) {
                     HStack(spacing: DeskLayout.space8) {
                         if isChecking { ProgressView() }
                         Text("فعّلتها، تحقّق الآن")
@@ -39,6 +34,18 @@ struct TwoFactorRequiredView: View {
                     .foregroundStyle(DeskTheme.textSecondary)
                     .padding(.top, DeskLayout.space8)
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { checkNow() }
+        }
+    }
+
+    private func checkNow() {
+        guard !isChecking else { return }
+        isChecking = true
+        Task {
+            defer { isChecking = false }
+            await model.reloadIdentity()
         }
     }
 }

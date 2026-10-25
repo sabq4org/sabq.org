@@ -30,7 +30,7 @@ Content-Type: application/json
 - **عدم التخزين المؤقت:** ترسل جميع مسارات `/api/v1/staff/*` الترويسة `Cache-Control: private, no-store`.
 
 ### ب) بوابة المصادقة الثنائية الإلزامية (Mandatory 2FA Gate)
-يشترط تطبيق الديسك إعداد المصادقة الثنائية (`users.twoFactorEnabled === true` أو وجود سر TOTP مهيأ في `users.twoFactorSecret` عبر `isStaffTwoFactorSatisfied`) على حساب الموظف. إذا كان الحساب لا يملك 2FA مفعلاً ولا سراً مهيأً، ترد جميع مسارات `/api/v1/staff/*` بـ:
+يشترط تطبيق الديسك تفعيل المصادقة الثنائية (`users.twoFactorEnabled === true`) على حساب الموظف. إذا كان الحساب لا يملك 2FA مفعلاً، ترد جميع مسارات `/api/v1/staff/*` بـ:
 
 ```http
 HTTP/1.1 403 Forbidden
