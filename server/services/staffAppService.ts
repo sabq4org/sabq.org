@@ -261,6 +261,37 @@ export class StaffInboxCursorError extends Error {
 export const STAFF_INBOX_SOCIAL_ACTIVE_STATUSES = ["draft", "scheduled", "processing"] as const;
 export const STAFF_INBOX_SOCIAL_RECENT_STATUSES = ["published", "failed"] as const;
 export const STAFF_INBOX_SOCIAL_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+/**
+ * تبويبا «منشور» و«مرفوض» في تطبيق الديسك: عند طلب `status` بإحدى هاتين
+ * القيمتين يُجلب السجل كاملاً (أحدث 200 مقترح) بدل نافذة الـ24 ساعة.
+ */
+export const STAFF_INBOX_SOCIAL_HISTORY_STATUSES = ["published", "canceled"] as const;
+
+/** `status` accepts one value or a comma list (`draft,processing,failed`). */
+export function parseStaffInboxStatuses(status: string | undefined): string[] {
+  if (!status) return [];
+  return status
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function socialStatusFilterFor(status: string | undefined) {
+  const statuses = parseStaffInboxStatuses(status);
+  if (
+    statuses.length > 0 &&
+    statuses.every((s) => (STAFF_INBOX_SOCIAL_HISTORY_STATUSES as readonly string[]).includes(s))
+  ) {
+    return { statuses };
+  }
+  // المجدول والجاري نشره يظلان ظاهرين حتى النشر، والمنشور/الفاشل آخر 24 ساعة.
+  // المرفوض (canceled) مستبعد. العدّاد و hasUnread يبقيان للمسودات فقط.
+  return {
+    statuses: [...STAFF_INBOX_SOCIAL_ACTIVE_STATUSES],
+    recentStatuses: [...STAFF_INBOX_SOCIAL_RECENT_STATUSES],
+    recentSince: new Date(Date.now() - STAFF_INBOX_SOCIAL_RECENT_WINDOW_MS),
+  };
+}
 
 export async function listStaffUnifiedInbox(options: {
   userId: string;
@@ -294,19 +325,14 @@ export async function listStaffUnifiedInbox(options: {
       ? listOpinionTickets({
           viewerId: options.userId,
           isAdmin: true,
-          status: options.status,
+          // A comma list (desk tabs) is filtered after the merge below.
+          status: options.status?.includes(",") ? undefined : options.status,
           unread: options.unread,
           limit: 200,
         })
       : Promise.resolve([]),
     includeSocial
-      ? listPendingSocialProposalsForDesk("all", 200, {
-          // المجدول والجاري نشره يظلان ظاهرين حتى النشر، والمنشور/الفاشل آخر 24 ساعة.
-          // المرفوض (canceled) مستبعد. العدّاد و hasUnread يبقيان للمسودات فقط.
-          statuses: [...STAFF_INBOX_SOCIAL_ACTIVE_STATUSES],
-          recentStatuses: [...STAFF_INBOX_SOCIAL_RECENT_STATUSES],
-          recentSince: new Date(Date.now() - STAFF_INBOX_SOCIAL_RECENT_WINDOW_MS),
-        })
+      ? listPendingSocialProposalsForDesk("all", 200, socialStatusFilterFor(options.status))
       : Promise.resolve([]),
   ]);
 
@@ -372,13 +398,15 @@ export async function listStaffUnifiedInbox(options: {
       deeplink: `sabqdesk://social/${s.id}`,
       scheduledAt: s.scheduledAt ?? null,
       publishedAt: s.publishedAt ?? null,
+      lastError: s.status === "canceled" || s.status === "failed" ? s.lastError ?? null : null,
       article: s.article ?? null,
     });
   }
 
   let filtered = unified;
-  if (options.status) {
-    filtered = filtered.filter((item) => item.status === options.status);
+  const statusList = parseStaffInboxStatuses(options.status);
+  if (statusList.length > 0) {
+    filtered = filtered.filter((item) => statusList.includes(item.status));
   }
   if (typeof options.unread === "boolean") {
     filtered = filtered.filter((item) => item.hasUnread === options.unread);

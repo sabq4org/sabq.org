@@ -95,6 +95,8 @@ export interface StaffInboxItem {
   scheduledAt?: string | null;
   /** Social only: ISO time the post went out (status `published`). */
   publishedAt?: string | null;
+  /** Social only: the rejection reason (`canceled`) or last publish error (`failed`). */
+  lastError?: string | null;
   article?: {
     id: string;
     title: string | null;

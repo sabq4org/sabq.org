@@ -39,6 +39,7 @@ import {
   claimPostForImmediatePublish,
   getPost,
   publishClaimedPost,
+  returnPostToDraft,
   schedulePost,
 } from "../services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../services/socialPublishing/types";
@@ -636,6 +637,53 @@ async function handleRejectSocialPost(req: StaffRequest, res: Response) {
   }
 }
 
+/**
+ * يعيد المقترح إلى «بانتظار القرار»: من المجدول (إلغاء الجدولة، يحتاج
+ * صلاحية الجدولة) أو من المرفوض (التراجع عن الرفض، يحتاج صلاحية الرفض).
+ */
+async function handleReturnSocialPostToDraft(req: StaffRequest, res: Response) {
+  const parsed = staffSocialPublishSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return sendError(res, 400, {
+      code: "validation_error",
+      message: "الإعادة لا تقبل حقولاً في الجسم",
+      details: parsed.error.flatten(),
+    });
+  }
+  try {
+    const existing = await getPost(req.params.id);
+    if (!existing) {
+      return sendError(res, 404, { code: "not_found", message: "المنشور غير موجود" });
+    }
+    if (existing.status !== "scheduled" && existing.status !== "canceled") {
+      return sendError(res, 409, {
+        code: "conflict",
+        message: "لا يمكن إعادة هذا المنشور إلى الانتظار في حالته الحالية",
+        post: existing,
+      });
+    }
+    const social = req.staffAuth!.capabilities.canSocial;
+    const allowed = existing.status === "scheduled" ? social.schedule : social.reject;
+    if (!allowed) {
+      return sendError(res, 403, {
+        code: "forbidden",
+        message: "لا توجد لديك صلاحيات للوصول إلى هذه الخدمة",
+      });
+    }
+    const post = await returnPostToDraft(req.params.id);
+    await auditStaffAppWrite(req, {
+      action: "social_post_return_to_draft",
+      entityType: "social_post",
+      entityId: post.id,
+      oldValue: { status: existing.status, scheduledAt: existing.scheduledAt },
+      newValue: { status: post.status },
+    });
+    res.json({ post });
+  } catch (error) {
+    handleSocialError(res, error, "تعذرت إعادة المنشور إلى الانتظار");
+  }
+}
+
 for (const prefix of ["/social", "/social/posts"] as const) {
   subRouter.get(
     `${prefix}/:id`,
@@ -663,6 +711,12 @@ for (const prefix of ["/social", "/social/posts"] as const) {
     requireSocialCapability("reject"),
     staffSocialActionLimiter,
     handleRejectSocialPost,
+  );
+  subRouter.post(
+    `${prefix}/:id/return-to-draft`,
+    requireStaffAuth,
+    staffSocialActionLimiter,
+    handleReturnSocialPostToDraft,
   );
 }
 

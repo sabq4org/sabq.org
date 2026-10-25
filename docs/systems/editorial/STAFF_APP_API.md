@@ -105,11 +105,11 @@ Content-Type: application/json
 ### 2. `GET /api/v1/staff/inbox`
 يعيد قائمة موحدة من التذاكر ومقترحات النشر الاجتماعي مرتبة من الأحدث إلى الأقدم (`updatedAt DESC`).
 
-مقترحات النشر المعروضة: `draft | scheduled | processing` دائماً، و`published | failed` لآخر 24 ساعة؛ المرفوض (`canceled`) لا يظهر. عناصر النشر تحمل `scheduledAt` و`publishedAt` (ISO أو `null`). `hasUnread` وعدّاد `social` في `/unread-counts` للمسودات (`draft`) فقط.
+مقترحات النشر المعروضة: `draft | scheduled | processing` دائماً، و`published | failed` لآخر 24 ساعة؛ المرفوض (`canceled`) لا يظهر. استثناء السجل (2026-10-25): إذا طُلب `status=published` أو `status=canceled` (أو قائمة منهما فقط) يُعاد السجل كاملاً (أحدث 200 مقترح) لتبويبَي «منشور» و«مرفوض» في التطبيق. عناصر `canceled`/`failed` تحمل `lastError` (سبب الرفض أو آخر خطأ نشر)، وهو `null` لغيرها. عناصر النشر تحمل `scheduledAt` و`publishedAt` (ISO أو `null`). `hasUnread` وعدّاد `social` في `/unread-counts` للمسودات (`draft`) فقط.
 
 **معاملات الاستعلام (Query Parameters):**
 - `type`: `all | ticket | social` (افتراضي `all`)
-- `status`: فلتر اختياري بالحالة (`open | answered | closed | draft | scheduled | processing | published | failed`)
+- `status`: فلتر اختياري بالحالة (`open | answered | closed | draft | scheduled | processing | published | failed | canceled`)، أو قائمة مفصولة بفواصل مثل `draft,processing,failed` (تبويب «بانتظارك»)
 - `unread`: فلتر اختياري بغير المقروء (`true | false | 1 | 0`)
 - `q`: بحث نصي اختياري في العنوان/المعاينة/اسم المرسل
 - `cursor`: مؤشر معتم (`opaque base64url cursor`) للصفحة التالية
@@ -198,6 +198,8 @@ Content-Type: application/json
   الجسم: `{ "scheduledAt": "2026-10-25T19:30:00+03:00" }` (صيغة ISO-8601 مع المنطقة الزمنية؛ يرفض الأوقات في الماضي بـ `400 validation_error`).
 - **`POST /api/v1/staff/social/:id/reject`**
   الجسم: `{ "reason"?: "سبب الرفض الاختياري" }`. يلغي المقترح (`status = "canceled"`) عبر `cancelPost` ويشعر الكاتب أو الوكالة.
+- **`POST /api/v1/staff/social/:id/return-to-draft`**
+  الجسم: `{}` (فارغ). يعيد المقترح إلى «بانتظار القرار» (`draft`) عبر `returnPostToDraft`: من `scheduled` (إلغاء الجدولة، يحتاج `canSocial.schedule`) أو من `canceled` (التراجع عن الرفض، يحتاج `canSocial.reject`). يمسح `scheduledAt` و`lastError` و`canceledByUserId` ويصفّر `attempts`. أي حالة أخرى ترد `409 conflict` دون لمس الصف. يُسجَّل في التدقيق بـ `social_post_return_to_draft`. لا يرسل إشعاراً لصاحب المقترح.
 
 ---
 
