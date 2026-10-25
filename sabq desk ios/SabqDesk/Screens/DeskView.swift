@@ -310,7 +310,7 @@ private struct SocialRow: View {
                     Spacer(minLength: DeskLayout.space4)
                     trailingTime
                 }
-                Text(item.listPreview)
+                Text(item.previewText?.isEmpty == false ? item.previewText! : item.title)
                     .deskText(DeskRowType.preview)
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(2)
@@ -414,7 +414,7 @@ private struct TimelineRow: View {
                         .lineLimit(1)
                     SenderKindTag(kind: item.sender.kind)
                 }
-                Text(item.listPreview)
+                Text(item.previewText?.isEmpty == false ? item.previewText! : item.title)
                     .deskText(DeskRowType.preview)
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(2)
