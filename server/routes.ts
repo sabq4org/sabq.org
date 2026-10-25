@@ -13448,6 +13448,9 @@ Respond in valid JSON format only:
       // englishSlug is the canonical public path segment (/article/<englishSlug || slug>).
       // shortCode (still used by the push-notifications picker) comes from a
       // LIMIT 1 subquery so an article with several short links yields one row.
+      // The correlation is spelled out with qualified identifiers: in a
+      // single-table select Drizzle renders column refs unqualified, which made
+      // the subquery compare short_links.article_id to short_links.id.
       const results = await db
         .select({ 
           id: articles.id, 
@@ -13456,9 +13459,9 @@ Respond in valid JSON format only:
           englishSlug: articles.englishSlug,
           imageUrl: articles.imageUrl,
           shortCode: sql<string | null>`(
-            SELECT ${shortLinks.shortCode} FROM ${shortLinks}
-            WHERE ${shortLinks.articleId} = ${articles.id} AND ${shortLinks.isActive} = true
-            ORDER BY ${shortLinks.createdAt} DESC
+            SELECT sl.short_code FROM ${shortLinks} AS sl
+            WHERE sl.article_id = ${sql.identifier("articles")}.${sql.identifier("id")} AND sl.is_active = true
+            ORDER BY sl.created_at DESC
             LIMIT 1
           )`
         })
