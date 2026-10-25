@@ -441,6 +441,7 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
         writerId: "w-1",
         writerName: "د. سعد",
         writerEmail: "saad@sabq.org",
+        writerProfileImageUrl: "https://media.sabq.org/avatars/w-1.jpg",
         authorKind: "opinion_author",
         title: "استفسار",
         status: "open",
@@ -453,6 +454,13 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
     mocks.canUserViewOpinionDesk.mockResolvedValue(true);
     const editorRes = await call("GET", "/api/v1/staff/tickets/t-1");
     expect(editorRes.status).toBe(200);
+    expect((await editorRes.json()).ticket.sender).toEqual({
+      id: "w-1",
+      name: "د. سعد",
+      kind: "writer",
+      roleKind: "opinion_author",
+      avatarUrl: "https://media.sabq.org/avatars/w-1.jpg",
+    });
 
     // 2) Admin -> allowed
     activeMockUser = { ...DEFAULT_STAFF_USER, id: "staff-admin-1", role: "admin" };

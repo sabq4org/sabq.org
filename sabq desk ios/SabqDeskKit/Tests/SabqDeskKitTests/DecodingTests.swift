@@ -136,6 +136,7 @@ final class DecodingTests: XCTestCase {
         let detail = try decoder.decode(StaffTicketDetail.self, from: Fixtures.ticketDetail.data)
         XCTAssertEqual(detail.ticket.status, .open)
         XCTAssertEqual(detail.ticket.writerName, "د. خالد العتيبي")
+        XCTAssertEqual(detail.ticket.sender?.avatarUrl, "https://media.sabq.org/avatars/writer-uuid.jpg")
         XCTAssertEqual(detail.messages.map(\.senderRole), [.writer, .admin])
         XCTAssertEqual(detail.messages[1].parentMessageId, "msg-1")
     }

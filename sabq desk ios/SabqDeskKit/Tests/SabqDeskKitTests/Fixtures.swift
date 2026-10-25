@@ -114,7 +114,8 @@ enum Fixtures {
         "writerLastName": "العتيبي",
         "writerEmail": "writer@example.com",
         "authorKind": "writer",
-        "sender": { "id": "writer-uuid", "name": "د. خالد العتيبي", "kind": "writer", "roleKind": "opinion_author" },
+        "sender": { "id": "writer-uuid", "name": "د. خالد العتيبي", "kind": "writer", "roleKind": "opinion_author",
+                    "avatarUrl": "https://media.sabq.org/avatars/writer-uuid.jpg" },
         "deeplink": "sabqdesk://ticket/ticket-uuid"
       },
       "messages": [
