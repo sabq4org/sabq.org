@@ -351,7 +351,7 @@ private struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isDesk ? .trailing : .leading)
-        .padding(isDesk ? .leading : .trailing, 48)
+        .padding(isDesk ? Edge.Set.leading : Edge.Set.trailing, 48)
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: "رد على هذه الرسالة") { if canReply { onReply() } }
     }
