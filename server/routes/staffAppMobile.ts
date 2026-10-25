@@ -15,6 +15,7 @@ import { isBotPublisherToken } from "@shared/botPublisherTokens";
 import {
   STAFF_APP_AUDIT_CHANNEL,
   STAFF_APP_BASE_PATH,
+  staffAlertPrefsUpdateSchema,
   staffInboxQuerySchema,
   staffSocialPublishSchema,
   staffSocialRejectSchema,
@@ -43,6 +44,9 @@ import {
   schedulePost,
 } from "../services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../services/socialPublishing/types";
+import { getStaffAdminAlerts } from "../services/staffAdminAlertsService";
+import { getStaffAlertPrefs, updateStaffAlertPrefs } from "../services/staffAlertPrefsService";
+import { getStaffSystemHealth } from "../services/staffSystemHealthService";
 import {
   StaffInboxCursorError,
   getStaffSocialPostDetail,
@@ -260,8 +264,33 @@ function handleSocialError(res: Response, error: unknown, fallback: string): voi
 
 // ── 1) الهوية والقدرات (/me) ─────────────────────────────────────────
 
-subRouter.get("/me", requireStaffAuth, (req: StaffRequest, res: Response) => {
+function requireAdminCapability(key: "canSystemHealth" | "canAdminAlerts") {
+  return (req: StaffRequest, res: Response, next: NextFunction) => {
+    const ctx = req.staffAuth;
+    if (!ctx) {
+      return sendError(res, 401, { code: "unauthorized", message: "Unauthorized" });
+    }
+    if (!ctx.capabilities[key]) {
+      return sendError(res, 403, {
+        code: "forbidden",
+        message: "هذه الخدمة متاحة للمشرفين فقط",
+      });
+    }
+    return next();
+  };
+}
+
+subRouter.get("/me", requireStaffAuth, async (req: StaffRequest, res: Response) => {
   const ctx = req.staffAuth!;
+  let alertPrefs: { aiAlerts: boolean; adminAlerts: boolean } | null = null;
+  if (ctx.capabilities.canAdminAlerts) {
+    try {
+      alertPrefs = await getStaffAlertPrefs(ctx.user.id);
+    } catch (error) {
+      console.error("[StaffApp me] alert prefs failed:", error);
+      alertPrefs = { aiAlerts: true, adminAlerts: true };
+    }
+  }
   res.json({
     id: ctx.user.id,
     email: ctx.user.email,
@@ -283,8 +312,90 @@ subRouter.get("/me", requireStaffAuth, (req: StaffRequest, res: Response) => {
     },
     roles: ctx.roles,
     capabilities: ctx.capabilities,
+    alertPrefs,
   });
 });
+
+// ── 1-ب) تفضيلات التنبيهات للمشرفين (/me/alert-prefs) ───────────────
+
+subRouter.get(
+  "/me/alert-prefs",
+  requireStaffAuth,
+  requireAdminCapability("canAdminAlerts"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      res.json(await getStaffAlertPrefs(req.staffAuth!.user.id));
+    } catch (error) {
+      console.error("[StaffApp alert-prefs] read failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب تفضيلات التنبيهات" });
+    }
+  },
+);
+
+subRouter.put(
+  "/me/alert-prefs",
+  requireStaffAuth,
+  requireAdminCapability("canAdminAlerts"),
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffAlertPrefsUpdateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "تفضيلات التنبيهات غير صالحة",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const ctx = req.staffAuth!;
+      const prefs = await updateStaffAlertPrefs(ctx.user.id, parsed.data);
+      await auditStaffAppWrite(req, {
+        action: "staff_alert_prefs_update",
+        entityType: "staff_alert_prefs",
+        entityId: ctx.user.id,
+        newValue: { ...prefs },
+      });
+      res.json(prefs);
+    } catch (error) {
+      console.error("[StaffApp alert-prefs] update failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر حفظ تفضيلات التنبيهات" });
+    }
+  },
+);
+
+// ── 1-ج) صحة النظام وتنبيهات الإدارة (/system/health, /alerts) ───────
+
+subRouter.get(
+  "/system/health",
+  requireStaffAuth,
+  requireAdminCapability("canSystemHealth"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      const prefs = await getStaffAlertPrefs(req.staffAuth!.user.id).catch(() => null);
+      res.json(await getStaffSystemHealth({ aiAlertsEnabled: prefs?.aiAlerts ?? true }));
+    } catch (error) {
+      console.error("[StaffApp system/health] error:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب صحة النظام" });
+    }
+  },
+);
+
+subRouter.get(
+  "/alerts",
+  requireStaffAuth,
+  requireAdminCapability("canAdminAlerts"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      res.json(
+        await getStaffAdminAlerts({
+          canRetrySocial: req.staffAuth!.capabilities.canSocial.publish,
+        }),
+      );
+    } catch (error) {
+      console.error("[StaffApp alerts] error:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب التنبيهات" });
+    }
+  },
+);
 
 // ── 2) الصندوق الموحد والعدادات (/inbox, /unread-counts) ─────────────
 

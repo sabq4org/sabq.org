@@ -388,8 +388,50 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
         schedule: true,
         reject: false,
       },
+      canSystemHealth: false,
+      canAdminAlerts: false,
     });
+    expect(body.alertPrefs).toBeNull();
     expect(mocks.invalidateUserPermissionCache).toHaveBeenCalledWith("staff-editor-1");
+  });
+
+  it("admin-only desk endpoints: /system/health, /alerts and /me/alert-prefs need ai_hub.view", async () => {
+    mocks.userHasPermission.mockImplementation(async (_uid: string, code: string) => code !== "ai_hub.view");
+    for (const [method, path, body] of [
+      ["GET", "/api/v1/staff/system/health", undefined],
+      ["GET", "/api/v1/staff/alerts", undefined],
+      ["GET", "/api/v1/staff/me/alert-prefs", undefined],
+      ["PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: false }],
+    ] as const) {
+      const res = await call(method, path, body);
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("forbidden");
+    }
+
+    // Admin: capabilities on, alertPrefs default ON when no row exists.
+    mocks.userHasPermission.mockResolvedValue(true);
+    mocks.dbSelect.mockImplementation(() => ({
+      from: (table: unknown) => ({
+        where: () => ({
+          limit: () =>
+            Promise.resolve(
+              table && typeof table === "object" && "twoFactorEnabled" in (table as object)
+                ? activeMockUser
+                  ? [activeMockUser]
+                  : []
+                : [],
+            ),
+        }),
+      }),
+    }));
+    const me = await (await call("GET", "/api/v1/staff/me")).json();
+    expect(me.capabilities).toMatchObject({ canSystemHealth: true, canAdminAlerts: true });
+    expect(me.alertPrefs).toEqual({ aiAlerts: true, adminAlerts: true });
+    const prefs = await call("GET", "/api/v1/staff/me/alert-prefs");
+    expect(prefs.status).toBe(200);
+    expect(await prefs.json()).toEqual({ aiAlerts: true, adminAlerts: true });
+    const bad = await call("PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: "off" });
+    expect(bad.status).toBe(400);
   });
 
   it("RBAC tickets: editor and admin can access tickets, reader cannot (403 forbidden)", async () => {
@@ -807,6 +849,57 @@ describe("Sabq Desk Staff API — Unified Inbox, Cursor Pagination & Unread Coun
     ]);
     const draftRes = await call("GET", "/api/v1/staff/inbox?type=social");
     expect((await draftRes.json()).items[0].lastError).toBeNull();
+  });
+
+  it("adds https-only sender avatars, sender kinds (incl. organization) and canceledBySelf", async () => {
+    mocks.listOpinionTickets.mockResolvedValue([
+      { ...sampleTickets[0], writerProfileImageUrl: "https://media.sabq.org/w/khalid.webp" },
+      { ...sampleTickets[1], writerProfileImageUrl: "/objects/avatars/fahad.png" },
+    ]);
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue([
+      { ...sampleSocialProposals[0], agencyLogoUrl: "https://media.sabq.org/logos/ofuq.png" },
+      {
+        ...sampleSocialProposals[1],
+        id: "social-org",
+        creatorRoles: ["system_admin"],
+        creatorProfileImageUrl: "http://insecure.example/a.png",
+      },
+      {
+        ...sampleSocialProposals[1],
+        id: "social-rep",
+        status: "canceled",
+        creatorRoles: ["reporter"],
+        creatorProfileImageUrl: "https://media.sabq.org/r.webp",
+        canceledByUserId: "writer-2",
+      },
+      {
+        ...sampleSocialProposals[1],
+        id: "social-rej",
+        status: "canceled",
+        creatorRoles: ["opinion_author"],
+        canceledByUserId: "editor-9",
+      },
+    ]);
+
+    const res = await call("GET", "/api/v1/staff/inbox?type=all&limit=50&status=open,answered,draft,canceled");
+    expect(res.status).toBe(200);
+    const items = (await res.json()).items as any[];
+    const byId = new Map(items.map((i) => [i.id, i]));
+    expect(byId.get("ticket-1").sender.avatarUrl).toBe("https://media.sabq.org/w/khalid.webp");
+    expect(byId.get("ticket-2").sender.avatarUrl).toBeNull();
+    expect(byId.get("social-1").sender).toMatchObject({
+      kind: "agency",
+      avatarUrl: "https://media.sabq.org/logos/ofuq.png",
+    });
+    expect(byId.get("social-1").canceledBySelf).toBeNull();
+    expect(byId.get("social-org").sender).toMatchObject({ kind: "organization", avatarUrl: null });
+    expect(byId.get("social-rep").sender).toMatchObject({
+      kind: "reporter",
+      avatarUrl: "https://media.sabq.org/r.webp",
+    });
+    expect(byId.get("social-rep").canceledBySelf).toBe(true);
+    expect(byId.get("social-rej").sender.kind).toBe("writer");
+    expect(byId.get("social-rej").canceledBySelf).toBe(false);
   });
 
   it("GET /unread-counts keeps the social count draft-only (default pending filter)", async () => {
