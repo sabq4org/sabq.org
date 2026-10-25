@@ -261,14 +261,16 @@ Content-Type: application/json
 
 | الجزء | المسار |
 |-------|--------|
-| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي |
+| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، رقم البناء `2026102501` |
 | شاشات التطبيق | `sabq desk ios/SabqDesk/` — الدخول + 2FA، شاشة «فعّل المصادقة الثنائية»، تبويبا «الوارد» و«الإعدادات»، تفاصيل الاستفسار، تفاصيل مقترح النشر وورقتا الجدولة والرفض |
-| حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
+| حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تسميات الأدوار العربية `StaffRoleLabel`، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
 | الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
 | CI | `.github/workflows/sabq-desk-ios-build.yml` — بناء بلا توقيع + الاختبارات |
 
 **سلوك العميل:**
-- الجلسة في Keychain (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`)، وتُحذف محلياً عند أي `401`. `403 two_factor_required` لا يحذف الجلسة؛ يعرض التطبيق شاشة تشرح التفعيل من `https://sabq.org/settings/security` ثم «تحقّق الآن».
+- الجلسة في Keychain (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`)، وتُمسح قبل بدء أي تسجيل دخول جديد وعند أي `401`. `403 two_factor_required` لا يحذف الجلسة؛ يعرض التطبيق شاشة تشرح التفعيل من `https://sabq.org/settings/security` ثم «تحقّق الآن».
+- تسمية الدور في شاشة الإعدادات تمر عبر `StaffRoleLabel` (`me.roleDisplayLabel`) لترجمة مفاتيح الأدوار (`system_admin` ← «مدير النظام»، `editor` ← «محرر»، إلخ) بالتطابق مع لوحة التحكم، مع الرجوع للمفتاح الخام عند عدم معرفته.
+- قوائم التبويبات («الوارد» و«الإعدادات») تضيف هامش محتوى سفلياً (`DeskLayout.tabBarClearance`) لتفادي تداخل شريط التبويبات العائم مع آخر الصفوف وتذييل الإصدار، بينما تخفي شاشتا تفاصيل الاستفسار وتفاصيل المقترح شريط التبويبات وتثبّتان شريط الإجراء في الأسفل عبر `safeAreaInset`.
 - `X-Installation-Id` معرّف عشوائي لكل تثبيت (UserDefaults)، ويُرسل أيضاً مع `POST /api/v1/members/push-token` (`bundleId: "com.sabq.desk"`). عند الخروج يُلغى تسجيل الرمز بـ `DELETE /api/v1/members/push-token`.
 - تسجيل رمز الدفع مربوط بمعرّف المستخدم (`PushRegistrationState`): يُعاد التسجيل كلما اختلف المستخدم أو تغيّر الرمز، ويُصفَّر الربط عند الخروج وعند أي `401`، لأن الخادم يربط الرمز بآخر حساب سجّله (upsert على `deviceToken`).
 - الأرقام العربية-الهندية والفارسية (`١٢٣`، `۱۲۳`) تُحوَّل إلى ASCII قبل الإرسال (`DeskInput`): رمز 2FA (أرقام فقط)، والرمز الاحتياطي (مع تكبير الأحرف)، ورقم الجوال في الدخول.

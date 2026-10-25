@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T20:39:07.708Z",
+  "generatedAt": "2026-10-25T02:59:53.388Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 306,
+      "fileCount": 353,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -374,7 +374,7 @@
     },
     {
       "id": "platform-runtime",
-      "fileCount": 33,
+      "fileCount": 34,
       "samplePaths": [
         "server/index.ts",
         "server/bootstrap.ts",

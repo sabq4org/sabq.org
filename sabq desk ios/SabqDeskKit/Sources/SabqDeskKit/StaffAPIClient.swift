@@ -48,7 +48,10 @@ public struct StaffAPIClient: Sendable {
     // MARK: - Auth
 
     /// `identifier` is an email when it contains `@`, otherwise a phone number.
+    /// Clears any pre-existing session first so an interrupted or two-step login
+    /// never falls back to a stale token in the store.
     public func login(identifier: String, password: String) async throws -> StaffLoginResult {
+        sessionStore.clear()
         let trimmed = DeskInput.loginIdentifier(identifier)
         let body = LoginBody(email: trimmed.contains("@") ? trimmed : nil,
                              phone: trimmed.contains("@") ? nil : trimmed,

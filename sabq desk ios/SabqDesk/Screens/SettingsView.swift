@@ -22,7 +22,7 @@ struct SettingsView: View {
                             }
                         }
                         .padding(.vertical, DeskLayout.space4)
-                        row("الدور", value: me.roles?.joined(separator: "، ") ?? me.role ?? "—")
+                        row("الدور", value: me.roleDisplayLabel)
                         row("المصادقة الثنائية", value: me.twoFactorEnabled == true ? "مفعّلة" : "غير مفعّلة")
                     }
 
@@ -47,6 +47,7 @@ struct SettingsView: View {
                     LTRText(text: versionString)
                 }
             }
+            .contentMargins(.bottom, DeskLayout.tabBarClearance, for: .scrollContent)
             .deskText(DeskType.excerpt)
             .navigationTitle("الإعدادات")
             .refreshable { await model.reloadIdentity() }

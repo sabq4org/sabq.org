@@ -148,6 +148,7 @@ interface MockUserRow {
   status: string;
   profileImageUrl: string | null;
   twoFactorEnabled: boolean;
+  twoFactorSecret?: string | null;
   twoFactorMethod: string;
   bannedUntil: Date | null;
   suspendedUntil: Date | null;
@@ -328,6 +329,32 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
         message: expect.any(String),
       });
     }
+  });
+
+  it("still returns 403 two_factor_required when a TOTP secret exists from an unconfirmed setup but twoFactorEnabled is false", async () => {
+    const unconfirmedSecret = "JBSWY3DP" + "EHPK3PXP";
+    activeMockUser = {
+      ...DEFAULT_STAFF_USER,
+      twoFactorEnabled: false,
+      twoFactorSecret: unconfirmedSecret,
+    };
+
+    const resUnconfirmed = await call("GET", "/api/v1/staff/me");
+    expect(resUnconfirmed.status).toBe(403);
+    expect(await resUnconfirmed.json()).toEqual({
+      code: "two_factor_required",
+      message: expect.any(String),
+    });
+
+    // Once the user completes verification (twoFactorEnabled = true), /me succeeds
+    activeMockUser = {
+      ...DEFAULT_STAFF_USER,
+      twoFactorEnabled: true,
+      twoFactorSecret: unconfirmedSecret,
+    };
+    const resEnabled = await call("GET", "/api/v1/staff/me");
+    expect(resEnabled.status).toBe(200);
+    expect((await resEnabled.json()).twoFactorEnabled).toBe(true);
   });
 
   it("GET /me returns user basics, roles, and live capability matrix", async () => {

@@ -44,10 +44,109 @@ public struct StaffMe: Codable, Sendable, Equatable {
     public var roles: [String]?
     public var capabilities: StaffCapabilities
 
+    public init(id: String, email: String? = nil, name: String? = nil, firstName: String? = nil,
+                lastName: String? = nil, profileImageUrl: String? = nil, role: String? = nil,
+                twoFactorEnabled: Bool? = nil, roles: [String]? = nil, capabilities: StaffCapabilities = .none) {
+        self.id = id
+        self.email = email
+        self.name = name
+        self.firstName = firstName
+        self.lastName = lastName
+        self.profileImageUrl = profileImageUrl
+        self.role = role
+        self.twoFactorEnabled = twoFactorEnabled
+        self.roles = roles
+        self.capabilities = capabilities
+    }
+
     public var displayName: String {
         if let name, !name.isEmpty { return name }
         let joined = [firstName, lastName].compactMap { $0 }.joined(separator: " ")
         return joined.isEmpty ? (email ?? "") : joined
+    }
+
+    public var roleDisplayLabel: String {
+        if let roles, let formatted = StaffRoleLabel.displayList(for: roles) {
+            return formatted
+        }
+        if let role, !role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return StaffRoleLabel.arabicLabel(for: role)
+        }
+        return "—"
+    }
+}
+
+/// Maps server role keys (`shared/rbac-constants.ts`, `shared/effectiveRoles.ts`,
+/// `server/services/mobileUserRolePayload.ts`) to the web dashboard's Arabic role labels.
+/// Unknown keys fall back to the raw key verbatim.
+public enum StaffRoleLabel {
+    private static let arabicMap: [String: String] = [
+        "system_admin": "مدير النظام",
+        "system.admin": "مدير النظام",
+        "superadmin": "المدير العام",
+        "super_admin": "المدير العام",
+        "admin": "مسؤول",
+        "editor_in_chief": "رئيس التحرير",
+        "chief_editor": "رئيس التحرير",
+        "managing_editor": "مدير تحرير",
+        "editorial_manager": "مدير تحرير",
+        "senior_editor": "محرر أول",
+        "editor": "محرر",
+        "content_manager": "مدير محتوى",
+        "reporter": "مراسل",
+        "correspondent": "مراسل",
+        "journalist": "صحفي",
+        "opinion_author": "كاتب مقال رأي",
+        "angle_writer": "كاتب زاوية",
+        "columnist": "كاتب عمود",
+        "article_writer": "كاتب مقال",
+        "article_author": "كاتب مقال",
+        "writer": "كاتب",
+        "author": "كاتب",
+        "content_creator": "صانع محتوى",
+        "comments_moderator": "مشرف تعليقات",
+        "moderator": "مشرف",
+        "media_manager": "مدير وسائط",
+        "publisher": "ناشر",
+        "photographer": "مصور",
+        "contributor": "مساهم",
+        "reviewer": "مراجع",
+        "analyst": "محلل",
+        "advertiser": "معلن",
+        "hr": "موارد بشرية",
+        "reader": "قارئ",
+        "user": "قارئ",
+        "subscriber": "مشترك",
+        "guest": "ضيف",
+    ]
+
+    public static func arabicLabel(for rawKey: String) -> String {
+        let trimmed = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return rawKey }
+        let lower = trimmed.lowercased()
+        if let match = arabicMap[lower] {
+            return match
+        }
+        let normalized = lower.replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        if let match = arabicMap[normalized] {
+            return match
+        }
+        return trimmed
+    }
+
+    public static func displayList(for rawKeys: [String]) -> String? {
+        var seen = Set<String>()
+        var labels: [String] = []
+        for raw in rawKeys {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let label = arabicLabel(for: trimmed)
+            if seen.insert(label).inserted {
+                labels.append(label)
+            }
+        }
+        return labels.isEmpty ? nil : labels.joined(separator: "، ")
     }
 }
 

@@ -10,8 +10,72 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(me.displayName, "ماجد العتيبي")
         XCTAssertEqual(me.twoFactorEnabled, true)
         XCTAssertEqual(me.roles, ["editor"])
+        XCTAssertEqual(me.roleDisplayLabel, "محرر")
         XCTAssertTrue(me.capabilities.canTickets)
         XCTAssertEqual(me.capabilities.canSocial, .init(view: true, publish: true, schedule: false, reject: true))
+    }
+
+    func testRoleArabicLabelMappingAndFallback() {
+        let expected: [(String, String)] = [
+            ("system_admin", "مدير النظام"),
+            ("system.admin", "مدير النظام"),
+            ("superadmin", "المدير العام"),
+            ("super_admin", "المدير العام"),
+            ("admin", "مسؤول"),
+            ("editor_in_chief", "رئيس التحرير"),
+            ("chief_editor", "رئيس التحرير"),
+            ("managing_editor", "مدير تحرير"),
+            ("editorial_manager", "مدير تحرير"),
+            ("senior_editor", "محرر أول"),
+            ("editor", "محرر"),
+            ("content_manager", "مدير محتوى"),
+            ("reporter", "مراسل"),
+            ("correspondent", "مراسل"),
+            ("journalist", "صحفي"),
+            ("opinion_author", "كاتب مقال رأي"),
+            ("angle_writer", "كاتب زاوية"),
+            ("columnist", "كاتب عمود"),
+            ("article_writer", "كاتب مقال"),
+            ("article_author", "كاتب مقال"),
+            ("writer", "كاتب"),
+            ("author", "كاتب"),
+            ("content_creator", "صانع محتوى"),
+            ("comments_moderator", "مشرف تعليقات"),
+            ("moderator", "مشرف"),
+            ("media_manager", "مدير وسائط"),
+            ("publisher", "ناشر"),
+            ("photographer", "مصور"),
+            ("contributor", "مساهم"),
+            ("reviewer", "مراجع"),
+            ("analyst", "محلل"),
+            ("advertiser", "معلن"),
+            ("hr", "موارد بشرية"),
+            ("reader", "قارئ"),
+            ("guest", "ضيف"),
+        ]
+        for (raw, label) in expected {
+            XCTAssertEqual(StaffRoleLabel.arabicLabel(for: raw), label, "failed for \(raw)")
+        }
+
+        // Case-insensitivity and hyphen/whitespace normalization
+        XCTAssertEqual(StaffRoleLabel.arabicLabel(for: " SYSTEM_ADMIN "), "مدير النظام")
+        XCTAssertEqual(StaffRoleLabel.arabicLabel(for: "opinion-author"), "كاتب مقال رأي")
+
+        // Unknown role falls back to the raw key
+        XCTAssertEqual(StaffRoleLabel.arabicLabel(for: "custom_role_xyz"), "custom_role_xyz")
+
+        // Multiple roles deduplicate identical Arabic labels (e.g. reporter + correspondent -> مراسل)
+        XCTAssertEqual(StaffRoleLabel.displayList(for: ["editor", "reporter", "correspondent"]), "محرر، مراسل")
+        XCTAssertEqual(StaffRoleLabel.displayList(for: ["system_admin"]), "مدير النظام")
+        XCTAssertNil(StaffRoleLabel.displayList(for: ["  ", ""]))
+
+        // StaffMe.roleDisplayLabel falls back to `role` then "—"
+        let meWithRoleOnly = StaffMe(id: "u1", role: "system_admin", roles: nil, capabilities: .none)
+        XCTAssertEqual(meWithRoleOnly.roleDisplayLabel, "مدير النظام")
+        let meUnknown = StaffMe(id: "u2", role: "special_ops", roles: [], capabilities: .none)
+        XCTAssertEqual(meUnknown.roleDisplayLabel, "special_ops")
+        let meEmpty = StaffMe(id: "u3", role: nil, roles: nil, capabilities: .none)
+        XCTAssertEqual(meEmpty.roleDisplayLabel, "—")
     }
 
     func testInboxPageDecodesBothKindsAndDateForms() throws {

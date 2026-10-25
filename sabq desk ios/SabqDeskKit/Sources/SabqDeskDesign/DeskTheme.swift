@@ -59,6 +59,8 @@ public enum DeskLayout {
     public static let pageMargin: CGFloat = 16
     public static let controlHeight: CGFloat = 48
     public static let touchTarget: CGFloat = 44
+    /// Bottom clearance so scrollable list and detail content clears the floating tab bar.
+    public static let tabBarClearance: CGFloat = 88
 }
 
 /// One step of the reader app's type scale.
