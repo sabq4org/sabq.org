@@ -1,6 +1,6 @@
 # تشغيل المنصة والبنية المشتركة (`platform-runtime`)
 
-> آخر مراجعة: 2026-10-24 (الانتقال إلى zod 4) | المالك: platform
+> آخر مراجعة: 2026-10-25 (تصنيف ضجيج Safari في Sentry) | المالك: platform
 
 ## الغرض والحدود
 الإقلاع، القيادة، انتهاء العملية، أدوات البناء والملفات المشتركة. `routes.ts` و`storage.ts` و`mobileApiRoutes.ts` و`schema.ts` مداخل مشتركة وليست ملكية لكل منطق أعمالها؛ يجب قراءة SYSTEM النظام المستهلك عند تعديل مساره أو جدوله. لا تغيير للبيانات أو Schema الإنتاج ضمن مراجعة سبتمبر.
@@ -13,6 +13,8 @@
 - الصورة وCI يستخدمان Node 24.22.1 (ترقية أمنية 2026-10-21)، وweb-next على 22.23.4؛ الحد الأدنى الحالي لـ Puppeteer هو 22.12. بناء الصورة وChromium في Linux تحقق مستقل عن تجميع TypeScript.
 - CI يغطي :app و:vara لأندرويد، ومشروعي سبق وVARA في iOS دون توقيع.
 - Sentry يُحمّل بعد أول رسم لتحسين LCP؛ مخزن الأخطاء المبكرة يحفظ `source` و`filename` الأصليين، ولا يعيد عبر `captureException` إلا الخطأ الذي يثبت أن له ملفًا أو stack من نطاق/حزمة سبق أو مشروع Pages `sabq-org`. لا تُعامل أخطاء السكربتات المحقونة عديمة المكدس كالتقاط صريح من التطبيق.
+- فلتر Sentry يسقط `TypeError` ذي القيمة الدقيقة `Type error` من `unhandledrejection` فقط عند وجود رسالة breadcrumb المطابقة لـ`[deployRecovery] Stale build detected (vite:preloadError)` وbreadcrumb `fetch` آخر يبدأ رابطه حرفيًا بـ`https://cdn.sabq.org/assets/` ويثبت الفشل بمستوى `error` أو status لا يقل عن 400؛ أي TypeError آخر يبقى قابلًا للرصد، والتحليل لا يستخدم serialization لبيانات breadcrumb.
+- يضبط الخادم `requestDataIntegration` لمنع body/cookies/headers/ip/query مع `sendDefaultPii=false`، ثم يمرر `beforeSend` عبر `sanitizeServerEvent` لحذف `user` والحقول الحساسة، مع إبقاء method/path وURL بلا query ورؤوس آمنة محددة فقط.
 - بركتا PostgreSQL عبر `node-postgres` في الإنتاج (الرئيسة والاحتياطية للجلسات) تثبتان مستمع خطأ دائمًا على كل عميل عند اتصاله، إضافة إلى مستمع البركة. هذا يمنع انقطاع socket عابرًا أثناء استعارة العميل من التحول إلى `uncaughtException`، مع إزالة التكرار عندما تعيد البركة إرسال كائن الخطأ نفسه؛ البركة الرئيسة تعلّم الاتصال غير متاح وتبدأ فحص الاستعادة. مسار `NeonPool` القديم يبقي مستمع `error` فقط حتى لا يعطّل `poolQueryViaFetch` الاختياري.
 
 ## موجة قرّاء العاجل على `/api/v1` — 2026-09-26
