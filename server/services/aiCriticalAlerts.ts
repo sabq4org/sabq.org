@@ -271,4 +271,10 @@ export function handleAiProviderStatusChange(change: BreakerStatusChange): void 
   void sendAiCriticalAlert(change).catch((err) => {
     console.warn("[AI Alerts] handler failed:", (err as Error).message);
   });
+  // إشعار تطبيق الديسك للمشرفين (تفضيل aiAlerts) — مستقل عن واتساب وبتهدئته الخاصة.
+  void import("./staffAiAlertPush")
+    .then(({ notifyStaffOfAiStatusChange }) => notifyStaffOfAiStatusChange(change))
+    .catch((err) => {
+      console.warn("[AI Alerts] staff-app push failed:", (err as Error).message);
+    });
 }
