@@ -31,6 +31,9 @@ final class DeepLinkAndRulesTests: XCTestCase {
         XCTAssertEqual(SocialRejectionPreset.composeReason(preset: .policy, note: ""), "لا يناسب سياسة الحساب")
         XCTAssertEqual(SocialRejectionPreset.composeReason(preset: nil, note: " ملاحظة "), "ملاحظة")
         XCTAssertNil(SocialRejectionPreset.composeReason(preset: nil, note: "  "))
+        XCTAssertNil(SocialRejectionPreset.composeReason(preset: nil, note: "   \n"))
+        XCTAssertEqual(SocialRejectionPreset.composeReason(preset: .rephrase, note: " أعد الصياغة "),
+                       "يحتاج إعادة صياغة — أعد الصياغة")
         XCTAssertEqual(SocialRejectionPreset.composeReason(preset: nil, note: String(repeating: "ا", count: 1200))?.count, 1000)
     }
 

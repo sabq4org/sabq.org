@@ -154,7 +154,7 @@ final class ClientTests: XCTestCase {
         let envelope = #"{"post":\#(Fixtures.socialPost)}"#
         let (client, transport, _) = makeClient([.init(status: 200, body: envelope), .init(status: 200, body: envelope)],
                                                 session: liveSession)
-        let reason = SocialRejectionPreset.composeReason(preset: .duplicate, note: "نُشر أمس")
+        let reason = try XCTUnwrap(SocialRejectionPreset.composeReason(preset: .duplicate, note: "نُشر أمس"))
         _ = try await client.rejectSocialPost(id: "social-post-uuid", reason: reason)
         XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/social/social-post-uuid/reject")
         XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["reason"] as? String, "مكرر — نُشر أمس")
@@ -164,7 +164,7 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["scheduledAt"] as? String, "2026-10-25T19:30:00+03:00")
     }
 
-    func testRejectWithoutReasonSendsEmptyBody() async throws {
+    func testRejectWithBlankReasonOmitsIt() async throws {
         let (client, transport, _) = makeClient([.init(status: 200, body: #"{"post":\#(Fixtures.socialPost)}"#)], session: liveSession)
         _ = try await client.rejectSocialPost(id: "social-post-uuid", reason: "   ")
         XCTAssertTrue(jsonObject(transport.lastRequest?.httpBody).isEmpty)
