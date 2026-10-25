@@ -2,6 +2,7 @@ import { registerShutdownHook } from "./shutdown";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
 import { setArticleDerivedFields, articleWriteConflict, refreshArticleLiteImage } from "./services/articleDerivedWrites";
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { getActiveBreakingTicker, getBreakingTickerHeadlines } from "./services/breakingTickerHeadlines";
 import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import { coalesceArticleReadOverlay } from "./services/articleReadOverlay";
@@ -13444,17 +13445,27 @@ Respond in valid JSON format only:
       // Build conditions for each word
       const wordConditions = words.map(word => ilike(articles.title, `%${word}%`));
       
-      // Join with shortLinks to get shortCode for deep links
+      // englishSlug is the canonical public path segment (/article/<englishSlug || slug>).
+      // shortCode (still used by the push-notifications picker) comes from a
+      // LIMIT 1 subquery so an article with several short links yields one row.
+      // The correlation is spelled out with qualified identifiers: in a
+      // single-table select Drizzle renders column refs unqualified, which made
+      // the subquery compare short_links.article_id to short_links.id.
       const results = await db
         .select({ 
           id: articles.id, 
           title: articles.title, 
           slug: articles.slug, 
+          englishSlug: articles.englishSlug,
           imageUrl: articles.imageUrl,
-          shortCode: shortLinks.shortCode
+          shortCode: sql<string | null>`(
+            SELECT sl.short_code FROM ${shortLinks} AS sl
+            WHERE sl.article_id = ${sql.identifier("articles")}.${sql.identifier("id")} AND sl.is_active = true
+            ORDER BY sl.created_at DESC
+            LIMIT 1
+          )`
         })
         .from(articles)
-        .leftJoin(shortLinks, eq(shortLinks.articleId, articles.id))
         .where(and(
           eq(articles.status, "published"),
           eq(articles.hideFromHomepage, false),
@@ -35368,7 +35379,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const cc = String(req.headers?.["cache-control"] ?? "").toLowerCase();
       const fresh = req.query?._nc != null || req.query?._t != null || cc.includes("no-cache") || cc.includes("no-store");
-      const data = await withSWR("breaking-ticker-active", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, () => storage.getActiveBreakingTicker(), fresh);
+      const data = await withSWR("breaking-ticker-active", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, () => getActiveBreakingTicker(), fresh);
       res.json(data ?? null);
     } catch (error) {
       console.error("Error fetching breaking ticker:", error);
@@ -35399,7 +35410,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!topic) {
         return res.status(404).json({ message: "الموضوع غير موجود" });
       }
-      const headlines = await storage.getBreakingTickerHeadlines(id);
+      const headlines = await getBreakingTickerHeadlines(id);
       res.json({ topic, headlines });
     } catch (error) {
       console.error("Error fetching breaking ticker topic:", error);
