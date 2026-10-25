@@ -133,6 +133,12 @@ function isLoneWrapperFrame(
 /** الشكل الأدنى الذي نحتاجه من حدث Sentry — يُبقي الوحدة قابلة للاختبار بلا SDK. */
 export interface MinimalSentryEvent {
   message?: string;
+  breadcrumbs?: Array<{
+    category?: string;
+    level?: string;
+    message?: string;
+    data?: Record<string, unknown> | null;
+  }>;
   exception?: {
     values?: Array<{
       type?: string;
@@ -141,6 +147,37 @@ export interface MinimalSentryEvent {
       stacktrace?: { frames?: Array<{ filename?: string }> } | null;
     }>;
   } | null;
+}
+
+function breadcrumbMessage(breadcrumb: NonNullable<MinimalSentryEvent["breadcrumbs"]>[number]): string {
+  return typeof breadcrumb.message === "string" ? breadcrumb.message : "";
+}
+
+/** Safari's old WebKit reports a swallowed Vite preload failure as `Type error`. */
+export function isSafariDeployRecoveryNoise(event: MinimalSentryEvent): boolean {
+  const exception = event.exception?.values?.[0];
+  if (
+    exception?.type !== "TypeError" ||
+    exception.value !== "Type error" ||
+    exception.mechanism?.type !== "auto.browser.global_handlers.onunhandledrejection"
+  ) return false;
+
+  const breadcrumbs = event.breadcrumbs ?? [];
+  const hasPreloadRecovery = breadcrumbs.some((breadcrumb) => {
+    return /\[deployRecovery\] Stale build detected .*\(vite:preloadError\)/.test(
+      breadcrumbMessage(breadcrumb),
+    );
+  });
+  const hasFailedCdnAsset = breadcrumbs.some((breadcrumb) => {
+    const data = breadcrumb.data ?? {};
+    const status = data.status_code ?? data.status;
+    const failedStatus = typeof status === "number" && status >= 400;
+    const url = typeof data.url === "string" ? data.url : "";
+    return breadcrumb.category === "fetch" &&
+      (breadcrumb.level === "error" || failedStatus) &&
+      url.startsWith("https://cdn.sabq.org/assets/");
+  });
+  return hasPreloadRecovery && hasFailedCdnAsset;
 }
 
 /**
@@ -298,6 +335,7 @@ export function isClientNoiseException(
  */
 export function shouldSendSentryEvent(event: MinimalSentryEvent): boolean {
   if (hasBrowserExtensionFrame(event)) return false;
+  if (isSafariDeployRecoveryNoise(event)) return false;
 
   const exceptionValue = event.exception?.values?.[0];
   if (isClientNoiseException(exceptionValue, event.message)) return false;

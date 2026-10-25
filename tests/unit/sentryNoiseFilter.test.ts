@@ -7,6 +7,7 @@ import {
   shouldSendSentryEvent,
   sentryBeforeSend,
   shouldReplayEarlyError,
+  isSafariDeployRecoveryNoise,
   SENTRY_DENY_URLS,
   type MinimalSentryEvent,
 } from "../../client/src/lib/sentryNoiseFilter";
@@ -256,6 +257,46 @@ describe("المساعدات", () => {
 });
 
 describe("ضجيج العميل غير القابل للإصلاح — يسقط ولو كان الإطار من حزمتنا", () => {
+  it("JAVASCRIPT-REACT-3N: Safari deploy recovery مع فشل CDN محدد يسقط", () => {
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "TypeError", value: "Type error" },
+    );
+    event.breadcrumbs = [
+      { category: "console", message: "[deployRecovery] Stale build detected (vite:preloadError); reloading" },
+      { category: "fetch", level: "error", data: { url: "https://cdn.sabq.org/assets/old.js", status_code: 404 } },
+    ];
+    expect(isSafariDeployRecoveryNoise(event)).toBe(true);
+    expect(shouldSendSentryEvent(event)).toBe(false);
+  });
+
+  it("Type error لا يسقط دون اكتمال إشارات deploy recovery", () => {
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "TypeError", value: "Type error" },
+    );
+    event.breadcrumbs = [
+      { category: "fetch", level: "error", data: { url: "https://cdn.sabq.org/assets/old.js", status_code: 404 } },
+    ];
+    expect(isSafariDeployRecoveryNoise(event)).toBe(false);
+    expect(shouldSendSentryEvent(event)).toBe(true);
+  });
+
+  it("بيانات breadcrumb دورية/غير قابلة للتسلسل لا ترمي ولا تسقط Type error ناقص الإشارات", () => {
+    const event = eventWith(
+      [{ filename: OUR_BUNDLE }],
+      "auto.browser.global_handlers.onunhandledrejection",
+      { type: "TypeError", value: "Type error" },
+    );
+    const circular: Record<string, unknown> = { url: "https://cdn.sabq.org/assets/old.js" };
+    circular.self = circular;
+    event.breadcrumbs = [{ category: "fetch", level: "error", data: circular }];
+    expect(() => shouldSendSentryEvent(event)).not.toThrow();
+    expect(shouldSendSentryEvent(event)).toBe(true);
+  });
+
   it("JAVASCRIPT-REACT-3F/3G/3H: مهلة المكونات الاصطناعية فقط تسقط", () => {
     const expectedDeadline = eventWith(
       [{ filename: OUR_BUNDLE }],
