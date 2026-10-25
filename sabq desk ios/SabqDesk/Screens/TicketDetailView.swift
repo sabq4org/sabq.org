@@ -56,7 +56,8 @@ struct TicketDetailView: View {
 
     private func titleView(_ ticket: StaffTicket) -> some View {
         HStack(spacing: DeskLayout.space8) {
-            SenderAvatar(name: ticket.writerName, kind: ticket.sender?.kind ?? .unknown, size: 36)
+            SenderAvatar(name: ticket.writerName, kind: ticket.sender?.kind ?? .unknown,
+                         imageURL: ticket.sender?.avatarUrl, size: 36)
             VStack(alignment: .leading, spacing: 0) {
                 Text(ticket.writerName)
                     .deskText(DeskRowType.headerName)
