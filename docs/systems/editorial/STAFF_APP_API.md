@@ -10,6 +10,7 @@
 3. **استفسارات المساهمين (`Tickets`):** قراءة سلسلة رسائل التذكرة، الرد باسم المنسوب مع نقل الحالة من `open` إلى `answered`، وتحديث حالة التذكرة (`open | answered | closed`).
 4. **مقترحات النشر الاجتماعي على X (`Social`):** معاينة التغريدة المقترحة والكاتب/الوكالة وسجل المحاولات، والنشر الفوري (`publish`) أو الجدولة (`schedule`) أو الرفض (`reject` مع ملاحظة اختيارية).
 5. **إشعارات الدفع الفوري الموجهة لتطبيق الديسك (`com.sabq.desk`):** إرسال إشعارات APNs/FCM عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` مع روابط عميقة `sabqdesk://ticket/<id>` و`sabqdesk://social/<id>` عند وصول تذكرة/رسالة جديدة أو مقترح نشر اجتماعي من كاتب رأي أو وكالة، مع عزل تام لإشعارات تطبيق القارئ (`com.sabq.sabqorg`).
+6. **أدوات المشرفين (`ai_hub.view`) — 2026-10-25:** صحة النظام (`GET /system/health`)، تنبيهات الإدارة (`GET /alerts`)، وتفضيلات التنبيهات (`GET|PUT /me/alert-prefs`)، مع إشعارات دفع لتغيّر حالة نماذج الذكاء الاصطناعي وحدود الميزانية وفشل نشر التغريدات.
 
 ---
 
@@ -54,9 +55,10 @@ Content-Type: application/json
 | **نشر المقترح فوراً** | `POST /social/:id/publish` | `social_publish.publish_now` |
 | **جدولة المقترح** | `POST /social/:id/schedule` | `social_publish.schedule` |
 | **رفض المقترح** | `POST /social/:id/reject` | `social_publish.manage_scheduled` **أو** `social_publish.create` |
+| **صحة النظام وتنبيهات الإدارة وتفضيلاتها** | `GET /system/health`، `GET /alerts`، `GET`/`PUT /me/alert-prefs` | `ai_hub.view` (`capabilities.canSystemHealth` / `canAdminAlerts`)؛ بدونها `403 forbidden` |
 
 ### د) سجل التدقيق (`activity_logs`) ومحددات المعدل
-- **التدقيق:** تُسجَّل كل عملية كتابة (`ticket_reply`, `ticket_status_update`, `social_post_publish`, `social_post_schedule`, `social_post_reject`) في جدول `activity_logs` مع:
+- **التدقيق:** تُسجَّل كل عملية كتابة (`ticket_reply`, `ticket_status_update`, `social_post_publish`, `social_post_schedule`, `social_post_reject`, `staff_alert_prefs_update`) في جدول `activity_logs` مع:
   - `metadata.channel = "staff-app"`
   - `metadata.userId` = معرّف المستخدم
   - `metadata.installationId` = قيمة الترويسة `X-Installation-Id` (إن أُرسلت من التطبيق)
@@ -97,10 +99,15 @@ Content-Type: application/json
       "publish": true,
       "schedule": true,
       "reject": true
-    }
-  }
+    },
+    "canSystemHealth": true,
+    "canAdminAlerts": true
+  },
+  "alertPrefs": { "aiAlerts": true, "adminAlerts": false }
 }
 ```
+- `canSystemHealth` و`canAdminAlerts` كلاهما = `ai_hub.view`.
+- `alertPrefs` يُعاد فقط لمن يملك `canAdminAlerts`، وإلا `null`. إن تعذّرت قراءته يُعاد `{ aiAlerts: true, adminAlerts: true }` بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
 يعيد قائمة موحدة من التذاكر ومقترحات النشر الاجتماعي مرتبة من الأحدث إلى الأقدم (`updatedAt DESC`).
@@ -155,7 +162,8 @@ Content-Type: application/json
         "id": "writer-uuid",
         "name": "د. خالد العتيبي",
         "kind": "writer",
-        "roleKind": "opinion_author"
+        "roleKind": "opinion_author",
+        "avatarUrl": "https://media.sabq.org/avatars/writer.jpg"
       },
       "createdAt": "2026-10-24T10:00:00.000Z",
       "updatedAt": "2026-10-24T14:00:00.000Z",
@@ -168,7 +176,7 @@ Content-Type: application/json
   "hasMore": false
 }
 ```
-> ملاحظة: حقل `sender.kind` يأخذ إحدى القيم الثلاث الموحدة: `"writer" | "reporter" | "agency"`.
+> ملاحظة: حقل `sender.kind` يأخذ إحدى القيم الموحدة: `"writer" | "reporter" | "agency" | "organization"` (`organization` = حساب منسوب غير كاتب ولا مراسل). `sender.avatarUrl` رابط `https` مطلق (صورة الشخص أو شعار الوكالة) أو `null` (`safeStaffAvatarUrl` في `shared/staffApp.ts`)؛ قد يغيب في الخوادم الأقدم.
 
 ### 3. `GET /api/v1/staff/unread-counts`
 يعيد أعداد العناصر غير المقروءة/المعلقة حسب صلاحيات الموظف:
@@ -182,7 +190,7 @@ Content-Type: application/json
 
 ### 4. مسارات التذاكر (`Tickets`)
 - **`GET /api/v1/staff/tickets/:id`**
-  يعيد تفاصيل التذكرة وكامل رسائل المحادثة مرتبة زمنياً، ويحدّث `lastReadByAdminAt`.
+  يعيد `{ ticket, messages }`: تفاصيل التذكرة وكامل رسائل المحادثة مرتبة زمنياً، ويحدّث `lastReadByAdminAt`. يحمل `ticket.sender` الشكل نفسه في الصندوق `{ id, name, kind, roleKind, avatarUrl }` (`buildStaffTicketDetailSender` في `server/services/staffAppService.ts`) مع `ticket.deeplink`.
 - **`POST /api/v1/staff/tickets/:id/reply`**
   الجسم: `{ "message": "نص الرد", "parentMessageId"?: "msg-id" }`.
   ينشر الرد باسم الموظف (`senderRole = "admin"`) وينقل التذكرة من `open` إلى `answered`، ويرفض التذكرة المغلقة بـ `400 { code: "ticket_closed" }`.
@@ -197,9 +205,67 @@ Content-Type: application/json
 - **`POST /api/v1/staff/social/:id/schedule`**
   الجسم: `{ "scheduledAt": "2026-10-25T19:30:00+03:00" }` (صيغة ISO-8601 مع المنطقة الزمنية؛ يرفض الأوقات في الماضي بـ `400 validation_error`).
 - **`POST /api/v1/staff/social/:id/reject`**
-  الجسم: `{ "reason"?: "سبب الرفض الاختياري" }`. يلغي المقترح (`status = "canceled"`) عبر `cancelPost` ويشعر الكاتب أو الوكالة.
+  الجسم: `{ "reason"?: "سبب الرفض" }` (حتى 1000 حرف). السبب اختياري في هذا المسار (التطبيق يرسل دائماً أحد الأسباب الجاهزة)؛ أما إلغاء الويب `POST /api/social-publishing/posts/:id/cancel` فيشترطه (انظر أدناه). يلغي المقترح (`status = "canceled"`) عبر `cancelPost` ويشعر الكاتب أو الوكالة.
 - **`POST /api/v1/staff/social/:id/return-to-draft`**
   الجسم: `{}` (فارغ). يعيد المقترح إلى «بانتظار القرار» (`draft`) عبر `returnPostToDraft`: من `scheduled` (إلغاء الجدولة، يحتاج `canSocial.schedule`) أو من `canceled` (التراجع عن الرفض، يحتاج `canSocial.reject`). يمسح `scheduledAt` و`lastError` و`canceledByUserId` ويصفّر `attempts`. أي حالة أخرى ترد `409 conflict` دون لمس الصف. يُسجَّل في التدقيق بـ `social_post_return_to_draft`. لا يرسل إشعاراً لصاحب المقترح.
+
+### 6. `GET /api/v1/staff/system/health` (`ai_hub.view`)
+لقطة صحة نماذج الذكاء الاصطناعي والميزانيات (`server/services/staffSystemHealthService.ts`):
+```json
+{
+  "generatedAt": "2026-10-25T09:00:00.000Z",
+  "lastCheckAt": "2026-10-25T08:55:00.000Z",
+  "summary": { "status": "partial", "title": "تعطّل جزئي", "detail": "..." },
+  "aiAlertsEnabled": true,
+  "models": [
+    {
+      "provider": "openai", "providerLabel": "OpenAI", "modelId": "gpt-5.1",
+      "status": "down", "rawStatus": "quota_exceeded",
+      "lastCheckAt": "2026-10-25T08:55:00.000Z", "since": "2026-10-25T08:40:00.000Z",
+      "cooldownUntil": null,
+      "lastError": { "code": "insufficient_quota", "message": "..." },
+      "requests24h": 120, "failures24h": 14
+    }
+  ],
+  "budgets": [
+    { "id": "budget-uuid", "label": "...", "limitUsd": 500, "spentUsd": 410.5, "percent": 82, "period": "monthly" }
+  ]
+}
+```
+- `models[].status`: `up | degraded | down` (`quota_exceeded` ← `down`). `summary.status`: `ok | partial | down`.
+- `lastError.message` مختصرة إلى 140 حرفاً مع حجب ما يشبه المفاتيح والتوكنات (`shortenAiError`).
+- `aiAlertsEnabled` = تفضيل `aiAlerts` للمستخدم الحالي.
+
+### 7. `GET /api/v1/staff/alerts` (`ai_hub.view`)
+تنبيهات الإدارة المجمّعة (`server/services/staffAdminAlertsService.ts`). كل مصدر مستقل ولا يُسقط فشلُه البقية، بحد أقصى 50 عنصراً:
+```json
+{
+  "generatedAt": "2026-10-25T09:00:00.000Z",
+  "counts": { "urgent": 2, "info": 1 },
+  "items": [
+    {
+      "id": "social_failed:post-uuid",
+      "kind": "social_failed",
+      "severity": "urgent",
+      "title": "فشل نشر تغريدة",
+      "body": "...",
+      "occurredAt": "2026-10-25T08:30:00.000Z",
+      "deeplink": "sabqdesk://social/post-uuid",
+      "action": { "type": "retry_social", "postId": "post-uuid" }
+    }
+  ]
+}
+```
+- `kind`: `social_failed` (آخر 72 ساعة) | `agency_balance_low` | `breaking_expiring` (خلال ساعتين) | `breaking_expired` (من صف `system_settings` `staff_app.breaking_expired_recent`) | `ai_incident` | `ai_budget` (≥ 80%).
+- `severity`: `urgent | info`. `action`: `{ type: "retry_social", postId }` (فقط لمن يملك `canSocial.publish`) | `{ type: "open_system" }` | `null`.
+
+### 8. `GET` / `PUT /api/v1/staff/me/alert-prefs` (`ai_hub.view`)
+- **`GET`** يعيد `{ "aiAlerts": true, "adminAlerts": true }`. غياب الصف = الاثنان مفعّلان.
+- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير منطقية ← `400 validation_error`). يعيد التفضيلات بعد الحفظ ويُسجَّل `staff_alert_prefs_update`.
+- التخزين: صف `system_settings` بالمفتاح `staff_app.alert_prefs:<userId>` (الفئة `staff_app`) بلا تغيير مخطط. الحفظ upsert ذري يدمج الحقول المرسلة فقط في قيمة jsonb المخزنة (`stored || patch`)، فلا يعيد طلبان متزامنان يغيّر كل منهما مفتاحاً مختلفاً تفعيلَ الآخر. جسم بلا حقول منطقية لا يكتب شيئاً ويعيد القيمة الحالية.
+
+### 9. سبب الرفض في إلغاء الويب
+`POST /api/social-publishing/posts/:id/cancel` (لوحة التحكم) يشترط `reason` غير فارغ إلا إذا كان الملغي هو صاحب المقترح (`resolveCancelReason` ← `400 "اكتب سبب الرفض"`). يُخزَّن السبب في `lastError` ويظهر في تبويب «مرفوض» مع `canceledBySelf`.
 
 ---
 
@@ -257,6 +323,18 @@ Content-Type: application/json
    - **الرابط العميق (`deeplink`):** `sabqdesk://social/<postId>`
    - **الحمولة الإضافية (`data`):** `{ "postId": "<postId>", "proposalKind": "agency" }`
    - **معرّف الدمج (`collapseId`):** `desk-social-<postId>`
+
+### ب-2) إشعارات المشرفين (`sendStaffAdminPush` في `server/services/staffAppPushService.ts`)
+المستلمون: المستخدمون النشطون الذين يملكون `ai_hub.view` ولم يطفئوا التفضيل المعني في `/me/alert-prefs` (إن تعذّرت قراءة التفضيلات يُرسل للجميع). لا ترمي هذه الدوال، ولا يمس فشلها مسار الذكاء الاصطناعي أو النشر.
+
+| الحدث | التفضيل | المصدر | `type` | `deeplink` | `collapseId` |
+|-------|---------|--------|--------|------------|--------------|
+| تغيّر حالة نموذج (`down` / `degraded` / `quota_exceeded` / تعافٍ) | `aiAlerts` | `notifyStaffOfAiStatusChange` من `aiCriticalAlerts` (تهدئة 15 دقيقة لكل مزود:نموذج:حالة) | `ai_status` | `sabqdesk://system` | `desk-ai-<provider>-<modelId>` |
+| استنفاد سلسلة البدائل (`chain_exhausted`) | `aiAlerts` | `handleAiGatewayIncident` عبر `setIncidentHandler` في بوابة الذكاء (تهدئة ≥ 10 دقائق لكل `featureKey`؛ مخزن دائري بالذاكرة لكل نسخة تقرؤه `/alerts`) | `ai_status` | `sabqdesk://system` | `desk-ai-chain-<featureKey>` |
+| بلوغ ميزانية 80% / 100% | `aiAlerts` | وظيفة `aiProviderHealthCheck` (مرة لكل ميزانية/شهر/حد بعلامة في `system_settings`) | `ai_status` | `sabqdesk://system` | `desk-ai-budget-<budgetId>` |
+| فشل نشر تغريدة فشلاً نهائياً | `adminAlerts` | `notifyStaffAdminsOfSocialFailure` من `socialPublishingService` | `admin_alert` (`data.postId`) | `sabqdesk://alerts` | `desk-social-failed-<postId>` |
+
+الكود: `server/services/staffAiAlertPush.ts`، `staffAlertPrefsService.ts`، `staffSystemHealthService.ts`، `staffAdminAlertsService.ts`، `staffBreakingExpiryLog.ts`.
 
 ### ج) عزل إشعارات القارئ عن أجهزة الديسك
 تم تحديث `notifyEditorialEvent` في `server/services/editorialNotifications.ts` لفلترة أجهزة iOS حسب حزمة تطبيق القارئ (`bundleId = 'com.sabq.sabqorg'`) وتمرير `topic: 'com.sabq.sabqorg'` إلى APNs، مما يضمن عدم إرسال إشعارات القارئ/الكاتب إلى أجهزة `com.sabq.desk`.

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T02:59:53.388Z",
+  "generatedAt": "2026-10-25T16:19:28.692Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 353,
+      "fileCount": 379,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -227,16 +227,16 @@
     },
     {
       "id": "comments",
-      "fileCount": 15,
+      "fileCount": 20,
       "samplePaths": [
         "server/services/commentInsightsService.ts",
+        "server/services/commentLoyalty.ts",
         "server/services/commentModerationService.ts",
+        "server/services/commentQuality.ts",
         "server/services/commentReactionsService.ts",
         "server/services/commentSafetyService.ts",
-        "server/routes/commentAppeals.ts",
-        "server/routes/commentModeration.ts",
-        "server/routes/commentReactions.ts",
-        "server/routes/commentReactionsMobile.ts"
+        "server/services/commentSuspicion.ts",
+        "server/services/commentVisibility.ts"
       ]
     },
     {
