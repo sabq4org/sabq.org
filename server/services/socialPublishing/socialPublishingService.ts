@@ -8,7 +8,7 @@
 //     └── cancel ──▶ canceled
 //   processing ── فشل مؤقت وattempts < MAX ──▶ scheduled (يعاد لاحقاً)
 //   processing ── فشل دائم أو استنفاد ──▶ failed ──(retry)──▶ processing
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../../db";
 import {
@@ -1272,6 +1272,8 @@ export interface PendingSocialProposalItem {
   mediaKind: string;
   mediaUrls: string[];
   requestedAt: string | null;
+  scheduledAt: string | null;
+  publishedAt: string | null;
   authorName: string | null;
   agencyName: string | null;
   proposerName: string | null;
@@ -1295,10 +1297,28 @@ export interface PendingSocialProposalItem {
   updated_at: string;
 }
 
+export interface DeskSocialProposalStatusFilter {
+  /** Statuses always included. Default `["draft"]` (pending decision only). */
+  statuses?: string[];
+  /** Statuses included only when updated at or after `recentSince` (e.g. published/failed). */
+  recentStatuses?: string[];
+  recentSince?: Date;
+}
+
 export async function listPendingSocialProposalsForDesk(
   kind: "author" | "agency" | "all" = "all",
   limit = 50,
+  filter: DeskSocialProposalStatusFilter = {},
 ): Promise<PendingSocialProposalItem[]> {
+  const statuses = filter.statuses && filter.statuses.length > 0 ? filter.statuses : ["draft"];
+  const recentStatuses = filter.recentStatuses ?? [];
+  const statusCondition =
+    recentStatuses.length > 0 && filter.recentSince
+      ? or(
+          inArray(socialPosts.status, statuses),
+          and(inArray(socialPosts.status, recentStatuses), gte(socialPosts.updatedAt, filter.recentSince)),
+        )
+      : inArray(socialPosts.status, statuses);
   const creator = alias(users, "social_proposal_creator");
   const rows = await db
     .select({
@@ -1317,7 +1337,7 @@ export async function listPendingSocialProposalsForDesk(
     .leftJoin(articles, eq(socialPosts.articleId, articles.id))
     .leftJoin(publishers, eq(socialPosts.publisherId, publishers.id))
     .leftJoin(creator, eq(socialPosts.createdByUserId, creator.id))
-    .where(eq(socialPosts.status, "draft"))
+    .where(statusCondition)
     .orderBy(desc(socialPosts.createdAt))
     .limit(Math.min(Math.max(limit * 2, 50), 200));
 
@@ -1360,6 +1380,8 @@ export async function listPendingSocialProposalsForDesk(
       mediaKind: r.post.mediaKind,
       mediaUrls: Array.isArray(r.post.mediaUrls) ? r.post.mediaUrls : [],
       requestedAt: r.post.requestedAt ? new Date(r.post.requestedAt).toISOString() : null,
+      scheduledAt: r.post.scheduledAt ? new Date(r.post.scheduledAt).toISOString() : null,
+      publishedAt: r.post.publishedAt ? new Date(r.post.publishedAt).toISOString() : null,
       authorName: isAuthor ? createdByName : null,
       agencyName,
       proposerName: isAgency ? agencyName ?? createdByName : createdByName,

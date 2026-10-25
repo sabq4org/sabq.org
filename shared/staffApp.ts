@@ -91,6 +91,10 @@ export interface StaffInboxItem {
   status: string;
   hasUnread: boolean;
   deeplink: string;
+  /** Social only: ISO time the post is scheduled for (status `scheduled`). */
+  scheduledAt?: string | null;
+  /** Social only: ISO time the post went out (status `published`). */
+  publishedAt?: string | null;
   article?: {
     id: string;
     title: string | null;

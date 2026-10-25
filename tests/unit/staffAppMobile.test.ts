@@ -689,6 +689,81 @@ describe("Sabq Desk Staff API — Unified Inbox, Cursor Pagination & Unread Coun
     expect((await badCursorRes.json()).code).toBe("validation_error");
   });
 
+  it("includes scheduled/processing and recent published/failed social posts with scheduledAt/publishedAt, keeping hasUnread draft-only", async () => {
+    mocks.listOpinionTickets.mockResolvedValue([]);
+    const scheduled = {
+      ...sampleSocialProposals[0],
+      id: "social-scheduled",
+      status: "scheduled",
+      scheduledAt: "2026-10-25T11:05:00.000Z",
+      publishedAt: null,
+      updatedAt: "2026-10-25T10:51:17.000Z",
+      updated_at: "2026-10-25T10:51:17.000Z",
+    };
+    const published = {
+      ...sampleSocialProposals[1],
+      id: "social-published",
+      status: "published",
+      scheduledAt: "2026-10-25T09:00:00.000Z",
+      publishedAt: "2026-10-25T09:00:03.000Z",
+      updatedAt: "2026-10-25T09:00:03.000Z",
+      updated_at: "2026-10-25T09:00:03.000Z",
+    };
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue([
+      scheduled,
+      published,
+      ...sampleSocialProposals,
+    ]);
+
+    const before = Date.now();
+    const res = await call("GET", "/api/v1/staff/inbox?type=social&limit=20");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    // الاستعلام يطلب المسودة والمجدول والجاري نشره دائماً، والمنشور/الفاشل آخر 24 ساعة، بلا المرفوض
+    expect(mocks.listPendingSocialProposalsForDesk).toHaveBeenCalledTimes(1);
+    const [kind, , filter] = mocks.listPendingSocialProposalsForDesk.mock.calls[0];
+    expect(kind).toBe("all");
+    expect(filter.statuses).toEqual(["draft", "scheduled", "processing"]);
+    expect(filter.recentStatuses).toEqual(["published", "failed"]);
+    expect(filter.statuses).not.toContain("canceled");
+    expect(filter.recentStatuses).not.toContain("canceled");
+    const since = (filter.recentSince as Date).getTime();
+    expect(Math.abs(before - 24 * 60 * 60 * 1000 - since)).toBeLessThan(5_000);
+
+    const byId = Object.fromEntries(body.items.map((i: any) => [i.id, i]));
+    expect(byId["social-scheduled"]).toMatchObject({
+      status: "scheduled",
+      hasUnread: false,
+      scheduledAt: "2026-10-25T11:05:00.000Z",
+      publishedAt: null,
+    });
+    expect(byId["social-published"]).toMatchObject({
+      status: "published",
+      hasUnread: false,
+      publishedAt: "2026-10-25T09:00:03.000Z",
+    });
+    expect(byId["social-1"]).toMatchObject({ status: "draft", hasUnread: true });
+
+    // «غير المقروء فقط» يبقى للمسودات فقط
+    const unreadRes = await call("GET", "/api/v1/staff/inbox?type=social&unread=true");
+    expect(unreadRes.status).toBe(200);
+    const unreadIds = (await unreadRes.json()).items.map((i: any) => i.id).sort();
+    expect(unreadIds).toEqual(["social-1", "social-2"]);
+  });
+
+  it("GET /unread-counts keeps the social count draft-only (default pending filter)", async () => {
+    mocks.getOpinionTicketsUnreadCounts.mockResolvedValue({ unreadCount: 0, unansweredCount: 0 });
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue(sampleSocialProposals);
+
+    const res = await call("GET", "/api/v1/staff/unread-counts");
+    expect(res.status).toBe(200);
+    expect((await res.json()).social).toBe(2);
+    const args = mocks.listPendingSocialProposalsForDesk.mock.calls[0];
+    expect(args[0]).toBe("all");
+    expect(args[2]).toBeUndefined();
+  });
+
   it("GET /unread-counts returns { tickets, social, total }", async () => {
     mocks.getOpinionTicketsUnreadCounts.mockResolvedValue({
       unreadCount: 3,
