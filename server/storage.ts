@@ -21327,9 +21327,18 @@ export class DatabaseStorage implements IStorage {
     
     if (!activeTopic) return null;
     
-    const headlines = await db
-      .select()
+    // Resolve the linked article's CURRENT canonical slug at read time
+    // (englishSlug || slug) instead of trusting the snapshot stored on the
+    // headline, which can be stale (slug edited later) or wrong (a share
+    // short code saved by an older dashboard build). Falls back to the stored
+    // value when the article is gone. Response shape is unchanged.
+    const headlines: BreakingTickerHeadline[] = await db
+      .select({
+        ...getTableColumns(breakingTickerHeadlines),
+        linkedArticleSlug: sql<string | null>`COALESCE(${articles.englishSlug}, ${articles.slug}, ${breakingTickerHeadlines.linkedArticleSlug})`,
+      })
       .from(breakingTickerHeadlines)
+      .leftJoin(articles, eq(articles.id, breakingTickerHeadlines.linkedArticleId))
       .where(eq(breakingTickerHeadlines.topicId, activeTopic.id))
       .orderBy(asc(breakingTickerHeadlines.orderIndex));
     
@@ -21352,9 +21361,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBreakingTickerHeadlines(topicId: string): Promise<BreakingTickerHeadline[]> {
+    // Same read-time slug resolution as getActiveBreakingTicker so the
+    // dashboard preview links match what the public ticker opens.
     return db
-      .select()
+      .select({
+        ...getTableColumns(breakingTickerHeadlines),
+        linkedArticleSlug: sql<string | null>`COALESCE(${articles.englishSlug}, ${articles.slug}, ${breakingTickerHeadlines.linkedArticleSlug})`,
+      })
       .from(breakingTickerHeadlines)
+      .leftJoin(articles, eq(articles.id, breakingTickerHeadlines.linkedArticleId))
       .where(eq(breakingTickerHeadlines.topicId, topicId))
       .orderBy(asc(breakingTickerHeadlines.orderIndex));
   }

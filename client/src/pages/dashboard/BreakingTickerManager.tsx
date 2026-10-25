@@ -101,6 +101,7 @@ type ArticleSearchResult = {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   shortSlug?: string | null;
   shortCode?: string | null;
   imageUrl?: string | null;
@@ -541,7 +542,9 @@ function SortableHeadlineRow({
     onUpdate(headline.id, {
       linkedArticleId: article.id,
       linkedArticleTitle: article.title,
-      linkedArticleSlug: article.shortCode || article.shortSlug || article.slug,
+      // Canonical public article path segment (same as the rest of the site):
+      // englishSlug || slug. Never the share short code — /article/<shortCode> 404s.
+      linkedArticleSlug: article.englishSlug || article.slug,
       externalUrl: null,
     });
     setArticleSearchTerm("");
@@ -1334,7 +1337,9 @@ export default function BreakingTickerManager() {
       headline: article.title,
       linkedArticleId: article.id,
       linkedArticleTitle: article.title,
-      linkedArticleSlug: article.shortCode || article.shortSlug || article.slug,
+      // Canonical public article path segment (same as the rest of the site):
+      // englishSlug || slug. Never the share short code — /article/<shortCode> 404s.
+      linkedArticleSlug: article.englishSlug || article.slug,
     });
   };
 

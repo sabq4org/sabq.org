@@ -13444,17 +13444,24 @@ Respond in valid JSON format only:
       // Build conditions for each word
       const wordConditions = words.map(word => ilike(articles.title, `%${word}%`));
       
-      // Join with shortLinks to get shortCode for deep links
+      // englishSlug is the canonical public path segment (/article/<englishSlug || slug>).
+      // shortCode (still used by the push-notifications picker) comes from a
+      // LIMIT 1 subquery so an article with several short links yields one row.
       const results = await db
         .select({ 
           id: articles.id, 
           title: articles.title, 
           slug: articles.slug, 
+          englishSlug: articles.englishSlug,
           imageUrl: articles.imageUrl,
-          shortCode: shortLinks.shortCode
+          shortCode: sql<string | null>`(
+            SELECT ${shortLinks.shortCode} FROM ${shortLinks}
+            WHERE ${shortLinks.articleId} = ${articles.id} AND ${shortLinks.isActive} = true
+            ORDER BY ${shortLinks.createdAt} DESC
+            LIMIT 1
+          )`
         })
         .from(articles)
-        .leftJoin(shortLinks, eq(shortLinks.articleId, articles.id))
         .where(and(
           eq(articles.status, "published"),
           eq(articles.hideFromHomepage, false),
