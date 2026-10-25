@@ -40,6 +40,7 @@ import {
   claimPostForImmediatePublish,
   getPost,
   publishClaimedPost,
+  resolveCancelReason,
   returnPostToDraft,
   schedulePost,
 } from "../services/socialPublishing/socialPublishingService";
@@ -722,7 +723,10 @@ async function handleRejectSocialPost(req: StaffRequest, res: Response) {
     if (!existing) {
       return sendError(res, 404, { code: "not_found", message: "المنشور غير موجود" });
     }
-    const reason = parsed.data.reason ?? null;
+    // نفس قاعدة الويب: سبب الرفض إلزامي إلا إذا سحب صاحب المنشور منشوره.
+    // resolveCancelReason يرمي SocialPublishValidationError(400) فيحوّله
+    // handleSocialError إلى validation_error بالرسالة العربية.
+    const reason = resolveCancelReason(existing, req.staffAuth!.user.id, parsed.data.reason);
     const post = await cancelPost(req.params.id, req.staffAuth!.user.id, reason);
     await auditStaffAppWrite(req, {
       action: "social_post_reject",

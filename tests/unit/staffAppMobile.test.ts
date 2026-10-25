@@ -134,7 +134,10 @@ import mobileAccountHooksRouter from "../../server/routes/mobileAccountHooks";
 import { isCsrfExemptRequest } from "../../server/csrf";
 import { OpinionTicketServiceError } from "../../server/services/opinionTicketsService";
 import { notifyDeskOfWriterInquiry } from "../../server/services/opinionTicketNotifications";
-import { notifyDeskOfAuthorSocialProposal } from "../../server/services/socialPublishing/socialPublishingService";
+import {
+  CANCEL_REASON_REQUIRED_MESSAGE,
+  notifyDeskOfAuthorSocialProposal,
+} from "../../server/services/socialPublishing/socialPublishingService";
 import { notifyStaffDeskOfSocialProposal } from "../../server/services/staffAppService";
 import { notifyEditorialEvent } from "../../server/services/editorialNotifications";
 
@@ -1142,6 +1145,52 @@ describe("Sabq Desk Staff API — Tickets, Social Actions, Schedule Validation, 
     expect(r2.status).toBe(200);
     expect(r3.status).toBe(429);
     expect((await r3.json()).code).toBe("rate_limited");
+  });
+
+  it("requires a rejection reason unless the staff user withdraws their own post", async () => {
+    const draftPost = {
+      id: "soc-reason",
+      articleId: "art-1",
+      platform: "x",
+      status: "draft",
+      text: "تغريدة",
+      textSource: "custom",
+      linkUrl: null,
+      createdByUserId: "w-1",
+      publisherId: null,
+    };
+    mocks.getPost.mockResolvedValue(draftPost);
+    mocks.cancelPost.mockResolvedValue({ ...draftPost, status: "canceled" });
+
+    // غير صاحب المنشور بلا جسم أو بسبب فارغ → 400 ولا يُلغى شيء.
+    for (const body of [undefined, {}, { reason: "   " }, { reason: null }]) {
+      const res = await call("POST", "/api/v1/staff/social/soc-reason/reject", body);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.code).toBe("validation_error");
+      expect(json.message).toBe(CANCEL_REASON_REQUIRED_MESSAGE);
+    }
+    // المسار البديل /social/posts/:id/reject يطبّق القاعدة نفسها.
+    const postsAlias = await call("POST", "/api/v1/staff/social/posts/soc-reason/reject", {});
+    expect(postsAlias.status).toBe(400);
+    expect(mocks.cancelPost).not.toHaveBeenCalled();
+
+    // بسبب → 200 ويصل السبب المقلّم إلى cancelPost.
+    const withReason = await call("POST", "/api/v1/staff/social/soc-reason/reject", {
+      reason: "  صياغة غير مناسبة  ",
+    });
+    expect(withReason.status).toBe(200);
+    expect(mocks.cancelPost).toHaveBeenLastCalledWith(
+      "soc-reason",
+      DEFAULT_STAFF_USER.id,
+      "صياغة غير مناسبة",
+    );
+
+    // صاحب المنشور يسحبه بلا سبب → 200 والسبب null.
+    mocks.getPost.mockResolvedValue({ ...draftPost, createdByUserId: DEFAULT_STAFF_USER.id });
+    const ownWithdraw = await call("POST", "/api/v1/staff/social/soc-reason/reject", {});
+    expect(ownWithdraw.status).toBe(200);
+    expect(mocks.cancelPost).toHaveBeenLastCalledWith("soc-reason", DEFAULT_STAFF_USER.id, null);
   });
 });
 
