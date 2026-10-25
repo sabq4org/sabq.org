@@ -15,10 +15,11 @@ final class ClientTests: XCTestCase {
     private let liveSession = StaffSession(token: "session-abc", expiresAt: Date().addingTimeInterval(3600), userId: "user-uuid")
 
     func testLoginThatNeedsTwoFactorReturnsChallengeWithoutSaving() async throws {
-        let (client, transport, store) = makeClient([.init(status: 200, body: Fixtures.loginNeeds2FA)])
+        let stale = StaffSession(token: "stale-token", expiresAt: Date().addingTimeInterval(3600), userId: "stale-user")
+        let (client, transport, store) = makeClient([.init(status: 200, body: Fixtures.loginNeeds2FA)], session: stale)
         let result = try await client.login(identifier: " editor@sabq.org ", password: "pw")
         XCTAssertEqual(result, .needsTwoFactor(challengeToken: "challenge-xyz", message: "أدخل رمز التحقق"))
-        XCTAssertNil(store.load())
+        XCTAssertNil(store.load(), "login must clear any pre-existing session before awaiting 2FA verification")
 
         let request = try XCTUnwrap(transport.lastRequest)
         XCTAssertEqual(request.url?.path, "/api/v1/auth/login")
@@ -195,5 +196,45 @@ final class ClientTests: XCTestCase {
         let (client, _, store) = makeClient([.init(status: 500, body: "{}")], session: liveSession)
         await client.logout()
         XCTAssertNil(store.load())
+    }
+
+    func testLoginWith2FAEnabledThenMeSucceedsWithoutGate() async throws {
+        let (client, _, store) = makeClient([
+            .init(status: 200, body: Fixtures.loginNeeds2FA),
+            .init(status: 200, body: Fixtures.loginSuccess),
+            .init(status: 200, body: Fixtures.me),
+        ])
+        let step1 = try await client.login(identifier: "admin@sabq.sa", password: "pw")
+        guard case .needsTwoFactor(let challenge, _) = step1 else {
+            return XCTFail("expected 2FA challenge")
+        }
+        XCTAssertNil(store.load())
+        _ = try await client.verifyTwoFactor(challengeToken: challenge, factor: .code("123456"))
+        let me = try await client.me()
+        XCTAssertEqual(me.twoFactorEnabled, true)
+        XCTAssertNotNil(store.load())
+    }
+
+    func testLoginWithout2FAThenMeThrowsTwoFactorRequiredAndKeepsSessionForRetry() async throws {
+        let gateBody = #"{"code":"two_factor_required","message":"يلزم تفعيل المصادقة الثنائية"}"#
+        let (client, _, store) = makeClient([
+            .init(status: 200, body: Fixtures.loginSuccess),
+            .init(status: 403, body: gateBody),
+            .init(status: 200, body: Fixtures.me),
+        ])
+        let step1 = try await client.login(identifier: "editor@sabq.org", password: "pw")
+        guard case .signedIn = step1 else {
+            return XCTFail("expected direct sign-in when 2FA is not enabled")
+        }
+        do {
+            _ = try await client.me()
+            XCTFail("expected twoFactorRequired error")
+        } catch let error as StaffAPIError {
+            XCTAssertEqual(error, .twoFactorRequired(message: "يلزم تفعيل المصادقة الثنائية"))
+            XCTAssertNotNil(store.load())
+        }
+        // After enabling 2FA on the web, retrying me() with the kept session succeeds.
+        let meAfterEnable = try await client.me()
+        XCTAssertEqual(meAfterEnable.twoFactorEnabled, true)
     }
 }

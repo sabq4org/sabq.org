@@ -94,6 +94,7 @@ private struct InboxList: View {
             }
         }
         .listStyle(.plain)
+        .contentMargins(.bottom, DeskLayout.tabBarClearance, for: .scrollContent)
         .overlay {
             if inbox.isLoading, inbox.items.isEmpty { ProgressView() }
         }

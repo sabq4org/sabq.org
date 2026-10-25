@@ -64,6 +64,14 @@ export interface StaffUserAccount {
   twoFactorMethod: string;
 }
 
+export function isStaffTwoFactorSatisfied(row: {
+  twoFactorEnabled?: boolean | null;
+  twoFactorSecret?: string | null;
+}): boolean {
+  if (row.twoFactorEnabled) return true;
+  return typeof row.twoFactorSecret === "string" && row.twoFactorSecret.trim().length > 0;
+}
+
 export interface StaffAuthContext {
   user: StaffUserAccount;
   roles: string[];
@@ -87,6 +95,7 @@ export async function getStaffUserAccount(userId: string): Promise<StaffUserAcco
       status: users.status,
       profileImageUrl: users.profileImageUrl,
       twoFactorEnabled: users.twoFactorEnabled,
+      twoFactorSecret: users.twoFactorSecret,
       twoFactorMethod: users.twoFactorMethod,
       bannedUntil: users.bannedUntil,
       suspendedUntil: users.suspendedUntil,
@@ -117,7 +126,7 @@ export async function getStaffUserAccount(userId: string): Promise<StaffUserAcco
     role: row.role,
     status: row.status,
     profileImageUrl: row.profileImageUrl ?? null,
-    twoFactorEnabled: Boolean(row.twoFactorEnabled),
+    twoFactorEnabled: isStaffTwoFactorSatisfied(row),
     twoFactorMethod: row.twoFactorMethod || "authenticator",
   };
 }

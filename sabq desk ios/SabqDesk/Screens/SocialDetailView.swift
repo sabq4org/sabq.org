@@ -35,6 +35,7 @@ struct SocialDetailView: View {
         }
         .navigationTitle("مقترح نشر")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .task { await load() }
         .confirmationDialog("نشر التغريدة الآن على حساب سبق؟", isPresented: $confirmPublish, titleVisibility: .visible) {
             Button("انشر الآن") { Task { await publish() } }
@@ -70,6 +71,7 @@ struct SocialDetailView: View {
             }
             .padding(DeskLayout.pageMargin)
         }
+        .contentMargins(.bottom, DeskLayout.space24, for: .scrollContent)
         .refreshable { await load() }
         .safeAreaInset(edge: .bottom) {
             if !actions.isEmpty || actionError != nil || notice != nil {

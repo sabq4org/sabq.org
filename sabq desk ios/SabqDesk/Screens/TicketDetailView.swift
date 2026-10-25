@@ -32,6 +32,7 @@ struct TicketDetailView: View {
         }
         .navigationTitle("استفسار")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             if let ticket = detail?.ticket {
                 ToolbarItem(placement: .primaryAction) { statusMenu(ticket) }
@@ -60,6 +61,7 @@ struct TicketDetailView: View {
                 }
                 .padding(DeskLayout.pageMargin)
             }
+            .contentMargins(.bottom, DeskLayout.space16, for: .scrollContent)
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
                 if let last = detail.messages.last?.id { proxy.scrollTo(last, anchor: .bottom) }

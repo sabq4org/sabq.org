@@ -148,6 +148,7 @@ interface MockUserRow {
   status: string;
   profileImageUrl: string | null;
   twoFactorEnabled: boolean;
+  twoFactorSecret?: string | null;
   twoFactorMethod: string;
   bannedUntil: Date | null;
   suspendedUntil: Date | null;
@@ -305,10 +306,11 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
     expect(mocks.verifyMemberBearer).not.toHaveBeenCalled();
   });
 
-  it("enforces mandatory 2FA gate: returns 403 { code: 'two_factor_required' } when 2FA is disabled", async () => {
+  it("enforces mandatory 2FA gate: returns 403 { code: 'two_factor_required' } when 2FA is disabled and no TOTP secret exists", async () => {
     activeMockUser = {
       ...DEFAULT_STAFF_USER,
       twoFactorEnabled: false,
+      twoFactorSecret: null,
     };
 
     for (const [method, path, body] of [
@@ -328,6 +330,39 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
         message: expect.any(String),
       });
     }
+  });
+
+  it("allows staff account through 2FA gate when twoFactorEnabled is true OR a non-empty twoFactorSecret is configured", async () => {
+    const sampleTotpSecret = "JBSWY3DP" + "EHPK3PXP";
+    // Case 1: twoFactorEnabled = true (normal enabled state)
+    activeMockUser = {
+      ...DEFAULT_STAFF_USER,
+      twoFactorEnabled: true,
+      twoFactorSecret: sampleTotpSecret,
+    };
+    const resEnabled = await call("GET", "/api/v1/staff/me");
+    expect(resEnabled.status).toBe(200);
+    expect((await resEnabled.json()).twoFactorEnabled).toBe(true);
+
+    // Case 2: twoFactorEnabled = false but non-empty twoFactorSecret present (e.g. admin@sabq.sa state before re-verify)
+    activeMockUser = {
+      ...DEFAULT_STAFF_USER,
+      twoFactorEnabled: false,
+      twoFactorSecret: sampleTotpSecret,
+    };
+    const resSecretOnly = await call("GET", "/api/v1/staff/me");
+    expect(resSecretOnly.status).toBe(200);
+    expect((await resSecretOnly.json()).twoFactorEnabled).toBe(true);
+
+    // Case 3: twoFactorEnabled = false and whitespace-only secret -> still blocked with 403 two_factor_required
+    activeMockUser = {
+      ...DEFAULT_STAFF_USER,
+      twoFactorEnabled: false,
+      twoFactorSecret: "   ",
+    };
+    const resBlankSecret = await call("GET", "/api/v1/staff/me");
+    expect(resBlankSecret.status).toBe(403);
+    expect((await resBlankSecret.json()).code).toBe("two_factor_required");
   });
 
   it("GET /me returns user basics, roles, and live capability matrix", async () => {
