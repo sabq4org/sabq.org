@@ -42,13 +42,6 @@ struct SocialDetailView: View {
         .navigationTitle("مقترح تغريدة")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            if let status = detail?.post.status {
-                ToolbarItem(placement: .primaryAction) {
-                    StatusChip(title: status.title, tone: status.tone)
-                }
-            }
-        }
         .task { await load() }
         .confirmationDialog("نشر التغريدة الآن على حساب سبق؟", isPresented: $confirmPublish, titleVisibility: .visible) {
             Button("انشر الآن") { Task { await publish() } }
@@ -81,12 +74,13 @@ struct SocialDetailView: View {
         let canRestore = post.status == .canceled && app.capabilities.canSocial.reject
         return ScrollView {
             VStack(alignment: .leading, spacing: DeskLayout.space16) {
+                statusCard(post)
                 sender(detail)
-                TweetBody(preview: detail.preview)
-                if let article = detail.article {
+                TweetBody(preview: detail.preview, showsCount: post.status.isActionable,
+                          muted: post.status == .canceled)
+                if let article = detail.article, !repeatsTweet(article, preview: detail.preview) {
                     articleRow(article)
                 }
-                statusNote(post)
                 if !detail.attempts.isEmpty {
                     AttemptsList(attempts: detail.attempts)
                 }
@@ -143,45 +137,43 @@ struct SocialDetailView: View {
         .disabled(article.url == nil)
     }
 
-    /// One plain sentence about where the post stands.
+    private func repeatsTweet(_ article: StaffArticleRef, preview: StaffSocialPreview) -> Bool {
+        guard let title = article.title, !title.isEmpty else { return false }
+        return DeskPreviewText.repeats(title, in: preview.text ?? preview.composedText)
+    }
+
+    /// Where the post stands, first on the page: the decision and its reason.
     @ViewBuilder
-    private func statusNote(_ post: StaffSocialPost) -> some View {
+    private func statusCard(_ post: StaffSocialPost) -> some View {
+        let decidedAt = RiyadhTime.displayString(post.updatedAt ?? post.createdAt)
         switch post.status {
         case .scheduled:
             if let at = post.scheduledAt {
-                InfoLine(systemImage: "calendar.badge.clock", tone: .info,
-                         title: "مجدولة \(RiyadhTime.displayString(at)) بتوقيت الرياض",
-                         detail: RiyadhTime.countdown(to: at))
+                StatusCard(systemImage: "calendar", tone: .info, title: "مجدولة للنشر",
+                           meta: (["\(RiyadhTime.displayString(at)) بتوقيت الرياض"]
+                                  + [RiyadhTime.countdown(to: at)].compactMap { $0 }).joined(separator: " · "))
             }
         case .published:
-            VStack(alignment: .leading, spacing: DeskLayout.space8) {
-                InfoLine(systemImage: "checkmark.circle.fill", tone: .success,
-                         title: post.publishedAt.map { "نُشرت \(RiyadhTime.displayString($0))" } ?? "نُشرت",
-                         detail: nil)
-                if let raw = post.externalPostUrl, let url = URL(string: raw) {
-                    Link("افتح التغريدة على X", destination: url)
-                        .deskText(DeskType.metaEmphasis)
-                        .foregroundStyle(DeskInk.link)
-                }
-            }
+            StatusCard(systemImage: "checkmark", tone: .success, title: "نُشرت على X",
+                       meta: post.publishedAt.map(RiyadhTime.displayString),
+                       link: post.externalPostUrl.flatMap(URL.init(string:)).map { ("افتح التغريدة على X", $0) })
         case .canceled:
             switch DeskRejectionNote(canceledBySelf: post.canceledBySelf ?? detail?.canceledBySelf, reason: post.lastError) {
-            case .withdrawn:
-                InfoLine(systemImage: "arrow.uturn.backward.circle.fill", tone: .neutral,
-                         title: DeskRejectionNote.withdrawn.text, detail: nil)
             case .reason(let reason):
-                InfoLine(systemImage: "xmark.circle.fill", tone: .danger,
-                         title: "رُفض المقترح", detail: DeskRejectionNote.reason(reason).text)
+                StatusCard(systemImage: "xmark", tone: .danger, title: "رُفض هذا المقترح", meta: decidedAt,
+                           detailLabel: "السبب", detail: reason)
             case .noReason:
-                InfoLine(systemImage: "xmark.circle.fill", tone: .neutral,
-                         title: "رُفض المقترح", detail: DeskRejectionNote.noReason.text)
+                StatusCard(systemImage: "xmark", tone: .neutral, title: "رُفض دون تسجيل سبب",
+                           meta: "من لوحة التحرير · \(decidedAt)")
+            case .withdrawn:
+                StatusCard(systemImage: "arrow.uturn.backward", tone: .neutral,
+                           title: DeskRejectionNote.withdrawn.text, meta: decidedAt)
             }
         case .failed:
-            InfoLine(systemImage: "exclamationmark.triangle.fill", tone: .danger,
-                     title: "فشلت محاولة النشر",
-                     detail: post.lastError)
+            StatusCard(systemImage: "exclamationmark", tone: .danger, title: "فشلت محاولة النشر", meta: decidedAt,
+                       detailLabel: "الخطأ", detail: post.lastError)
         case .processing:
-            InfoLine(systemImage: "paperplane", tone: .info, title: "قيد النشر الآن…", detail: nil)
+            StatusCard(systemImage: "paperplane", tone: .info, title: "قيد النشر الآن…", meta: nil)
         case .draft, .unknown:
             EmptyView()
         }
@@ -309,37 +301,91 @@ struct SocialDetailView: View {
     }
 }
 
-/// Icon, a line, and an optional second line, tinted by tone. No card.
-private struct InfoLine: View {
+/// The post's state at the top of the page: a tinted card with a round
+/// symbol, the state and when, then the reason or error under a hairline.
+private struct StatusCard: View {
     let systemImage: String
     let tone: DeskTone
     let title: String
-    let detail: String?
+    let meta: String?
+    var detailLabel: String?
+    var detail: String?
+    var link: (title: String, url: URL)?
+
+    private var ink: Color { tone == .neutral ? DeskTheme.textTertiary : tone.ink }
 
     var body: some View {
-        HStack(alignment: .top, spacing: DeskLayout.space8) {
-            Image(systemName: systemImage)
-                .foregroundStyle(tone.ink)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .deskText(DeskType.metaEmphasis)
-                    .foregroundStyle(DeskTheme.textPrimary)
-                if let detail, !detail.isEmpty {
-                    Text(detail)
-                        .deskText(DeskType.meta)
-                        .foregroundStyle(tone == .danger ? DeskTheme.danger : DeskTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: DeskLayout.space12) {
+            HStack(spacing: DeskLayout.space12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 36, height: 36)
+                    .background(ink, in: Circle())
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .deskText(DeskTextRole(size: 17, weight: .bold, style: .headline, lineSpacing: 0))
+                        .foregroundStyle(tone == .danger ? DeskTheme.danger : DeskTheme.textPrimary)
+                    if let meta, !meta.isEmpty {
+                        Text(meta)
+                            .deskText(DeskType.meta)
+                            .foregroundStyle(DeskTheme.textSecondary)
+                    }
                 }
+                Spacer(minLength: 0)
+            }
+            if let detail, !detail.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let detailLabel {
+                        Text(detailLabel)
+                            .deskText(DeskType.tag)
+                            .foregroundStyle(ink)
+                    }
+                    Text(detail)
+                        .deskText(DeskType.rowTitle)
+                        .foregroundStyle(DeskTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .padding(.top, DeskLayout.space12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .top) { Rectangle().fill(ink.opacity(0.2)).frame(height: 1) }
+            }
+            if let link {
+                Link(link.title, destination: link.url)
+                    .deskText(DeskType.metaEmphasis)
+                    .foregroundStyle(DeskInk.link)
             }
         }
+        .padding(DeskLayout.cardInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tone == .neutral ? DeskInk.chip : tone.fill,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }
 
-/// The tweet as X will show it: text, media and the weighted count.
+/// The tweet as X will show it: text with links in link blue, media, and
+/// the weighted count while the post can still go out.
 private struct TweetBody: View {
     let preview: StaffSocialPreview
+    var showsCount = true
+    /// A rejected post: a step lighter than a live one.
+    var muted = false
+
+    private var linkedText: AttributedString {
+        let text = preview.composedText
+        var result = AttributedString(text)
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return result
+        }
+        for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range, in: text), let run = Range(range, in: result) else { continue }
+            result[run].foregroundColor = DeskInk.link
+        }
+        return result
+    }
 
     private var images: [URL] {
         let urls = (preview.mediaKind == "image" ? preview.mediaUrls ?? [] : []) + [preview.imageUrl].compactMap { $0 }
@@ -349,10 +395,10 @@ private struct TweetBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
-            Text(preview.composedText)
+            Text(linkedText)
                 .font(DeskFonts.app(size: 17, weight: .regular))
                 .lineSpacing(6)
-                .foregroundStyle(DeskTheme.textPrimary)
+                .foregroundStyle(muted ? DeskTheme.textSecondary : DeskTheme.textPrimary)
                 .textSelection(.enabled)
             if !images.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -375,11 +421,13 @@ private struct TweetBody: View {
                     .deskText(DeskType.meta)
                     .foregroundStyle(DeskTheme.textSecondary)
             }
-            HStack {
-                Spacer()
-                LTRText(text: "\(preview.weightedLength) / \(preview.maxLength)",
-                        role: DeskType.meta,
-                        color: preview.valid ? DeskTheme.textSecondary : DeskTheme.danger)
+            if showsCount {
+                HStack {
+                    Spacer()
+                    LTRText(text: "\(preview.weightedLength) / \(preview.maxLength)",
+                            role: DeskType.meta,
+                            color: preview.valid ? DeskTheme.textSecondary : DeskTheme.danger)
+                }
             }
         }
     }

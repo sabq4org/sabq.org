@@ -3,9 +3,9 @@ import SabqDeskKit
 import SwiftUI
 import UIKit
 
-/// «حسابي»: the member's avatar with the robot beside it, what they may do as
-/// plain tags, then security, notifications, quick replies and about. Rows sit
-/// on the page with hairlines, no cards.
+/// «حسابي»: the member's avatar with the robot beside it, one row for what
+/// they may do, then security, notifications, quick replies and about, each
+/// group in a light outline.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppLockController.self) private var appLock
@@ -14,116 +14,137 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if let me = model.me {
-                    AccountHeader(me: me)
-                        .listRowInsets(EdgeInsets(top: DeskLayout.space16, leading: DeskLayout.pageMargin + 4,
-                                                  bottom: DeskLayout.space16, trailing: DeskLayout.pageMargin + 4))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
-
-                Section {
-                    Toggle(isOn: appLockBinding) {
-                        RowLabel(title: appLock.availability.toggleTitle,
-                                 systemImage: appLock.availability.kind?.systemImage ?? "lock")
-                    }
-                    .tint(DeskInk.action)
-                    .disabled(appLock.isAuthenticating || (!appLock.availability.isAvailable && !appLock.isEnabled))
+            ScrollView {
+                VStack(alignment: .leading, spacing: DeskLayout.space24) {
                     if let me = model.me {
-                        HStack {
-                            RowLabel(title: "المصادقة الثنائية", systemImage: "lock.shield")
-                            Spacer()
-                            Text(me.twoFactorEnabled == true ? "مفعّلة" : "غير مفعّلة")
-                                .deskText(DeskType.metaEmphasis)
-                                .foregroundStyle(me.twoFactorEnabled == true ? DeskTheme.success : DeskTheme.warning)
+                        AccountHeader(me: me)
+                        SettingsGroup {
+                            NavigationLink {
+                                PermissionsList(titles: DeskPermissionSummary.titles(me.capabilities))
+                            } label: {
+                                HStack {
+                                    RowLabel(title: "صلاحياتك في المكتب", systemImage: "key",
+                                             subtitle: DeskPermissionSummary.line(me.capabilities))
+                                    Spacer()
+                                    Image(systemName: "chevron.forward")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(DeskTheme.textTertiary)
+                                        .accessibilityHidden(true)
+                                }
+                                .settingsRow()
+                            }
+                            .buttonStyle(.plain)
                         }
+                    }
+
+                    SettingsSection(title: "الأمان", footer: appLockFootnote) {
+                        Toggle(isOn: appLockBinding) {
+                            RowLabel(title: appLock.availability.toggleTitle,
+                                     systemImage: appLock.availability.kind?.systemImage ?? "lock",
+                                     subtitle: appLockNote,
+                                     subtitleColor: appLock.errorMessage == nil ? DeskTheme.textSecondary : DeskTheme.danger)
+                        }
+                        .tint(DeskInk.action)
+                        .disabled(appLock.isAuthenticating || (!appLock.availability.isAvailable && !appLock.isEnabled))
+                        .settingsRow()
+                        if let me = model.me {
+                            GroupDivider()
+                            HStack {
+                                RowLabel(title: "المصادقة الثنائية", systemImage: "lock.shield")
+                                Spacer()
+                                Text(me.twoFactorEnabled == true ? "مفعّلة" : "غير مفعّلة")
+                                    .deskText(DeskType.metaEmphasis)
+                                    .foregroundStyle(me.twoFactorEnabled == true ? DeskTheme.success : DeskTheme.warning)
+                            }
+                            .settingsRow()
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+
+                    SettingsSection(title: "الإشعارات والرسائل") {
+                        Button {
+                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                        } label: {
+                            HStack {
+                                RowLabel(title: "إشعارات المكتب", systemImage: "bell.badge")
+                                Spacer()
+                                Image(systemName: "arrow.up.forward.app")
+                                    .foregroundStyle(DeskTheme.textTertiary)
+                                    .accessibilityHidden(true)
+                            }
+                            .settingsRow()
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("يفتح إعدادات النظام")
+                        if model.capabilities.canTickets {
+                            GroupDivider()
+                            NavigationLink {
+                                QuickRepliesEditor()
+                            } label: {
+                                HStack {
+                                    RowLabel(title: "الردود السريعة", systemImage: "text.bubble")
+                                    Spacer()
+                                    Image(systemName: "chevron.forward")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(DeskTheme.textTertiary)
+                                        .accessibilityHidden(true)
+                                }
+                                .settingsRow()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if model.capabilities.canSystemTab {
+                        SettingsSection(title: "تنبيهات النظام",
+                                        footer: model.alertPrefsError ?? "تصلك على هذا الجهاز فور حدوث ما يحتاج تدخلك.",
+                                        footerColor: model.alertPrefsError == nil ? DeskTheme.textSecondary : DeskTheme.danger) {
+                            if model.capabilities.canAdminAlerts {
+                                Toggle(isOn: adminAlertsBinding) {
+                                    RowLabel(title: "تنبيهات الإدارة الفورية", systemImage: "exclamationmark.bubble")
+                                }
+                                .tint(DeskInk.action)
+                                .settingsRow()
+                            }
+                            if model.capabilities.canAdminAlerts, model.capabilities.canSystemHealth {
+                                GroupDivider()
+                            }
+                            if model.capabilities.canSystemHealth {
+                                Toggle(isOn: aiAlertsBinding) {
+                                    RowLabel(title: "تنبيهات نماذج الذكاء الاصطناعي", systemImage: "cpu")
+                                }
+                                .tint(DeskInk.action)
+                                .settingsRow()
+                            }
+                        }
+                    }
+
+                    SettingsSection(title: "حول التطبيق") {
+                        HStack {
+                            RowLabel(title: "الإصدار", systemImage: "info.circle")
+                            Spacer()
+                            LTRText(text: "\(appVersion) (\(buildNumber))", role: DeskType.excerpt, color: DeskTheme.textSecondary)
+                        }
+                        .settingsRow()
                         .accessibilityElement(children: .combine)
                     }
-                } header: {
-                    sectionHeader("الأمان")
-                } footer: {
-                    Text(appLockFooter)
-                        .deskText(DeskType.meta)
-                        .foregroundStyle(appLock.errorMessage == nil ? DeskTheme.textSecondary : DeskTheme.danger)
-                }
 
-                Section {
-                    Button {
-                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
-                    } label: {
-                        HStack {
-                            RowLabel(title: "إشعارات المكتب", systemImage: "bell.badge")
-                            Spacer()
-                            Image(systemName: "arrow.up.forward.app")
-                                .foregroundStyle(DeskTheme.textTertiary)
-                                .accessibilityHidden(true)
+                    SettingsGroup {
+                        Button(role: .destructive) { confirmSignOut = true } label: {
+                            Text("تسجيل الخروج")
+                                .deskText(DeskType.button)
+                                .foregroundStyle(DeskTheme.danger)
+                                .frame(maxWidth: .infinity, minHeight: 56)
                         }
-                    }
-                    .accessibilityHint("يفتح إعدادات النظام")
-                    if model.capabilities.canTickets {
-                        NavigationLink {
-                            QuickRepliesEditor()
-                        } label: {
-                            RowLabel(title: "الردود السريعة", systemImage: "text.bubble")
-                        }
-                    }
-                } header: {
-                    sectionHeader("الإشعارات والرسائل")
-                }
-
-                if model.capabilities.canSystemTab {
-                    Section {
-                        if model.capabilities.canAdminAlerts {
-                            Toggle(isOn: adminAlertsBinding) {
-                                RowLabel(title: "تنبيهات الإدارة الفورية", systemImage: "exclamationmark.bubble")
-                            }
-                            .tint(DeskInk.action)
-                        }
-                        if model.capabilities.canSystemHealth {
-                            Toggle(isOn: aiAlertsBinding) {
-                                RowLabel(title: "تنبيهات نماذج الذكاء الاصطناعي", systemImage: "cpu")
-                            }
-                            .tint(DeskInk.action)
-                        }
-                    } header: {
-                        sectionHeader("تنبيهات النظام")
-                    } footer: {
-                        Text(model.alertPrefsError ?? "تصلك على هذا الجهاز فور حدوث ما يحتاج تدخلك.")
-                            .deskText(DeskType.meta)
-                            .foregroundStyle(model.alertPrefsError == nil ? DeskTheme.textSecondary : DeskTheme.danger)
+                        .buttonStyle(.plain)
                     }
                 }
-
-                Section {
-                    HStack {
-                        RowLabel(title: "الإصدار", systemImage: "info.circle")
-                        Spacer()
-                        LTRText(text: "\(appVersion) (\(buildNumber))", role: DeskType.excerpt, color: DeskTheme.textSecondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                } header: {
-                    sectionHeader("حول التطبيق")
-                }
-
-                Section {
-                    Button(role: .destructive) { confirmSignOut = true } label: {
-                        Text("تسجيل الخروج")
-                            .deskText(DeskType.button)
-                            .foregroundStyle(DeskTheme.danger)
-                            .frame(maxWidth: .infinity, minHeight: DeskLayout.touchTarget)
-                    }
-                } footer: {
-                    LTRText(text: "Sabq Desk \(appVersion) (\(buildNumber))")
-                        .frame(maxWidth: .infinity)
-                }
+                .padding(.horizontal, DeskLayout.pageMargin + 4)
+                .padding(.vertical, DeskLayout.space16)
             }
-            .listStyle(.plain)
-            .listRowSeparatorTint(DeskInk.hairline)
             .scrollContentBackground(.hidden)
             .background(DeskTheme.background)
             .contentMargins(.bottom, DeskLayout.tabBarClearance, for: .scrollContent)
-            .deskText(DeskType.excerpt)
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await model.reloadIdentity() }
             .onAppear { appLock.refreshAvailability() }
@@ -135,13 +156,6 @@ struct SettingsView: View {
                 Text("لن تصلك إشعارات المكتب على هذا الجهاز حتى تسجّل الدخول مجددًا.")
             }
         }
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .deskText(DeskType.metaEmphasis)
-            .foregroundStyle(DeskTheme.textSecondary)
-            .textCase(nil)
     }
 
     private var appVersion: String {
@@ -169,23 +183,130 @@ struct SettingsView: View {
                 set: { value in Task { await model.updateAlertPrefs(StaffAlertPrefsUpdate(aiAlerts: value)) } })
     }
 
-    private var appLockFooter: String {
+    /// Under the lock's own row: an error, or why it cannot be turned on.
+    private var appLockNote: String? {
         if let error = appLock.errorMessage { return error }
         if let reason = appLock.availability.unavailableReason, !appLock.isEnabled { return reason }
-        return "عند التفعيل يُطلب التحقق عند فتح التطبيق، وعند العودة إليه بعد أكثر من دقيقة. هذا قفل محلي إضافي ولا يغني عن تسجيل الدخول والمصادقة الثنائية."
+        return nil
+    }
+
+    /// What the lock does, under the group, only while it can be used.
+    private var appLockFootnote: String? {
+        appLockNote == nil
+            ? "عند التفعيل يُطلب التحقق عند فتح التطبيق، وعند العودة إليه بعد أكثر من دقيقة. هذا قفل محلي إضافي ولا يغني عن تسجيل الدخول والمصادقة الثنائية."
+            : nil
     }
 }
 
-/// Big avatar (photo when the account has one) with the robot as a badge,
-/// name, email, role, and the member's desk permissions as tags.
+/// A titled outlined group with an optional note under it.
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    var footer: String?
+    var footerColor: Color = DeskTheme.textSecondary
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DeskLayout.space8) {
+            DeskSectionHeader(title: title)
+                .padding(.horizontal, 4)
+            SettingsGroup(content: content)
+            if let footer {
+                Text(footer)
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(footerColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+            }
+        }
+    }
+}
+
+private struct SettingsGroup<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) { content() }
+            .modifier(DeskOutlinedGroup())
+    }
+}
+
+private struct GroupDivider: View {
+    var body: some View {
+        Rectangle().fill(DeskTheme.hairline).frame(height: 1)
+    }
+}
+
+private extension View {
+    func settingsRow() -> some View {
+        padding(.horizontal, DeskLayout.space16)
+            .padding(.vertical, 6)
+            .frame(minHeight: 60)
+            .contentShape(Rectangle())
+    }
+}
+
+/// The member's desk permissions: every title, or a short line for the row.
+enum DeskPermissionSummary {
+    static func titles(_ caps: StaffCapabilities) -> [String] {
+        var titles: [String] = []
+        if caps.canTickets { titles.append("رسائل المساهمين") }
+        if caps.canSocial.view { titles.append("مقترحات X") }
+        if caps.canSocial.schedule { titles.append("الجدولة") }
+        if caps.canSocial.publish { titles.append("النشر الفوري") }
+        if caps.canSocial.reject { titles.append("الرفض") }
+        if caps.canSystemHealth { titles.append("حالة النظام") }
+        if caps.canAdminAlerts { titles.append("تنبيهات الإدارة") }
+        return titles
+    }
+
+    /// «كل الصلاحيات · 7», «رسائل المساهمين، مقترحات X +2», or none.
+    static func line(_ caps: StaffCapabilities) -> String {
+        let titles = titles(caps)
+        switch titles.count {
+        case 0: return "لا صلاحيات في المكتب"
+        case 7: return "كل الصلاحيات · \u{2066}7\u{2069}"
+        case 1, 2: return titles.joined(separator: "، ")
+        default: return titles.prefix(2).joined(separator: "، ") + " \u{2066}+\(titles.count - 2)\u{2069}"
+        }
+    }
+}
+
+private struct PermissionsList: View {
+    let titles: [String]
+
+    var body: some View {
+        List {
+            if titles.isEmpty {
+                Text("لا صلاحيات في المكتب. تواصل مع مدير النظام.")
+                    .deskText(DeskType.excerpt)
+                    .foregroundStyle(DeskTheme.textSecondary)
+            }
+            ForEach(titles, id: \.self) { title in
+                Label(title, systemImage: "checkmark")
+                    .deskText(DeskType.excerpt)
+                    .foregroundStyle(DeskTheme.textPrimary)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(DeskTheme.background)
+        .navigationTitle("صلاحياتك في المكتب")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+/// Avatar (photo when the account has one) with the robot as a badge, then
+/// name, email and role.
 private struct AccountHeader: View {
     let me: StaffMe
 
     var body: some View {
         VStack(spacing: DeskLayout.space12) {
             ZStack(alignment: .bottomTrailing) {
-                avatar
-                DeskMascot(size: 40)
+                AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 88)
+                    .overlay(Circle().strokeBorder(DeskTheme.separator, lineWidth: 1))
+                DeskMascot(size: 36)
                     .background(DeskTheme.background, in: Circle())
                     .overlay(Circle().stroke(DeskTheme.background, lineWidth: 3))
                     .offset(x: 6, y: 4)
@@ -206,101 +327,17 @@ private struct AccountHeader: View {
                     .padding(.top, 2)
             }
             .accessibilityElement(children: .combine)
-            FlowTags(tags: permissionTags)
-                .padding(.top, DeskLayout.space4)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("صلاحياتك: " + permissionTags.joined(separator: "، "))
         }
         .frame(maxWidth: .infinity)
     }
-
-    private var avatar: some View {
-        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 96)
-    }
-
-    private var permissionTags: [String] {
-        let caps = me.capabilities
-        var tags: [String] = []
-        if caps.canTickets { tags.append("رسائل المساهمين") }
-        if caps.canSocial.view { tags.append("مقترحات X") }
-        if caps.canSocial.schedule { tags.append("الجدولة") }
-        if caps.canSocial.publish { tags.append("النشر الفوري") }
-        if caps.canSocial.reject { tags.append("الرفض") }
-        if caps.canSystemHealth { tags.append("حالة النظام") }
-        if caps.canAdminAlerts { tags.append("تنبيهات الإدارة") }
-        return tags.isEmpty ? ["لا صلاحيات في المكتب"] : tags
-    }
 }
 
-/// Wrapping row of small grey tags.
-private struct FlowTags: View {
-    let tags: [String]
-
-    var body: some View {
-        FlowLayout(spacing: 6) {
-            ForEach(tags, id: \.self) { tag in
-                Text(tag)
-                    .deskText(DeskType.tag)
-                    .foregroundStyle(DeskTheme.textPrimary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(DeskInk.chip, in: Capsule())
-            }
-        }
-    }
-}
-
-/// Minimal centered wrapping layout for the tags.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = rows(for: subviews, width: proposal.width ?? .infinity)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
-        let width = rows.map(\.width).max() ?? 0
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in rows(for: subviews, width: bounds.width) {
-            var x = bounds.midX - row.width / 2
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func rows(for subviews: Subviews, width: CGFloat) -> [Row] {
-        var rows: [Row] = [Row()]
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let extra = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
-            if rows[rows.count - 1].width + extra > width, !rows[rows.count - 1].indices.isEmpty {
-                rows.append(Row())
-            }
-            let isFirst = rows[rows.count - 1].indices.isEmpty
-            rows[rows.count - 1].indices.append(index)
-            rows[rows.count - 1].width += isFirst ? size.width : size.width + spacing
-            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
-        }
-        return rows
-    }
-}
-
-/// Icon and title for a settings row, in Sabq blue line icons.
+/// Icon, title and an optional note under the title, in Sabq blue line icons.
 private struct RowLabel: View {
     let title: String
     let systemImage: String
+    var subtitle: String?
+    var subtitleColor: Color = DeskTheme.textSecondary
 
     var body: some View {
         HStack(spacing: DeskLayout.space12) {
@@ -309,10 +346,18 @@ private struct RowLabel: View {
                 .foregroundStyle(DeskInk.link)
                 .frame(width: 26)
                 .accessibilityHidden(true)
-            Text(title)
-                .deskText(DeskType.excerpt)
-                .foregroundStyle(DeskTheme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .deskText(DeskType.excerpt)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .deskText(DeskType.meta)
+                        .foregroundStyle(subtitleColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .frame(minHeight: DeskLayout.touchTarget)
     }

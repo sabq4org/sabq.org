@@ -10,6 +10,7 @@ struct AdminAlertsView: View {
     let openSystem: () -> Void
     /// Pushes a social post or ticket on the tab's navigation stack.
     let open: (DeskDeepLink) -> Void
+    var picker: SystemSectionPicker?
 
     @State private var alerts: [StaffAdminAlert] = []
     @State private var hasLoaded = false
@@ -26,6 +27,7 @@ struct AdminAlertsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DeskLayout.space16) {
                 DeskScreenHeader(title: "تنبيهات الإدارة", subtitle: "ما يحتاج انتباهك فقط، مرتّبًا حسب الأهمية")
+                if let picker { picker }
                 if let loadError {
                     ErrorLine(message: loadError)
                 }

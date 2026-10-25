@@ -18,7 +18,8 @@ enum SystemSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 /// «النظام» (admins only): «تنبيهات الإدارة» and «حالة النظام» behind two
-/// chips. A member with only one of the two permissions sees no chips.
+/// chips under the screen's header. A member with only one of the two
+/// permissions sees no chips.
 struct SystemView: View {
     @Environment(AppModel.self) private var app
     @Binding var section: SystemSection
@@ -35,26 +36,21 @@ struct SystemView: View {
         sections.contains(section) ? section : (sections.first ?? .health)
     }
 
+    private var picker: SystemSectionPicker? {
+        sections.count > 1 ? SystemSectionPicker(sections: sections, selection: $section, urgentCount: app.urgentAlerts) : nil
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                if sections.count > 1 {
-                    SectionChipBar(sections: sections, selection: $section,
-                                   title: \.title,
-                                   count: { $0 == .alerts ? app.urgentAlerts : 0 })
-                        .padding(.top, DeskLayout.space8)
-                        .padding(.bottom, DeskLayout.space4)
+            Group {
+                switch shownSection {
+                case .alerts:
+                    AdminAlertsView(openSystem: { section = .health }, open: { path = [$0] }, picker: picker)
+                case .health:
+                    SystemHealthView(picker: picker)
                 }
-                Group {
-                    switch shownSection {
-                    case .alerts:
-                        AdminAlertsView(openSystem: { section = .health }, open: { path = [$0] })
-                    case .health:
-                        SystemHealthView()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DeskTheme.background)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: DeskDeepLink.self) { link in
@@ -71,6 +67,21 @@ struct SystemView: View {
         .onChange(of: path) { _, newPath in
             if newPath.isEmpty { Task { await app.refreshUnread() } }
         }
+    }
+}
+
+/// The «التنبيهات / حالة النظام» chips, placed under each screen's header
+/// like the chips of «المكتب» and «الرسائل».
+struct SystemSectionPicker: View {
+    let sections: [SystemSection]
+    @Binding var selection: SystemSection
+    let urgentCount: Int
+
+    var body: some View {
+        SectionChipBar(sections: sections, selection: $selection, title: \.title,
+                       count: { $0 == .alerts ? urgentCount : 0 })
+            // The screens pad their content; the bar pads itself.
+            .padding(.horizontal, -(DeskLayout.pageMargin + 4))
     }
 }
 
