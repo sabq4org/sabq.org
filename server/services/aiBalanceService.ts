@@ -218,6 +218,18 @@ async function trackedDaily(provider: AiBalanceProvider, from: Date, now: Date, 
     .where(and(providerFilter(aiUsageDaily, provider), gte(aiUsageDaily.date, utcDateKey(from)), lt(aiUsageDaily.date, utcDateKey(today))))
     .groupBy(aiUsageDaily.date);
   for (const row of daily) out.set(String(row.date).slice(0, 10), Number(row.total) || 0);
+  // التجميع الليلي (aiUsageRollup ‎03:20) لا يكون قد لخّص الأمس بعد منتصف الليل مباشرة:
+  // نغطي الأمس من السجل الخام إن غاب عن الجدول اليومي (دون عدّه مرتين).
+  const yesterday = addUtcDays(today, -1);
+  const yesterdayKey = utcDateKey(yesterday);
+  if (from <= yesterday && !out.has(yesterdayKey)) {
+    const prev = await db
+      .select({ total: sumExpr(field, aiUsageLogs) })
+      .from(aiUsageLogs)
+      .where(and(providerFilter(aiUsageLogs, provider), gte(aiUsageLogs.createdAt, yesterday), lt(aiUsageLogs.createdAt, today)));
+    const value = Number(prev[0]?.total) || 0;
+    if (value > 0) out.set(yesterdayKey, value);
+  }
   const raw = await db
     .select({ total: sumExpr(field, aiUsageLogs) })
     .from(aiUsageLogs)
@@ -301,7 +313,9 @@ async function dailySpend(provider: AiBalanceProvider, from: Date, now: Date): P
  */
 async function spendSinceBaseline(provider: AiBalanceProvider, baseline: AiBalanceBaseline, spend: SpendData, now: Date): Promise<number> {
   const at = new Date(baseline.at);
-  if (spend.source === "provider_admin_api") {
+  // خط أساس حُفظ بمصدر سبق (مثلاً أثناء تعطل واجهة التكاليف) لا يحمل إزاحة صرف يومه؛
+  // نبقى على المصدر المتوافق معه (سبق، دقيق باللحظة) حتى لو تعافت واجهة المزوّد.
+  if (spend.source === "provider_admin_api" && baseline.source === "provider_admin_api") {
     const total = sumSeriesFrom(
       [...spend.daily.entries()].map(([date, value]) => ({ date, value })),
       utcDateKey(at),
@@ -356,10 +370,19 @@ function baseView(provider: AiBalanceProvider, config: AiBalanceConfig, now: Dat
   };
 }
 
-function applySeries(view: AiBalanceView, series: DailyPoint[], now: Date) {
-  const today = utcDateKey(now);
-  view.todaySpend = round2(series.find((p) => p.date === today)?.value ?? 0);
-  view.monthSpend = sumSeriesFrom(series, utcDateKey(monthStartUtc(now)));
+/** صرف اليوم والشهر من بيانات المصدر كاملة (لا من سلسلة الرسم المقصوصة بثلاثين يوماً). */
+function applySpendTotals(view: AiBalanceView, daily: Map<string, number>, now: Date) {
+  const monthKey = utcDateKey(monthStartUtc(now));
+  const todayKey = utcDateKey(now);
+  view.todaySpend = round2(daily.get(todayKey) ?? 0);
+  view.monthSpend = round2([...daily.entries()].filter(([d]) => d >= monthKey && d <= todayKey).reduce((sum, [, v]) => sum + v, 0));
+}
+
+/** بداية نافذة الجلب: الأقدم بين بداية سلسلة الرسم وبداية الشهر. */
+function spendWindowStart(now: Date): Date {
+  const seriesFrom = addUtcDays(startOfUtcDay(now), -(SERIES_DAYS - 1));
+  const month = monthStartUtc(now);
+  return month < seriesFrom ? month : seriesFrom;
 }
 
 async function computeDeepSeek(config: AiBalanceConfig, now: Date): Promise<AiBalanceDetailView> {
@@ -382,8 +405,9 @@ async function computeDeepSeek(config: AiBalanceConfig, now: Date): Promise<AiBa
       days = recordSnapshot(days, todayKey, parsed.amount);
       await writeSetting(snapshotsKey("deepseek"), { days, at: now.toISOString(), unit: parsed.unit });
     }
-    const series = buildDailySeries(spendFromSnapshots(days), now, SERIES_DAYS);
-    applySeries(view, series, now);
+    const snapshotSpend = spendFromSnapshots(days);
+    const series = buildDailySeries(snapshotSpend, now, SERIES_DAYS);
+    applySpendTotals(view, snapshotSpend, now);
     view.daysLeft = estimateDaysLeft(parsed.amount, averageDailySpend(series, now));
     const peak = Math.max(parsed.amount, ...Object.values(days), view.threshold.low * 2);
     view.total = null;
@@ -410,8 +434,9 @@ async function computeElevenLabs(config: AiBalanceConfig, now: Date): Promise<Ai
     view.state = computeBalanceState(sub.remaining, view.threshold.low);
     let series: DailyPoint[] = [];
     try {
-      series = buildDailySeries(await trackedDaily("elevenlabs", addUtcDays(startOfUtcDay(now), -(SERIES_DAYS - 1)), now, "units"), now, SERIES_DAYS);
-      applySeries(view, series, now);
+      const units = await trackedDaily("elevenlabs", spendWindowStart(now), now, "units");
+      series = buildDailySeries(units, now, SERIES_DAYS);
+      applySpendTotals(view, units, now);
       view.daysLeft = estimateDaysLeft(sub.remaining, averageDailySpend(series, now));
     } catch (err) {
       console.warn(`${LOG_PREFIX} elevenlabs tracked series failed:`, sanitizeBalanceError(err));
@@ -425,14 +450,14 @@ async function computeElevenLabs(config: AiBalanceConfig, now: Date): Promise<Ai
 async function computeEstimated(provider: "openai" | "anthropic", config: AiBalanceConfig, now: Date): Promise<AiBalanceDetailView> {
   const view = baseView(provider, config, now);
   const topups = config.topups ?? [];
-  const seriesFrom = addUtcDays(startOfUtcDay(now), -(SERIES_DAYS - 1));
+  const windowStart = spendWindowStart(now);
   const baselineAt = config.baseline ? startOfUtcDay(new Date(config.baseline.at)) : null;
-  const from = baselineAt && baselineAt < seriesFrom ? baselineAt : seriesFrom;
+  const from = baselineAt && baselineAt < windowStart ? baselineAt : windowStart;
   try {
     const spend = await dailySpend(provider, from, now);
     view.spendSource = spend.source;
     const series = buildDailySeries(spend.daily, now, SERIES_DAYS);
-    applySeries(view, series, now);
+    applySpendTotals(view, spend.daily, now);
     if (!config.baseline) {
       return { ...view, state: "not_configured", reason: "no_topup", series, topups };
     }

@@ -5,6 +5,8 @@ const state = vi.hoisted(() => ({
   settings: new Map<string, unknown>(),
   trackedRaw: 0,
   trackedDaily: [] as Array<{ date: string; total: number }>,
+  /** السجل الخام لنافذة [الأمس، اليوم) — استعلام بحدّين زمنيين. */
+  trackedRawYesterday: 0,
 }));
 
 vi.mock("../../server/db", () => {
@@ -32,7 +34,9 @@ vi.mock("../../server/db", () => {
             return key && state.settings.has(key) ? [{ value: state.settings.get(key) }] : [];
           }
           if (name === "ai_usage_daily") return state.trackedDaily;
-          if (name === "ai_usage_logs") return [{ total: state.trackedRaw }];
+          if (name === "ai_usage_logs") {
+            return [{ total: countDates(ctx.whereSql) >= 2 ? state.trackedRawYesterday : state.trackedRaw }];
+          }
           if (name === "ai_budgets") return [];
           void fields;
           return [];
@@ -51,6 +55,18 @@ vi.mock("../../server/db", () => {
       }),
     },
   };
+
+  function countDates(node: unknown, seen = new Set<unknown>()): number {
+    if (node instanceof Date) return 1;
+    if (!node || typeof node !== "object" || seen.has(node)) return 0;
+    seen.add(node);
+    let n = 0;
+    for (const child of Object.values(node as Record<string, unknown>)) {
+      if (Array.isArray(child)) for (const c of child) n += countDates(c, seen);
+      else n += countDates(child, seen);
+    }
+    return n;
+  }
 
   function findKey(node: unknown, seen = new Set<unknown>()): string | null {
     if (!node || typeof node !== "object" || seen.has(node)) return null;
@@ -98,6 +114,7 @@ beforeEach(() => {
   state.settings.clear();
   state.trackedRaw = 0;
   state.trackedDaily = [];
+  state.trackedRawYesterday = 0;
   clearAiBalanceCache();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
@@ -179,6 +196,54 @@ describe("aiBalanceService", () => {
     const b = await getProviderBalance("anthropic", { now: NOW });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(b).toMatchObject({ spendSource: "sabq_tracked", amount: 250, state: "healthy" });
+  });
+
+  it("a tracked-source baseline stays on tracked spend after the Costs API recovers", async () => {
+    process.env.OPENAI_ADMIN_KEY = fakeKey("sk-admin");
+    // حُفظ عند الظهر أثناء تعطل الواجهة: لا إزاحة لصرف الصباح ($40).
+    state.settings.set(configKey("openai"), {
+      baseline: { amountUsd: 100, at: "2026-10-25T12:00:00.000Z", source: "sabq_tracked", offsetUsd: 0 },
+    });
+    state.trackedRaw = 0;
+    fetchMock.mockResolvedValue(jsonResponse({
+      data: [{ start_time: Date.UTC(2026, 9, 25) / 1000, results: [{ amount: { value: 40, currency: "usd" } }] }],
+      has_more: false,
+    }));
+    const b = await getProviderBalance("openai", { now: NOW });
+    expect(b.spendSource).toBe("provider_admin_api");
+    expect(b.spentSinceBaseline).toBe(0);
+    expect(b.amount).toBe(100);
+  });
+
+  it("covers yesterday from raw logs before the nightly rollup, without double counting", async () => {
+    const early = new Date("2026-10-25T01:00:00.000Z");
+    state.settings.set(configKey("anthropic"), {
+      baseline: { amountUsd: 300, at: "2026-10-20T09:00:00.000Z", source: "sabq_tracked", offsetUsd: 0 },
+    });
+    state.trackedRaw = 5;
+    state.trackedRawYesterday = 12;
+    const before = await getProviderBalance("anthropic", { now: early, fresh: true });
+    expect(before.series.find((p) => p.date === "2026-10-24")?.value).toBe(12);
+    expect(before.monthSpend).toBe(17);
+
+    state.trackedDaily = [{ date: "2026-10-24", total: 12 }];
+    state.trackedRawYesterday = 999; // لا يُقرأ عند وجود ملخص الأمس
+    clearAiBalanceCache();
+    const after = await getProviderBalance("anthropic", { now: early, fresh: true });
+    expect(after.series.find((p) => p.date === "2026-10-24")?.value).toBe(12);
+    expect(after.monthSpend).toBe(17);
+  });
+
+  it("month spend on day 31 includes the 1st (outside the 30-day chart)", async () => {
+    process.env.OPENAI_ADMIN_KEY = fakeKey("sk-admin");
+    const day31 = new Date("2026-10-31T12:00:00.000Z");
+    const buckets = [1, 2, 31].map((d) => ({ start_time: Date.UTC(2026, 9, d) / 1000, results: [{ amount: { value: 10, currency: "usd" } }] }));
+    fetchMock.mockResolvedValue(jsonResponse({ data: buckets, has_more: false }));
+    const b = await getProviderBalance("openai", { now: day31, fresh: true });
+    expect(b.series).toHaveLength(30);
+    expect(b.series[0].date).toBe("2026-10-02");
+    expect(b.monthSpend).toBe(30);
+    expect(b.todaySpend).toBe(10);
   });
 
   it("first top-up then threshold save persist to system_settings", async () => {
