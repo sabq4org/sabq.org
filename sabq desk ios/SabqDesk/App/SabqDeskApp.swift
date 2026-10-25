@@ -21,7 +21,9 @@ struct SabqDeskApp: App {
                 .environment(appLock)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, RiyadhTime.locale)
-                .tint(DeskTheme.primary)
+                .tint(DeskInk.link)
+                // The approved desk design is light only.
+                .preferredColorScheme(.light)
                 .onOpenURL { model.open($0) }
         }
     }

@@ -205,6 +205,9 @@ public struct StaffInboxItem: Codable, Sendable, Equatable, Identifiable {
     public var scheduledAt: Date?
     /// Social only: when a `published` post went out. Absent on older servers.
     public var publishedAt: Date?
+    /// Social only: the rejection reason (`canceled`) or the last publish
+    /// error (`failed`). Absent on older servers.
+    public var lastError: String?
 
     /// Stable across kinds: a ticket and a social post may share a UUID space.
     public var listID: String { "\(kind.rawValue):\(id)" }

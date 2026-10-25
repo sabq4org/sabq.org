@@ -20,7 +20,7 @@ struct LoginView: View {
     @State private var errorMessage: String?
     @FocusState private var focused: Field?
 
-    private enum Field { case identifier, password, code }
+    fileprivate enum Field { case identifier, password, code }
 
     var body: some View {
         ScrollView {
@@ -47,20 +47,32 @@ struct LoginView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: DeskLayout.space8) {
-            Image("SabqLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 40)
-                .accessibilityLabel("سبق")
-            Text("ديسك سبق")
-                .deskText(DeskType.pageTitle)
-                .foregroundStyle(DeskTheme.textPrimary)
-            Text("للمنسوبين: استفسارات الكتّاب ومقترحات النشر في مكان واحد")
-                .deskText(DeskType.excerpt)
-                .foregroundStyle(DeskTheme.textSecondary)
+        VStack(spacing: DeskLayout.space16) {
+            DeskMascot(size: 150)
+                .frame(maxWidth: .infinity)
+            VStack(spacing: 2) {
+                Text("مكتب سبق")
+                    .deskText(DeskType.pageTitle)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(verbatim: "SABQ DESK")
+                    .font(DeskFonts.app(size: 12, weight: .semibold))
+                    .tracking(2)
+                    .foregroundStyle(DeskInk.link)
+            }
+            .frame(maxWidth: .infinity)
+            AssistantBubble(text: bubbleText)
         }
         .padding(.bottom, DeskLayout.space8)
+    }
+
+    private var bubbleText: String {
+        switch step {
+        case .credentials:
+            return "أهلًا بك. أنا مساعد المكتب: أجمع لك مقترحات النشر ورسائل الكتّاب في مكان واحد. سجّل دخولك بحساب سبق."
+        case .secondFactor:
+            return useBackupCode ? "اكتب أحد رموز الاسترداد الاحتياطية." : "خطوة أخيرة: اكتب الرمز المكوّن من 6 أرقام من تطبيق المصادقة."
+        }
     }
 
     private var credentialsForm: some View {
@@ -83,9 +95,9 @@ struct LoginView: View {
             Button(action: signIn) {
                 busyLabel("تسجيل الدخول")
             }
-            .buttonStyle(DeskPrimaryButtonStyle())
+            .buttonStyle(DeskBigButtonStyle())
             .disabled(identifier.trimmingCharacters(in: .whitespaces).isEmpty || password.isEmpty)
-            Text("يتطلب الديسك تفعيل المصادقة الثنائية على حسابك.")
+            Text("يتطلب المكتب تفعيل المصادقة الثنائية على حسابك.")
                 .deskText(DeskType.meta)
                 .foregroundStyle(DeskTheme.textTertiary)
         }
@@ -93,25 +105,30 @@ struct LoginView: View {
 
     private func secondFactorForm(hint: String?) -> some View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
-            Text(useBackupCode ? "أدخل أحد رموز الاسترداد الاحتياطية" : (hint ?? "أدخل رمز التحقق من تطبيق المصادقة"))
-                .deskText(DeskType.excerpt)
-                .foregroundStyle(DeskTheme.textSecondary)
-            TextField(useBackupCode ? "رمز الاسترداد" : "000000", text: $code)
-                .textContentType(.oneTimeCode)
-                .keyboardType(useBackupCode ? .asciiCapable : .numberPad)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .multilineTextAlignment(.center)
-                .environment(\.layoutDirection, .leftToRight)
-                .font(DeskFonts.app(size: 22, weight: .semibold))
-                .monospacedDigit()
-                .focused($focused, equals: .code)
-                .onSubmit(verify)
-                .modifier(DeskInputSurface())
+            if useBackupCode {
+                TextField("رمز الاسترداد", text: $code)
+                    .textContentType(.oneTimeCode)
+                    .keyboardType(.asciiCapable)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.center)
+                    .environment(\.layoutDirection, .leftToRight)
+                    .font(DeskFonts.app(size: 22, weight: .semibold))
+                    .focused($focused, equals: .code)
+                    .onSubmit(verify)
+                    .modifier(DeskInputSurface())
+            } else {
+                OTPBoxes(code: $code, focused: $focused)
+                if let hint {
+                    Text(hint)
+                        .deskText(DeskType.meta)
+                        .foregroundStyle(DeskTheme.textSecondary)
+                }
+            }
             Button(action: verify) {
                 busyLabel("تحقق")
             }
-            .buttonStyle(DeskPrimaryButtonStyle())
+            .buttonStyle(DeskBigButtonStyle())
             .disabled(!isCodeComplete)
             HStack {
                 Button(useBackupCode ? "استخدام رمز التطبيق" : "استخدام رمز احتياطي") {
@@ -127,7 +144,7 @@ struct LoginView: View {
                 }
             }
             .deskText(DeskType.metaEmphasis)
-            .foregroundStyle(DeskTheme.primary)
+            .foregroundStyle(DeskInk.link)
         }
         .onAppear { focused = .code }
         .onChange(of: code) { _, value in
@@ -141,7 +158,7 @@ struct LoginView: View {
 
     private func busyLabel(_ title: String) -> some View {
         HStack(spacing: DeskLayout.space8) {
-            if isBusy { ProgressView().tint(DeskTheme.onAction) }
+            if isBusy { ProgressView().tint(Color.white) }
             Text(title)
         }
     }
@@ -192,6 +209,50 @@ struct LoginView: View {
             if !model.handle(error) {
                 errorMessage = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
             }
+        }
+    }
+}
+
+/// Six boxes over one hidden field, so paste and the keyboard's code
+/// suggestion still fill it in one go.
+private struct OTPBoxes: View {
+    @Binding var code: String
+    var focused: FocusState<LoginView.Field?>.Binding
+
+    private var digits: [Character] { Array(DeskInput.otpCode(code).prefix(6)) }
+
+    var body: some View {
+        ZStack {
+            TextField("", text: $code)
+                .textContentType(.oneTimeCode)
+                .keyboardType(.numberPad)
+                .focused(focused, equals: .code)
+                .foregroundStyle(Color.clear)
+                .tint(Color.clear)
+                .frame(height: 56)
+                .accessibilityLabel("رمز التحقق")
+            HStack(spacing: DeskLayout.space8) {
+                ForEach(0..<6, id: \.self) { index in
+                    let isCurrent = index == digits.count
+                    Text(verbatim: index < digits.count ? String(digits[index]) : "")
+                        .font(DeskFonts.app(size: 24, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(DeskTheme.textPrimary)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(DeskInk.chip, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(isCurrent ? DeskInk.action : Color.clear, lineWidth: 2))
+                }
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused.wrappedValue = .code }
+        .onChange(of: code) { _, value in
+            let clean = String(DeskInput.otpCode(value).prefix(6))
+            if clean != value { code = clean }
         }
     }
 }

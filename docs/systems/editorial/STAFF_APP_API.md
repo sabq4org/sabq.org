@@ -263,12 +263,12 @@ Content-Type: application/json
 
 ---
 
-## 5) تطبيق iOS «ديسك سبق» (`sabq desk ios/`)
+## 5) تطبيق iOS «مكتب سبق» (`sabq desk ios/`)
 
 | الجزء | المسار |
 |-------|--------|
-| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، رقم البناء `2026102501` |
-| شاشات التطبيق | `sabq desk ios/SabqDesk/` — الدخول + 2FA، شاشة «فعّل المصادقة الثنائية»، تبويبا «الوارد» و«الإعدادات»، تفاصيل الاستفسار، تفاصيل مقترح النشر وورقتا الجدولة والرفض |
+| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.1.0 ورقم البناء `2026102601` |
+| شاشات التطبيق | `sabq desk ios/SabqDesk/` — تصميم «تطبيقات البوت» المعتمد 2026-10-25: الروبوت (`DeskMascot`) كبير في الدخول وقفل Face ID، ثلاثة تبويبات «المكتب» (`DeskView`: بانتظارك/مجدول/منشور/مرفوض، والمجدول خط زمني بالأيام) و«الرسائل» (`MessagesView`: تنتظر ردك/تم الرد/مغلقة مع بحث) و«حسابي» (`SettingsView` مع الآفاتار والصلاحيات والردود السريعة)؛ محادثة الرسالة (`TicketDetailView`: فقاعات، فواصل أيام، «ردًا على» عبر `parentMessageId`)، تفاصيل المقترح، ورقة الجدولة (أوقات سريعة + تنبيه تعارض ±30 دقيقة) وورقة الرفض. المكوّنات المشتركة في `Components/DeskChrome.swift` والمنطق القابل للاختبار في `SabqDeskKit/DeskBoard.swift` |
 | حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تسميات الأدوار العربية `StaffRoleLabel`، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
 | الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
 | CI | `.github/workflows/sabq-desk-ios-build.yml` — بناء بلا توقيع + الاختبارات |
@@ -276,7 +276,8 @@ Content-Type: application/json
 **سلوك العميل:**
 - الجلسة في Keychain (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`)، وتُمسح قبل بدء أي تسجيل دخول جديد وعند أي `401`. `403 two_factor_required` لا يحذف الجلسة؛ يعرض التطبيق شاشة تشرح التفعيل من `https://sabq.org/settings/security` ثم «تحقّق الآن».
 - تسمية الدور في شاشة الإعدادات تمر عبر `StaffRoleLabel` (`me.roleDisplayLabel`) لترجمة مفاتيح الأدوار (`system_admin` ← «مدير النظام»، `editor` ← «محرر»، إلخ) بالتطابق مع لوحة التحكم، مع الرجوع للمفتاح الخام عند عدم معرفته.
-- قوائم التبويبات («الوارد» و«الإعدادات») تضيف هامش محتوى سفلياً (`DeskLayout.tabBarClearance`) لتفادي تداخل شريط التبويبات العائم مع آخر الصفوف وتذييل الإصدار، بينما تخفي شاشتا تفاصيل الاستفسار وتفاصيل المقترح شريط التبويبات وتثبّتان شريط الإجراء في الأسفل عبر `safeAreaInset`.
+- «ألغِ الجدولة» (مجدول) و«أعده إلى بانتظارك» (مرفوض) يستدعيان `POST /api/v1/staff/social/:id/return-to-draft`. الردود السريعة محلية على الجهاز (`QuickReplyStore`، حتى 8).
+- تخفي شاشتا تفاصيل الاستفسار وتفاصيل المقترح شريط التبويبات وتثبّتان شريط الإجراء في الأسفل عبر `safeAreaInset`.
 - `X-Installation-Id` معرّف عشوائي لكل تثبيت (UserDefaults)، ويُرسل أيضاً مع `POST /api/v1/members/push-token` (`bundleId: "com.sabq.desk"`). عند الخروج يُلغى تسجيل الرمز بـ `DELETE /api/v1/members/push-token`.
 - تسجيل رمز الدفع مربوط بمعرّف المستخدم (`PushRegistrationState`): يُعاد التسجيل كلما اختلف المستخدم أو تغيّر الرمز، ويُصفَّر الربط عند الخروج وعند أي `401`، لأن الخادم يربط الرمز بآخر حساب سجّله (upsert على `deviceToken`).
 - الأرقام العربية-الهندية والفارسية (`١٢٣`، `۱۲۳`) تُحوَّل إلى ASCII قبل الإرسال (`DeskInput`): رمز 2FA (أرقام فقط)، والرمز الاحتياطي (مع تكبير الأحرف)، ورقم الجوال في الدخول.

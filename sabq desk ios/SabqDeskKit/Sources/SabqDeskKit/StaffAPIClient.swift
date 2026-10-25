@@ -151,6 +151,14 @@ public struct StaffAPIClient: Sendable {
         return envelope.post
     }
 
+    /// Back to «بانتظار القرار»: unschedules a `scheduled` post or undoes the
+    /// rejection of a `canceled` one. The server refuses any other status (409).
+    public func returnSocialPostToDraft(id: String) async throws -> StaffSocialPost {
+        let envelope: StaffSocialPostEnvelope = try await send("POST", "/api/v1/staff/social/\(try pathID(id))/return-to-draft",
+                                                               body: EmptyBody())
+        return envelope.post
+    }
+
     // MARK: - Push
 
     public func registerPushToken(_ token: String, deviceName: String?, osVersion: String?) async throws {

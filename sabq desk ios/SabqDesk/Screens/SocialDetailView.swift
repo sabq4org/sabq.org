@@ -2,11 +2,15 @@ import SabqDeskDesign
 import SabqDeskKit
 import SwiftUI
 
+/// One tweet proposal: who sent it, the tweet as X will show it, its state,
+/// and the decisions the member may take.
 struct SocialDetailView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
     let postID: String
-    /// Reports the post's latest status back to the inbox row.
+    /// Other scheduled times, for the clash note in the schedule sheet.
+    var scheduledTimes: [Date] = []
+    /// Reports the post's latest status back to the lists.
     let onChange: (String?) -> Void
 
     @State private var detail: StaffSocialDetail?
@@ -14,18 +18,19 @@ struct SocialDetailView: View {
     @State private var actionError: String?
     @State private var busyAction: BusyAction?
     @State private var confirmPublish = false
+    @State private var confirmUnschedule = false
     @State private var showSchedule = false
     @State private var showReject = false
     @State private var notice: String?
 
-    private enum BusyAction { case publish, schedule, reject }
+    private enum BusyAction { case publish, schedule, reject, draft }
 
     var body: some View {
         Group {
             if let detail {
                 content(detail)
             } else if let loadError {
-                DeskMessageView(systemImage: "exclamationmark.triangle", title: "تعذر فتح المقترح", message: loadError) {
+                DeskMessageView(title: "تعذر فتح المقترح", message: loadError) {
                     Button("إعادة المحاولة") { Task { await load() } }
                         .buttonStyle(DeskSecondaryButtonStyle())
                 }
@@ -33,18 +38,32 @@ struct SocialDetailView: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle("مقترح نشر")
+        .background(DeskTheme.background)
+        .navigationTitle("مقترح تغريدة")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            if let status = detail?.post.status {
+                ToolbarItem(placement: .primaryAction) {
+                    StatusChip(title: status.title, tone: status.tone)
+                }
+            }
+        }
         .task { await load() }
         .confirmationDialog("نشر التغريدة الآن على حساب سبق؟", isPresented: $confirmPublish, titleVisibility: .visible) {
             Button("انشر الآن") { Task { await publish() } }
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("ستظهر التغريدة فوراً على X ولا يمكن التراجع من التطبيق.")
+            Text("ستظهر التغريدة فورًا على X ولا يمكن التراجع من التطبيق.")
+        }
+        .confirmationDialog("إلغاء الجدولة؟", isPresented: $confirmUnschedule, titleVisibility: .visible) {
+            Button("ألغِ الجدولة", role: .destructive) { Task { await returnToDraft(success: "أُلغيت الجدولة وعادت التغريدة إلى «بانتظارك»") } }
+            Button("تراجع", role: .cancel) {}
+        } message: {
+            Text("تعود التغريدة إلى «بانتظارك» دون موعد، ولن تُنشر حتى تقرر.")
         }
         .sheet(isPresented: $showSchedule) {
-            ScheduleSheet(initial: detail?.post.scheduledAt) { date in
+            ScheduleSheet(initial: detail?.post.scheduledAt, scheduledTimes: scheduledTimes) { date in
                 Task { await schedule(date) }
             }
         }
@@ -56,46 +75,52 @@ struct SocialDetailView: View {
     }
 
     private func content(_ detail: StaffSocialDetail) -> some View {
-        let actions = app.capabilities.socialActions(for: detail.post.status)
+        let post = detail.post
+        let actions = app.capabilities.socialActions(for: post.status)
+        let canUnschedule = post.status == .scheduled && app.capabilities.canSocial.schedule
+        let canRestore = post.status == .canceled && app.capabilities.canSocial.reject
         return ScrollView {
             VStack(alignment: .leading, spacing: DeskLayout.space16) {
-                meta(detail)
-                TweetPreview(preview: detail.preview)
+                sender(detail)
+                TweetBody(preview: detail.preview)
                 if let article = detail.article {
                     articleRow(article)
                 }
-                statusBlock(detail.post)
+                statusNote(post)
                 if !detail.attempts.isEmpty {
                     AttemptsList(attempts: detail.attempts)
                 }
             }
-            .padding(DeskLayout.pageMargin)
+            .padding(.horizontal, DeskLayout.pageMargin + 4)
+            .padding(.vertical, DeskLayout.space16)
         }
-        .contentMargins(.bottom, DeskLayout.space24, for: .scrollContent)
         .refreshable { await load() }
         .safeAreaInset(edge: .bottom) {
-            if !actions.isEmpty || actionError != nil || notice != nil {
-                actionBar(actions, preview: detail.preview)
+            if !actions.isEmpty || canUnschedule || canRestore || actionError != nil || notice != nil {
+                actionBar(post: post, actions: actions, preview: detail.preview,
+                          canUnschedule: canUnschedule, canRestore: canRestore)
             }
         }
     }
 
-    private func meta(_ detail: StaffSocialDetail) -> some View {
-        VStack(alignment: .leading, spacing: DeskLayout.space4) {
-            Text("من")
-                .deskText(DeskType.meta)
-                .foregroundStyle(DeskTheme.textTertiary)
-            HStack(spacing: DeskLayout.space8) {
-                Text(detail.sender?.name ?? detail.agency?.name ?? detail.author?.name ?? "—")
-                    .deskText(DeskType.rowTitle)
-                    .foregroundStyle(DeskTheme.textPrimary)
-                if let kind = detail.sender?.kind {
-                    StatusPill(title: kind.title)
+    private func sender(_ detail: StaffSocialDetail) -> some View {
+        let name = detail.sender?.name ?? detail.agency?.name ?? detail.author?.name ?? "—"
+        let kind = detail.sender?.kind ?? .unknown
+        return HStack(spacing: DeskLayout.space12) {
+            SenderAvatar(name: name, kind: kind, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(name)
+                        .deskText(DeskType.rowTitle)
+                        .foregroundStyle(DeskTheme.textPrimary)
+                    SenderKindTag(kind: kind)
                 }
-                Spacer()
-                LTRText(text: RiyadhTime.displayString(detail.post.createdAt))
+                Text("أرسلها \(RiyadhTime.ago(detail.post.createdAt)) · على حساب سبق في X")
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func articleRow(_ article: StaffArticleRef) -> some View {
@@ -104,56 +129,58 @@ struct SocialDetailView: View {
         } label: {
             HStack(spacing: DeskLayout.space8) {
                 Image(systemName: "doc.text")
-                    .foregroundStyle(DeskTheme.textTertiary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("الخبر المرتبط")
-                        .deskText(DeskType.meta)
-                        .foregroundStyle(DeskTheme.textTertiary)
-                    Text(article.title ?? article.url ?? "")
-                        .deskText(DeskType.excerpt)
-                        .foregroundStyle(DeskTheme.primary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer()
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .accessibilityHidden(true)
+                Text("الخبر المرتبط: «\(article.title ?? article.url ?? "")»")
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskInk.link)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
             }
         }
         .buttonStyle(.plain)
         .disabled(article.url == nil)
     }
 
+    /// One plain sentence about where the post stands.
     @ViewBuilder
-    private func statusBlock(_ post: StaffSocialPost) -> some View {
-        VStack(alignment: .leading, spacing: DeskLayout.space8) {
-            HStack(spacing: DeskLayout.space8) {
-                Text("الحالة")
-                    .deskText(DeskType.meta)
-                    .foregroundStyle(DeskTheme.textTertiary)
-                StatusPill(title: post.status.title, tint: post.status.tint)
+    private func statusNote(_ post: StaffSocialPost) -> some View {
+        switch post.status {
+        case .scheduled:
+            if let at = post.scheduledAt {
+                InfoLine(systemImage: "calendar.badge.clock", tone: .info,
+                         title: "مجدولة \(RiyadhTime.displayString(at)) بتوقيت الرياض",
+                         detail: RiyadhTime.countdown(to: at))
             }
-            if post.status == .scheduled, let at = post.scheduledAt {
-                Text("مجدولة: \(RiyadhTime.displayString(at)) بتوقيت الرياض")
-                    .deskText(DeskType.excerpt)
-                    .foregroundStyle(DeskTheme.textSecondary)
-            }
-            if post.status == .published {
-                if let at = post.publishedAt {
-                    Text("نُشرت: \(RiyadhTime.displayString(at))")
-                        .deskText(DeskType.excerpt)
-                        .foregroundStyle(DeskTheme.textSecondary)
-                }
+        case .published:
+            VStack(alignment: .leading, spacing: DeskLayout.space8) {
+                InfoLine(systemImage: "checkmark.circle.fill", tone: .success,
+                         title: post.publishedAt.map { "نُشرت \(RiyadhTime.displayString($0))" } ?? "نُشرت",
+                         detail: nil)
                 if let raw = post.externalPostUrl, let url = URL(string: raw) {
-                    Link("فتح التغريدة على X", destination: url)
+                    Link("افتح التغريدة على X", destination: url)
                         .deskText(DeskType.metaEmphasis)
+                        .foregroundStyle(DeskInk.link)
                 }
             }
-            if post.status == .failed, let error = post.lastError, !error.isEmpty {
-                ErrorLine(message: error)
-            }
+        case .canceled:
+            InfoLine(systemImage: "xmark.circle.fill", tone: .danger,
+                     title: "رُفض المقترح",
+                     detail: post.lastError.map { "السبب: \($0)" } ?? "دون ذكر سبب")
+        case .failed:
+            InfoLine(systemImage: "exclamationmark.triangle.fill", tone: .danger,
+                     title: "فشلت محاولة النشر",
+                     detail: post.lastError)
+        case .processing:
+            InfoLine(systemImage: "paperplane", tone: .info, title: "قيد النشر الآن…", detail: nil)
+        case .draft, .unknown:
+            EmptyView()
         }
     }
 
-    private func actionBar(_ actions: SocialActionSet, preview: StaffSocialPreview) -> some View {
+    private func actionBar(post: StaffSocialPost, actions: SocialActionSet, preview: StaffSocialPreview,
+                           canUnschedule: Bool, canRestore: Bool) -> some View {
         VStack(spacing: DeskLayout.space8) {
             if let notice {
                 Label(notice, systemImage: "checkmark.circle")
@@ -162,32 +189,45 @@ struct SocialDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let actionError { ErrorLine(message: actionError) }
-            if !preview.valid {
+            if !preview.valid, actions.publish || actions.schedule {
                 ErrorLine(message: "النص أطول من حد X؛ لا يمكن نشره كما هو")
             }
-            if actions.publish {
-                Button { confirmPublish = true } label: { busyLabel("انشر الآن", busy: busyAction == .publish) }
-                    .buttonStyle(DeskPrimaryButtonStyle())
-                    .disabled(busyAction != nil || !preview.valid)
+            if actions.schedule {
+                Button { showSchedule = true } label: {
+                    busyLabel(post.status == .scheduled ? "غيّر الموعد" : "جدولة", busy: busyAction == .schedule)
+                }
+                .buttonStyle(DeskBigButtonStyle())
+                .disabled(busyAction != nil || !preview.valid)
             }
-            if actions.schedule || actions.reject {
-                HStack(spacing: DeskLayout.space8) {
-                    if actions.schedule {
-                        Button { showSchedule = true } label: { busyLabel("جدولة", busy: busyAction == .schedule) }
-                            .buttonStyle(DeskSecondaryButtonStyle())
-                            .disabled(busyAction != nil || !preview.valid)
-                    }
-                    if actions.reject {
-                        Button { showReject = true } label: { busyLabel("رفض", busy: busyAction == .reject) }
-                            .buttonStyle(DeskSecondaryButtonStyle(destructive: true))
-                            .disabled(busyAction != nil)
-                    }
+            HStack(spacing: DeskLayout.space8) {
+                if actions.publish {
+                    Button { confirmPublish = true } label: { busyLabel("انشر الآن", busy: busyAction == .publish) }
+                        .buttonStyle(DeskSecondaryButtonStyle())
+                        .disabled(busyAction != nil || !preview.valid)
+                }
+                if canUnschedule {
+                    Button { confirmUnschedule = true } label: { busyLabel("ألغِ الجدولة", busy: busyAction == .draft) }
+                        .buttonStyle(DeskSecondaryButtonStyle(destructive: true))
+                        .disabled(busyAction != nil)
+                } else if actions.reject {
+                    Button { showReject = true } label: { busyLabel("رفض…", busy: busyAction == .reject) }
+                        .buttonStyle(DeskSecondaryButtonStyle(destructive: true))
+                        .disabled(busyAction != nil)
                 }
             }
+            if canRestore {
+                Button {
+                    Task { await returnToDraft(success: "عاد المقترح إلى «بانتظارك»") }
+                } label: { busyLabel("أعده إلى «بانتظارك»", busy: busyAction == .draft) }
+                    .buttonStyle(DeskBigButtonStyle())
+                    .disabled(busyAction != nil)
+            }
         }
-        .padding(.horizontal, DeskLayout.pageMargin)
-        .padding(.vertical, DeskLayout.space8)
-        .background(.bar)
+        .padding(.horizontal, DeskLayout.pageMargin + 4)
+        .padding(.top, DeskLayout.space12)
+        .padding(.bottom, DeskLayout.space8)
+        .background(DeskTheme.background)
+        .overlay(alignment: .top) { Rectangle().fill(DeskInk.hairline).frame(height: 1) }
     }
 
     private func busyLabel(_ title: String, busy: Bool) -> some View {
@@ -228,6 +268,10 @@ struct SocialDetailView: View {
         }
     }
 
+    private func returnToDraft(success: String) async {
+        await run(.draft, success: success) { try await app.client.returnSocialPostToDraft(id: postID) }
+    }
+
     private func run(_ action: BusyAction, success: String, _ call: () async throws -> StaffSocialPost) async {
         busyAction = action
         actionError = nil
@@ -257,9 +301,36 @@ struct SocialDetailView: View {
     }
 }
 
-/// The tweet as X will show it: composed text, link, media, and the
-/// weighted character count against the 280 limit.
-private struct TweetPreview: View {
+/// Icon, a line, and an optional second line, tinted by tone. No card.
+private struct InfoLine: View {
+    let systemImage: String
+    let tone: DeskTone
+    let title: String
+    let detail: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: DeskLayout.space8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tone.ink)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .deskText(DeskType.metaEmphasis)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                if let detail, !detail.isEmpty {
+                    Text(detail)
+                        .deskText(DeskType.meta)
+                        .foregroundStyle(tone == .danger ? DeskTheme.danger : DeskTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The tweet as X will show it: text, media and the weighted count.
+private struct TweetBody: View {
     let preview: StaffSocialPreview
 
     private var images: [URL] {
@@ -271,7 +342,8 @@ private struct TweetPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
             Text(preview.composedText)
-                .deskText(DeskType.body)
+                .font(DeskFonts.app(size: 17, weight: .regular))
+                .lineSpacing(6)
                 .foregroundStyle(DeskTheme.textPrimary)
                 .textSelection(.enabled)
             if !images.isEmpty {
@@ -283,8 +355,8 @@ private struct TweetPreview: View {
                             } placeholder: {
                                 DeskTheme.surfaceStrong
                             }
-                            .frame(width: images.count == 1 ? 300 : 200, height: 170)
-                            .clipShape(RoundedRectangle(cornerRadius: DeskRadius.small))
+                            .frame(width: images.count == 1 ? 330 : 220, height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             .accessibilityLabel("صورة مرفقة")
                         }
                     }
@@ -297,13 +369,11 @@ private struct TweetPreview: View {
             }
             HStack {
                 Spacer()
-                LTRText(text: "\(preview.weightedLength)/\(preview.maxLength)",
+                LTRText(text: "\(preview.weightedLength) / \(preview.maxLength)",
                         role: DeskType.meta,
-                        color: preview.valid ? DeskTheme.textTertiary : DeskTheme.danger)
+                        color: preview.valid ? DeskTheme.textSecondary : DeskTheme.danger)
             }
         }
-        .padding(DeskLayout.space16)
-        .background(DeskTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: DeskRadius.medium))
     }
 }
 

@@ -77,7 +77,7 @@ final class AppLockController {
             return
         }
         errorMessage = nil
-        if await authenticate(reason: "افتح ديسك سبق") {
+        if await authenticate(reason: "افتح مكتب سبق") {
             state.unlock()
         }
     }
