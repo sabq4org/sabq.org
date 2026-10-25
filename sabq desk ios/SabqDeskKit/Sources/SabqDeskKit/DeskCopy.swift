@@ -70,4 +70,19 @@ extension StaffInboxItem {
         case .social: return StaffSocialStatus(rawValue: status)?.title ?? status
         }
     }
+
+    /// Row chip: «مجدول · 14:05» / «منشورة · 14:05» (Riyadh time) when the
+    /// server sent the time; otherwise the plain status title.
+    public var statusChipTitle: String {
+        guard kind == .social, let social = StaffSocialStatus(rawValue: status) else { return statusTitle }
+        switch social {
+        case .scheduled:
+            if let at = scheduledAt { return "مجدول · \(RiyadhTime.timeString(at))" }
+        case .published:
+            if let at = publishedAt { return "منشورة · \(RiyadhTime.timeString(at))" }
+        default:
+            break
+        }
+        return statusTitle
+    }
 }
