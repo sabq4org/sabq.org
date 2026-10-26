@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-25 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
+> آخر مراجعة: 2026-10-26 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
 
 ## الملخص
 
