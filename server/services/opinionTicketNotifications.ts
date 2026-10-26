@@ -19,6 +19,7 @@ import {
   getDeskBotAlertRecipients,
 } from "./deskBotAlerts";
 import { SABQ_DESK_BUNDLE_ID, sendPushToUserApp } from "./userAppPushService";
+import { applyStaffDeskPrefs, loadStaffDeskPrefs } from "./staffAppPushService";
 
 const NOTIFY_ROLE_NAMES = [...OPINION_TICKET_NOTIFY_ROLE_NAMES];
 
@@ -82,6 +83,7 @@ export async function notifyDeskOfWriterInquiry(input: {
   }
 
   if (recipients.length > 0) {
+    const deskPrefs = await loadStaffDeskPrefs(recipients.map((r) => r.id));
     await Promise.all(
       recipients.map(async (recipient) => {
         try {
@@ -97,18 +99,21 @@ export async function notifyDeskOfWriterInquiry(input: {
           console.error("[opinion-tickets] inbox notify failed", err);
         }
 
+        // الصندوق والبريد يبقيان كما هما؛ التفضيلات تخص إشعار الجوال فقط.
+        const pushMessage = applyStaffDeskPrefs(deskPrefs.get(recipient.id), "writerMessages", {
+          title: notice.title,
+          body: notice.body,
+          type: notice.type,
+          deeplink: `sabqdesk://ticket/${input.ticketId}`,
+          data: {
+            ticketId: input.ticketId,
+            kind: input.kind,
+          },
+          collapseId: `desk-ticket-${input.ticketId}`,
+        });
+        if (!pushMessage) return;
         try {
-          await sendPushToUserApp(recipient.id, SABQ_DESK_BUNDLE_ID, {
-            title: notice.title,
-            body: notice.body,
-            type: notice.type,
-            deeplink: `sabqdesk://ticket/${input.ticketId}`,
-            data: {
-              ticketId: input.ticketId,
-              kind: input.kind,
-            },
-            collapseId: `desk-ticket-${input.ticketId}`,
-          });
+          await sendPushToUserApp(recipient.id, SABQ_DESK_BUNDLE_ID, pushMessage);
         } catch (pushErr) {
           console.error("[opinion-tickets] staff app push failed", pushErr);
         }

@@ -116,17 +116,55 @@ export interface StaffCapabilities {
   canManageBalances: boolean;
 }
 
+/**
+ * الساعات الهادئة لتطبيق الديسك (بتوقيت الرياض): ما يصل خلالها يصل بصمت
+ * (interruption-level = passive، بلا صوت) ويبقى في مركز الإشعارات.
+ */
+export const STAFF_QUIET_HOURS = ["off", "night", "offhours"] as const;
+export type StaffQuietHours = (typeof STAFF_QUIET_HOURS)[number];
+
+/** [بداية, نهاية) بالساعة؛ النافذة تعبر منتصف الليل. */
+export const STAFF_QUIET_HOURS_WINDOWS: Record<Exclude<StaffQuietHours, "off">, [number, number]> = {
+  night: [23, 7],
+  offhours: [17, 8],
+};
+
+export function isStaffQuietHour(quietHours: StaffQuietHours, riyadhHour: number): boolean {
+  if (quietHours === "off") return false;
+  const window = STAFF_QUIET_HOURS_WINDOWS[quietHours];
+  if (!window) return false;
+  const [start, end] = window;
+  return start > end ? riyadhHour >= start || riyadhHour < end : riyadhHour >= start && riyadhHour < end;
+}
+
 export interface StaffAlertPrefs {
   aiAlerts: boolean;
   adminAlerts: boolean;
+  /** رسائل الكتّاب: استفسار جديد أو رد من كاتب. */
+  writerMessages: boolean;
+  /** مقترحات النشر على X من الكتّاب والوكالات. */
+  socialProposals: boolean;
+  quietHours: StaffQuietHours;
 }
 
-export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = { aiAlerts: true, adminAlerts: true };
+export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
+  aiAlerts: true,
+  adminAlerts: true,
+  writerMessages: true,
+  socialProposals: true,
+  quietHours: "off",
+};
+
+/** أنواع التنبيه التي يمكن إطفاؤها (كل حقل منطقي في التفضيلات). */
+export type StaffAlertKind = "aiAlerts" | "adminAlerts" | "writerMessages" | "socialProposals";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
     aiAlerts: z.boolean().optional(),
     adminAlerts: z.boolean().optional(),
+    writerMessages: z.boolean().optional(),
+    socialProposals: z.boolean().optional(),
+    quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();
 

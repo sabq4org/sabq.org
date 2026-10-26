@@ -144,7 +144,7 @@ final class AppModel {
     }
 
     func loadAlertPrefsIfNeeded() async {
-        guard alertPrefs == nil, capabilities.canSystemTab else { return }
+        guard alertPrefs == nil else { return }
         do {
             alertPrefs = try await client.alertPrefs()
         } catch {
@@ -155,10 +155,7 @@ final class AppModel {
     /// Applies the change at once and rolls it back if the server refuses.
     func updateAlertPrefs(_ update: StaffAlertPrefsUpdate) async {
         let previous = alertPrefs
-        var optimistic = alertPrefs ?? StaffAlertPrefs()
-        if let value = update.aiAlerts { optimistic.aiAlerts = value }
-        if let value = update.adminAlerts { optimistic.adminAlerts = value }
-        alertPrefs = optimistic
+        alertPrefs = update.applied(to: alertPrefs ?? StaffAlertPrefs())
         alertPrefsError = nil
         do {
             alertPrefs = try await client.updateAlertPrefs(update)

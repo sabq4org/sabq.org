@@ -15,6 +15,8 @@ import { isBotPublisherToken } from "@shared/botPublisherTokens";
 import {
   STAFF_APP_AUDIT_CHANNEL,
   STAFF_APP_BASE_PATH,
+  DEFAULT_STAFF_ALERT_PREFS,
+  type StaffAlertPrefs,
   staffAlertPrefsUpdateSchema,
   staffAiBalanceProviderSchema,
   staffAiBalanceThresholdSchema,
@@ -297,14 +299,14 @@ function requireAdminCapability(key: "canSystemHealth" | "canAdminAlerts" | "can
 
 subRouter.get("/me", requireStaffAuth, async (req: StaffRequest, res: Response) => {
   const ctx = req.staffAuth!;
-  let alertPrefs: { aiAlerts: boolean; adminAlerts: boolean } | null = null;
-  if (ctx.capabilities.canAdminAlerts) {
-    try {
-      alertPrefs = await getStaffAlertPrefs(ctx.user.id);
-    } catch (error) {
-      console.error("[StaffApp me] alert prefs failed:", error);
-      alertPrefs = { aiAlerts: true, adminAlerts: true };
-    }
+  // تفضيلات التنبيهات لكل عضو (رسائل الكتّاب، مقترحات X، الساعات الهادئة،
+  // ومفاتيح المشرفين). إن تعذّرت قراءتها تُعاد الافتراضية بدل إفشال /me.
+  let alertPrefs: StaffAlertPrefs;
+  try {
+    alertPrefs = await getStaffAlertPrefs(ctx.user.id);
+  } catch (error) {
+    console.error("[StaffApp me] alert prefs failed:", error);
+    alertPrefs = { ...DEFAULT_STAFF_ALERT_PREFS };
   }
   res.json({
     id: ctx.user.id,
@@ -331,12 +333,13 @@ subRouter.get("/me", requireStaffAuth, async (req: StaffRequest, res: Response) 
   });
 });
 
-// ── 1-ب) تفضيلات التنبيهات للمشرفين (/me/alert-prefs) ───────────────
+// ── 1-ب) تفضيلات التنبيهات لكل عضو (/me/alert-prefs) ────────────────
+// مفتاحا aiAlerts/adminAlerts لا أثر لهما إلا لمن يملك ai_hub.view (الإرسال
+// نفسه محصور فيهم)، فلا حاجة لحجب المسار عن بقية الأعضاء.
 
 subRouter.get(
   "/me/alert-prefs",
   requireStaffAuth,
-  requireAdminCapability("canAdminAlerts"),
   async (req: StaffRequest, res: Response) => {
     try {
       res.json(await getStaffAlertPrefs(req.staffAuth!.user.id));
@@ -350,7 +353,6 @@ subRouter.get(
 subRouter.put(
   "/me/alert-prefs",
   requireStaffAuth,
-  requireAdminCapability("canAdminAlerts"),
   async (req: StaffRequest, res: Response) => {
     const parsed = staffAlertPrefsUpdateSchema.safeParse(req.body ?? {});
     if (!parsed.success) {

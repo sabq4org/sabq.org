@@ -185,6 +185,30 @@ final class DecodingTests: XCTestCase {
                        StaffAlertPrefs(aiAlerts: false, adminAlerts: true))
     }
 
+    func testAlertPrefsDecodeKindsAndQuietHours() throws {
+        let json = #"{"writerMessages":false,"socialProposals":true,"quietHours":"night"}"#
+        let prefs = try decoder.decode(StaffAlertPrefs.self, from: json.data)
+        XCTAssertEqual(prefs, StaffAlertPrefs(writerMessages: false, quietHours: .night))
+        // A preset from a newer server falls back to no quiet hours.
+        let unknown = try decoder.decode(StaffAlertPrefs.self, from: #"{"quietHours":"weekend"}"#.data)
+        XCTAssertEqual(unknown.quietHours, .off)
+    }
+
+    func testQuietHoursWindowsCrossMidnight() {
+        XCTAssertTrue(StaffQuietHours.night.isQuiet(hour: 23))
+        XCTAssertTrue(StaffQuietHours.night.isQuiet(hour: 6))
+        XCTAssertFalse(StaffQuietHours.night.isQuiet(hour: 7))
+        XCTAssertTrue(StaffQuietHours.offhours.isQuiet(hour: 17))
+        XCTAssertFalse(StaffQuietHours.offhours.isQuiet(hour: 12))
+        XCTAssertFalse(StaffQuietHours.off.isQuiet(hour: 2))
+    }
+
+    func testAlertPrefsUpdateAppliesOnlySentFields() {
+        let base = StaffAlertPrefs(adminAlerts: false)
+        let next = StaffAlertPrefsUpdate(socialProposals: false, quietHours: .offhours).applied(to: base)
+        XCTAssertEqual(next, StaffAlertPrefs(adminAlerts: false, socialProposals: false, quietHours: .offhours))
+    }
+
     func testInboxDecodesOrganizationSenderAvatarAndWithdrawal() throws {
         let page = try decoder.decode(StaffInboxPage.self, from: Fixtures.inboxV2.data)
         let item = try XCTUnwrap(page.items.first)
