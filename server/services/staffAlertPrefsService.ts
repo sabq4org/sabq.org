@@ -1,10 +1,22 @@
-// تفضيلات تنبيهات تطبيق الديسك لكل مشرف — مخزنة في system_settings
+// تفضيلات تنبيهات تطبيق الديسك لكل عضو — مخزنة في system_settings
 // (مفتاح staff_app.alert_prefs:<userId>) دون أي تغيير في المخطط.
-// غياب الصف يعني أن التنبيهين مفعّلان.
+// غياب الصف يعني أن كل التنبيهات مفعّلة وبلا ساعات هادئة.
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { systemSettings } from "@shared/schema";
-import { DEFAULT_STAFF_ALERT_PREFS, type StaffAlertPrefs } from "@shared/staffApp";
+import {
+  DEFAULT_STAFF_ALERT_PREFS,
+  STAFF_QUIET_HOURS,
+  type StaffAlertKind,
+  type StaffAlertPrefs,
+  type StaffQuietHours,
+} from "@shared/staffApp";
+
+const STAFF_ALERT_KINDS: StaffAlertKind[] = ["aiAlerts", "adminAlerts", "writerMessages", "socialProposals"];
+
+function isQuietHours(value: unknown): value is StaffQuietHours {
+  return typeof value === "string" && (STAFF_QUIET_HOURS as readonly string[]).includes(value);
+}
 
 export const STAFF_ALERT_PREFS_KEY_PREFIX = "staff_app.alert_prefs:";
 export const STAFF_APP_SETTINGS_CATEGORY = "staff_app";
@@ -13,15 +25,15 @@ export function staffAlertPrefsKey(userId: string): string {
   return `${STAFF_ALERT_PREFS_KEY_PREFIX}${userId}`;
 }
 
-/** يطبع القيمة المخزنة: أي حقل غير منطقي (boolean) يرجع للافتراضي (مفعّل). */
+/** يطبع القيمة المخزنة: أي حقل غير صالح يرجع للافتراضي (مفعّل، وبلا ساعات هادئة). */
 export function normalizeStaffAlertPrefs(value: unknown): StaffAlertPrefs {
   const obj = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  return {
-    aiAlerts:
-      typeof obj.aiAlerts === "boolean" ? obj.aiAlerts : DEFAULT_STAFF_ALERT_PREFS.aiAlerts,
-    adminAlerts:
-      typeof obj.adminAlerts === "boolean" ? obj.adminAlerts : DEFAULT_STAFF_ALERT_PREFS.adminAlerts,
-  };
+  const out: StaffAlertPrefs = { ...DEFAULT_STAFF_ALERT_PREFS };
+  for (const kind of STAFF_ALERT_KINDS) {
+    if (typeof obj[kind] === "boolean") out[kind] = obj[kind] as boolean;
+  }
+  if (isQuietHours(obj.quietHours)) out.quietHours = obj.quietHours;
+  return out;
 }
 
 export async function getStaffAlertPrefs(userId: string): Promise<StaffAlertPrefs> {
@@ -60,8 +72,11 @@ export async function updateStaffAlertPrefs(
   patch: Partial<StaffAlertPrefs>,
 ): Promise<StaffAlertPrefs> {
   const changes: Partial<StaffAlertPrefs> = {};
-  if (typeof patch.aiAlerts === "boolean") changes.aiAlerts = patch.aiAlerts;
-  if (typeof patch.adminAlerts === "boolean") changes.adminAlerts = patch.adminAlerts;
+  for (const kind of STAFF_ALERT_KINDS) {
+    const value = patch[kind];
+    if (typeof value === "boolean") changes[kind] = value;
+  }
+  if (isQuietHours(patch.quietHours)) changes.quietHours = patch.quietHours;
   if (Object.keys(changes).length === 0) return getStaffAlertPrefs(userId);
 
   const rows = await db

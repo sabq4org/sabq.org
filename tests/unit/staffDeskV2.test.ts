@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_STAFF_ALERT_PREFS } from "@shared/staffApp";
 import { PgDialect } from "drizzle-orm/pg-core";
 
 const mocks = vi.hoisted(() => ({
@@ -144,10 +145,11 @@ describe("cancel reason rule (task 2)", () => {
 
 describe("alert prefs defaults (contract §3)", () => {
   it("normalizes missing/invalid values to ON", () => {
-    expect(normalizeStaffAlertPrefs(undefined)).toEqual({ aiAlerts: true, adminAlerts: true });
-    expect(normalizeStaffAlertPrefs({ aiAlerts: "no" })).toEqual({ aiAlerts: true, adminAlerts: true });
-    expect(normalizeStaffAlertPrefs({ aiAlerts: false })).toEqual({ aiAlerts: false, adminAlerts: true });
+    expect(normalizeStaffAlertPrefs(undefined)).toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: true, adminAlerts: true });
+    expect(normalizeStaffAlertPrefs({ aiAlerts: "no" })).toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: true, adminAlerts: true });
+    expect(normalizeStaffAlertPrefs({ aiAlerts: false })).toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: false, adminAlerts: true });
     expect(normalizeStaffAlertPrefs({ aiAlerts: false, adminAlerts: false })).toEqual({
+      ...DEFAULT_STAFF_ALERT_PREFS,
       aiAlerts: false,
       adminAlerts: false,
     });
@@ -156,7 +158,7 @@ describe("alert prefs defaults (contract §3)", () => {
   it("returns both ON when the system_settings row is missing", async () => {
     const where = vi.fn(() => ({ limit: () => Promise.resolve([]) }));
     mocks.dbSelect.mockImplementation(() => ({ from: () => ({ where }) }));
-    await expect(getStaffAlertPrefs("admin-1")).resolves.toEqual({ aiAlerts: true, adminAlerts: true });
+    await expect(getStaffAlertPrefs("admin-1")).resolves.toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: true, adminAlerts: true });
     expect(staffAlertPrefsKey("admin-1")).toBe("staff_app.alert_prefs:admin-1");
   });
 
@@ -164,7 +166,7 @@ describe("alert prefs defaults (contract §3)", () => {
     mocks.dbSelect.mockImplementation(() => ({
       from: () => ({ where: () => ({ limit: () => Promise.resolve([{ value: { aiAlerts: false } }]) }) }),
     }));
-    await expect(getStaffAlertPrefs("admin-1")).resolves.toEqual({ aiAlerts: false, adminAlerts: true });
+    await expect(getStaffAlertPrefs("admin-1")).resolves.toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: false, adminAlerts: true });
   });
 
   it("updates atomically: one upsert that merges only the sent toggle into the stored jsonb", async () => {
@@ -181,6 +183,7 @@ describe("alert prefs defaults (contract §3)", () => {
       },
     }));
     await expect(updateStaffAlertPrefs("admin-1", { adminAlerts: false })).resolves.toEqual({
+      ...DEFAULT_STAFF_ALERT_PREFS,
       aiAlerts: true,
       adminAlerts: false,
     });
@@ -202,7 +205,7 @@ describe("alert prefs defaults (contract §3)", () => {
     }));
     await expect(
       updateStaffAlertPrefs("admin-1", { aiAlerts: "off" } as unknown as { aiAlerts: boolean }),
-    ).resolves.toEqual({ aiAlerts: false, adminAlerts: true });
+    ).resolves.toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: false, adminAlerts: true });
     expect(mocks.dbInsert).not.toHaveBeenCalled();
   });
 });

@@ -4,12 +4,11 @@ import SwiftUI
 import UIKit
 
 /// «حسابي»: the member's avatar with the robot beside it, one row for what
-/// they may do, then security, notifications, quick replies and about, each
-/// group in a light outline.
+/// they may do, then security, notifications (a page of its own), quick
+/// replies and about, each group in a light outline.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppLockController.self) private var appLock
-    @Environment(\.openURL) private var openURL
     @State private var confirmSignOut = false
 
     var body: some View {
@@ -62,20 +61,21 @@ struct SettingsView: View {
                     }
 
                     SettingsSection(title: "الإشعارات والرسائل") {
-                        Button {
-                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                        NavigationLink {
+                            NotificationPrefsView()
                         } label: {
                             HStack {
-                                RowLabel(title: "إشعارات المكتب", systemImage: "bell.badge")
+                                RowLabel(title: "التنبيهات", systemImage: "bell.badge",
+                                         subtitle: alertsSummary)
                                 Spacer()
-                                Image(systemName: "arrow.up.forward.app")
+                                Image(systemName: "chevron.forward")
+                                    .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(DeskTheme.textTertiary)
                                     .accessibilityHidden(true)
                             }
                             .settingsRow()
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("يفتح إعدادات النظام")
                         if model.capabilities.canTickets {
                             GroupDivider()
                             NavigationLink {
@@ -92,30 +92,6 @@ struct SettingsView: View {
                                 .settingsRow()
                             }
                             .buttonStyle(.plain)
-                        }
-                    }
-
-                    if model.capabilities.canSystemTab {
-                        SettingsSection(title: "تنبيهات النظام",
-                                        footer: model.alertPrefsError ?? "تصلك على هذا الجهاز فور حدوث ما يحتاج تدخلك.",
-                                        footerColor: model.alertPrefsError == nil ? DeskTheme.textSecondary : DeskTheme.danger) {
-                            if model.capabilities.canAdminAlerts {
-                                Toggle(isOn: adminAlertsBinding) {
-                                    RowLabel(title: "تنبيهات الإدارة الفورية", systemImage: "exclamationmark.bubble")
-                                }
-                                .tint(DeskInk.action)
-                                .settingsRow()
-                            }
-                            if model.capabilities.canAdminAlerts, model.capabilities.canSystemHealth {
-                                GroupDivider()
-                            }
-                            if model.capabilities.canSystemHealth {
-                                Toggle(isOn: aiAlertsBinding) {
-                                    RowLabel(title: "تنبيهات نماذج الذكاء الاصطناعي", systemImage: "cpu")
-                                }
-                                .tint(DeskInk.action)
-                                .settingsRow()
-                            }
                         }
                     }
 
@@ -173,14 +149,13 @@ struct SettingsView: View {
                 set: { newValue in Task { await appLock.setEnabled(newValue) } })
     }
 
-    private var adminAlertsBinding: Binding<Bool> {
-        Binding(get: { model.alertPrefs?.adminAlerts ?? true },
-                set: { value in Task { await model.updateAlertPrefs(StaffAlertPrefsUpdate(adminAlerts: value)) } })
-    }
-
-    private var aiAlertsBinding: Binding<Bool> {
-        Binding(get: { model.alertPrefs?.aiAlerts ?? true },
-                set: { value in Task { await model.updateAlertPrefs(StaffAlertPrefsUpdate(aiAlerts: value)) } })
+    /// Under «التنبيهات»: the quiet-hours preset, or that everything is on.
+    private var alertsSummary: String {
+        switch model.alertPrefs?.quietHours ?? .off {
+        case .night: return "هادئة ليلًا \u{2066}23:00 – 07:00\u{2069}"
+        case .offhours: return "هادئة خارج الدوام \u{2066}17:00 – 08:00\u{2069}"
+        case .off: return "الساعات الهادئة وما يصلك على الجوال"
+        }
     }
 
     /// Under the lock's own row: an error, or why it cannot be turned on.

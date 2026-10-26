@@ -14,7 +14,13 @@ import {
   ROLE_PERMISSIONS_MAP,
   SUPERUSER_ROLE_NAMES,
 } from "@shared/rbac-constants";
-import { STAFF_APP_BUNDLE_ID, type StaffAlertPrefs } from "@shared/staffApp";
+import {
+  DEFAULT_STAFF_ALERT_PREFS,
+  STAFF_APP_BUNDLE_ID,
+  isStaffQuietHour,
+  type StaffAlertKind,
+  type StaffAlertPrefs,
+} from "@shared/staffApp";
 import { userHasPermission } from "../rbac";
 import { clipDeskAlertExcerpt } from "./deskBotAlerts";
 import { isOpinionTicketNotifyRecipient } from "./opinionTicketNotice";
@@ -131,7 +137,48 @@ export async function listSocialDeskRecipientUserIds(
 /** صلاحية مشرفي تطبيق الديسك (صحة النظام + تنبيهات الإدارة). */
 export const STAFF_ADMIN_ALERT_PERMISSION = "ai_hub.view";
 
-export type StaffAdminAlertPref = keyof StaffAlertPrefs;
+export type StaffAdminAlertPref = Extract<StaffAlertKind, "aiAlerts" | "adminAlerts">;
+
+/** الساعة (0–23) بتوقيت الرياض. */
+export function riyadhHour(date: Date = new Date()): number {
+  try {
+    const hour = Number(
+      new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Asia/Riyadh" }).format(date),
+    );
+    if (Number.isFinite(hour)) return hour % 24;
+  } catch {
+    // يسقط إلى الحساب الثابت أدناه (الرياض UTC+3 بلا توقيت صيفي).
+  }
+  return (date.getUTCHours() + 3) % 24;
+}
+
+/**
+ * يطبّق تفضيلات العضو على إشعار الديسك: null إن أطفأ هذا النوع، ونسخة صامتة
+ * (passive) في ساعاته الهادئة، وإلا الرسالة كما هي.
+ */
+export function applyStaffDeskPrefs(
+  prefs: StaffAlertPrefs | undefined,
+  kind: StaffAlertKind,
+  message: UserAppPushMessage,
+  now: Date = new Date(),
+): UserAppPushMessage | null {
+  const p = prefs ?? DEFAULT_STAFF_ALERT_PREFS;
+  if (p[kind] === false) return null;
+  if (isStaffQuietHour(p.quietHours, riyadhHour(now))) {
+    return { ...message, interruptionLevel: "passive" };
+  }
+  return message;
+}
+
+/** تفضيلات المستلمين؛ إن تعذّرت القراءة يُعامل الجميع بالافتراضي (يصلهم كل شيء). */
+export async function loadStaffDeskPrefs(userIds: string[]): Promise<Map<string, StaffAlertPrefs>> {
+  try {
+    return await getStaffAlertPrefsForUsers(userIds);
+  } catch (err) {
+    console.error("[StaffAppPush] alert prefs lookup failed:", err);
+    return new Map();
+  }
+}
 
 /** المشرفون النشطون (ai_hub.view) الذين فعّلوا التفضيل المطلوب. */
 export async function listStaffAdminAlertRecipientIds(
@@ -139,13 +186,8 @@ export async function listStaffAdminAlertRecipientIds(
 ): Promise<string[]> {
   const ids = await listStaffPermissionRecipientUserIds(STAFF_ADMIN_ALERT_PERMISSION);
   if (ids.length === 0) return [];
-  try {
-    const prefs = await getStaffAlertPrefsForUsers(ids);
-    return ids.filter((id) => prefs.get(id)?.[pref] !== false);
-  } catch (err) {
-    console.error("[StaffAppPush] alert prefs lookup failed:", err);
-    return ids;
-  }
+  const prefs = await loadStaffDeskPrefs(ids);
+  return ids.filter((id) => prefs.get(id)?.[pref] !== false);
 }
 
 /** يرسل إشعاراً لحزمة الديسك فقط إلى المشرفين المفعّلين للتفضيل. لا يرمي. */
@@ -154,12 +196,15 @@ export async function sendStaffAdminPush(
   message: UserAppPushMessage,
 ): Promise<number> {
   try {
-    const recipientIds = await listStaffAdminAlertRecipientIds(pref);
-    if (recipientIds.length === 0) return 0;
+    const ids = await listStaffPermissionRecipientUserIds(STAFF_ADMIN_ALERT_PERMISSION);
+    if (ids.length === 0) return 0;
+    const prefs = await loadStaffDeskPrefs(ids);
     const results = await Promise.all(
-      recipientIds.map(async (recipientId) => {
+      ids.map(async (recipientId) => {
+        const personal = applyStaffDeskPrefs(prefs.get(recipientId), pref, message);
+        if (!personal) return 0;
         try {
-          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
+          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, personal);
           return r.sent;
         } catch (pushErr) {
           console.error("[StaffAppPush] admin push to recipient failed:", pushErr);
@@ -233,20 +278,23 @@ export async function notifyStaffDeskOfSocialProposal(input: {
     const body = input.articleTitle ? `«${input.articleTitle}» — ${excerpt}` : excerpt;
     const deeplink = `sabqdesk://social/${input.postId}`;
 
+    const prefs = await loadStaffDeskPrefs(recipientIds);
     await Promise.all(
       recipientIds.map(async (recipientId) => {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), "socialProposals", {
+          title,
+          body,
+          type: "desk.social_proposal",
+          deeplink,
+          data: {
+            postId: input.postId,
+            proposalKind: input.proposalKind,
+          },
+          collapseId: `desk-social-${input.postId}`,
+        });
+        if (!message) return;
         try {
-          await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, {
-            title,
-            body,
-            type: "desk.social_proposal",
-            deeplink,
-            data: {
-              postId: input.postId,
-              proposalKind: input.proposalKind,
-            },
-            collapseId: `desk-social-${input.postId}`,
-          });
+          await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
         } catch (pushErr) {
           console.error("[StaffAppPush] social push to recipient failed:", pushErr);
         }

@@ -7,22 +7,66 @@ import Foundation
 
 // MARK: - Alert preferences
 
-/// Per-admin push switches. A missing key means ON (the server default).
+/// Quiet hours in Riyadh time: pushes in the window arrive silently
+/// (no sound, screen stays dark) and wait in Notification Center.
+public enum StaffQuietHours: String, Codable, Sendable, CaseIterable {
+    case off
+    case night
+    case offhours
+
+    /// [start, end) hours, crossing midnight; nil when off.
+    public var window: (start: Int, end: Int)? {
+        switch self {
+        case .off: return nil
+        case .night: return (23, 7)
+        case .offhours: return (17, 8)
+        }
+    }
+
+    public func isQuiet(hour: Int) -> Bool {
+        guard let window else { return false }
+        return window.start > window.end
+            ? hour >= window.start || hour < window.end
+            : hour >= window.start && hour < window.end
+    }
+
+    /// An unknown value from a newer server means no quiet hours.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = StaffQuietHours(rawValue: raw) ?? .off
+    }
+}
+
+/// Per-member push switches. A missing key means ON (the server default),
+/// and missing quiet hours mean none.
 public struct StaffAlertPrefs: Codable, Sendable, Equatable {
     public var aiAlerts: Bool
     public var adminAlerts: Bool
+    public var writerMessages: Bool
+    public var socialProposals: Bool
+    public var quietHours: StaffQuietHours
 
-    private enum CodingKeys: String, CodingKey { case aiAlerts, adminAlerts }
+    private enum CodingKeys: String, CodingKey {
+        case aiAlerts, adminAlerts, writerMessages, socialProposals, quietHours
+    }
 
-    public init(aiAlerts: Bool = true, adminAlerts: Bool = true) {
+    public init(aiAlerts: Bool = true, adminAlerts: Bool = true,
+                writerMessages: Bool = true, socialProposals: Bool = true,
+                quietHours: StaffQuietHours = .off) {
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
+        self.writerMessages = writerMessages
+        self.socialProposals = socialProposals
+        self.quietHours = quietHours
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         aiAlerts = try container.decodeIfPresent(Bool.self, forKey: .aiAlerts) ?? true
         adminAlerts = try container.decodeIfPresent(Bool.self, forKey: .adminAlerts) ?? true
+        writerMessages = try container.decodeIfPresent(Bool.self, forKey: .writerMessages) ?? true
+        socialProposals = try container.decodeIfPresent(Bool.self, forKey: .socialProposals) ?? true
+        quietHours = (try? container.decodeIfPresent(StaffQuietHours.self, forKey: .quietHours)) ?? .off
     }
 }
 
@@ -30,10 +74,29 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
 public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
     public var aiAlerts: Bool?
     public var adminAlerts: Bool?
+    public var writerMessages: Bool?
+    public var socialProposals: Bool?
+    public var quietHours: StaffQuietHours?
 
-    public init(aiAlerts: Bool? = nil, adminAlerts: Bool? = nil) {
+    public init(aiAlerts: Bool? = nil, adminAlerts: Bool? = nil,
+                writerMessages: Bool? = nil, socialProposals: Bool? = nil,
+                quietHours: StaffQuietHours? = nil) {
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
+        self.writerMessages = writerMessages
+        self.socialProposals = socialProposals
+        self.quietHours = quietHours
+    }
+
+    /// Applies the sent fields to `prefs`, as the server does.
+    public func applied(to prefs: StaffAlertPrefs) -> StaffAlertPrefs {
+        var out = prefs
+        if let aiAlerts { out.aiAlerts = aiAlerts }
+        if let adminAlerts { out.adminAlerts = adminAlerts }
+        if let writerMessages { out.writerMessages = writerMessages }
+        if let socialProposals { out.socialProposals = socialProposals }
+        if let quietHours { out.quietHours = quietHours }
+        return out
     }
 }
 

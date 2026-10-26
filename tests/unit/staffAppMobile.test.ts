@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { DEFAULT_STAFF_ALERT_PREFS } from "@shared/staffApp";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -410,17 +411,16 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
       canAdminAlerts: false,
       canManageBalances: false,
     });
-    expect(body.alertPrefs).toBeNull();
+    // Every member gets their own prefs now (writer messages, X proposals, quiet hours).
+    expect(body.alertPrefs).toEqual(DEFAULT_STAFF_ALERT_PREFS);
     expect(mocks.invalidateUserPermissionCache).toHaveBeenCalledWith("staff-editor-1");
   });
 
-  it("admin-only desk endpoints: /system/health, /system/balances, /alerts and /me/alert-prefs need ai_hub.view", async () => {
+  it("admin-only desk endpoints: /system/health, /system/balances and /alerts need ai_hub.view", async () => {
     mocks.userHasPermission.mockImplementation(async (_uid: string, code: string) => code !== "ai_hub.view");
     for (const [method, path, body] of [
       ["GET", "/api/v1/staff/system/health", undefined],
       ["GET", "/api/v1/staff/alerts", undefined],
-      ["GET", "/api/v1/staff/me/alert-prefs", undefined],
-      ["PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: false }],
       ["GET", "/api/v1/staff/system/balances", undefined],
       ["GET", "/api/v1/staff/system/balances/openai", undefined],
       ["POST", "/api/v1/staff/system/balances/openai/topup", { mode: "add", amountUsd: 500 }],
@@ -449,10 +449,10 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
     }));
     const me = await (await call("GET", "/api/v1/staff/me")).json();
     expect(me.capabilities).toMatchObject({ canSystemHealth: true, canAdminAlerts: true, canManageBalances: true });
-    expect(me.alertPrefs).toEqual({ aiAlerts: true, adminAlerts: true });
+    expect(me.alertPrefs).toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: true, adminAlerts: true });
     const prefs = await call("GET", "/api/v1/staff/me/alert-prefs");
     expect(prefs.status).toBe(200);
-    expect(await prefs.json()).toEqual({ aiAlerts: true, adminAlerts: true });
+    expect(await prefs.json()).toEqual({ ...DEFAULT_STAFF_ALERT_PREFS, aiAlerts: true, adminAlerts: true });
     const bad = await call("PUT", "/api/v1/staff/me/alert-prefs", { aiAlerts: "off" });
     expect(bad.status).toBe(400);
   });

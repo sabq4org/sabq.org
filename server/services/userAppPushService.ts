@@ -33,7 +33,8 @@ export interface UserAppPushMessage {
   deeplink: string;
   data?: Record<string, string>;
   collapseId?: string;
-  interruptionLevel?: "active" | "time-sensitive";
+  /** passive = الساعات الهادئة في الديسك: يصل بلا صوت ولا يضيء الشاشة. */
+  interruptionLevel?: "passive" | "active" | "time-sensitive";
 }
 
 export interface UserAppPushResult {
@@ -92,6 +93,7 @@ async function sendPushToUserApps(
       type: message.type,
       priority: message.interruptionLevel ?? "active",
     });
+    if (message.interruptionLevel === "passive") payload.aps.sound = undefined;
     Object.assign(payload, message.data ?? {});
 
     const responses = await Promise.all(

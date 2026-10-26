@@ -111,7 +111,7 @@ Content-Type: application/json
 ```
 - `canSystemHealth` و`canAdminAlerts` كلاهما = `ai_hub.view`.
 - `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
-- `alertPrefs` يُعاد فقط لمن يملك `canAdminAlerts`، وإلا `null`. إن تعذّرت قراءته يُعاد `{ aiAlerts: true, adminAlerts: true }` بدل إفشال `/me`.
+- `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
 يعيد قائمة موحدة من التذاكر ومقترحات النشر الاجتماعي مرتبة من الأحدث إلى الأقدم (`updatedAt DESC`).
@@ -263,9 +263,11 @@ Content-Type: application/json
 - `kind`: `social_failed` (آخر 72 ساعة) | `agency_balance_low` | `breaking_expiring` (خلال ساعتين) | `breaking_expired` (من صف `system_settings` `staff_app.breaking_expired_recent`) | `ai_incident` | `ai_budget` (≥ 80%).
 - `severity`: `urgent | info`. `action`: `{ type: "retry_social", postId }` (فقط لمن يملك `canSocial.publish`) | `{ type: "open_system" }` | `null`.
 
-### 8. `GET` / `PUT /api/v1/staff/me/alert-prefs` (`ai_hub.view`)
+### 8. `GET` / `PUT /api/v1/staff/me/alert-prefs` (كل عضو)
 - **`GET`** يعيد `{ "aiAlerts": true, "adminAlerts": true }`. غياب الصف = الاثنان مفعّلان.
-- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير منطقية ← `400 validation_error`). يعيد التفضيلات بعد الحفظ ويُسجَّل `staff_alert_prefs_update`.
+- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean, "writerMessages"?: boolean, "socialProposals"?: boolean, "quietHours"?: "off" | "night" | "offhours" }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير صالحة ← `400 validation_error`). منذ 2026-10-26 متاح لكل عضو؛ مفتاحا `aiAlerts`/`adminAlerts` لا أثر لهما إلا لمن يملك `ai_hub.view`.
+- **الساعات الهادئة** (بتوقيت الرياض): `night` = 23:00–07:00، `offhours` = 17:00–08:00. كل إشعار ديسك خلالها يُرسل بـ `interruption-level: passive` وبلا صوت، فيبقى في مركز الإشعارات دون إزعاج. لا يُؤجَّل ولا يُجمع.
+- **رسائل الكتّاب** (`writerMessages`) و**مقترحات X** (`socialProposals`) تخص إشعار الجوال فقط؛ الصندوق الداخلي والبريد لا يتغيران. يعيد التفضيلات بعد الحفظ ويُسجَّل `staff_alert_prefs_update`.
 - التخزين: صف `system_settings` بالمفتاح `staff_app.alert_prefs:<userId>` (الفئة `staff_app`) بلا تغيير مخطط. الحفظ upsert ذري يدمج الحقول المرسلة فقط في قيمة jsonb المخزنة (`stored || patch`)، فلا يعيد طلبان متزامنان يغيّر كل منهما مفتاحاً مختلفاً تفعيلَ الآخر. جسم بلا حقول منطقية لا يكتب شيئاً ويعيد القيمة الحالية.
 
 ### 9. سبب الرفض في إلغاء الويب ورفض المكتب
@@ -378,7 +380,7 @@ Content-Type: application/json
    - **معرّف الدمج (`collapseId`):** `desk-social-<postId>`
 
 ### ب-2) إشعارات المشرفين (`sendStaffAdminPush` في `server/services/staffAppPushService.ts`)
-المستلمون: المستخدمون النشطون الذين يملكون `ai_hub.view` ولم يطفئوا التفضيل المعني في `/me/alert-prefs` (إن تعذّرت قراءة التفضيلات يُرسل للجميع). لا ترمي هذه الدوال، ولا يمس فشلها مسار الذكاء الاصطناعي أو النشر.
+المستلمون: المستخدمون النشطون الذين يملكون `ai_hub.view` ولم يطفئوا التفضيل المعني في `/me/alert-prefs` (إن تعذّرت قراءة التفضيلات يُرسل للجميع). كل إشعارات الديسك (هنا وفي الخطافات الثلاثة أعلاه) تمر على `applyStaffDeskPrefs` في `staffAppPushService.ts`: نوع مطفأ لا يُرسل، وفي الساعات الهادئة يصل صامتاً. لا ترمي هذه الدوال، ولا يمس فشلها مسار الذكاء الاصطناعي أو النشر.
 
 | الحدث | التفضيل | المصدر | `type` | `deeplink` | `collapseId` |
 |-------|---------|--------|--------|------------|--------------|
