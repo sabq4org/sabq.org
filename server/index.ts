@@ -1,4 +1,5 @@
-import { installShutdown } from "./shutdown";
+import { installShutdown, isShuttingDown } from "./shutdown";
+import { applyServerTimeouts, withLivenessFastPath } from "./utils/livenessFastPath";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
@@ -1009,8 +1010,25 @@ app.use((req, res, next) => {
 
 const isProduction = process.env.NODE_ENV === "production";
 const port = (globalThis as any).__sabqPort || parseInt(process.env.PORT || '5000', 10);
-const server = (globalThis as any).__sabqServer || createServer(app);
+// /healthz و/livez يُخدَمان قبل Express كليًّا (بلا I/O) — انظر livenessFastPath.ts.
+// مزلاج الإقلاع من ./db يُحمَّل كسولًا كما في /health (ADR-001: لا استيراد ساكن لـdb هنا).
+let livenessDb: { isDatabaseReadyOnce: () => boolean } | null = null;
+let livenessDbLoading = false;
+const livenessIsReady = (): boolean => {
+  if (livenessDb) return livenessDb.isDatabaseReadyOnce();
+  if (!livenessDbLoading) {
+    livenessDbLoading = true;
+    void import("./db")
+      .then((m) => { livenessDb = m; })
+      .catch(() => { livenessDbLoading = false; });
+  }
+  return false;
+};
+const server = (globalThis as any).__sabqServer || createServer(
+  withLivenessFastPath(app, { isReady: livenessIsReady, isStopping: isShuttingDown }),
+);
 httpPressure.attach(server);
+if (!(globalThis as any).__sabqServer) applyServerTimeouts(server);
 
 if (!(globalThis as any).__sabqServer) {
   // reusePort is unsupported on macOS/Darwin; only enable on Linux

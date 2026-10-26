@@ -1,6 +1,6 @@
 # تشغيل المنصة والبنية المشتركة (`platform-runtime`)
 
-> آخر مراجعة: 2026-10-25 (تصنيف ضجيج Safari في Sentry) | المالك: platform
+> آخر مراجعة: 2026-10-26 (مسار حيوية `/healthz` قبل Express ومهل keep-alive — حادثة فحص Render 2026-10-25) | المالك: platform
 
 ## الغرض والحدود
 الإقلاع، القيادة، انتهاء العملية، أدوات البناء والملفات المشتركة. `routes.ts` و`storage.ts` و`mobileApiRoutes.ts` و`schema.ts` مداخل مشتركة وليست ملكية لكل منطق أعمالها؛ يجب قراءة SYSTEM النظام المستهلك عند تعديل مساره أو جدوله. لا تغيير للبيانات أو Schema الإنتاج ضمن مراجعة سبتمبر.
@@ -16,6 +16,25 @@
 - فلتر Sentry يسقط `TypeError` ذي القيمة الدقيقة `Type error` من `unhandledrejection` فقط عند وجود رسالة breadcrumb المطابقة لـ`[deployRecovery] Stale build detected (vite:preloadError)` وbreadcrumb `fetch` آخر يبدأ رابطه حرفيًا بـ`https://cdn.sabq.org/assets/` ويثبت الفشل بمستوى `error` أو status لا يقل عن 400؛ أي TypeError آخر يبقى قابلًا للرصد، والتحليل لا يستخدم serialization لبيانات breadcrumb.
 - يضبط الخادم `requestDataIntegration` لمنع body/cookies/headers/ip/query مع `sendDefaultPii=false`، ثم يمرر `beforeSend` عبر `sanitizeServerEvent` لحذف `user` والحقول الحساسة، مع إبقاء method/path وURL بلا query ورؤوس آمنة محددة فقط.
 - بركتا PostgreSQL عبر `node-postgres` في الإنتاج (الرئيسة والاحتياطية للجلسات) تثبتان مستمع خطأ دائمًا على كل عميل عند اتصاله، إضافة إلى مستمع البركة. هذا يمنع انقطاع socket عابرًا أثناء استعارة العميل من التحول إلى `uncaughtException`، مع إزالة التكرار عندما تعيد البركة إرسال كائن الخطأ نفسه؛ البركة الرئيسة تعلّم الاتصال غير متاح وتبدأ فحص الاستعادة. مسار `NeonPool` القديم يبقي مستمع `error` فقط حتى لا يعطّل `poolQueryViaFetch` الاختياري.
+
+## فحص الحيوية ومهل HTTP — 2026-10-26
+سببه حادثة 2026-10-25 (15:40–16:10 بتوقيت الرياض): فشل فحص Render على `/health` مرتين تحت ~4× ترافيك، فأوقف Render التوجيه للنسخة الوحيدة ثم أعاد تشغيلها (~110 ألف 502). التفاصيل في PR #2007.
+
+**نقاط الدخول:**
+- `GET|HEAD /healthz` و`/livez` (مع أي query) تُخدَم في معالج طلبات `http.Server` **قبل Express كليًّا** (`server/utils/livenessFastPath.ts`، يُركَّب في `server/index.ts` عند `createServer`). لا I/O ولا dynamic import ولا middleware (لا originGate ولا rate limit ولا جلسات)، والجسم نص قصير مع `Cache-Control: no-store`. أي طريقة أخرى (POST…) أو مسار آخر يمر لـExpress كالمعتاد.
+- الدلالات:
+  - `503 starting`: قبل مزلاج جاهزية الإقلاع `isDatabaseReadyOnce()` من `./db` (يُحمَّل كسولًا عند أول فحص، ADR-001). نفس بوابة `/health` فلا يُوجَّه ترافيك لحاوية باردة.
+  - `503 stopping`: بعد SIGTERM/SIGINT (`isShuttingDown()` من `server/shutdown.ts`).
+  - `200 ok`: غير ذلك.
+- `/health` **لم يتغير**: يبقى JSON تشخيصيًّا (db/leader/leaderMode/podId/theSports) داخل Express، ويرد 503 «starting» قبل الجاهزية. `/ready` يبقى فحصًا عميقًا (SELECT 1) ولا يصلح healthCheckPath.
+
+**مهل الخادم** (`applyServerTimeouts`، تُطبَّق على الخادم الذي ينشئه index فقط):
+- `server.keepAliveTimeout` = 65000ms افتراضيًّا (افتراضي Node 5000ms)، والهدف تقليل فتح اتصالات جديدة من بروكسي Render تحت الطفرات. يُضبط بـ`HTTP_KEEP_ALIVE_TIMEOUT_MS`.
+- `server.headersTimeout` = keepAlive + 1000ms افتراضيًّا (66000ms). يُضبط بـ`HTTP_HEADERS_TIMEOUT_MS`، ولا يقل أبدًا عن keepAlive + 1000ms. القيم غير الصالحة أو غير الموجبة تعود للافتراضي.
+
+**خطوة يدوية بعد النشر (Render، لا تتم من الكود):** في لوحة Render ← خدمة `sabq.org` (srv-dbcgjcom7kps739tsa7g) ← Settings ← Health Checks: حوّل Health Check Path من `/health` إلى `/healthz` بعد أن يؤكد `curl -i https://sabq-api-virginia.onrender.com/healthz` ردًّا `200 ok` على النسخة المنشورة. **قبل هذه الخطوة يبقى فحص الإنتاج على `/health` ولا يستفيد من المسار السريع.** يُنصح أيضًا بحد أدنى نسختين في autoscaling، لأن فشل فحص واحد على نسخة وحيدة يُسقط كل السعة.
+
+**التحقق:** `tests/unit/livenessFastPath.test.ts` يتحقق من الرد خلال أقل من 500ms مع 20 طلبًا عالقًا خلف middleware بطيء، وأن الفحص لا يدخل Express، ومن حالات HEAD وstarting وstopping، ومرور غير GET، والقيم الافتراضية ومتغيرات البيئة للمهل.
 
 ## موجة قرّاء العاجل على `/api/v1` — 2026-09-26
 - طلب «طازج» من التطبيق (`Cache-Control: no-cache` أو `_nc`/`refresh`) **لا يتجاوز** كاش الخادم: `readWithFreshWindow` (`server/utils/freshWindowCache.ts`) يسلّمه نسخة عمرها ≤10ث بجلب واحد للمتزامنين. يغطي `/homepage` و`/news/paginated` و`/articles/:id`. سببه: iOS يستدعي `checkForNewArticles` بـno-cache عند العودة للواجهة، فبعد بث 37 ألف إشعار بُنيت الرئيسية لكل جهاز (pool=50/0idle/23wait).
