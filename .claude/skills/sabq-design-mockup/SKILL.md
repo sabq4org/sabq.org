@@ -9,6 +9,7 @@ description: تصميم نموذج بصري لأي شاشة أو واجهة جد
 
 ## قبل أن ترسم
 1. اقرأ المراجع:
+   - `references/sabq-visual-language.md`: **لغة سبق البصرية المعتمدة** (الألوان والمسافات والخط والتكوين). هي الأساس لكل شاشة
    - `references/clean-app-reference-01.jpg`: المستوى المطلوب من النظافة
    - رموز «مكتب سبق» في `sabq desk ios/SabqDeskKit/Sources/SabqDeskDesign/DeskTheme.swift`
    - للويب: الألوان في `client/src/index.css`، والشاشة الحالية إن كانت إعادة تصميم
