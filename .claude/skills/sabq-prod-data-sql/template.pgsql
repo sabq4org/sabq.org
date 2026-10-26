@@ -47,7 +47,9 @@ BEGIN
   SET <column> = <new value>,
       updated_at = now()
   FROM ops_backup.<table>_<topic>_<YYYYMMDD> b
-  WHERE t.id = b.id;
+  WHERE t.id = b.id
+    -- الشرط نفسه داخل التحديث: صف تغيّر بين الفحص والتحديث لا يُكتب فوقه، فيختلف العدد ويُلغى كل شيء
+    AND t.<column> IS NOT DISTINCT FROM b.old_<column>;
   GET DIAGNOSTICS changed = ROW_COUNT;
 
   IF changed <> expected THEN
