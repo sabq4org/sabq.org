@@ -6,7 +6,7 @@
 //   3) صورة GPT Image 2.5 Sunburst إن لم تكن للمقال صورة (نفس مسار محرر الويب).
 //   4) حفظ واحد مشروط بنسخة المقال وقفل التحرير، ثم نسخة في سجل المادة، ثم
 //      الجدولة في موعد الكاتب الثابت (أو الموعد المرسل) بنفس منطق «جدول».
-// إن تعذرت الصورة يُحفظ النص والملحقات ولا يُجدول المقال.
+// إن تعذرت الصورة يُجدول المقال بلا صورة، وتذكر النتيجة السبب.
 //
 // حالة العملية في system_settings (staff_app.opinion_prep:<articleId>) لأن الخادم
 // يعمل بأكثر من نسخة: الطلب التالي قد يصل نسخة أخرى. لا تغيير في المخطط.
@@ -249,19 +249,19 @@ async function generateImage(prompt: string, actorId: string): Promise<string> {
   throw new Error(job?.error || "تعذر توليد الصورة");
 }
 
+function imageFailureDetail(error: unknown): string {
+  const safe = safeImageError(error);
+  return safe.code === "generation_failed" && error instanceof Error && /[\u0600-\u06FF]/.test(error.message)
+    ? error.message
+    : safe.message;
+}
+
 function failureMessage(step: StaffOpinionPrepStep, error: unknown, saved: boolean): string {
   if (saved && step === "schedule") {
     const detail = error instanceof StaffOpinionDeskError ? error.message : "خطأ غير متوقع.";
     return `جُهّز المقال وحُفظ، لكن تعذرت جدولته: ${detail} جدوله يدوياً.`;
   }
   if (error instanceof StaffOpinionDeskError) return error.message;
-  if (step === "image") {
-    const safe = safeImageError(error);
-    const detail = safe.code === "generation_failed" && error instanceof Error && /[؀-ۿ]/.test(error.message)
-      ? error.message
-      : safe.message;
-    return `جُهّز النص والملحقات وحُفظا، لكن تعذر توليد الصورة: ${detail} لم يُجدول المقال.`;
-  }
   if (step === "proofread") return "تعذر التدقيق اللغوي الآن. لم يتغير شيء في المقال؛ حاول بعد قليل.";
   if (step === "enrich") return "تعذر توليد الملحقات الآن. لم يتغير شيء في المقال؛ حاول بعد قليل.";
   return "تعذر إكمال التجهيز.";
@@ -321,7 +321,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     const enrichment = await generateEnrichment(newTitle, stripHtmlToText(fixed.html), job.actorId);
     await advance({ step: "image" });
 
-    // 3) الحقول ثم الصورة. النص والملحقات يُحفظان حتى لو فشلت الصورة.
+    // 3) الحقول ثم الصورة. فشل الصورة لا يوقف الحفظ ولا الجدولة.
     const existingSeo = (before.seo ?? {}) as NonNullable<Article["seo"]>;
     const manual = before.seoMetadata?.manualOverride === true;
     const pick = (generated: string | null, current: string | undefined) =>
@@ -359,7 +359,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
       } as Article["seoMetadata"],
     };
 
-    let imageError: unknown = null;
+    let imageNote: string | null = null;
     if (!before.imageUrl) {
       try {
         updates.imageUrl = await generateImage(
@@ -369,12 +369,14 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
         updates.isAiGeneratedImage = true;
         job.image = "generated";
       } catch (err) {
-        imageError = err;
+        console.warn("[opinion-prep] image failed; scheduling without it", { articleId: job.articleId });
+        job.image = "failed";
+        imageNote = `جُدول بلا صورة لأن توليدها تعذر: ${imageFailureDetail(err)}`;
       }
     } else {
       job.image = "kept";
     }
-    await advance({ step: imageError ? "image" : "schedule" });
+    await advance({ step: "schedule" });
 
     // 4) حفظ واحد: يفشل إن عُدّل المقال أثناء التجهيز أو فتحه زميل للتحرير.
     const [row] = await db
@@ -399,7 +401,6 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
       summary: "جهّز مكتب سبق المقال للجدولة (تدقيق وملحقات وصورة)",
       metadata: { channel: "staff-app", flow: "opinion-prepare", contentFixes: job.contentFixes },
     }).catch((err) => console.error("[opinion-prep] history record failed:", err));
-    if (imageError) throw imageError;
 
     const result = await scheduleOpinionFromDesk({
       articleId: row.id,
@@ -412,7 +413,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
       scheduledAt: result.scheduledAt,
       finishedAt: new Date().toISOString(),
       heartbeatAt: new Date().toISOString(),
-      message: result.warnings[0]?.message ?? null,
+      message: [imageNote, result.warnings[0]?.message].filter(Boolean).join(" · ") || null,
     };
     await writeJob(job);
   } catch (error) {

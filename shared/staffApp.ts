@@ -306,8 +306,8 @@ export interface StaffOpinionPrepJob {
   scheduledAt: string | null;
   titleChanged: boolean;
   contentFixes: number;
-  /** generated = صورة جديدة؛ kept = للمقال صورة فأُبقيت. */
-  image: "generated" | "kept" | null;
+  /** generated = صورة جديدة؛ kept = للمقال صورة فأُبقيت؛ failed = تعذرت فجُدول بلا صورة. */
+  image: "generated" | "kept" | "failed" | null;
   message: string | null;
 }
 
