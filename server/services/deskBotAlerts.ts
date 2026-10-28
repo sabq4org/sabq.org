@@ -287,9 +287,19 @@ export interface DeskOpinionDraftAlertEmailInput {
   slotLine: string;
   /** الموعد الثابت القادم (ISO) إن وُجد. */
   nextSlotIso?: string | null;
+  /** معرّف الكاتب (users.id) — ليطابق البوت المسودة بالكاتب دون بحث. */
+  authorId?: string | null;
   excerpt?: string | null;
   dashboardUrl?: string;
+  /** رابط المسودة في bot-desk API؛ الافتراضي PUBLIC_API_URL + /api/internal/bot-desk/opinion/drafts/<id>. */
+  botApiUrl?: string;
   occurredAt?: Date;
+}
+
+/** رابط المسودة في bot-desk API (يقرؤه «مكتب سبق» بتوكن botpub_). */
+export function buildOpinionDraftBotApiUrl(articleId: string): string {
+  const apiOrigin = (process.env.PUBLIC_API_URL || "https://api.sabq.org").replace(/\/$/, "");
+  return `${apiOrigin}/api/internal/bot-desk/opinion/drafts/${encodeURIComponent(articleId)}`;
 }
 
 /** بريد «مقال رأي جديد» لبوت الديسك: `[sabq-desk] type=opinion_draft id=<articleId>`. */
@@ -307,15 +317,23 @@ export function buildDeskOpinionDraftAlertEmail(input: DeskOpinionDraftAlertEmai
   const origin = (process.env.FRONTEND_URL || process.env.PUBLIC_SITE_URL || "https://sabq.org").replace(/\/$/, "");
   const dashboardUrl =
     input.dashboardUrl || `${origin}/dashboard/articles?status=draft&id=${encodeURIComponent(input.articleId)}`;
+  const botApiUrl = input.botApiUrl || buildOpinionDraftBotApiUrl(input.articleId);
+  const nextSlotDate = input.nextSlotIso ? new Date(input.nextSlotIso) : null;
+  const nextSlotRiyadh =
+    nextSlotDate && !Number.isNaN(nextSlotDate.getTime()) ? formatDeskAlertRiyadhTime(nextSlotDate) : "none";
   const headline = `مقال رأي جديد: ${authorName}`;
 
   const subject = `سبق | ${headline} — «${clipDeskAlertExcerpt(articleTitle, 80)}» | ${header}`;
   const textLines = [
     header,
+    `article_id: ${input.articleId}`,
     `author: ${authorName}`,
+    `author_id: ${input.authorId || "none"}`,
     `time: ${timeRiyadh}`,
     `title: ${articleTitle}`,
     `next_slot: ${input.nextSlotIso || "none"}`,
+    `next_slot_riyadh: ${nextSlotRiyadh}`,
+    `bot_api: ${botApiUrl}`,
     ...(excerpt ? [`excerpt: ${excerpt}`] : []),
     "",
     headline,
@@ -325,6 +343,7 @@ export function buildDeskOpinionDraftAlertEmail(input: DeskOpinionDraftAlertEmai
     ...(excerpt ? [`المقتطف: ${excerpt}`] : []),
     "",
     `افتح المسودة: ${dashboardUrl}`,
+    `للبوت (GET بتوكن botpub_): ${botApiUrl}`,
   ];
 
   const html = `<!DOCTYPE html>
@@ -339,6 +358,7 @@ export function buildDeskOpinionDraftAlertEmail(input: DeskOpinionDraftAlertEmai
     <p style="margin:4px 0"><strong>وقت الإرسال (Asia/Riyadh):</strong> <span dir="ltr">${escapeHtml(timeRiyadh)}</span></p>
     ${excerpt ? `<div style="white-space:pre-wrap;background:#f8fafc;border-right:4px solid #0ea5e9;border-radius:6px;padding:12px;margin:12px 0">${escapeHtml(excerpt)}</div>` : ""}
     <p style="margin-top:16px"><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600">فتح المسودة في اللوحة</a></p>
+    <p dir="ltr" style="margin-top:8px;font-size:12px;color:#64748b;text-align:left">bot_api: ${escapeHtml(botApiUrl)}</p>
   </div>
 </body>
 </html>`;

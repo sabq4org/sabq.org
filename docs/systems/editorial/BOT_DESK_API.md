@@ -1,4 +1,4 @@
-# Bot Desk API — واجهة بوت الديسك لاستفسارات المساهمين ومقترحات النشر الاجتماعي
+# Bot Desk API — واجهة بوت الديسك لاستفسارات المساهمين ومقترحات النشر الاجتماعي ومقالات الرأي
 
 > آخر مراجعة: 2026-10-24 | المالك: editorial + social-publishing + auth-rbac | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
 
@@ -7,7 +7,8 @@
 توفّر واجهة `/api/internal/bot-desk/*` نقاط دخول آمنة لبوت مساعد موثوق للتعامل مع:
 1. **استفسارات المساهمين (التذاكر):** استعراض التذاكر، قراءة سلسلة المحادثة الكاملة، الرد باسم مالك التوكن (مع تحويل الحالة من `open` إلى `answered`)، وتحديث حالة التذكرة (`open | answered | closed`).
 2. **مقترحات النشر الاجتماعي على X:** استعراض المقترحات المعلقة من كتّاب الرأي والوكالات، قراءة تفاصيل المنشور وسجل محاولاته، والرفض (`reject` → `canceled` مع إشعار صاحب المقترح) أو النشر الفوري (`publish`) أو الجدولة (`schedule`) على منشورات أنشأها مستخدمون آخرون.
-3. **تنبيهات البريد الإلكتروني القابلة للتحليل آلياً:** إشعار البوت بريدياً فور وصول تذكرة/رسالة جديدة من مساهم أو مقترح تغريدة من كاتب رأي أو وكالة، مع سطر ثابت قابل للتحليل الآلي (`[sabq-desk] type=ticket id=<id>` أو `[sabq-desk] type=social_proposal id=<id>` أو `[sabq-desk] type=opinion_draft id=<articleId>` لمقال رأي جديد بانتظار المراجعة منذ 2026-10-28) ليجلب البوت السجل الكامل بالمعرّف.
+3. **مقالات الرأي (منذ 2026-10-28):** لوحة الرأي، قراءة المسودة كاملة، و«جهّز وجدول» نفسه في تطبيق الديسك (`startOpinionPrep`)، ثم الجدولة أو النشر أو الإعادة للكاتب — بالدوال نفسها التي يستدعيها التطبيق (§3-ج).
+4. **تنبيهات البريد الإلكتروني القابلة للتحليل آلياً:** إشعار البوت بريدياً فور وصول تذكرة/رسالة جديدة من مساهم أو مقترح تغريدة من كاتب رأي أو وكالة، مع سطر ثابت قابل للتحليل الآلي (`[sabq-desk] type=ticket id=<id>` أو `[sabq-desk] type=social_proposal id=<id>` أو `[sabq-desk] type=opinion_draft id=<articleId>` لمقال رأي جديد بانتظار المراجعة منذ 2026-10-28) ليجلب البوت السجل الكامل بالمعرّف.
 
 ---
 
@@ -138,6 +139,77 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
   -d '{"reason":"نعتذر، تم الاكتفاء بتغريدة الخبر الرئيسي اليوم."}'
 ```
 
+### ج) مقالات الرأي (Opinion Drafts) — منذ 2026-10-28
+
+تعطي «مكتب سبق» ما يفعله تبويب «الرأي» في تطبيق الديسك حرفياً. **لا منطق خاص بالبوت:** كل مسار يستدعي دالة الخدمة نفسها التي يستدعيها مسار التطبيق المقابل في `/api/v1/staff/opinion/*`، والصلاحية تُحسب لمالك التوكن بـ `resolveStaffCapabilitiesAndRoles` ← `canOpinion` (القواعد في `computeStaffOpinionCapabilities`):
+
+- **عرض (view):** `opinion.review` أو `articles.schedule`.
+- **تجهيز/جدولة (schedule):** عرض + (`articles.schedule` أو `articles.publish`).
+- **نشر (publish):** عرض + `articles.publish`.
+- **إعادة للكاتب (returnToWriter):** عرض + (`opinion.review` أو `articles.edit_any`).
+
+| الطريقة | المسار | القدرة | دالة الخدمة (مشتركة مع التطبيق) | الوصف |
+|---------|--------|--------|------|-------|
+| `GET` | `/api/internal/bot-desk/opinion/drafts?weekStart=YYYY-MM-DD` | view | `getStaffOpinionBoard` | لوحة الأسبوع كما في التطبيق (`weekStart`, `days`, `slots`, `unslotted`, `pendingCount`) + `items`: قائمة مسطّحة بانتظار المكتب أولاً (`new_draft`، `in_prep`) ثم `scheduled` ثم `published`. كل عنصر فيه `writer` (مع `slotLabel` للموعد الثابت) و`slotAt` و`article.status`. |
+| `GET` | `/api/internal/bot-desk/opinion/drafts/:id` | view | `getStaffOpinionItem` + `getOpinionDraftContent` + `checkOpinionSlotClashes` + `getOpinionPrepJob` | `{ item, nextSlot, draft, warnings, prep }`. `draft` = العنوان والعنوان الفرعي والنص (HTML) والمقتطف والصورة وألبوم الصور والتصنيف والملخص الذكي وSEO (`metaTitle`, `metaDescription`, `keywords`) وحالة المراجعة. `warnings` = تعارض موعد الكاتب مع كاتب آخر (للمسودات المعلّقة). `prep` = آخر تجهيز أو `null`. |
+| `GET` | `/api/internal/bot-desk/opinion/drafts/:id/slot-check?scheduledAt=<ISO>` | schedule | `checkOpinionSlotClashes` | `{ scheduledAt, warnings }` دون كتابة. |
+| `POST` | `/api/internal/bot-desk/opinion/drafts/:id/prepare` | schedule | **`startOpinionPrep`** | «جهّز وجدول» نفسه: تدقيق العنوان والنص ← الملحقات (ملخص، كلمات مفتاحية، SEO، اختيار التصنيف) ← صورة GPT ← جدولة في موعد الكاتب الثابت أو `scheduledAt`. جسم `{}` أو `{ "scheduledAt": "<ISO مع المنطقة>" }`. يعيد `202 { job }` ويكمل في الخلفية. `409` إن لم يكن المقال `new_draft`/`in_prep` أو النص قصيراً أو المقال مقفلاً لمحرر آخر أو لا موعد ثابت ولا `scheduledAt`؛ `400` لموعد ماضٍ. |
+| `GET` | `/api/internal/bot-desk/opinion/drafts/:id/prepare` | view | `getOpinionPrepJob` | `{ job }`: `status` (`running`/`done`/`failed`)، `step`، `stepLabel`، `scheduledAt`، `titleChanged`، `contentFixes`، `image`، `categoryName`، `message`. `404` إن لم يبدأ تجهيز. |
+| `POST` | `/api/internal/bot-desk/opinion/drafts/:id/schedule` | schedule | `scheduleOpinionFromDesk` | جسم `{}` أو `{ "mode": "fixed_slot" }` = موعد الكاتب الثابت؛ أو `{ "scheduledAt": "<ISO مع المنطقة>" }`. يعيد `{ article, scheduledAt, warnings }`. |
+| `POST` | `/api/internal/bot-desk/opinion/drafts/:id/publish` | publish | `publishOpinionFromDesk` | نشر فوري بجسم فارغ `{}`. `409` إن كان منشوراً. |
+| `POST` | `/api/internal/bot-desk/opinion/drafts/:id/return` | returnToWriter | `returnOpinionToWriterFromDesk` | إعادة للكاتب `{ "note": "..." }` (3–2000 حرف) مع إشعاره. |
+
+حدود المعدّل: أفعال الكتابة تمر على `BOT_DESK_WRITE_RATE_LIMIT` (60/دقيقة) و`BOT_DESK_OPINION_RATE_LIMIT` (30 / 5 دقائق لكل مالك توكن، مثل حد تطبيق الديسك)، والنشر أيضاً على `BOT_DESK_PUBLISH_RATE_LIMIT`. كل فعل يُسجَّل في `activity_logs` بقناة `bot-desk-api` والأفعال `opinion_prepare_start` / `opinion_schedule` / `opinion_publish` / `opinion_return_to_writer`. أخطاء الخدمة تمر كما هي (`{ code, message }` مع `404`/`409`/`400`).
+
+**مسار البوت المقترح:** بريد `type=opinion_draft` ← `GET` رابط `bot_api` من البريد ← قراءة `draft` و`warnings` ← `POST …/prepare` ← متابعة `GET …/prepare` كل 10–20 ثانية حتى `done`/`failed` ← إبلاغ المحرر بالنتيجة (الموعد، تغيّر العنوان، عدد التصحيحات، الصورة، التصنيف). إن رأى البوت أن المقال يحتاج تعديلاً من الكاتب: `POST …/return`.
+
+#### أمثلة مقالات الرأي
+
+```bash
+# 1) لوحة الرأي: المعلّق أولاً
+curl -sS "https://api.sabq.org/api/internal/bot-desk/opinion/drafts" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+
+# 2) قراءة مسودة كاملة مع الموعد القادم والتعارضات وحالة التجهيز
+curl -sS "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+
+# 3) «جهّز وجدول» في موعد الكاتب الثابت (أو أضف scheduledAt)
+curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>/prepare" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  -d '{}'
+
+# 4) متابعة التجهيز
+curl -sS "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>/prepare" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+
+# 5) جدولة دون تجهيز (موعد مخصص بتوقيت الرياض)
+curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>/schedule" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  -d '{"scheduledAt":"2026-10-29T09:00:00+03:00"}'
+
+# 6) نشر فوري
+curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>/publish" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  -d '{}'
+
+# 7) إعادة للكاتب مع ملاحظة
+curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>/return" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  -d '{"note":"نرجو اختصار المقدمة وتوثيق الرقم في الفقرة الثانية."}'
+```
+
 ---
 
 ## 4) إعداد مستلمي التنبيهات البريدية (Email Alerts Configuration)
@@ -171,7 +243,7 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
 - لمقال رأي جديد بانتظار المراجعة والجدولة (منذ 2026-10-28، من `notifyOpinionArticleSubmittedForReview` لكل مسارات الإرسال: الويب والجوال ولوحة الرأي):
   `[sabq-desk] type=opinion_draft id=<articleId>`
   يُرسل أيضاً عند إعادة إرسال الكاتب مقاله من الجوال بعد «يحتاج تعديل» (`PUT /api/v1/articles/:id/resubmit`، منذ 2026-10-28)، ويمكن للمكتب إعادة إطلاقه يدوياً لمسودة ما زالت `pending_review` عبر `POST /api/v1/staff/opinion/:id/renotify` (push الديسك + هذا البريد فقط، مرة لكل مقال لكل عضو كل 5 دقائق) — فقد يصل البوت البريد نفسه لنفس `id` أكثر من مرة؛ عامله كتحديث لا كمسودة جديدة.
-  المتن: `author` و`time` و`title` و`next_slot` (ISO للموعد الثابت القادم للكاتب، أو `none`)، ثم سطر عربي «موعده الثابت: <اليوم التاريخ الساعة> (الرياض)» أو «بلا موعد ثابت». المستلمون: `DESK_BOT_ALERT_EMAILS` + `editor_alerts.deskBotAlertEmails` فقط (`getDeskBotAlertRecipients()`). المنشئ `buildDeskOpinionDraftAlertEmail` في `server/services/deskBotAlerts.ts`. فشل البريد لا يُفشل الإرسال.
+  المتن: `article_id` و`author` و`author_id` و`time` و`title` و`next_slot` (ISO للموعد الثابت القادم للكاتب، أو `none`) و`next_slot_riyadh` (`YYYY-MM-DD HH:mm:ss Asia/Riyadh` أو `none`) و`bot_api` (رابط `GET /api/internal/bot-desk/opinion/drafts/<articleId>` على `PUBLIC_API_URL`)، ثم سطر عربي «موعده الثابت: <اليوم التاريخ الساعة> (الرياض)» أو «بلا موعد ثابت». المستلمون: `DESK_BOT_ALERT_EMAILS` + `editor_alerts.deskBotAlertEmails` فقط (`getDeskBotAlertRecipients()`). المنشئ `buildDeskOpinionDraftAlertEmail` في `server/services/deskBotAlerts.ts`. فشل البريد لا يُفشل الإرسال.
 
 ويتبعها في المتن:
 - `sender`: اسم المرسل

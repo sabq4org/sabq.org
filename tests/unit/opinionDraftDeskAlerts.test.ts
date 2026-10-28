@@ -114,6 +114,32 @@ describe("desk bot email type=opinion_draft", () => {
     expect(mail.text).toContain("بلا موعد ثابت");
     expect(mail.html).toContain("عنوان &lt;المقال&gt;");
     expect(mail.html).not.toContain("<المقال>");
+    expect(mail.text).toContain("article_id: art-123");
+    expect(mail.text).toContain("author_id: none");
+    expect(mail.text).toContain("next_slot_riyadh: none");
+  });
+
+  it("gives «مكتب سبق» the ids, the bot API URL and the next slot in ISO + Riyadh", () => {
+    vi.stubEnv("PUBLIC_API_URL", "https://api.example.test/");
+    try {
+      const mail = buildDeskOpinionDraftAlertEmail({
+        articleId: "art-9",
+        articleTitle: "مقال",
+        authorName: "سعد",
+        authorId: "writer-1",
+        slotLine: "موعده الثابت: الخميس 29 أكتوبر 09:00 (الرياض)",
+        nextSlotIso: "2026-10-29T06:00:00.000Z",
+      });
+      const lines = mail.text.split("\n");
+      expect(lines).toContain("article_id: art-9");
+      expect(lines).toContain("author_id: writer-1");
+      expect(lines).toContain("next_slot: 2026-10-29T06:00:00.000Z");
+      expect(lines).toContain("next_slot_riyadh: 2026-10-29 09:00:00 Asia/Riyadh");
+      expect(lines).toContain("bot_api: https://api.example.test/api/internal/bot-desk/opinion/drafts/art-9");
+      expect(mail.html).toContain("https://api.example.test/api/internal/bot-desk/opinion/drafts/art-9");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
