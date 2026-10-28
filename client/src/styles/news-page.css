@@ -1,0 +1,113 @@
+/* Scoped to /news; shared article cards keep their defaults. */
+.news-listing-page {
+  min-height: 100dvh;
+}
+
+.news-filter-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(148px, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.news-filter-select {
+  min-width: 0;
+  height: auto;
+  min-height: 44px;
+}
+
+.news-filter-select > span {
+  min-width: 0;
+  text-align: start;
+}
+
+.news-filter-select > svg {
+  flex-shrink: 0;
+}
+
+.news-view-controls {
+  justify-self: end;
+}
+
+.news-view-controls button {
+  width: 44px;
+  height: 44px;
+}
+
+.news-active-filters > * {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:is(.news-filters, .news-display-options, .news-pagination) :is(button, [role="combobox"]) {
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease;
+}
+
+.news-pagination button {
+  width: auto;
+  min-width: 44px;
+  padding-inline: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.news-filters, .news-display-options, .news-pagination) :is(button, [role="combobox"]):active:not(:disabled):not(:focus-visible) {
+  transform: scale(0.97);
+}
+
+.news-main :is(button, a):focus-visible {
+  outline: 2px solid var(--public-primary, #087dbb);
+  outline-offset: 3px;
+  transition: none;
+}
+
+.news-filters input {
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.news-listing-page :is(.public-card-title, .public-card-excerpt, .public-label) {
+  overflow-wrap: anywhere;
+}
+
+.news-listing-page .public-label {
+  max-width: 100%;
+}
+
+.news-filter-menu {
+  max-width: calc(100vw - 32px);
+}
+
+.news-filter-menu [role="option"] {
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 640px) {
+  .news-filter-controls {
+    grid-template-columns: repeat(3, minmax(0, 10rem)) 1fr;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  :is(.news-filters, .news-display-options, .news-pagination) .hover-elevate:not(.no-default-hover-elevate):hover::after {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.news-filters, .news-display-options, .news-pagination) :is(button, input, [role="combobox"]) {
+    transition: none;
+  }
+
+  :is(.news-filters, .news-display-options, .news-pagination) :is(button, [role="combobox"]):active:not(:disabled):not(:focus-visible) {
+    transform: none;
+  }
+
+  .news-filter-menu {
+    animation: none;
+  }
+}

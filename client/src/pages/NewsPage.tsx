@@ -22,6 +22,7 @@ import { Link } from "wouter";
 import type { ArticleWithDetails, Category } from "@shared/schema";
 import { filterAICategories } from "@/utils/filterAICategories";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
+import "@/styles/news-page.css";
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
 type Mood = 'all' | 'trending' | 'calm' | 'hot';
@@ -222,13 +223,14 @@ export default function NewsPage() {
     return pages;
   };
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToTop = (fromKeyboard: boolean) => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reducedMotion || fromKeyboard ? 'instant' : 'smooth' });
   };
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = (page: number, fromKeyboard: boolean) => {
     setCurrentPage(page);
-    scrollToTop();
+    scrollToTop(fromKeyboard);
   };
 
   const handleFilterChange = () => {
@@ -262,7 +264,7 @@ export default function NewsPage() {
         </div>
       </section>
 
-      <main className="flex-1 public-container py-5 lg:py-6">
+      <main className="news-main flex-1 public-container py-5 lg:py-6">
 
         {/* DMS Ads - Leaderboard for desktop, MPU for mobile */}
         <DmsLeaderboardAd />
@@ -292,7 +294,7 @@ export default function NewsPage() {
         />
 
         {/* Results Summary */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             عرض {currentArticles.length} من {sortedArticles.length} خبر
           </p>
@@ -316,21 +318,22 @@ export default function NewsPage() {
         </div>
 
         {/* Advanced Pagination Controls */}
-        <div className="mt-8 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-muted/30 rounded-lg">
+        <div className="news-display-options mb-6 flex flex-wrap items-center justify-between gap-4 border-y py-3">
           {/* Items per page selector */}
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">عرض:</span>
             <Select
+              dir="rtl"
               value={itemsPerPage.toString()}
               onValueChange={(value) => {
                 setItemsPerPage(Number(value));
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="w-[100px]" data-testid="select-items-per-page">
+              <SelectTrigger className="w-[100px]" aria-label="عدد الأخبار في الصفحة" data-testid="select-items-per-page">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="news-filter-menu">
                 <SelectItem value="10">10</SelectItem>
                 <SelectItem value="20">20</SelectItem>
                 <SelectItem value="50">50</SelectItem>
@@ -355,6 +358,7 @@ export default function NewsPage() {
                 }
               }}
               data-testid="button-toggle-infinite-scroll"
+              aria-pressed={infiniteScrollEnabled}
             >
               {infiniteScrollEnabled ? "مفعّل" : "معطّل"}
             </Button>
@@ -448,11 +452,11 @@ export default function NewsPage() {
 
             {/* Pagination - Only show when infinite scroll is disabled */}
             {!infiniteScrollEnabled && totalPages > 1 && (
-              <div className="mt-12 flex justify-center items-center gap-2" dir="ltr">
+              <nav className="news-pagination mt-10 flex flex-wrap justify-center items-center gap-2" dir="ltr" aria-label="صفحات الأخبار">
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => handlePageChange(currentPage - 1)}
+                  onClick={(event) => handlePageChange(currentPage - 1, event.detail === 0)}
                   disabled={currentPage === 1}
                   data-testid="button-prev-page"
                   aria-label="الصفحة السابقة"
@@ -470,9 +474,11 @@ export default function NewsPage() {
                       key={page}
                       variant={currentPage === page ? "default" : "outline"}
                       size="icon"
-                      onClick={() => handlePageChange(page as number)}
+                      onClick={(event) => handlePageChange(page as number, event.detail === 0)}
                       data-testid={`button-page-${page}`}
                       className="min-w-9"
+                      aria-label={`الصفحة ${page}`}
+                      aria-current={currentPage === page ? 'page' : undefined}
                     >
                       {page}
                     </Button>
@@ -482,14 +488,14 @@ export default function NewsPage() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => handlePageChange(currentPage + 1)}
+                  onClick={(event) => handlePageChange(currentPage + 1, event.detail === 0)}
                   disabled={currentPage === totalPages}
                   data-testid="button-next-page"
                   aria-label="الصفحة التالية"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-              </div>
+              </nav>
             )}
           </>
         )}
