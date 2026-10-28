@@ -170,6 +170,7 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
   `[sabq-desk] type=social_proposal id=<postId>`
 - لمقال رأي جديد بانتظار المراجعة والجدولة (منذ 2026-10-28، من `notifyOpinionArticleSubmittedForReview` لكل مسارات الإرسال: الويب والجوال ولوحة الرأي):
   `[sabq-desk] type=opinion_draft id=<articleId>`
+  يُرسل أيضاً عند إعادة إرسال الكاتب مقاله من الجوال بعد «يحتاج تعديل» (`PUT /api/v1/articles/:id/resubmit`، منذ 2026-10-28)، ويمكن للمكتب إعادة إطلاقه يدوياً لمسودة ما زالت `pending_review` عبر `POST /api/v1/staff/opinion/:id/renotify` (push الديسك + هذا البريد فقط، مرة لكل مقال لكل عضو كل 5 دقائق) — فقد يصل البوت البريد نفسه لنفس `id` أكثر من مرة؛ عامله كتحديث لا كمسودة جديدة.
   المتن: `author` و`time` و`title` و`next_slot` (ISO للموعد الثابت القادم للكاتب، أو `none`)، ثم سطر عربي «موعده الثابت: <اليوم التاريخ الساعة> (الرياض)» أو «بلا موعد ثابت». المستلمون: `DESK_BOT_ALERT_EMAILS` + `editor_alerts.deskBotAlertEmails` فقط (`getDeskBotAlertRecipients()`). المنشئ `buildDeskOpinionDraftAlertEmail` في `server/services/deskBotAlerts.ts`. فشل البريد لا يُفشل الإرسال.
 
 ويتبعها في المتن:
