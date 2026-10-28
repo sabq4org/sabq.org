@@ -1,7 +1,7 @@
 /* صفحة مزادات إنفاذ /infath — منقولة من النموذج المعتمد (artifact BMqvBCLKYdJ1qKDns63gpF).
    فاتحة فقط، IBM Plex Sans Arabic، أرقام لاتينية. التخطيط يتكيّف بـ container queries. */
 .inf-page{
-  --bg:#F5F7FA; --surface:#FFFFFF; --ink:#0F2233; --muted:#5B6B7C; --hair:#EEF2F6;
+  --bg:#EDF1F5; --surface:#FFFFFF; --ink:#0F2233; --muted:#5B6B7C; --hair:#E6ECF2; --line:#DCE4EC;
   --btn:#1E9BE6; --link:#0B6FA8; --sky:#4CBCFD; --soft:#EAF7FF; --chip:#F1F5F9; --track:#E3EAF1;
   --amber-bg:#FFF6E5; --amber:#946000; --green:#0E7A4B; --green-bg:#E7F6EE;
   container-type:inline-size;container-name:infpg;
@@ -27,11 +27,12 @@
 .inf-page .weeknav button:disabled{color:#C3CDD7;cursor:default}
 .inf-page .weeknav button:hover:not(:disabled){background:var(--soft)}
 .inf-page .weeknav span{font-size:13.5px;font-weight:600;padding-inline:6px}
-.inf-page .group{background:var(--surface);border-radius:22px}
+/* البلوك أبيض بحد رفيع وظل خفيف حتى لا يذوب في الخلفية */
+.inf-page .group{background:var(--surface);border-radius:22px;border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,34,51,.04),0 6px 18px rgba(15,34,51,.06)}
 .inf-page .gh{display:flex;justify-content:space-between;align-items:center;padding:16px 20px 0;gap:10px}
 .inf-page .gh h2{font-size:16px;font-weight:600;margin:0}
 .inf-page .gh .s{font-size:12px;color:var(--muted)}
-.inf-page .harv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);overflow:hidden;background:linear-gradient(180deg,#F4FAFF 0%,#FFFFFF 70%)}
+.inf-page .harv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);overflow:hidden;background:linear-gradient(180deg,#EEF8FF 0%,#FFFFFF 75%);border-color:#CBE6F7;border-top:3px solid var(--sky)}
 .inf-page .harv>div{padding:22px 24px;min-width:0}
 .inf-page .harv>div+div{border-inline-start:1px solid var(--hair)}
 .inf-page .hv-k{font-size:13px;color:var(--link);font-weight:600;display:flex;align-items:center;gap:8px}
