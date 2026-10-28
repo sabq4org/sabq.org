@@ -116,7 +116,7 @@ struct OpinionView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
-            DeskScreenHeader(title: "الرأي", subtitle: "مقالات الرأي · \(weekTitle)") {
+            DeskScreenHeader(title: "الرأي", subtitle: "مقالات الرأي", detail: weekTitle) {
                 HStack(spacing: 6) {
                     if counts.pending > 0 {
                         CountPill(text: "\(counts.pending) بانتظارك", tone: .warning)

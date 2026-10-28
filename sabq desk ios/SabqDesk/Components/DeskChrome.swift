@@ -76,11 +76,13 @@ struct AssistantBubble: View {
     }
 }
 
-/// Screen header: a short grey line over a large title, and an optional
-/// trailing view (a count pill, a search or account button).
+/// Screen header: a short grey line over a large title, an optional grey
+/// detail line under it (the week on «الرأي»), and an optional trailing view
+/// (a count pill, a search or account button).
 struct DeskScreenHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
+    var detail: String? = nil
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
@@ -96,6 +98,14 @@ struct DeskScreenHeader<Trailing: View>: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .accessibilityAddTraits(.isHeader)
+                if let detail {
+                    Text(detail)
+                        .deskText(DeskType.meta)
+                        .foregroundStyle(DeskTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: DeskLayout.space8)
             trailing()
