@@ -363,4 +363,8 @@
 - عند أي تحويل: `invalidateClearedBreakingArticles` لكل مقال، ومسح `^en:article:base:` إن تغيّر مقال إنجليزي، و`purgeBreakingNews({ immediate: true })` لشريط العاجل والرئيسية على الحافة.
 - شرط الجدول العربي يطابق أعمدة `idx_articles_breaking` كلها (`hide_from_homepage IN (false, true)` ليتقدّم الفهرس إلى `news_type` و`published_at`). جدولا `en_articles` و`ur_articles` بلا فهرس على `news_type`، فيمرّان على `idx_*_status_published`. الاختبار: `tests/unit/breakingNewsExpiry.test.ts`.
 
+## شريط الخبر العائم على الجوال — 2026-10-28
+- صفحة الخبر للقرّاء (`client/src/pages/ArticleDetail.tsx`) على الجوال (أقل من `lg`) تعرض شريطًا زجاجيًا عائمًا (`client/src/components/public/ArticleMobileDock.tsx`): إعجاب، حفظ، «Aa»، مشاركة. يظهر بعد تجاوز صف المشاركة العلوي، ويختفي حين يكون صف الأفعال السفلي على الشاشة، فلا تتكرر الأزرار. زر الصعود للأعلى في التذييل يتنحى ما دام الشريط ظاهرًا.
+- «مشاركة» و«Aa» يفتحان ورقة سفلية (vaul عبر `components/ui/drawer`) فيها `SocialShareBar` نفسه وشريط حجم خط المتن. الحجم من خمس درجات (`client/src/lib/articleTextScale.ts`) يُطبَّق عبر `--article-text-scale` على `.article-prose`، ويُحفظ على الجهاز (`sabq:article-text-scale`)، ويعود «عادي» إن مُنع التخزين.
+- صفّا المشاركة والأفعال في الصفحة باقيان كما هما. لا تغيير على الخادم ولا على صفحة web-next الخاصة بالزواحف. الحركة تحترم `prefers-reduced-motion`.
 
