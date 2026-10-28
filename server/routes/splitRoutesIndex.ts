@@ -119,6 +119,7 @@ import deepseekLabRouter from "./deepseekLab";
 import editorialImagesRouter from "./editorialImages";
 import videoResolverRouter from "./videoResolver";
 import mawaeedRouter from "./mawaeed";
+import infathRouter from "./infath";
 import servicePagesRouter from "./servicePages";
 
 /**
@@ -260,5 +261,6 @@ export function registerSplitRoutes(app: Express) {
   // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
   app.use(videoResolverRouter);
   app.use(mawaeedRouter);
+  app.use(infathRouter);
   app.use(servicePagesRouter);
 }

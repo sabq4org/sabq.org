@@ -1101,6 +1101,7 @@ const LOCALIZED_STATIC_PAGES: Record<
   "/advertise": { title: "أعلن معنا — سبق", desc: "فرص الإعلان على صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
   "/news": { title: "آخر الأخبار — سبق", desc: "تصفح أحدث الأخبار العاجلة والمستجدات على صحيفة سبق الإلكترونية.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
   "/newsletter": { title: "النشرة الإخبارية — سبق", desc: "اشترك في نشرة سبق الإخبارية لتصلك أهم الأخبار والمستجدات يوميًا.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/infath": { title: "مزادات إنفاذ العقارية هذا الأسبوع — سبق", desc: "جدول المزادات العقارية التي يشرف عليها مركز الإسناد والتصفية «إنفاذ» هذا الأسبوع: المواعيد والمدن والأصول وحصاد المبيعات، محدثًا أسبوعيًا.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
   "/ai": { title: "iFox — مساعد سبق الذكي", desc: "iFox هو مساعد سبق الذكي للأخبار والمعلومات والإجابات الفورية.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
   // Urdu
   "/ur": { title: "سبق نیوز — اے آئی سے چلنے والا اسمارٹ نیوز پلیٹ فارم", desc: "سبق نیوز — ایک اسمارٹ، اے آئی سے چلنے والا نیوز پلیٹ فارم جو تازہ ترین خبریں فراہم کرتا ہے۔", locale: "ur_PK", siteName: "سبق نیوز" },

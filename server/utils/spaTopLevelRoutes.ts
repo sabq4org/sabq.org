@@ -11,7 +11,7 @@ export const SPA_TOP_LEVEL_SEGMENTS: ReadonlySet<string> = new Set([
   "categories", "category", "complete-name", "contact", "correspondent",
   "culture", "daily-brief", "dashboard", "dashboard2", "developers", "economy",
   "en", "entertainment", "entity", "focus", "forgot-password", "gulf",
-  "gulf-cup", "gulf-live", "health", "ifox", "infographic-demo", "interests",
+  "gulf-cup", "gulf-live", "health", "ifox", "infath", "infographic-demo", "interests",
   "keyword", "kings-cup", "lite", "live", "local", "login", "loyalty",
   "loyalty-preview", "loyalty-terms", "mawaeed", "media", "media-store", "meet",
   "moment-by-moment", "muqtarab", "my-follows", "my-keywords", "mylife",

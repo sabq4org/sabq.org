@@ -150,6 +150,7 @@ const Home = lazy(() => retryImport(() => import("@/pages/Home")));
 const ArticleDetail = lazy(() => retryImport(() => import("@/pages/ArticleDetail")));
 const ServiceDatePage = lazy(() => retryImport(() => import("@/pages/ServiceDatePage")));
 const MawaeedPage = lazy(() => retryImport(() => import("@/pages/MawaeedPage")));
+const InfathPage = lazy(() => retryImport(() => import("@/pages/InfathPage")));
 const ArticlePassport = lazy(() => retryImport(() => import("@/pages/ArticlePassport")));
 const EnglishArticlePassport = lazy(() => retryImport(() => import("@/pages/en/EnglishArticlePassport")));
 const UrduArticlePassport = lazy(() => retryImport(() => import("@/pages/ur/UrduArticlePassport")));
@@ -343,6 +344,7 @@ const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/Qu
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
 const MawaeedManagement = lazy(() => retryImport(() => import("@/pages/dashboard/MawaeedManagement")));
+const InfathManagement = lazy(() => retryImport(() => import("@/pages/dashboard/InfathManagement")));
 const SmartRadar = lazy(() => retryImport(() => import("@/pages/dashboard/SmartRadar")));
 const RssFeedsManager = lazy(() => retryImport(() => import("@/pages/dashboard/RssFeedsManager")));
 const SportmonksNewsImporter = lazy(() => retryImport(() => import("@/pages/dashboard/SportmonksNewsImporter")));
@@ -700,6 +702,7 @@ function Router() {
         <Route path="/article/:slug">{() => <LazyRoute component={ArticleDetail} />}</Route>
         <Route path="/services/:id">{() => <LazyRoute component={ServiceDatePage} />}</Route>
         <Route path="/mawaeed">{() => <LazyRoute component={MawaeedPage} />}</Route>
+        <Route path="/infath">{() => <LazyRoute component={InfathPage} />}</Route>
 
         {/* Focus Mode (Task #80) */}
         <Route path="/focus/weekly">
@@ -906,6 +909,16 @@ function Router() {
             <ProtectedRoute requireAnyPermission={["mawaeed.edit"]}>
               <Suspense fallback={<PageLoader />}>
                 <MawaeedManagement />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
+
+        <Route path="/dashboard/infath">
+          {() => (
+            <ProtectedRoute requireAnyPermission={["infath.submit", "infath.approve"]}>
+              <Suspense fallback={<PageLoader />}>
+                <InfathManagement />
               </Suspense>
             </ProtectedRoute>
           )}

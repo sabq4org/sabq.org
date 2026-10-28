@@ -185,6 +185,11 @@ export function getDefaultRedirectPath(user: User | null | undefined): string {
     return '/dashboard/ai-moderation';
   }
 
+  // حساب إنفاذ لا يرى من اللوحة إلا صفحة مزاداته.
+  if (hasRole(user, 'infath_partner') && !hasPermission(user, 'articles.create')) {
+    return '/dashboard/infath';
+  }
+
   // Staff members go to dashboard
   if (isStaff(user)) {
     return '/dashboard';

@@ -15788,3 +15788,53 @@ export const logoAssets = pgTable("logo_assets", {
 
 export type Logo = typeof logos.$inferSelect;
 export type LogoAsset = typeof logoAssets.$inferSelect;
+
+// ============================================
+// مزادات إنفاذ العقارية — صفحة /infath. حساب إنفاذ يُدخل الأسبوع ومحرر سبق يعتمده.
+// الصفحة العامة تقرأ published_json فقط (لقطة آخر اعتماد)، فالتعديل بعد الاعتماد
+// لا يظهر حتى يُعتمد من جديد. المنطق المشترك: shared/infath.ts.
+// ============================================
+
+export const infathWeeks = pgTable("infath_weeks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** الأحد بتوقيت الرياض */
+  weekStart: date("week_start").notNull(),
+  weekEnd: date("week_end").notNull(),
+  /** draft | pending | returned | approved */
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  /** مسودة المزادات الحالية (InfathAuction[]) */
+  auctionsJson: jsonb("auctions_json").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
+  reviewNote: text("review_note"),
+  submittedBy: varchar("submitted_by").references(() => users.id, { onDelete: "set null" }),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  /** لقطة آخر اعتماد (InfathAuction[]) — المصدر الوحيد للصفحة العامة */
+  publishedJson: jsonb("published_json").$type<unknown[] | null>(),
+  /** ملخص اللقطة (InfathWeekSummary) لقوائم الأرشيف والرسم دون تحميل كل الصفوف */
+  publishedSummary: jsonb("published_summary").$type<Record<string, unknown> | null>(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("infath_weeks_week_start_uidx").on(table.weekStart),
+  index("infath_weeks_published_idx").on(table.publishedAt),
+]);
+
+export const infathChanges = pgTable("infath_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekId: varchar("week_id").notNull().references(() => infathWeeks.id, { onDelete: "cascade" }),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  /** create | save | submit | approve | return */
+  action: varchar("action", { length: 20 }).notNull(),
+  note: text("note"),
+  beforeJson: jsonb("before_json").$type<Record<string, unknown> | null>(),
+  afterJson: jsonb("after_json").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("infath_changes_week_idx").on(table.weekId, table.createdAt),
+]);
+
+export type InfathWeekRow = typeof infathWeeks.$inferSelect;

@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-10-25",
+  "updatedAt": "2026-10-28",
   "systems": [
     {
       "id": "account-center",
@@ -1243,6 +1243,38 @@
         "editorial"
       ],
       "lastReviewed": "2026-10-22"
+    },
+    {
+      "id": "infath",
+      "nameAr": "مزادات إنفاذ",
+      "nameEn": "Infath auctions",
+      "status": "active",
+      "category": "content",
+      "summary": "جدول المزادات العقارية الأسبوعي لمركز الإسناد والتصفية على /infath: حساب إنفاذ يُدخل ويرسل، ومحرر سبق يعتمد فتُنشر لقطة الأسبوع.",
+      "docPath": "docs/systems/infath/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/auth-rbac/SYSTEM.md",
+        "docs/systems/seo-ssr/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "shared/infath.ts",
+        "server/services/infathService.ts",
+        "server/routes/infath.ts",
+        "client/src/pages/InfathPage.tsx",
+        "client/src/styles/infath-page.css",
+        "client/src/components/infath/**",
+        "client/src/pages/dashboard/InfathManagement.tsx",
+        "migrations/20261028_infath_auctions.sql",
+        "tests/unit/infath.test.ts",
+        "tests/unit/infathApi.test.ts",
+        "docs/systems/infath/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/infath",
+      "owners": [
+        "editorial"
+      ],
+      "lastReviewed": "2026-10-28"
     },
     {
       "id": "systems-catalog",
