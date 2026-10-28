@@ -99,6 +99,33 @@ final class AppLockController {
         if !enabled { state.unlock() }
     }
 
+    // MARK: - Sensitive actions
+
+    enum SensitiveCheck: Equatable {
+        case confirmed
+        case cancelled
+        case failed(String)
+    }
+
+    /// Face ID (or the device passcode) before an irreversible action such as
+    /// «انشر الآن», whether or not the app lock is turned on. A device with no
+    /// passcode cannot confirm, so the action is refused.
+    func confirmSensitiveAction(reason: String) async -> SensitiveCheck {
+        guard !isAuthenticating else { return .cancelled }
+        guard Self.canAuthenticate() else {
+            return .failed(BiometricAvailability.passcodeNotSet.unavailableReason ?? "فعّل رمز قفل الجهاز أولًا.")
+        }
+        // Do not leave this check's error on the lock screen.
+        let previous = errorMessage
+        errorMessage = nil
+        let ok = await authenticate(reason: reason)
+        let message = errorMessage
+        errorMessage = previous
+        if ok { return .confirmed }
+        if let message { return .failed(message) }
+        return .cancelled
+    }
+
     func refreshAvailability() {
         availability = Self.currentAvailability()
     }

@@ -104,13 +104,15 @@ Content-Type: application/json
     },
     "canSystemHealth": true,
     "canAdminAlerts": true,
-    "canManageBalances": true
+    "canManageBalances": true,
+    "canOpinion": { "view": true, "schedule": true, "publish": true, "returnToWriter": true }
   },
   "alertPrefs": { "aiAlerts": true, "adminAlerts": false }
 }
 ```
 - `canSystemHealth` و`canAdminAlerts` كلاهما = `ai_hub.view`.
 - `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
+- `canOpinion` (منذ 2026-10-28، `computeStaffOpinionCapabilities` في `shared/staffApp.ts`): `view` = `opinion.review` أو `articles.schedule`؛ `schedule` = `articles.schedule` أو `articles.publish`؛ `publish` = `articles.publish`؛ `returnToWriter` = `opinion.review` أو `articles.edit_any`. كل فعل يشترط `view` أيضاً. الخوادم الأقدم لا ترسله، فيعدّه التطبيق كله `false`.
 - `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
@@ -324,6 +326,25 @@ Content-Type: application/json
 
 **التنبيهات:** وظيفة `aiProviderHealthCheck` (القائد فقط، كل 5 دقائق) تستدعي `evaluateAiBalanceAlerts` في `staffAiAlertPush.ts`: إشعار واحد لكل عبور إلى `low` أو `critical` (المستوى يُحجز ذرياً حتى لا ترسله نسختان)، والعودة إلى «جيد» تعيد التسليح. التفضيل `aiAlerts`، `type: "ai_status"`، الرابط `sabqdesk://balances/<provider>`، `collapseId: desk-ai-balance-<provider>`، و`time-sensitive` للحرج. أول تقييم لمزوّد لا صف تنبيه له (أول تشغيل بعد النشر، أو أول ضبط لمزوّد كان غير مضبوط) يخزّن مستواه الحالي بصمت دون إشعار، فلا يصل سيل إشعارات لمزوّدين منخفضين أصلاً؛ الإشعار يبدأ من العبور التالي. ما يزال الرصيد المنخفض ظاهراً في القائمة وشريط التنبيه داخل التطبيق.
 
+### 11. تبويب «الرأي» `/api/v1/staff/opinion/*` (منذ 2026-10-28)
+
+المنطق في `server/services/staffOpinionDeskService.ts` (الاستعلامات والأفعال)، و`staffOpinionBoard.ts` (توزيع خالص على المواعيد)، و`opinionSlotClash.ts` (تعارض خالص). كل كتابة بمحدد `STAFF_APP_OPINION_RATE_LIMIT` (افتراضي 30 / 5 دقائق لكل عضو) وتُسجَّل في التدقيق.
+
+| المسار | الصلاحية | الوصف |
+|---|---|---|
+| `GET /opinion/board?weekStart=YYYY-MM-DD` | `canOpinion.view` | سبعة أيام بتوقيت الرياض من اليوم (أو `weekStart` ضمن ±60 يوماً): `{ weekStart, days:[{date, weekday, counts:{draft,prep,scheduled,missing}}], slots, unslotted, pendingCount }` |
+| `GET /opinion/:id` | `view` | `{ item, nextSlot }` بالشكل نفسه؛ `404` إن لم يعد المقال بانتظار المكتب |
+| `GET /opinion/:id/slot-check?scheduledAt=ISO` | `schedule` | `{ scheduledAt, warnings }` بلا كتابة |
+| `POST /opinion/:id/schedule` | `schedule` | `{ "mode": "fixed_slot" }` (الموعد الثابت القادم) أو `{ "scheduledAt": ISO+offset }`؛ يعيد `{ article, scheduledAt, warnings }`؛ تدقيق `staff_opinion_schedule` |
+| `POST /opinion/:id/publish` | `publish` | نشر فوري (جسم فارغ)؛ يقبل `pending_review` و`approved` ويثبت الاعتماد؛ `409` إن كان منشوراً؛ تدقيق `staff_opinion_publish` |
+| `POST /opinion/:id/return-to-writer` | `returnToWriter` | `{ "note": "…" }` من 3 إلى 2000 حرف إلزامي ← `needs_changes` + `draft` + إشعار وبريد للكاتب؛ تدقيق `staff_opinion_return_to_writer` |
+| `POST /opinion/:id/prepare` | `schedule` | «جهّز وجدول»: مرحلة لاحقة، يرد دائماً `501 { code: "not_implemented", message: "التجهيز الآلي قريبًا" }` (حتى مع `OPINION_AUTO_PREP_ENABLED=true`) |
+
+- **العنصر:** `{ writer: { id, name, avatarUrl, jobTitle, fixedSlot: { weekday, publishTime } | null }, slotAt, state, article: { id, title, status, submittedAt, scheduledAt, publishedAt } | null, deeplink }`. `status`: `new_draft` (بانتظار التحرير: `pending_review` أو مسودة موبايل قديمة)، `in_prep` (`approved` ولم يُجدول)، `scheduled`، و`published` للعرض فقط. `state`: `arrived | missing | scheduled | published | late`.
+- **التوزيع:** لكل كاتب بموعد ثابت خانة في يومه (نُشر ← مجدول ← مسودة ← «لم تصل بعد»)، ومجدولات أخرى في موعدها الفعلي، ومسودة زائدة لكاتب بموعد ثابت تأخذ موعده التالي، ومسودات من لا موعد ثابت له في `unslotted`. `pendingCount` = `new_draft` + `in_prep` (شارة التبويب).
+- **الجدولة** تعيد استخدام `scheduleApprovedOpinionArticle` (ومنها قاعدة الفاصل الأسبوعي للكاتب نفسه ← `409`)، ثم إشعارات الويب نفسها. **التعارض** مع كاتب آخر في الدقيقة نفسها لا يمنع: يرد `200` مع `warnings: [{ code: "slot_clash", message, otherWriterName, otherArticleId }]`.
+- **النشر والإعادة** يكرران منطق `/api/dashboard/opinion/:id/publish` و`request-revision` في `routes.ts` (الذي بقي دون تعديل) بالدوال نفسها: إبطال الكاش، `createNotification`، `sendOpinionAuthorPublishEmail`/`sendOpinionAuthorRevisionEmail`، `notifyArticleStakeholders`.
+
 ## 3) صيغة الأخطاء الموحدة (Error Format)
 
 تعيد جميع مسارات `/api/v1/staff/*` الأخطاء بصيغة JSON موحدة `{ code, message }`:
@@ -429,4 +450,5 @@ Content-Type: application/json
 - «انشر الآن» يمر بتأكيد، والجدولة تعرض ملخص الموعد بتوقيت الرياض قبل الإرسال (`scheduledAt` بإزاحة `+03:00`).
 - أسباب الرفض الجاهزة: لا يناسب سياسة الحساب، معلومة غير دقيقة، مكرر، يحتاج إعادة صياغة؛ مع ملاحظة تُضم في `reason` (`<السبب> — <الملاحظة>`)؛ يكفي السبب الجاهز أو الملاحظة، وزر التأكيد معطّل حتى يتوفر أحدهما.
 - «أرصدة النماذج» (للمشرفين، `canSystemHealth`): صف «أرصدة النماذج» مع عدّاد ما يحتاج انتباهاً في «حالة النظام»، وشريط تنبيه داخل التطبيق لأخطر رصيد مع «افتح الأرصدة» و«ذكّرني بعد ساعة» (إخفاء محلي يعود عند تغيّر المستوى). الشاشات: `ModelBalancesView` (القائمة)، `ProviderBalanceDetailView` (مخطط صرف 30 يوماً بـ Swift Charts وسجل الشحنات)، `UpdateBalanceSheet` (تحديث الرصيد/الميزانية وحدود التنبيه). أدوات التعديل تظهر فقط حين `canManage` في الاستجابة (أو `capabilities.canManageBalances` إن غاب)، ومن يملك العرض فقط يرى الأرصدة للقراءة. الروابط العميقة `sabqdesk://balances` و`sabqdesk://balances/<provider>` (قائمة بيضاء للمزوّدين) تفتح تبويب النظام.
+- «الرأي» (`canOpinion.view`، التبويب الثاني بأيقونة `square.and.pencil` وشارة `pendingCount`): `OpinionView` — شريط أيام الأسبوع بنقاط الحالة، ثم خط زمني بالساعة كـ«مجدول» في المكتب، وقسم «بلا موعد ثابت» في الآخر، وحالة «لا مسودات بانتظارك هذا الأسبوع». «جهّز وجدول»/«أكمل التجهيز» معطّل حتى `OpinionFeatureFlags.autoPrepEnabled`؛ «جدول في موعده» يجدول في الموعد الثابت؛ «انشر الآن» بتأكيد ثم Face ID (`AppLockController.confirmSensitiveAction`)؛ الجدولة تفحص `slot-check` أولاً وتنبّه «جدول رغم ذلك». الرابط `sabqdesk://opinion/<articleId>` وإشعار `type: "desk.opinion_draft"` (`articleId`) يفتحان التبويب ويبرزان المقال. مفتاح «مقالات الرأي» في التنبيهات لمن يملك `canOpinion.view`.
 - المعرّفات القادمة من رابط أو إشعار تُقبل فقط إن كانت `[A-Za-z0-9_-]{1,128}`؛ يقرأ التطبيق `deeplink` أولاً ثم `ticketId`/`postId`.

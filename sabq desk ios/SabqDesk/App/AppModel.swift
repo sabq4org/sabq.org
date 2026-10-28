@@ -29,6 +29,8 @@ final class AppModel {
     private(set) var alertPrefsError: String?
     /// Admins: urgent «تنبيهات الإدارة», the badge on «النظام».
     private(set) var urgentAlerts = 0
+    /// Opinion drafts waiting for the desk (new + in prep), the badge on «الرأي».
+    private(set) var opinionPending = 0
 
     let client: StaffAPIClient
     private var push = PushRegistrationState()
@@ -90,6 +92,7 @@ final class AppModel {
         alertPrefs = nil
         alertPrefsError = nil
         urgentAlerts = 0
+        opinionPending = 0
         phase = .signedOut
         try? await UNUserNotificationCenter.current().setBadgeCount(0)
     }
@@ -125,6 +128,25 @@ final class AppModel {
         if me.capabilities.canAdminAlerts {
             await refreshUrgentAlerts()
         }
+        if me.capabilities.canOpinion.view {
+            await refreshOpinionPending()
+        }
+    }
+
+    // MARK: - Opinion
+
+    func refreshOpinionPending() async {
+        guard capabilities.canOpinion.view else { return }
+        do {
+            opinionPending = try await client.opinionBoard().pendingCount
+        } catch {
+            handle(error)
+        }
+    }
+
+    /// Called by «الرأي» after its own load, so the badge matches the board.
+    func setOpinionPending(_ count: Int) {
+        opinionPending = max(count, 0)
     }
 
     // MARK: - System (admins)
