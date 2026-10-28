@@ -173,9 +173,11 @@ struct OpinionView: View {
                 timelineRow(linked, isFirst: false, unslotted: linked.slotAt == nil)
             }
             if board.hasNoDrafts {
-                DeskEmptyState(title: "لا مسودات بانتظارك هذا الأسبوع",
-                               message: "المواعيد الثابتة محجوزة لكتّابها، وتظهر كل مسودة في خانة موعدها فور وصولها.")
-                    .padding(.top, -DeskLayout.space8)
+                DeskInlineEmpty(systemImage: "tray",
+                                title: "لا مسودات بانتظارك هذا الأسبوع",
+                                message: "كل مسودة تظهر هنا في خانة موعد كاتبها فور وصولها")
+                    .padding(.horizontal, DeskLayout.pageMargin + 4)
+                    .padding(.top, DeskLayout.space12)
             }
             ForEach(sections(board), id: \.title) { section in
                 dayHeader(section.title, anchor: section.anchor)

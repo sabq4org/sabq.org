@@ -115,6 +115,45 @@ struct DeskSummaryCard: View {
     }
 }
 
+/// The hero when nothing waits: a check tile, the line, and the next
+/// scheduled post, at about half the summary card's height.
+struct DeskCalmHero: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: DeskLayout.space12) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(DeskInk.action)
+                .frame(width: 40, height: 40)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .deskText(DeskTextRole(size: 17, weight: .bold, style: .headline, lineSpacing: 0))
+                    .foregroundStyle(DeskTheme.textPrimary)
+                Text(detail)
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [DeskTheme.heroStart, DeskTheme.heroEnd],
+                           startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: DeskRadius.large, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DeskRadius.large, style: .continuous)
+            .strokeBorder(Color.white, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// Seven days from today; each shows how many posts are scheduled in it.
 /// Tapping a day selects it, tapping it again clears the selection.
 struct DeskWeekStrip: View {

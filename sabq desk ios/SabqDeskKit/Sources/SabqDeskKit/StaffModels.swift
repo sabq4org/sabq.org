@@ -374,6 +374,35 @@ public struct StaffTicketMessage: Codable, Sendable, Equatable, Identifiable {
 public struct StaffTicketDetail: Codable, Sendable, Equatable {
     public var ticket: StaffTicket
     public var messages: [StaffTicketMessage]
+    /// Opinion writers only: their last published and next scheduled article.
+    /// Absent on older servers and for other senders.
+    public var writerContext: StaffWriterOpinionContext?
+}
+
+/// The line above a writer's conversation: when they last published, what is
+/// scheduled next, and whether a draft awaits review.
+public struct StaffWriterOpinionContext: Codable, Sendable, Equatable {
+    public var lastPublishedAt: Date?
+    public var nextScheduledAt: Date?
+    public var hasPendingDraft: Bool
+
+    public init(lastPublishedAt: Date?, nextScheduledAt: Date?, hasPendingDraft: Bool) {
+        self.lastPublishedAt = lastPublishedAt
+        self.nextScheduledAt = nextScheduledAt
+        self.hasPendingDraft = hasPendingDraft
+    }
+
+    /// `آخر مقال نُشر له: 20 أكتوبر`
+    public var headline: String {
+        guard let lastPublishedAt else { return "لم يُنشر له مقال بعد" }
+        return "آخر مقال نُشر له: \(DeskBalanceCopy.dayMonth(lastPublishedAt))"
+    }
+
+    /// `المجدول القادم: الخميس 29 أكتوبر، 10:45 · مسودة بانتظار المراجعة`
+    public var detail: String {
+        let next = nextScheduledAt.map { "المجدول القادم: \(RiyadhTime.displayString($0))" } ?? "لا مقال مجدول له الآن"
+        return hasPendingDraft ? "\(next) · مسودة بانتظار المراجعة" : next
+    }
 }
 
 public struct StaffTicketReplyResult: Codable, Sendable, Equatable {

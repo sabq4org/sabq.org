@@ -197,6 +197,7 @@ Content-Type: application/json
 ### 4. مسارات التذاكر (`Tickets`)
 - **`GET /api/v1/staff/tickets/:id`**
   يعيد `{ ticket, messages }`: تفاصيل التذكرة وكامل رسائل المحادثة مرتبة زمنياً، ويحدّث `lastReadByAdminAt`. يحمل `ticket.sender` الشكل نفسه في الصندوق `{ id, name, kind, roleKind, avatarUrl }` (`buildStaffTicketDetailSender` في `server/services/staffAppService.ts`) مع `ticket.deeplink`.
+  ويحمل أيضاً `writerContext` (أو `null`) حين يكون المرسل كاتب رأي أو زاوية: `{ lastPublishedAt, nextScheduledAt, hasPendingDraft }` من `getWriterOpinionContext` في `server/services/staffOpinionDeskService.ts`، ويعرضه التطبيق سطراً فوق المحادثة («آخر مقال نُشر له…»). فشل حسابه لا يفشل الطلب.
 - **`POST /api/v1/staff/tickets/:id/reply`**
   الجسم: `{ "message": "نص الرد", "parentMessageId"?: "msg-id" }`.
   ينشر الرد باسم الموظف (`senderRole = "admin"`) وينقل التذكرة من `open` إلى `answered`، ويرفض التذكرة المغلقة بـ `400 { code: "ticket_closed" }`.

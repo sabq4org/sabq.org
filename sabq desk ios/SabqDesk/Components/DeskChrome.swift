@@ -362,6 +362,37 @@ struct DeskEmptyState: View {
     }
 }
 
+/// A one-line empty state for a list that still has other content under
+/// it: a soft icon tile, the line, and a short hint, on a white row.
+struct DeskInlineEmpty: View {
+    let systemImage: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        HStack(spacing: DeskLayout.space12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(DeskInk.action)
+                .frame(width: 36, height: 36)
+                .background(DeskInk.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .deskText(DeskType.rowTitle)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                Text(message)
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .deskRowCard(padding: 12)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// Text-style filled button used on the lock and login screens.
 struct DeskBigButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
