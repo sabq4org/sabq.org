@@ -161,6 +161,53 @@ public struct StaffAPIClient: Sendable {
         return envelope.post
     }
 
+    // MARK: - Opinion («الرأي»)
+
+    /// The week board: seven Riyadh days from today (or `weekStart`, `YYYY-MM-DD`).
+    public func opinionBoard(weekStart: String? = nil) async throws -> StaffOpinionBoard {
+        let query = weekStart.map { [URLQueryItem(name: "weekStart", value: $0)] } ?? []
+        return try await send("GET", "/api/v1/staff/opinion/board", query: query)
+    }
+
+    public func opinionItem(id: String) async throws -> StaffOpinionItemDetail {
+        try await send("GET", "/api/v1/staff/opinion/\(try pathID(id))")
+    }
+
+    /// Other writers already scheduled in the same minute. Warns, never blocks.
+    public func opinionSlotCheck(id: String, at date: Date) async throws -> [StaffOpinionWarning] {
+        let check: StaffOpinionSlotCheck = try await send(
+            "GET", "/api/v1/staff/opinion/\(try pathID(id))/slot-check",
+            query: [URLQueryItem(name: "scheduledAt", value: RiyadhTime.isoString(date))])
+        return check.warnings
+    }
+
+    public func scheduleOpinion(id: String, _ target: StaffOpinionScheduleTarget) async throws -> StaffOpinionScheduleResult {
+        let path = "/api/v1/staff/opinion/\(try pathID(id))/schedule"
+        switch target {
+        case .fixedSlot:
+            return try await send("POST", path, body: OpinionFixedSlotBody())
+        case .at(let date):
+            return try await send("POST", path, body: ScheduleBody(scheduledAt: RiyadhTime.isoString(date)))
+        }
+    }
+
+    public func publishOpinion(id: String) async throws -> StaffOpinionActionResult {
+        try await send("POST", "/api/v1/staff/opinion/\(try pathID(id))/publish", body: EmptyBody())
+    }
+
+    /// The note is required (3…2000 characters); the server answers 400 otherwise.
+    public func returnOpinionToWriter(id: String, note: String) async throws -> StaffOpinionActionResult {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3 else { throw StaffAPIError.validation(message: "اكتب ملاحظتك للكاتب") }
+        return try await send("POST", "/api/v1/staff/opinion/\(try pathID(id))/return-to-writer",
+                              body: OpinionNoteBody(note: String(trimmed.prefix(2000))))
+    }
+
+    /// «جهّز وجدول»: a later phase. The server answers 501 for now.
+    public func prepareOpinion(id: String) async throws -> StaffOpinionActionResult {
+        try await send("POST", "/api/v1/staff/opinion/\(try pathID(id))/prepare", body: EmptyBody())
+    }
+
     // MARK: - System (admins)
 
     /// «حالة النظام»: AI model health and monthly budgets. 403 without `canSystemHealth`.
@@ -343,6 +390,14 @@ private struct StatusBody: Encodable {
 
 private struct ScheduleBody: Encodable {
     var scheduledAt: String
+}
+
+private struct OpinionFixedSlotBody: Encodable {
+    var mode = "fixed_slot"
+}
+
+private struct OpinionNoteBody: Encodable {
+    var note: String
 }
 
 private struct RejectBody: Encodable {

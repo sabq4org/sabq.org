@@ -52,6 +52,15 @@ public enum DeskTheme {
     public static let teal = adaptive(0x08785F, 0x70DCC0)
     public static let shadow = Color.black.opacity(0.03)
 
+    // «الرأي» (concept C, 2026-10-28): the warm card of writers without a fixed slot.
+
+    /// #FFFCF4 — background of a «بلا موعد ثابت» card.
+    public static let amberTint = adaptive(0xFFFCF4, 0x221C10)
+    /// #E8C887 — its outline.
+    public static let amberOutline = adaptive(0xE8C887, 0x5C4A22)
+    /// #FBFCFE — an empty reserved slot («لم تصل بعد»), drawn with a dashed outline.
+    public static let slotWaiting = adaptive(0xFBFCFE, 0x111A24)
+
     // Semantic roles for the grouped desk screens, built from the palette above.
 
     /// Page behind cards and grouped lists: muted sky in light, the page colour in dark.

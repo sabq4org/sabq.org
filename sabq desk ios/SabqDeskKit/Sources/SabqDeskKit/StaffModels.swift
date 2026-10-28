@@ -30,19 +30,48 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
     /// Save a top-up, budget or alert threshold in «أرصدة النماذج»
     /// (`ai_hub.view` + `ai_hub.manage`). False when an older server omits it.
     public var canManageBalances: Bool
+    /// «الرأي» tab. All false when an older server omits it.
+    public var canOpinion: Opinion
+
+    /// Opinion desk rights, computed server-side from live RBAC
+    /// (`computeStaffOpinionCapabilities` in shared/staffApp.ts).
+    public struct Opinion: Codable, Sendable, Equatable {
+        public var view: Bool
+        public var schedule: Bool
+        public var publish: Bool
+        public var returnToWriter: Bool
+
+        public init(view: Bool = false, schedule: Bool = false, publish: Bool = false, returnToWriter: Bool = false) {
+            self.view = view
+            self.schedule = schedule
+            self.publish = publish
+            self.returnToWriter = returnToWriter
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            view = try container.decodeIfPresent(Bool.self, forKey: .view) ?? false
+            schedule = try container.decodeIfPresent(Bool.self, forKey: .schedule) ?? false
+            publish = try container.decodeIfPresent(Bool.self, forKey: .publish) ?? false
+            returnToWriter = try container.decodeIfPresent(Bool.self, forKey: .returnToWriter) ?? false
+        }
+
+        private enum CodingKeys: String, CodingKey { case view, schedule, publish, returnToWriter }
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case canTickets, canSocial, canSystemHealth, canAdminAlerts, canManageBalances
+        case canTickets, canSocial, canSystemHealth, canAdminAlerts, canManageBalances, canOpinion
     }
 
     public init(canTickets: Bool = false, canSocial: Social = Social(),
                 canSystemHealth: Bool = false, canAdminAlerts: Bool = false,
-                canManageBalances: Bool = false) {
+                canManageBalances: Bool = false, canOpinion: Opinion = Opinion()) {
         self.canTickets = canTickets
         self.canSocial = canSocial
         self.canSystemHealth = canSystemHealth
         self.canAdminAlerts = canAdminAlerts
         self.canManageBalances = canManageBalances
+        self.canOpinion = canOpinion
     }
 
     public init(from decoder: Decoder) throws {
@@ -52,6 +81,7 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
         canSystemHealth = try container.decodeIfPresent(Bool.self, forKey: .canSystemHealth) ?? false
         canAdminAlerts = try container.decodeIfPresent(Bool.self, forKey: .canAdminAlerts) ?? false
         canManageBalances = try container.decodeIfPresent(Bool.self, forKey: .canManageBalances) ?? false
+        canOpinion = (try? container.decodeIfPresent(Opinion.self, forKey: .canOpinion)) ?? Opinion()
     }
 
     public static let none = StaffCapabilities()
