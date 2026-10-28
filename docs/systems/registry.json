@@ -177,6 +177,8 @@
         "sabq app ios/sabqTests/AdminScheduleTests.swift",
         "sabq app ios/sabqTests/AdminScheduleSnapshotTests.swift",
         "client/src/pages/ArticleDetail.tsx",
+        "client/src/components/public/ArticleMobileDock.tsx",
+        "client/src/lib/articleTextScale.ts",
         "client/src/components/AiArticleStats.tsx",
         "client/src/components/AIRecommendationsBlock.tsx",
         "client/src/components/ArticleSidebarRecovery.tsx",

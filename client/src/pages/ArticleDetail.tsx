@@ -62,6 +62,8 @@ import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 import { useInViewport } from "@/hooks/useInViewport";
 import ArticleServiceDateLine from "@/components/mawaeed/ArticleServiceDateLine";
 import { serviceLinkForArticle } from "@shared/servicePages/articleLink";
+import { ArticleMobileDock } from "@/components/public/ArticleMobileDock";
+import { readArticleTextScale, writeArticleTextScale } from "@/lib/articleTextScale";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
 const SHOW_TOP_AD = true;
@@ -409,6 +411,14 @@ export default function ArticleDetail() {
 
   // Focus mode (Task #80)
   const [focusOpen, setFocusOpen] = useState(false);
+
+  // Reader's article text size (phone sheet slider), remembered on this device.
+  const [textScale, setTextScale] = useState(1);
+  useEffect(() => setTextScale(readArticleTextScale()), []);
+  const handleTextScaleChange = useCallback((scale: number) => {
+    setTextScale(scale);
+    writeArticleTextScale(scale);
+  }, []);
 
   // Ensure RTL direction is applied for Arabic content
   useEffect(() => {
@@ -1111,7 +1121,11 @@ export default function ArticleDetail() {
   }
 
   return (
-    <div className="article-detail public-page min-h-screen bg-background relative z-10" dir="rtl">
+    <div
+      className="article-detail public-page min-h-screen bg-background relative z-10"
+      dir="rtl"
+      style={{ "--article-text-scale": textScale } as React.CSSProperties}
+    >
       <Header user={user} />
 
       {/* الإعلان البارز أعلى المقال — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_AD بقي كقاطع طوارئ في الكود. */}
@@ -1546,6 +1560,24 @@ export default function ArticleDetail() {
               )}
 
             </div>
+
+            <ArticleMobileDock
+              title={article.title}
+              shareUrl={`https://sabq.org/article/${slug}`}
+              copyUrl={`https://sabq.org/article/${slug}`}
+              description={article.excerpt || ""}
+              articleId={article.id}
+              hasReacted={!!article.hasReacted}
+              reactionsCount={article.reactionsCount || 0}
+              onReact={handleReact}
+              reactPending={reactMutation.isPending}
+              isBookmarked={!!article.isBookmarked}
+              onBookmark={handleBookmark}
+              bookmarkPending={bookmarkMutation.isPending}
+              textScale={textScale}
+              onTextScaleChange={handleTextScaleChange}
+              onShareIntent={ensureShortLink}
+            />
 
             {/* Focus mode overlay (Task #80) */}
             {article && focusOpen && (
