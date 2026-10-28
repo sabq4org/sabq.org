@@ -379,3 +379,123 @@ extension RiyadhTime {
         }
     }
 }
+
+/// «استعراض المقال»: the article as readers will see it (`GET /opinion/:id/content`).
+/// `publicUrl` is set only once it is published on sabq.org.
+public struct StaffOpinionContent: Codable, Sendable, Equatable {
+    public struct Category: Codable, Sendable, Equatable {
+        public var id: String
+        public var name: String
+    }
+
+    public var id: String
+    public var title: String
+    public var subtitle: String?
+    public var status: String
+    /// HTML as the writer saved it (or as «جهّز وجدول» corrected it).
+    public var content: String
+    public var excerpt: String?
+    public var imageUrl: String?
+    public var isAiGeneratedImage: Bool?
+    public var category: Category?
+    public var publicUrl: String?
+    public var updatedAt: Date?
+
+    public init(id: String, title: String, subtitle: String? = nil, status: String, content: String,
+                excerpt: String? = nil, imageUrl: String? = nil, isAiGeneratedImage: Bool? = nil,
+                category: Category? = nil, publicUrl: String? = nil, updatedAt: Date? = nil) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.status = status
+        self.content = content
+        self.excerpt = excerpt
+        self.imageUrl = imageUrl
+        self.isAiGeneratedImage = isAiGeneratedImage
+        self.category = category
+        self.publicUrl = publicUrl
+        self.updatedAt = updatedAt
+    }
+
+    /// The published page, https only.
+    public var publicPageURL: URL? {
+        guard let publicUrl, let url = URL(string: publicUrl), url.scheme == "https" else { return nil }
+        return url
+    }
+
+    /// The body as reading blocks, so the app shows text without a web view.
+    public var blocks: [StaffArticleBlock] { StaffArticleBlock.parse(html: content) }
+}
+
+/// One block of an article body: a paragraph, a sub-heading, a quote or a list item.
+public struct StaffArticleBlock: Sendable, Equatable, Hashable {
+    public enum Kind: Sendable, Equatable, Hashable { case paragraph, heading, quote, listItem }
+
+    public var kind: Kind
+    public var text: String
+
+    public init(_ kind: Kind, _ text: String) {
+        self.kind = kind
+        self.text = text
+    }
+
+    /// Splits simple editor HTML on block tags, drops every other tag and
+    /// decodes the common entities. Scripts and styles are removed with their content.
+    public static func parse(html: String) -> [StaffArticleBlock] {
+        var source = html
+        for tag in ["script", "style", "iframe", "noscript"] {
+            source = source.replacingOccurrences(of: "<\(tag)\\b[^>]*>[\\s\\S]*?</\(tag)>", with: " ",
+                                                 options: [.regularExpression, .caseInsensitive])
+        }
+        source = source.replacingOccurrences(of: "<br\\s*/?>", with: "\n", options: [.regularExpression, .caseInsensitive])
+
+        var blocks: [StaffArticleBlock] = []
+        let pattern = "<(p|h[1-6]|blockquote|li|div)\\b[^>]*>([\\s\\S]*?)</\\1>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let ns = source as NSString
+        let matches = regex.matches(in: source, range: NSRange(location: 0, length: ns.length))
+        var cursor = 0
+        func appendLoose(_ range: NSRange) {
+            guard range.length > 0 else { return }
+            for line in plain(ns.substring(with: range)).components(separatedBy: "\n") {
+                let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { blocks.append(StaffArticleBlock(.paragraph, text)) }
+            }
+        }
+        for match in matches {
+            appendLoose(NSRange(location: cursor, length: match.range.location - cursor))
+            cursor = match.range.location + match.range.length
+            let tag = ns.substring(with: match.range(at: 1)).lowercased()
+            let inner = ns.substring(with: match.range(at: 2))
+            // A container holding its own blocks (a div of paragraphs, a quote of paragraphs).
+            if tag == "div" || tag == "blockquote", inner.range(of: "<(p|h[1-6]|li)\\b", options: [.regularExpression, .caseInsensitive]) != nil {
+                let nested = parse(html: inner)
+                blocks.append(contentsOf: tag == "blockquote" ? nested.map { StaffArticleBlock(.quote, $0.text) } : nested)
+                continue
+            }
+            let text = plain(inner).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let kind: Kind
+            switch tag {
+            case "blockquote": kind = .quote
+            case "li": kind = .listItem
+            case let t where t.hasPrefix("h"): kind = .heading
+            default: kind = .paragraph
+            }
+            blocks.append(StaffArticleBlock(kind, text))
+        }
+        appendLoose(NSRange(location: cursor, length: ns.length - cursor))
+        return blocks
+    }
+
+    static func plain(_ html: String) -> String {
+        var text = html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        // `&amp;` last, so `&amp;lt;` stays the text «&lt;».
+        let entities: [(String, String)] = [("&nbsp;", " "), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"),
+                                            ("&lt;", "<"), ("&gt;", ">"), ("&laquo;", "«"), ("&raquo;", "»"),
+                                            ("&hellip;", "…"), ("&ndash;", "–"), ("&mdash;", "—"), ("&amp;", "&")]
+        for (entity, value) in entities { text = text.replacingOccurrences(of: entity, with: value) }
+        text = text.replacingOccurrences(of: "[ \\t\u{00A0}]+", with: " ", options: .regularExpression)
+        return text
+    }
+}

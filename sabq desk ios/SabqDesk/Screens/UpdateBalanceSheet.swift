@@ -116,7 +116,7 @@ struct UpdateBalanceSheet: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, minHeight: 40)
-                .background(selected ? DeskInk.strong : Color.clear,
+                .background(selected ? DeskInk.selected : Color.clear,
                             in: RoundedRectangle(cornerRadius: DeskRadius.small, style: .continuous))
                 .contentShape(Rectangle())
         }
@@ -374,7 +374,7 @@ struct ThresholdChips: View {
                 .foregroundStyle(selected ? Color.white : DeskTheme.textPrimary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 40)
-                .background(selected ? DeskInk.strong : DeskInk.chip,
+                .background(selected ? DeskInk.selected : DeskInk.chip,
                             in: RoundedRectangle(cornerRadius: DeskRadius.medium, style: .continuous))
                 .contentShape(Rectangle())
         }

@@ -300,6 +300,21 @@ export async function getOpinionDraftContent(articleId: string): Promise<StaffOp
   };
 }
 
+/** رابط المقال على سبق بعد نشره فقط؛ المسودة والمجدول لا رابط عامًا لهما بعد. */
+export function opinionPublicUrl(status: string, slug: string | null | undefined): string | null {
+  if (status !== "published" || !slug) return null;
+  const site = (process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || "https://sabq.org").replace(/\/+$/, "");
+  return `${site}/opinion/${encodeURIComponent(slug)}`;
+}
+
+/** «استعراض المقال» في تطبيق «مكتب سبق»: النص كما سيظهر، ورابط الصفحة بعد النشر. */
+export async function getStaffOpinionPreview(
+  articleId: string,
+): Promise<StaffOpinionDraftContent & { publicUrl: string | null }> {
+  const content = await getOpinionDraftContent(articleId);
+  return { ...content, publicUrl: opinionPublicUrl(content.status, content.slug) };
+}
+
 /** مقالات رأي مجدولة في الدقيقة نفسها لكتّاب آخرين (تنبيه لا منع). */
 export async function checkOpinionSlotClashes(
   articleId: string,

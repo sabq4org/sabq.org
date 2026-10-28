@@ -8,7 +8,6 @@ struct MessagesView: View {
 
     @State private var section: DeskTicketSection = .awaiting
     @State private var search = ""
-    @State private var isSearching = false
     @FocusState private var searchFocused: Bool
     @State private var model: InboxModel?
     @State private var path: [DeskDeepLink] = []
@@ -63,31 +62,22 @@ struct MessagesView: View {
         }
     }
 
-    /// The search is a round button beside the title; tapping it swaps the
-    /// title row for the field until «إلغاء».
+    /// Title with the waiting count, an always-visible search field, then the tabs.
     private var header: some View {
-        VStack(alignment: .leading, spacing: DeskLayout.space16) {
-            Group {
-                if isSearching {
-                    searchRow
-                } else {
-                    DeskScreenHeader(title: "رسائل المساهمين", subtitle: subtitle) {
-                        Button {
-                            isSearching = true
-                            searchFocused = true
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(DeskTheme.textSecondary)
-                                .frame(width: 44, height: 44)
-                                .background(DeskInk.chip, in: Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("بحث")
-                    }
+        VStack(alignment: .leading, spacing: 14) {
+            DeskScreenHeader(title: "الرسائل", subtitle: "رسائل المساهمين") {
+                if app.unread.tickets > 0 {
+                    Text("\(DeskCount.messages(app.unread.tickets)) بانتظار ردك")
+                        .deskText(DeskType.metaEmphasis)
+                        .foregroundStyle(DeskInk.link)
+                        .padding(.horizontal, DeskLayout.space12)
+                        .padding(.vertical, 6)
+                        .background(DeskInk.soft, in: Capsule())
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
+            searchRow
+                .padding(.horizontal, DeskLayout.pageMargin + 4)
             SectionChipBar(sections: DeskTicketSection.allCases, selection: $section,
                            title: \.title,
                            count: { $0 == .awaiting ? app.unread.tickets : 0 })
@@ -113,23 +103,19 @@ struct MessagesView: View {
                     .accessibilityLabel("مسح البحث")
                 }
             }
-            .padding(.horizontal, DeskLayout.space12)
-            .frame(minHeight: 44)
-            .background(DeskInk.chip, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            Button("إلغاء") {
-                search = ""
-                searchFocused = false
-                isSearching = false
+            .padding(.horizontal, DeskLayout.space16)
+            .frame(minHeight: 48)
+            .background(DeskTheme.surface, in: Capsule())
+            .shadow(color: DeskTheme.shadow, radius: 4, y: 1)
+            if searchFocused || !search.isEmpty {
+                Button("إلغاء") {
+                    search = ""
+                    searchFocused = false
+                }
+                .deskText(DeskType.button)
+                .foregroundStyle(DeskInk.link)
             }
-            .deskText(DeskType.button)
-            .foregroundStyle(DeskInk.link)
         }
-        .frame(minHeight: 52)
-    }
-
-    private var subtitle: String {
-        let count = app.unread.tickets
-        return count > 0 ? "\(DeskCount.messages(count)) بانتظار ردك" : "لا رسائل جديدة"
     }
 
     @ViewBuilder
@@ -156,12 +142,10 @@ struct MessagesView: View {
         } else {
             ForEach(model.items, id: \.listID) { item in
                 Button { path.append(.ticket(id: item.id)) } label: {
-                    ConversationRow(item: item,
-                                    isFirst: item.listID == model.items.first?.listID,
-                                    isLast: item.listID == model.items.last?.listID)
+                    ConversationRow(item: item)
                 }
                 .buttonStyle(.plain)
-                .listRowInsets(EdgeInsets(top: 0, leading: DeskLayout.pageMargin + 4, bottom: 0, trailing: DeskLayout.pageMargin + 4))
+                .listRowInsets(EdgeInsets(top: 5, leading: DeskLayout.pageMargin + 4, bottom: 5, trailing: DeskLayout.pageMargin + 4))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .task { await model.loadMoreIfNeeded(after: item) }
@@ -190,14 +174,10 @@ struct MessagesView: View {
     }
 }
 
-/// Chat-list row on the rail: avatar, name and label, time and unread dot,
-/// subject, last message.
+/// Chat-list row on its own card: avatar, name and label, time and unread
+/// dot, subject, last message.
 private struct ConversationRow: View {
     let item: StaffInboxItem
-    let isFirst: Bool
-    let isLast: Bool
-
-    private static let verticalPadding: CGFloat = 16
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -233,9 +213,8 @@ private struct ConversationRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, Self.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .deskRail(isFirst: isFirst, isLast: isLast, topPadding: Self.verticalPadding)
+        .deskRowCard()
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.hasUnread ? "غير مقروءة" : "")

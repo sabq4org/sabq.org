@@ -11,10 +11,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "SabqDeskKit"),
-        .target(
-            name: "SabqDeskDesign",
-            resources: [.copy("Fonts")]
-        ),
+        .target(name: "SabqDeskDesign"),
         .testTarget(name: "SabqDeskKitTests", dependencies: ["SabqDeskKit"]),
     ]
 )

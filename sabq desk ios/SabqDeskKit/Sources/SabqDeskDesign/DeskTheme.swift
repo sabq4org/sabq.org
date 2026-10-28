@@ -26,11 +26,12 @@ public enum DeskTheme {
     public static let actionFill = adaptive(0x096EBD, 0x1A6FA8)
     public static let onAction = Color.white
 
-    public static let textPrimary = adaptive(0x0C1A2A, 0xF0F4F8)
-    public static let textSecondary = adaptive(0x3E5063, 0xA6B5C4, highContrastLight: 0x0C1A2A, highContrastDark: 0xF0F4F8)
-    public static let textTertiary = adaptive(0x556677, 0x8E9EAE, highContrastLight: 0x0C1A2A, highContrastDark: 0xF0F4F8)
+    public static let textPrimary = adaptive(0x1B2B3A, 0xF0F4F8)
+    public static let textSecondary = adaptive(0x55667A, 0xA6B5C4, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
+    public static let textTertiary = adaptive(0x617183, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
 
-    public static let background = adaptive(0xFFFFFF, 0x0B121A)
+    /// #F4F7FB — the soft grey-blue page (design 2026-10-28, SF Arabic).
+    public static let background = adaptive(0xF4F7FB, 0x0B121A)
     public static let surface = adaptive(0xFFFFFF, 0x141D27)
     public static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
     public static let surfaceStrong = adaptive(0xDFECF7, 0x1F3145)
@@ -50,7 +51,7 @@ public enum DeskTheme {
     /// إطار سماوي ناعم للبطاقات.
     public static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
     public static let teal = adaptive(0x08785F, 0x70DCC0)
-    public static let shadow = Color.black.opacity(0.03)
+    public static let shadow = Color(red: 27 / 255.0, green: 43 / 255.0, blue: 58 / 255.0).opacity(0.06)
 
     // «الرأي» (concept C, 2026-10-28): the warm card of writers without a fixed slot.
 
@@ -64,7 +65,7 @@ public enum DeskTheme {
     // Semantic roles for the grouped desk screens, built from the palette above.
 
     /// Page behind cards and grouped lists: muted sky in light, the page colour in dark.
-    public static let groupedBackground = adaptive(0xEFF6FC, 0x0B121A)
+    public static let groupedBackground = adaptive(0xF4F7FB, 0x0B121A)
     public static let cardBackground = surface
     public static let cardOutline = skyOutline
 
@@ -75,10 +76,17 @@ public enum DeskTheme {
     public static let link = rgb(0x0B6FA8)
     /// #1E9BE6 — big buttons, send, the «new» dot.
     public static let buttonBlue = rgb(0x1E9BE6)
-    /// #0F2233 — selected chip background.
-    public static let navy = rgb(0x0F2233)
-    /// #F1F5F9 — unselected chips, search field, the writer's bubble, secondary buttons.
-    public static let chipGrey = rgb(0xF1F5F9)
+    /// #1B2B3A — strong text. Never a fill: the desk has no dark surfaces (owner, 2026-10-28).
+    public static let navy = rgb(0x1B2B3A)
+    /// Selected chip, day or segment: solid Sabq blue with white text.
+    public static let selectedFill = rgb(0x1E9BE6)
+    /// #E6F4FD — soft blue behind selected tabs, the account initials and highlights.
+    public static let softBlue = rgb(0xE6F4FD)
+    /// Summary card gradient, soft blue to soft lavender.
+    public static let heroStart = rgb(0xE2F2FD)
+    public static let heroEnd = rgb(0xEEF1FE)
+    /// #EBF0F6 — unselected chips, search field, the writer's bubble, secondary buttons.
+    public static let chipGrey = rgb(0xEBF0F6)
     /// #EAF7FF — the assistant's bubble and quick replies.
     public static let bubbleBlue = rgb(0xEAF7FF)
     /// #EEF2F6 — hairlines between rows.
@@ -127,9 +135,9 @@ public enum DeskTone: Sendable, Hashable {
 
 public enum DeskRadius {
     public static let small: CGFloat = 8
-    public static let medium: CGFloat = 12
+    public static let medium: CGFloat = 16
     /// Desk-only: hero cards (account header, inbox summary).
-    public static let large: CGFloat = 16
+    public static let large: CGFloat = 22
 }
 
 /// Soft card elevation, using the reader app's `shadow` colour.
@@ -140,7 +148,7 @@ public struct DeskShadowStyle: Sendable {
 }
 
 public enum DeskShadow {
-    public static let card = DeskShadowStyle(color: DeskTheme.shadow, radius: 8, y: 2)
+    public static let card = DeskShadowStyle(color: DeskTheme.shadow, radius: 10, y: 3)
 }
 
 public enum DeskLayout {
@@ -180,16 +188,7 @@ public struct DeskTextRole: Sendable {
         self.lineSpacing = lineSpacing
     }
 
-    public var font: Font { .custom(postScriptName, size: size, relativeTo: style) }
-
-    private var postScriptName: String {
-        switch weight {
-        case .regular: return DeskFonts.regular
-        case .medium: return DeskFonts.medium
-        case .semibold: return DeskFonts.semibold
-        case .bold: return DeskFonts.bold
-        }
-    }
+    public var font: Font { DeskFonts.app(size: size, weight: weight, relativeTo: style) }
 }
 
 public enum DeskType {
@@ -223,7 +222,7 @@ extension View {
     }
 }
 
-/// Card surface: rounded fill, hairline sky outline and a soft shadow.
+/// Card surface: a white rounded fill and a soft shadow, no outline.
 public struct DeskCardBackground: View {
     private let radius: CGFloat
 
@@ -234,7 +233,6 @@ public struct DeskCardBackground: View {
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         shape.fill(DeskTheme.cardBackground)
-            .overlay(shape.stroke(DeskTheme.cardOutline, lineWidth: 1))
             .shadow(color: DeskShadow.card.color, radius: DeskShadow.card.radius, y: DeskShadow.card.y)
     }
 }
@@ -260,7 +258,7 @@ public struct DeskInputSurface: ViewModifier {
     }
 }
 
-/// Filled primary button; `role: .destructive` switches to the danger fill.
+/// Filled primary pill button; `destructive` switches to the danger fill.
 public struct DeskPrimaryButtonStyle: ButtonStyle {
     private let destructive: Bool
     @Environment(\.isEnabled) private var isEnabled
@@ -275,12 +273,12 @@ public struct DeskPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: DeskLayout.controlHeight)
             .foregroundStyle(isEnabled ? DeskTheme.onAction : DeskTheme.disabledInk)
             .background(isEnabled ? (destructive ? DeskTheme.danger : DeskTheme.actionFill) : DeskTheme.disabledFill,
-                        in: RoundedRectangle(cornerRadius: DeskRadius.medium))
+                        in: Capsule())
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
 
-/// Outlined secondary button.
+/// Outlined secondary pill button.
 public struct DeskSecondaryButtonStyle: ButtonStyle {
     private let destructive: Bool
     @Environment(\.isEnabled) private var isEnabled
@@ -295,8 +293,8 @@ public struct DeskSecondaryButtonStyle: ButtonStyle {
             .deskText(DeskType.button)
             .frame(maxWidth: .infinity, minHeight: DeskLayout.controlHeight)
             .foregroundStyle(ink)
-            .background(DeskTheme.surface, in: RoundedRectangle(cornerRadius: DeskRadius.medium))
-            .overlay(RoundedRectangle(cornerRadius: DeskRadius.medium).stroke(ink.opacity(0.5), lineWidth: 1))
+            .background(DeskTheme.surface, in: Capsule())
+            .overlay(Capsule().stroke(ink.opacity(0.5), lineWidth: 1))
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }

@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-26 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
+> آخر مراجعة: 2026-10-28 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
 
 ## الملخص
 
@@ -334,6 +334,7 @@ Content-Type: application/json
 |---|---|---|
 | `GET /opinion/board?weekStart=YYYY-MM-DD` | `canOpinion.view` | سبعة أيام بتوقيت الرياض من اليوم (أو `weekStart` ضمن ±60 يوماً): `{ weekStart, days:[{date, weekday, counts:{draft,prep,scheduled,missing}}], slots, unslotted, pendingCount }` |
 | `GET /opinion/:id` | `view` | `{ item, nextSlot }` بالشكل نفسه؛ `404` إن لم يعد المقال بانتظار المكتب |
+| `GET /opinion/:id/content` | `view` | «استعراض المقال» (منذ 2026-10-28): نص المقال كما سيقرؤه القراء `{ id, title, subtitle, slug, status, content (HTML), excerpt, imageUrl, isAiGeneratedImage, category, … , publicUrl }`؛ `publicUrl` (`<PUBLIC_SITE_URL>/opinion/<slug>`) يُرسل للمنشور فقط و`null` للمسودة والمجدول؛ `Cache-Control: private, no-store`؛ `404` إن لم يوجد أو ليس مقال رأي (`getStaffOpinionPreview`) |
 | `GET /opinion/:id/slot-check?scheduledAt=ISO` | `schedule` | `{ scheduledAt, warnings }` بلا كتابة |
 | `POST /opinion/:id/schedule` | `schedule` | `{ "mode": "fixed_slot" }` (الموعد الثابت القادم) أو `{ "scheduledAt": ISO+offset }`؛ يعيد `{ article, scheduledAt, warnings }`؛ تدقيق `staff_opinion_schedule` |
 | `POST /opinion/:id/publish` | `publish` | نشر فوري (جسم فارغ)؛ يقبل `pending_review` و`approved` ويثبت الاعتماد؛ `409` إن كان منشوراً؛ تدقيق `staff_opinion_publish` |
@@ -436,9 +437,9 @@ Content-Type: application/json
 
 | الجزء | المسار |
 |-------|--------|
-| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.1.0 ورقم البناء `2026102605` |
+| مشروع Xcode (هدف واحد، مجلد متزامن) | `sabq desk ios/SabqDesk.xcodeproj` — الحزمة `com.sabq.desk`، الفريق `CBU7MJEC5R`، iOS 17، RTL عربي، ثيم فاتح فقط، الإصدار 1.2.0 ورقم البناء `2026102804` |
 | شاشات التطبيق | `sabq desk ios/SabqDesk/` — تصميم «تطبيقات البوت» المعتمد 2026-10-25: الروبوت (`DeskMascot`) كبير في الدخول وقفل Face ID، ثلاثة تبويبات «المكتب» (`DeskView`: بانتظارك/مجدول/منشور/مرفوض، والمجدول خط زمني بالأيام) و«الرسائل» (`MessagesView`: تنتظر ردك/تم الرد/مغلقة مع بحث) و«حسابي» (`SettingsView` مع الآفاتار والصلاحيات والردود السريعة)؛ محادثة الرسالة (`TicketDetailView`: فقاعات، فواصل أيام، «ردًا على» عبر `parentMessageId`)، تفاصيل المقترح، ورقة الجدولة (أوقات سريعة + تنبيه تعارض ±30 دقيقة) وورقة الرفض. المكوّنات المشتركة في `Components/DeskChrome.swift` والمنطق القابل للاختبار في `SabqDeskKit/DeskBoard.swift` |
-| حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تسميات الأدوار العربية `StaffRoleLabel`، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (ألوان وخطوط IBM Plex Sans Arabic منسوخة من تطبيق القارئ دون ربط أهدافه) |
+| حزمة `SabqDeskKit` المحلية | `sabq desk ios/SabqDeskKit/` — `SabqDeskKit` (عميل الـ API، النماذج، تسميات الأدوار العربية `StaffRoleLabel`، تحويل الأخطاء، Keychain، الروابط العميقة، توقيت الرياض) و`SabqDeskDesign` (الألوان، وخط النظام SF Arabic عبر `DeskFonts.app` بتحجيم Dynamic Type منذ 2026-10-28 بدل IBM Plex المضمّن) |
 | الاختبارات | `sabq desk ios/SabqDeskKit/Tests/SabqDeskKitTests/` — `swift test` على macOS، ومخطط `SabqDeskKit-Package` على محاكي iOS |
 | CI | `.github/workflows/sabq-desk-ios-build.yml` — بناء بلا توقيع + الاختبارات |
 
@@ -455,4 +456,6 @@ Content-Type: application/json
 - أسباب الرفض الجاهزة: لا يناسب سياسة الحساب، معلومة غير دقيقة، مكرر، يحتاج إعادة صياغة؛ مع ملاحظة تُضم في `reason` (`<السبب> — <الملاحظة>`)؛ يكفي السبب الجاهز أو الملاحظة، وزر التأكيد معطّل حتى يتوفر أحدهما.
 - «أرصدة النماذج» (للمشرفين، `canSystemHealth`): صف «أرصدة النماذج» مع عدّاد ما يحتاج انتباهاً في «حالة النظام»، وشريط تنبيه داخل التطبيق لأخطر رصيد مع «افتح الأرصدة» و«ذكّرني بعد ساعة» (إخفاء محلي يعود عند تغيّر المستوى). الشاشات: `ModelBalancesView` (القائمة)، `ProviderBalanceDetailView` (مخطط صرف 30 يوماً بـ Swift Charts وسجل الشحنات)، `UpdateBalanceSheet` (تحديث الرصيد/الميزانية وحدود التنبيه). أدوات التعديل تظهر فقط حين `canManage` في الاستجابة (أو `capabilities.canManageBalances` إن غاب)، ومن يملك العرض فقط يرى الأرصدة للقراءة. الروابط العميقة `sabqdesk://balances` و`sabqdesk://balances/<provider>` (قائمة بيضاء للمزوّدين) تفتح تبويب النظام.
 - «الرأي» (`canOpinion.view`، التبويب الثاني بأيقونة `square.and.pencil` وشارة `pendingCount`): `OpinionView` — شريط أيام الأسبوع بنقاط الحالة، ثم خط زمني بالساعة كـ«مجدول» في المكتب، وقسم «بلا موعد ثابت» في الآخر، وحالة «لا مسودات بانتظارك هذا الأسبوع». «جهّز وجدول»/«أكمل التجهيز» معطّل حتى `OpinionFeatureFlags.autoPrepEnabled`؛ «جدول في موعده» يجدول في الموعد الثابت؛ «انشر الآن» بتأكيد ثم Face ID (`AppLockController.confirmSensitiveAction`)؛ الجدولة تفحص `slot-check` أولاً وتنبّه «جدول رغم ذلك». الرابط `sabqdesk://opinion/<articleId>` وإشعار `type: "desk.opinion_draft"` (`articleId`) يفتحان التبويب ويبرزان المقال. مفتاح «مقالات الرأي» في التنبيهات لمن يملك `canOpinion.view`.
+- **التصميم الفاتح (1.2.0، معتمد 2026-10-28):** خلفية `#F4F7FB`، الصفوف بطاقات بيضاء مستديرة بظل خفيف بلا خط سكة، المحدد يُملأ بأزرق سبق `#1E9BE6` (لا تعبئات كحلية أو داكنة)، الأزرار حبوب. «المكتب» يبدأ بتحية («صباح الخير/مساء الخير» بتوقيت الرياض) وبطاقة «بانتظارك الآن» (التغريدات + رسائل المساهمين لمن يملكها، وأقرب منشور مجدول)، ثم شريط أسبوع (`DeskWeekStrip`) بنقاط المجدول لكل يوم: الضغط على يوم يفتح «مجدول» مصفّى بذلك اليوم، والضغط مجدداً يلغي التصفية. المكوّنات في `Components/DeskHome.swift`.
+- **«استعراض المقال» في «الرأي»** (`Components/ArticlePreview.swift`): زر «استعراض المقال» (أو «استعراض المنشور») والضغط على العنوان يفتحان ورقة تقرأ `GET /opinion/:id/content` وتعرض التصنيف والعنوان والعنوان الفرعي والصورة (مع وسم الصورة المولّدة) والنص كتلاً أصلية (`StaffArticleBlock.parse`: فقرات وعناوين واقتباسات وقوائم، تُحذف السكربتات، بلا WebView). بعد النشر يظهر «افتح الصفحة المنشورة على سبق» فيفتح `publicUrl` داخل التطبيق (`SFSafariViewController`). الخبر المرتبط في تفاصيل مقترح X يفتح كذلك داخل التطبيق.
 - المعرّفات القادمة من رابط أو إشعار تُقبل فقط إن كانت `[A-Za-z0-9_-]{1,128}`؛ يقرأ التطبيق `deeplink` أولاً ثم `ticketId`/`postId`.

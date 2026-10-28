@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   logActivity: vi.fn(),
   getStaffOpinionBoard: vi.fn(),
   getStaffOpinionItem: vi.fn(),
+  getStaffOpinionPreview: vi.fn(),
   checkOpinionSlotClashes: vi.fn(),
   scheduleOpinionFromDesk: vi.fn(),
   publishOpinionFromDesk: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock("../../server/services/staffOpinionDeskService", async () => {
     ...actual,
     getStaffOpinionBoard: (...a: unknown[]) => mocks.getStaffOpinionBoard(...a),
     getStaffOpinionItem: (...a: unknown[]) => mocks.getStaffOpinionItem(...a),
+    getStaffOpinionPreview: (...a: unknown[]) => mocks.getStaffOpinionPreview(...a),
     checkOpinionSlotClashes: (...a: unknown[]) => mocks.checkOpinionSlotClashes(...a),
     scheduleOpinionFromDesk: (...a: unknown[]) => mocks.scheduleOpinionFromDesk(...a),
     publishOpinionFromDesk: (...a: unknown[]) => mocks.publishOpinionFromDesk(...a),
@@ -83,7 +85,7 @@ vi.mock("../../server/services/staffOpinionPrepareService", () => ({
 }));
 
 import staffAppMobileRouter from "../../server/routes/staffAppMobile";
-import { StaffOpinionDeskError } from "../../server/services/staffOpinionDeskService";
+import { StaffOpinionDeskError, opinionPublicUrl } from "../../server/services/staffOpinionDeskService";
 import {
   buildOpinionSlotClashWarnings,
   findOpinionSlotClashes,
@@ -121,6 +123,18 @@ describe("opinion slot clash", () => {
     expect(isSameScheduleMinute(at, new Date(at.getTime() + 59_000))).toBe(true);
     expect(isSameScheduleMinute(at, new Date(at.getTime() + 60_000))).toBe(false);
     expect(findOpinionSlotClashes({ scheduledAt: new Date("x"), articleId: "z", writerId: null, candidates })).toEqual([]);
+  });
+});
+
+describe("opinionPublicUrl", () => {
+  it("links only published articles with a slug", () => {
+    vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org/");
+    expect(opinionPublicUrl("published", "my-slug")).toBe("https://sabq.org/opinion/my-slug");
+    expect(opinionPublicUrl("published", "رأي اليوم")).toBe(`https://sabq.org/opinion/${encodeURIComponent("رأي اليوم")}`);
+    expect(opinionPublicUrl("scheduled", "my-slug")).toBeNull();
+    expect(opinionPublicUrl("draft", "my-slug")).toBeNull();
+    expect(opinionPublicUrl("published", "")).toBeNull();
+    vi.unstubAllEnvs();
   });
 });
 
@@ -299,6 +313,7 @@ describe("/api/v1/staff/opinion routes", () => {
     for (const [method, path, body] of [
       ["GET", "/opinion/board", undefined],
       ["GET", "/opinion/a1", undefined],
+      ["GET", "/opinion/a1/content", undefined],
       ["POST", "/opinion/a1/publish", {}],
       ["POST", "/opinion/a1/schedule", { mode: "fixed_slot" }],
       ["POST", "/opinion/a1/return-to-writer", { note: "عدّل المقدمة" }],
@@ -322,6 +337,24 @@ describe("/api/v1/staff/opinion routes", () => {
     granted = ["articles.schedule"];
     const me = await (await call("GET", "/me")).json();
     expect(me.capabilities.canOpinion).toEqual({ view: true, schedule: true, publish: false, returnToWriter: false });
+  });
+
+  it("content returns the article for preview, private and uncached, and maps 404", async () => {
+    granted = ["opinion.review"];
+    mocks.getStaffOpinionPreview.mockResolvedValue({
+      id: "a1", title: "عنوان", status: "published", slug: "s-1", content: "<p>نص</p>",
+      publicUrl: "https://sabq.org/opinion/s-1",
+    });
+    const ok = await call("GET", "/opinion/a1/content");
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("cache-control")).toBe("private, no-store");
+    expect((await ok.json()).publicUrl).toBe("https://sabq.org/opinion/s-1");
+    expect(mocks.getStaffOpinionPreview).toHaveBeenCalledWith("a1");
+
+    mocks.getStaffOpinionPreview.mockRejectedValue(new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود"));
+    const missing = await call("GET", "/opinion/zz/content");
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).code).toBe("not_found");
   });
 
   it("board passes weekStart and validates it", async () => {

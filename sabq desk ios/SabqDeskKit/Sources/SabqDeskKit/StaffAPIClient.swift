@@ -173,6 +173,11 @@ public struct StaffAPIClient: Sendable {
         try await send("GET", "/api/v1/staff/opinion/\(try pathID(id))")
     }
 
+    /// «استعراض المقال»: the body to read in the app, and the public link once published.
+    public func opinionContent(id: String) async throws -> StaffOpinionContent {
+        try await send("GET", "/api/v1/staff/opinion/\(try pathID(id))/content")
+    }
+
     /// Other writers already scheduled in the same minute. Warns, never blocks.
     public func opinionSlotCheck(id: String, at date: Date) async throws -> [StaffOpinionWarning] {
         let check: StaffOpinionSlotCheck = try await send(

@@ -306,7 +306,7 @@ private struct QuietHoursGroup: View {
                             .deskText(PrefsType.chip)
                             .foregroundStyle(selected ? Color.white : DeskInk.strong)
                             .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(selected ? DeskTheme.navy : DeskTheme.chipGrey, in: Capsule())
+                            .background(selected ? DeskInk.selected : DeskTheme.chipGrey, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selected ? .isSelected : [])
