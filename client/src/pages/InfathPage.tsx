@@ -226,7 +226,7 @@ export default function InfathPage() {
   const goWeek = (w: string | null) => navigate(w ? `/infath?week=${w}` : "/infath");
 
   return (
-    <div className="min-h-screen" dir="rtl" style={{ background: "#F5F7FA" }}>
+    <div className="min-h-screen" dir="rtl" style={{ background: "#EDF1F5" }}>
       <Header user={user || undefined} />
       <div className="inf-page">
         <main className="inf-main">
