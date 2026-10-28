@@ -2,11 +2,11 @@ import Foundation
 import Observation
 import SabqDeskKit
 
-/// «جهّز وجدول» (automatic preparation) is a later phase. While false the
-/// button stays disabled with «التجهيز الآلي قريبًا» under it; when true it
-/// calls `POST /opinion/:id/prepare` (which still answers 501 today).
+/// «جهّز وجدول»: `POST /opinion/:id/prepare` proofreads the title and text,
+/// generates the ancillaries and a GPT image, then schedules at the writer's
+/// fixed slot. Set false to bring back the disabled «التجهيز الآلي قريبًا» button.
 enum OpinionFeatureFlags {
-    static let autoPrepEnabled = false
+    static let autoPrepEnabled = true
 }
 
 /// Loads the «الرأي» week board and keeps the deep-linked article in view.

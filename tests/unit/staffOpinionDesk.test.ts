@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   scheduleOpinionFromDesk: vi.fn(),
   publishOpinionFromDesk: vi.fn(),
   returnOpinionToWriterFromDesk: vi.fn(),
+  startOpinionPrep: vi.fn(),
+  getOpinionPrepJob: vi.fn(),
   renotifyOpinionDraftFromDesk: vi.fn(),
 }));
 
@@ -74,6 +76,11 @@ vi.mock("../../server/services/staffOpinionDeskService", async () => {
     renotifyOpinionDraftFromDesk: (...a: unknown[]) => mocks.renotifyOpinionDraftFromDesk(...a),
   };
 });
+
+vi.mock("../../server/services/staffOpinionPrepareService", () => ({
+  startOpinionPrep: (...a: unknown[]) => mocks.startOpinionPrep(...a),
+  getOpinionPrepJob: (...a: unknown[]) => mocks.getOpinionPrepJob(...a),
+}));
 
 import staffAppMobileRouter from "../../server/routes/staffAppMobile";
 import { StaffOpinionDeskError } from "../../server/services/staffOpinionDeskService";
@@ -184,19 +191,21 @@ describe("buildStaffOpinionBoard", () => {
       row("a4", "w4", "scheduled", "approved", { scheduledAt: new Date("2026-11-01T07:00:00.000Z") }),
       row("a3", "w3", "draft", "pending_review"),
       row("ax", "w5", "draft", "needs_changes"),
+      row("a6", "w6", "published", "approved", { publishedAt: new Date("2026-10-28T03:00:00.000Z") }),
     ],
   });
 
-  it("puts every fixed slot on the timeline, sorted, with its state", () => {
+  it("shows only arrived material: pending first, then scheduled, published last", () => {
     expect(board.weekStart).toBe("2026-10-28");
     expect(board.slots.map((s) => [s.writer.id, s.slotAt, s.state, s.article?.status ?? null])).toEqual([
-      ["w6", "2026-10-28T03:00:00.000Z", "late", null],
       ["w1", "2026-10-29T06:00:00.000Z", "arrived", "new_draft"],
       ["w2", "2026-10-31T05:00:00.000Z", "arrived", "in_prep"],
       ["w4", "2026-11-01T07:00:00.000Z", "scheduled", "scheduled"],
-      ["w5", "2026-11-03T06:00:00.000Z", "missing", null],
+      ["w6", "2026-10-28T03:00:00.000Z", "published", "published"],
     ]);
-    expect(board.slots[1].deeplink).toBe("sabqdesk://opinion/a1");
+    expect(board.slots[0].deeplink).toBe("sabqdesk://opinion/a1");
+    // w5 لم تصل مسودته: لا خانة له.
+    expect(board.slots.some((s) => s.article === null)).toBe(false);
   });
 
   it("lists writers without a fixed slot separately and counts the badge", () => {
@@ -210,8 +219,8 @@ describe("buildStaffOpinionBoard", () => {
     expect(byDate["2026-10-29"]).toEqual({ draft: 1, prep: 0, scheduled: 0, missing: 0 });
     expect(byDate["2026-10-31"]).toEqual({ draft: 0, prep: 1, scheduled: 0, missing: 0 });
     expect(byDate["2026-11-01"]).toEqual({ draft: 0, prep: 0, scheduled: 1, missing: 0 });
-    expect(byDate["2026-11-03"]).toEqual({ draft: 0, prep: 0, scheduled: 0, missing: 1 });
-    expect(byDate["2026-10-28"].missing).toBe(1);
+    expect(byDate["2026-11-03"]).toEqual({ draft: 0, prep: 0, scheduled: 0, missing: 0 });
+    expect(byDate["2026-10-28"].missing).toBe(0);
   });
 
   it("gives a second pending draft of a slotted writer the following fixed slot", () => {
@@ -393,12 +402,36 @@ describe("/api/v1/staff/opinion routes", () => {
     expect((await call("POST", "/opinion/a1/publish", { force: true })).status).toBe(400);
   });
 
-  it("prepare is a 501 stub, flag or not", async () => {
+  it("prepare starts in the background (202), audits once, and reports status", async () => {
+    const job = {
+      articleId: "a1", status: "running", step: "proofread", stepLabel: "تدقيق العنوان والنص",
+      startedAt: "2026-10-28T06:00:00.000Z", finishedAt: null, scheduledAt: null,
+      titleChanged: false, contentFixes: 0, image: null, message: null,
+    };
+    mocks.startOpinionPrep.mockResolvedValueOnce({ job, created: true });
     const res = await call("POST", "/opinion/a1/prepare", {});
-    expect(res.status).toBe(501);
-    expect(await res.json()).toEqual({ code: "not_implemented", message: "التجهيز الآلي قريبًا" });
-    vi.stubEnv("OPINION_AUTO_PREP_ENABLED", "true");
-    expect((await call("POST", "/opinion/a1/prepare", {})).status).toBe(501);
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ job });
+    expect(mocks.startOpinionPrep).toHaveBeenCalledWith({ articleId: "a1", actorId: "staff-1", scheduledAt: undefined });
+    expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: "staff_opinion_prepare_start" }));
+
+    mocks.logActivity.mockClear();
+    mocks.startOpinionPrep.mockResolvedValueOnce({ job, created: false });
+    expect((await call("POST", "/opinion/a1/prepare", {})).status).toBe(202);
+    expect(mocks.logActivity).not.toHaveBeenCalled();
+
+    expect((await call("POST", "/opinion/a1/prepare", { scheduledAt: "tomorrow" })).status).toBe(400);
+    expect((await call("POST", "/opinion/a1/prepare", { force: true })).status).toBe(400);
+
+    mocks.startOpinionPrep.mockRejectedValueOnce(new StaffOpinionDeskError(409, "conflict", "لا موعد ثابت"));
+    expect((await call("POST", "/opinion/a1/prepare", {})).status).toBe(409);
+
+    mocks.getOpinionPrepJob.mockResolvedValueOnce({ ...job, status: "done", scheduledAt: "2026-11-01T06:00:00.000Z" });
+    const status = await call("GET", "/opinion/a1/prepare");
+    expect(status.status).toBe(200);
+    expect((await status.json()).job.status).toBe("done");
+    mocks.getOpinionPrepJob.mockResolvedValueOnce(null);
+    expect((await call("GET", "/opinion/a1/prepare")).status).toBe(404);
   });
 
   describe("POST /opinion/:id/renotify", () => {

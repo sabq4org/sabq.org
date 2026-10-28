@@ -122,6 +122,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "story-cards", displayName: "بطاقات القصص", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "calendar-ai", displayName: "ذكاء التقويم", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "media-caption", displayName: "أوصاف الوسائط", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
+  // «جهّز وجدول» في تطبيق الديسك: موجز ونقاط وكلمات مفتاحية وSEO لمقال الرأي في نداء واحد
+  { featureKey: "opinion-desk-prepare", displayName: "تجهيز مقال الرأي (مكتب سبق)", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "mobile-article-enrichment", displayName: "إثراء مقالات الجوال", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   { featureKey: "seo-generator", displayName: "مولّد SEO", category: "seo", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
 

@@ -3,9 +3,9 @@ import SabqDeskKit
 import SwiftUI
 
 /// «الرأي» (approved concept C, 2026-10-28): the week first — a strip of seven
-/// Riyadh days with a dot per slot state — then an hourly timeline in the
-/// style of «مجدول» in المكتب. Every fixed slot keeps its place even before
-/// its draft arrives; writers without a fixed slot close the list.
+/// Riyadh days with a dot per slot state — then the material that arrived:
+/// drafts waiting for the desk first, then scheduled, published last
+/// (owner feedback 2026-10-28: empty «لم تصل بعد» slots are not shown).
 struct OpinionView: View {
     @Environment(AppModel.self) private var app
     @Environment(AppLockController.self) private var appLock
@@ -18,6 +18,9 @@ struct OpinionView: View {
     @State private var busyID: String?
     @State private var errorText: String?
     @State private var notice: String?
+    @State private var successText: String?
+    /// «جهّز وجدول» jobs in flight or just finished, by article id.
+    @State private var prepJobs: [String: StaffOpinionPrepJob] = [:]
 
     @State private var publishTarget: StaffOpinionItem?
     @State private var returnTarget: StaffOpinionItem?
@@ -53,8 +56,9 @@ struct OpinionView: View {
                 .onChange(of: model?.board) { _, _ in scroll(to: focusID, proxy: proxy) }
                 .onChange(of: model?.linked) { _, _ in scroll(to: focusID, proxy: proxy) }
                 .onChange(of: selectedDay) { _, day in
-                    guard let day else { return }
-                    withAnimation { proxy.scrollTo(Self.dayAnchor(day), anchor: .top) }
+                    guard let day, let first = board.map(sections)?.flatMap(\.items)
+                        .first(where: { $0.slotAt.map(RiyadhTime.dayString) == day }) else { return }
+                    withAnimation { proxy.scrollTo(first.id, anchor: .top) }
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -125,6 +129,13 @@ struct OpinionView: View {
                 ErrorLine(message: text)
                     .padding(.horizontal, DeskLayout.pageMargin + 4)
             }
+            if let successText {
+                Label(successText, systemImage: "checkmark.circle")
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.success)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DeskLayout.pageMargin + 4)
+            }
             if let notice {
                 Label(notice, systemImage: "exclamationmark.triangle")
                     .deskText(DeskType.meta)
@@ -155,24 +166,17 @@ struct OpinionView: View {
                                message: "المواعيد الثابتة محجوزة لكتّابها، وتظهر كل مسودة في خانة موعدها فور وصولها.")
                     .padding(.top, -DeskLayout.space8)
             }
-            let groups = dayGroups(board.slots)
-            ForEach(groups, id: \.day) { group in
-                dayHeader(RiyadhTime.dayTitle(group.start), anchor: Self.dayAnchor(group.day))
-                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+            ForEach(sections(board), id: \.title) { section in
+                dayHeader(section.title, anchor: section.anchor)
+                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
                     timelineRow(item,
-                                isFirst: group.day == groups.first?.day && index == 0,
-                                isLast: index == group.items.count - 1,
-                                unslotted: false)
+                                isFirst: false,
+                                isLast: index == section.items.count - 1,
+                                unslotted: item.slotAt == nil)
                 }
             }
-            if !board.unslotted.isEmpty {
-                dayHeader("بلا موعد ثابت", anchor: "unslotted")
-                ForEach(Array(board.unslotted.enumerated()), id: \.element.id) { index, item in
-                    timelineRow(item, isFirst: false, isLast: index == board.unslotted.count - 1, unslotted: true)
-                }
-            }
-            if board.slots.isEmpty, board.unslotted.isEmpty, !board.hasNoDrafts {
-                DeskEmptyState(title: "لا مواعيد هذا الأسبوع", message: "لا يوجد كتّاب بمواعيد ثابتة في هذه الأيام.")
+            if sections(board).isEmpty, !board.hasNoDrafts {
+                DeskEmptyState(title: "لا مقالات هذا الأسبوع", message: "تظهر هنا مقالات الرأي فور وصولها.")
             }
         } else if model?.isLoading ?? true {
             HStack { Spacer(); ProgressView(); Spacer() }
@@ -180,29 +184,28 @@ struct OpinionView: View {
         }
     }
 
-    private struct DayGroup {
-        let day: String
-        let start: Date
+    private struct Section {
+        let title: String
+        let anchor: String
         let items: [StaffOpinionItem]
     }
 
-    private func dayGroups(_ items: [StaffOpinionItem]) -> [DayGroup] {
-        var order: [String] = []
-        var byDay: [String: [StaffOpinionItem]] = [:]
-        var starts: [String: Date] = [:]
-        for item in items {
-            guard let at = item.slotAt else { continue }
-            let key = RiyadhTime.dayString(at)
-            if byDay[key] == nil {
-                order.append(key)
-                starts[key] = RiyadhTime.dayKey(at)
-            }
-            byDay[key, default: []].append(item)
+    /// المسودات بانتظارك أولاً، ثم المجدول، والمنشور أسفل القائمة. الخانات
+    /// التي لم تصل مسودتها لا تُعرض (الخادم لا يرسلها، والنسخ الأقدم تُرشَّح هنا).
+    private func sections(_ board: StaffOpinionBoard) -> [Section] {
+        let arrived = board.allItems.filter { $0.article != nil }
+        let bySlot: (StaffOpinionItem, StaffOpinionItem) -> Bool = {
+            ($0.slotAt ?? .distantFuture) < ($1.slotAt ?? .distantFuture)
         }
-        return order.sorted().map { DayGroup(day: $0, start: starts[$0] ?? Date(), items: byDay[$0] ?? []) }
+        let pending = arrived.filter { $0.article?.status.isPending == true }.sorted(by: bySlot)
+        let scheduled = arrived.filter { $0.article?.status == .scheduled }.sorted(by: bySlot)
+        let published = arrived.filter { $0.article?.status == .published }.sorted(by: bySlot)
+        return [
+            Section(title: "بانتظارك", anchor: "pending", items: pending),
+            Section(title: "مجدولة", anchor: "scheduled", items: scheduled),
+            Section(title: "نُشرت", anchor: "published", items: published),
+        ].filter { !$0.items.isEmpty }
     }
-
-    private static func dayAnchor(_ day: String) -> String { "day-\(day)" }
 
     private func dayHeader(_ title: String, anchor: String?) -> some View {
         HStack(spacing: DeskLayout.space8) {
@@ -226,6 +229,7 @@ struct OpinionView: View {
                         isUnslotted: unslotted,
                         isHighlighted: highlighted == item.id,
                         isBusy: busyID == item.id,
+                        prepJob: item.article.flatMap { prepJobs[$0.id] },
                         actions: actions(for: item))
                 .padding(.bottom, DeskLayout.space12)
         }
@@ -293,9 +297,53 @@ struct OpinionView: View {
         }
     }
 
+    /// Starts «جهّز وجدول» on the server, then follows it until it finishes.
+    /// Leaving the screen is fine: the server keeps going and pushes the result.
     private func prepare(_ item: StaffOpinionItem) async {
         guard OpinionFeatureFlags.autoPrepEnabled, let id = item.article?.id else { return }
-        await run(item) { _ = try await app.client.prepareOpinion(id: id) }
+        if prepJobs[id]?.status == .running { return }
+        errorText = nil
+        notice = nil
+        successText = nil
+        busyID = item.id
+        do {
+            let job = try await app.client.prepareOpinion(id: id)
+            busyID = nil
+            prepJobs[id] = job
+            await follow(id: id, title: item.article?.title ?? "")
+        } catch {
+            busyID = nil
+            if !app.handle(error) {
+                errorText = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func follow(id: String, title: String) async {
+        // Image generation alone can take ~2.5 minutes; give up polling after 10.
+        for _ in 0..<150 {
+            guard let job = prepJobs[id], !job.isFinished else { break }
+            try? await Task.sleep(for: .seconds(4))
+            if Task.isCancelled { return }
+            if let fresh = try? await app.client.opinionPrepStatus(id: id) { prepJobs[id] = fresh }
+        }
+        guard let job = prepJobs[id], job.isFinished else { return }
+        prepJobs[id] = nil
+        switch job.status {
+        case .done:
+            var parts = ["جُهّز «\(title)» وجُدول"]
+            if let at = job.scheduledAt { parts[0] += " · \(RiyadhTime.shortWeekday(at)) \(RiyadhTime.timeString(at))" }
+            if job.titleChanged { parts.append("صُحّح العنوان") }
+            if job.contentFixes > 0 { parts.append("\(job.contentFixes) تصحيحات في النص") }
+            if job.image == "generated" { parts.append("صورة جديدة") }
+            successText = parts.joined(separator: " · ")
+            if let message = job.message { notice = message }
+        case .failed:
+            errorText = job.message ?? "تعذر إكمال التجهيز"
+        case .running:
+            break
+        }
+        await reload()
     }
 
     /// Confirmation dialog → Face ID → publish.
@@ -390,7 +438,6 @@ private struct OpinionWeekStrip: View {
         if c.draft > 0 { parts.append("\(c.draft) مسودة جديدة") }
         if c.prep > 0 { parts.append("\(c.prep) قيد التجهيز") }
         if c.scheduled > 0 { parts.append("\(c.scheduled) مجدول") }
-        if c.missing > 0 { parts.append("\(c.missing) لم تصل بعد") }
         return parts.joined(separator: "، ")
     }
 }
@@ -403,9 +450,6 @@ private struct OpinionDayDots: View {
             if counts.draft > 0 { dot(OpinionStateStyle.newDraft.ink) }
             if counts.prep > 0 { dot(OpinionStateStyle.inPrep.ink) }
             if counts.scheduled > 0 { dot(OpinionStateStyle.scheduled.ink) }
-            if counts.missing > 0 {
-                Circle().strokeBorder(DeskTheme.outline, lineWidth: 1.5).frame(width: 6, height: 6)
-            }
         }
         .frame(height: 6)
         .accessibilityHidden(true)
@@ -422,10 +466,6 @@ private struct OpinionLegend: View {
             item(OpinionStateStyle.newDraft)
             item(OpinionStateStyle.inPrep)
             item(OpinionStateStyle.scheduled)
-            HStack(spacing: DeskLayout.space4) {
-                Circle().strokeBorder(DeskTheme.outline, lineWidth: 1.5).frame(width: 7, height: 7)
-                Text(OpinionStateStyle.missing.title)
-            }
         }
         .deskText(DeskType.timestamp)
         .foregroundStyle(DeskTheme.textSecondary)
@@ -489,8 +529,15 @@ private struct OpinionTimeColumn: View {
     var body: some View {
         VStack(spacing: 2) {
             if let date {
-                LTRText(text: RiyadhTime.timeString(date), role: DeskType.timelineTime,
+                Text(RiyadhTime.shortWeekday(date))
+                    .deskText(DeskType.tag)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .lineLimit(1)
+                    .fixedSize()
+                LTRText(text: RiyadhTime.timeString(date), role: DeskType.rowTitle,
                         color: isFirst ? DeskInk.link : DeskTheme.textPrimary)
+                    .lineLimit(1)
+                    .fixedSize()
                 if let countdown = RiyadhTime.slotCountdown(to: date) {
                     Text(countdown)
                         .deskText(DeskType.tag)
@@ -500,7 +547,7 @@ private struct OpinionTimeColumn: View {
                 }
             } else {
                 Text(verbatim: "—")
-                    .deskText(DeskType.timelineTime)
+                    .deskText(DeskType.rowTitle)
                     .foregroundStyle(DeskTheme.textTertiary)
             }
             if !isLast {
@@ -532,7 +579,10 @@ private struct OpinionCard: View {
     let isUnslotted: Bool
     let isHighlighted: Bool
     let isBusy: Bool
+    let prepJob: StaffOpinionPrepJob?
     let actions: Actions
+
+    private var isPreparing: Bool { prepJob?.status == .running }
 
     private var style: OpinionStateStyle { OpinionStateStyle(item: item) }
     private var status: StaffOpinionStatus? { item.article?.status }
@@ -619,11 +669,19 @@ private struct OpinionCard: View {
                             Label(status == .newDraft ? "جهّز وجدول" : "أكمل التجهيز", systemImage: "sparkles")
                         }
                         .buttonStyle(OpinionButtonStyle(kind: .primary))
-                        .disabled(!OpinionFeatureFlags.autoPrepEnabled)
+                        .disabled(!OpinionFeatureFlags.autoPrepEnabled || isPreparing)
                     }
-                    if caps.publish { publishButton }
+                    if caps.publish { publishButton.disabled(isPreparing) }
                 }
-                if caps.schedule, !OpinionFeatureFlags.autoPrepEnabled {
+                if isPreparing {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("يجهّز الآن: \(prepJob?.stepLabel ?? "التدقيق")")
+                            .deskText(DeskType.timestamp)
+                            .foregroundStyle(DeskTheme.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                } else if caps.schedule, !OpinionFeatureFlags.autoPrepEnabled {
                     Text("التجهيز الآلي قريبًا")
                         .deskText(DeskType.timestamp)
                         .foregroundStyle(DeskTheme.textTertiary)

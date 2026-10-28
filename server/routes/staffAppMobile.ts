@@ -23,6 +23,7 @@ import {
   staffAiBalanceTopupSchema,
   staffInboxQuerySchema,
   staffOpinionBoardQuerySchema,
+  staffOpinionPrepareSchema,
   staffOpinionReturnSchema,
   staffOpinionScheduleSchema,
   staffOpinionSlotCheckQuerySchema,
@@ -68,6 +69,7 @@ import {
   returnOpinionToWriterFromDesk,
   scheduleOpinionFromDesk,
 } from "../services/staffOpinionDeskService";
+import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
 import {
   AiBalanceInputError,
   auditSnapshot as auditBalanceSnapshot,
@@ -1230,19 +1232,55 @@ subRouter.post(
 );
 
 /**
- * «جهّز وجدول»: التجهيز الآلي مرحلة لاحقة. يبقى 501 حتى مع
- * OPINION_AUTO_PREP_ENABLED=true إلى أن يُبنى (الفرق في الرسالة فقط).
+ * «جهّز وجدول»: تدقيق ← ملحقات ← صورة GPT Sunburst ← جدولة في موعد الكاتب
+ * (أو scheduledAt). يعمل في الخلفية: 202 + الحالة، ثم GET للمتابعة.
  */
 subRouter.post(
   "/opinion/:id/prepare",
   requireStaffAuth,
   requireOpinionCapability("schedule"),
-  (_req: StaffRequest, res: Response) => {
-    const enabled = process.env.OPINION_AUTO_PREP_ENABLED === "true";
-    return sendError(res, 501, {
-      code: "not_implemented",
-      message: enabled ? "التجهيز الآلي قيد البناء" : "التجهيز الآلي قريبًا",
-    });
+  staffOpinionActionLimiter,
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffOpinionPrepareSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "أرسل جسماً فارغاً أو scheduledAt",
+      });
+    }
+    try {
+      const { job, created } = await startOpinionPrep({
+        articleId: req.params.id,
+        actorId: req.staffAuth!.user.id,
+        scheduledAt: parsed.data.scheduledAt,
+      });
+      if (created) {
+        await auditStaffAppWrite(req, {
+          action: "staff_opinion_prepare_start",
+          entityType: "article",
+          entityId: job.articleId,
+          extraMetadata: { scheduledAt: parsed.data.scheduledAt ?? "fixed_slot" },
+        });
+      }
+      res.status(202).json({ job });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر بدء التجهيز");
+    }
+  },
+);
+
+subRouter.get(
+  "/opinion/:id/prepare",
+  requireStaffAuth,
+  requireOpinionCapability("view"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      const job = await getOpinionPrepJob(req.params.id);
+      if (!job) return sendError(res, 404, { code: "not_found", message: "لا يوجد تجهيز لهذا المقال" });
+      res.json({ job });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب حالة التجهيز");
+    }
   },
 );
 

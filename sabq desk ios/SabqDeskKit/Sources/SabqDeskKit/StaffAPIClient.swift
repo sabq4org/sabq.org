@@ -203,9 +203,23 @@ public struct StaffAPIClient: Sendable {
                               body: OpinionNoteBody(note: String(trimmed.prefix(2000))))
     }
 
-    /// «جهّز وجدول»: a later phase. The server answers 501 for now.
-    public func prepareOpinion(id: String) async throws -> StaffOpinionActionResult {
-        try await send("POST", "/api/v1/staff/opinion/\(try pathID(id))/prepare", body: EmptyBody())
+    /// «جهّز وجدول»: starts the server-side preparation (202) and returns its
+    /// state. `nil` schedules at the writer's fixed slot. A second call while
+    /// one is running returns the same job.
+    public func prepareOpinion(id: String, at date: Date? = nil) async throws -> StaffOpinionPrepJob {
+        let path = "/api/v1/staff/opinion/\(try pathID(id))/prepare"
+        let envelope: StaffOpinionPrepEnvelope
+        if let date {
+            envelope = try await send("POST", path, body: ScheduleBody(scheduledAt: RiyadhTime.isoString(date)))
+        } else {
+            envelope = try await send("POST", path, body: EmptyBody())
+        }
+        return envelope.job
+    }
+
+    public func opinionPrepStatus(id: String) async throws -> StaffOpinionPrepJob {
+        let envelope: StaffOpinionPrepEnvelope = try await send("GET", "/api/v1/staff/opinion/\(try pathID(id))/prepare")
+        return envelope.job
     }
 
     // MARK: - System (admins)

@@ -274,6 +274,43 @@ export const staffOpinionReturnSchema = z
   })
   .strict();
 
+/** «جهّز وجدول»: بلا جسم = موعد الكاتب الثابت؛ أو scheduledAt لموعد آخر. */
+export const staffOpinionPrepareSchema = z
+  .object({
+    scheduledAt: z
+      .string()
+      .datetime({ offset: true, message: "صيغة وقت الجدولة غير صالحة (ISO مع المنطقة الزمنية)" })
+      .optional(),
+  })
+  .strict();
+
+/** خطوات التجهيز بالترتيب: تدقيق ← ملحقات ← صورة ← حفظ وجدولة. */
+export const STAFF_OPINION_PREP_STEPS = ["proofread", "enrich", "image", "schedule"] as const;
+export type StaffOpinionPrepStep = (typeof STAFF_OPINION_PREP_STEPS)[number];
+
+export const STAFF_OPINION_PREP_STEP_LABELS: Record<StaffOpinionPrepStep, string> = {
+  proofread: "تدقيق العنوان والنص",
+  enrich: "توليد الموجز والكلمات المفتاحية وSEO",
+  image: "توليد صورة GPT",
+  schedule: "الحفظ والجدولة",
+};
+
+export interface StaffOpinionPrepJob {
+  articleId: string;
+  status: "running" | "done" | "failed";
+  /** الخطوة الجارية، أو التي فشلت. */
+  step: StaffOpinionPrepStep | null;
+  stepLabel: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  scheduledAt: string | null;
+  titleChanged: boolean;
+  contentFixes: number;
+  /** generated = صورة جديدة؛ kept = للمقال صورة فأُبقيت؛ failed = تعذرت فجُدول بلا صورة. */
+  image: "generated" | "kept" | "failed" | null;
+  message: string | null;
+}
+
 export type StaffOpinionScheduleInput = z.infer<typeof staffOpinionScheduleSchema>;
 export type StaffOpinionReturnInput = z.infer<typeof staffOpinionReturnSchema>;
 

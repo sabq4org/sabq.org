@@ -290,9 +290,8 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["scheduledAt"] as? String, "2026-10-29T09:00:00+03:00")
     }
 
-    func testReturnToWriterNeedsANoteAndPrepareSurfaces501() async throws {
-        let (client, transport, _) = makeClient([.init(status: 501, body: #"{"code":"not_implemented","message":"التجهيز الآلي قريبًا"}"#)],
-                                                session: liveSession)
+    func testReturnToWriterNeedsANote() async throws {
+        let (client, transport, _) = makeClient([], session: liveSession)
         do {
             _ = try await client.returnOpinionToWriter(id: "a1", note: " a ")
             XCTFail("expected validation error")
@@ -300,11 +299,25 @@ final class ClientTests: XCTestCase {
             if case .validation = error {} else { XCTFail("\(error)") }
         }
         XCTAssertNil(transport.lastRequest, "a blank note never reaches the server")
-        do {
-            _ = try await client.prepareOpinion(id: "a1")
-            XCTFail("expected 501")
-        } catch {
-            XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/prepare")
-        }
+    }
+
+    func testPrepareStartsAndPollsTheJob() async throws {
+        let running = #"{"job":{"articleId":"a1","status":"running","step":"image","stepLabel":"توليد صورة GPT","startedAt":"2026-10-28T06:00:00.000Z","finishedAt":null,"scheduledAt":null,"titleChanged":true,"contentFixes":3,"image":null,"message":null}}"#
+        let done = #"{"job":{"articleId":"a1","status":"done","step":"schedule","stepLabel":"الحفظ والجدولة","startedAt":"2026-10-28T06:00:00.000Z","finishedAt":"2026-10-28T06:02:00.000Z","scheduledAt":"2026-11-01T06:00:00.000Z","titleChanged":true,"contentFixes":3,"image":"generated","message":null}}"#
+        let (client, transport, _) = makeClient([.init(status: 202, body: running), .init(status: 200, body: done)],
+                                                session: liveSession)
+        let started = try await client.prepareOpinion(id: "a1")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/prepare")
+        XCTAssertEqual(started.status, .running)
+        XCTAssertEqual(started.stepLabel, "توليد صورة GPT")
+        XCTAssertFalse(started.isFinished)
+
+        let finished = try await client.opinionPrepStatus(id: "a1")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(finished.status, .done)
+        XCTAssertEqual(finished.image, "generated")
+        XCTAssertEqual(finished.contentFixes, 3)
+        XCTAssertNotNil(finished.scheduledAt)
     }
 }

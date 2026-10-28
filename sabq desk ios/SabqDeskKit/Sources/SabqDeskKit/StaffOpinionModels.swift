@@ -288,6 +288,46 @@ public struct StaffOpinionActionResult: Codable, Sendable, Equatable {
     public var article: Article
 }
 
+/// «جهّز وجدول» state: `POST/GET /opinion/:id/prepare`. Runs on the server in
+/// the background (proofread → ancillaries → GPT image → schedule).
+public struct StaffOpinionPrepJob: Codable, Sendable, Equatable {
+    public enum Status: String, Codable, Sendable { case running, done, failed }
+
+    public var articleId: String
+    public var status: Status
+    public var step: String?
+    public var stepLabel: String?
+    public var scheduledAt: Date?
+    public var titleChanged: Bool
+    public var contentFixes: Int
+    /// `generated` = a new image; `kept` = the article already had one.
+    public var image: String?
+    public var message: String?
+
+    public var isFinished: Bool { status != .running }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        articleId = try c.decode(String.self, forKey: .articleId)
+        status = (try? c.decode(Status.self, forKey: .status)) ?? .failed
+        step = try c.decodeIfPresent(String.self, forKey: .step)
+        stepLabel = try c.decodeIfPresent(String.self, forKey: .stepLabel)
+        scheduledAt = try c.decodeIfPresent(Date.self, forKey: .scheduledAt)
+        titleChanged = try c.decodeIfPresent(Bool.self, forKey: .titleChanged) ?? false
+        contentFixes = try c.decodeIfPresent(Int.self, forKey: .contentFixes) ?? 0
+        image = try c.decodeIfPresent(String.self, forKey: .image)
+        message = try c.decodeIfPresent(String.self, forKey: .message)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case articleId, status, step, stepLabel, scheduledAt, titleChanged, contentFixes, image, message
+    }
+}
+
+struct StaffOpinionPrepEnvelope: Decodable {
+    var job: StaffOpinionPrepJob
+}
+
 // MARK: - Display helpers
 
 extension RiyadhTime {
