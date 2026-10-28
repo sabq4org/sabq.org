@@ -4,7 +4,7 @@
 // ونفس إشعارات /api/dashboard/opinion/:id/publish و request-revision.
 import { and, desc, eq, gte, inArray, lt, ne, or } from "drizzle-orm";
 import { db } from "../db";
-import { articles, opinionWriterSchedules, users } from "@shared/schema";
+import { articles, categories, opinionWriterSchedules, users } from "@shared/schema";
 import {
   resolveStaffOpinionArticleStatus,
   safeStaffAvatarUrl,
@@ -223,6 +223,80 @@ export async function getStaffOpinionItem(articleId: string): Promise<{
       deeplink: `sabqdesk://opinion/${row.id}`,
     },
     nextSlot,
+  };
+}
+
+/** نص المسودة وملحقاتها كما هي في المقال (قراءة فقط) — لبوت «مكتب سبق» الذي لا يرى الشاشة. */
+export interface StaffOpinionDraftContent {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  slug: string;
+  status: string;
+  reviewStatus: string | null;
+  reviewNotes: string | null;
+  /** HTML كما حفظه الكاتب أو التجهيز. */
+  content: string;
+  excerpt: string | null;
+  imageUrl: string | null;
+  albumImages: string[];
+  isAiGeneratedImage: boolean;
+  category: { id: string; name: string } | null;
+  aiSummary: string | null;
+  seo: { metaTitle: string | null; metaDescription: string | null; keywords: string[] } | null;
+  updatedAt: string | null;
+}
+
+export async function getOpinionDraftContent(articleId: string): Promise<StaffOpinionDraftContent> {
+  const [row] = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      subtitle: articles.subtitle,
+      slug: articles.slug,
+      status: articles.status,
+      reviewStatus: articles.reviewStatus,
+      reviewNotes: articles.reviewNotes,
+      content: articles.content,
+      excerpt: articles.excerpt,
+      imageUrl: articles.imageUrl,
+      albumImages: articles.albumImages,
+      isAiGeneratedImage: articles.isAiGeneratedImage,
+      categoryId: articles.categoryId,
+      categoryName: categories.nameAr,
+      aiSummary: articles.aiSummary,
+      seo: articles.seo,
+      updatedAt: articles.updatedAt,
+    })
+    .from(articles)
+    .leftJoin(categories, eq(categories.id, articles.categoryId))
+    .where(and(eq(articles.id, articleId), eq(articles.articleType, "opinion")))
+    .limit(1);
+  if (!row) throw new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود");
+  const seo = row.seo ?? null;
+  return {
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle ?? null,
+    slug: row.slug,
+    status: row.status,
+    reviewStatus: row.reviewStatus ?? null,
+    reviewNotes: row.reviewNotes ?? null,
+    content: row.content ?? "",
+    excerpt: row.excerpt ?? null,
+    imageUrl: row.imageUrl ?? null,
+    albumImages: row.albumImages ?? [],
+    isAiGeneratedImage: row.isAiGeneratedImage === true,
+    category: row.categoryId ? { id: row.categoryId, name: row.categoryName ?? "" } : null,
+    aiSummary: row.aiSummary ?? null,
+    seo: seo
+      ? {
+          metaTitle: seo.metaTitle ?? null,
+          metaDescription: seo.metaDescription ?? null,
+          keywords: Array.isArray(seo.keywords) ? seo.keywords : [],
+        }
+      : null,
+    updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
   };
 }
 

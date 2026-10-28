@@ -15,6 +15,18 @@
 //   POST  /api/internal/bot-desk/social/posts/:id/reject
 //   POST  /api/internal/bot-desk/social/posts/:id/publish
 //   POST  /api/internal/bot-desk/social/posts/:id/schedule
+//   GET   /api/internal/bot-desk/opinion/drafts
+//   GET   /api/internal/bot-desk/opinion/drafts/:id
+//   GET   /api/internal/bot-desk/opinion/drafts/:id/slot-check
+//   POST  /api/internal/bot-desk/opinion/drafts/:id/prepare   («جهّز وجدول» — نفس startOpinionPrep)
+//   GET   /api/internal/bot-desk/opinion/drafts/:id/prepare
+//   POST  /api/internal/bot-desk/opinion/drafts/:id/schedule
+//   POST  /api/internal/bot-desk/opinion/drafts/:id/publish
+//   POST  /api/internal/bot-desk/opinion/drafts/:id/return
+//
+// مسارات الرأي لا تحمل منطقاً خاصاً: تستدعي الدوال نفسها التي يستدعيها تطبيق
+// الديسك (/api/v1/staff/opinion/*) من staffOpinionDeskService و
+// staffOpinionPrepareService، وتحسب الصلاحية بـ resolveStaffCapabilitiesAndRoles.
 //
 // التوثيق: docs/systems/editorial/BOT_DESK_API.md
 // ----------------------------------------------------------------------------
@@ -59,6 +71,27 @@ import {
   schedulePost,
 } from "../services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../services/socialPublishing/types";
+import {
+  StaffOpinionDeskError,
+  checkOpinionSlotClashes,
+  getOpinionDraftContent,
+  getStaffOpinionBoard,
+  getStaffOpinionItem,
+  publishOpinionFromDesk,
+  returnOpinionToWriterFromDesk,
+  scheduleOpinionFromDesk,
+} from "../services/staffOpinionDeskService";
+import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
+import { resolveStaffCapabilitiesAndRoles } from "../services/staffAppService";
+import {
+  staffOpinionBoardQuerySchema,
+  staffOpinionPrepareSchema,
+  staffOpinionReturnSchema,
+  staffOpinionScheduleSchema,
+  staffOpinionSlotCheckQuerySchema,
+  type StaffOpinionCapabilities,
+  type StaffOpinionItem,
+} from "@shared/staffApp";
 
 const router = Router();
 
@@ -577,6 +610,317 @@ router.post(
       res.json({ post });
     } catch (error) {
       handleSocialError(res, error, "تعذرت الجدولة");
+    }
+  },
+);
+
+// ── مسارات مقالات الرأي (Opinion drafts) ────────────────────────────
+// نفس قواعد تبويب الرأي في تطبيق الديسك (computeStaffOpinionCapabilities):
+//  view = opinion.review أو articles.schedule؛ schedule = view + (articles.schedule أو articles.publish)؛
+//  publish = view + articles.publish؛ return = view + (opinion.review أو articles.edit_any).
+
+function requireOpinionCapability(key: keyof StaffOpinionCapabilities) {
+  return async (req: BotDeskRequest, res: Response, next: NextFunction) => {
+    try {
+      const principal = req.botPrincipal;
+      if (!principal) {
+        return sendError(res, 401, { code: "unauthorized", message: "Unauthorized" });
+      }
+      const { capabilities } = await resolveStaffCapabilitiesAndRoles(principal.userId);
+      const caps = capabilities.canOpinion;
+      if (!caps?.view || !caps[key]) {
+        return sendError(res, 403, {
+          code: "forbidden",
+          message: "لا تملك صلاحية هذا الإجراء على مقالات الرأي",
+          details: { required: key },
+        });
+      }
+      return next();
+    } catch (error) {
+      console.error("[BotDesk] opinion RBAC check failed:", error);
+      return sendError(res, 500, { code: "server_error", message: "خطأ داخلي" });
+    }
+  };
+}
+
+/** مثل staffOpinionActionLimiter في تطبيق الديسك: أفعال الرأي لكل مالك توكن كل 5 دقائق. */
+const botDeskOpinionActionLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: () => Number(process.env.BOT_DESK_OPINION_RATE_LIMIT) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: (req) =>
+    `bot-desk-opinion:${(req as BotDeskRequest).botPrincipal?.userId ?? "anonymous"}`,
+  handler: (_req, res) =>
+    sendError(res, 429, {
+      code: "rate_limited",
+      message: "محاولات كثيرة خلال فترة قصيرة؛ انتظر قليلاً",
+    }),
+});
+
+function handleOpinionError(res: Response, error: unknown, fallback: string): void {
+  if (error instanceof StaffOpinionDeskError) {
+    // رموز تطبيق الديسك ⊂ رموز الـ bot-desk، عدا رمزين خاصين بجلسة العضو.
+    const code: BotDeskErrorBody["code"] =
+      error.code === "two_factor_required" ? "forbidden"
+        : error.code === "not_implemented" ? "server_error"
+          : error.code;
+    return sendError(res, error.status, { code, message: error.message });
+  }
+  console.error("[BotDesk opinion]", error);
+  sendError(res, 500, { code: "server_error", message: fallback });
+}
+
+const OPINION_STATUS_ORDER: Record<string, number> = {
+  new_draft: 0,
+  in_prep: 1,
+  scheduled: 2,
+  published: 3,
+};
+
+/** قائمة مسطّحة للبوت: بانتظار المكتب أولاً، ثم المجدول، ثم المنشور (الخانات بلا مقال تُستبعد). */
+function flattenOpinionBoard(board: { slots: StaffOpinionItem[]; unslotted: StaffOpinionItem[] }) {
+  return [...board.slots, ...board.unslotted]
+    .filter((item) => item.article)
+    .sort((a, b) => {
+      const byStatus =
+        (OPINION_STATUS_ORDER[a.article!.status] ?? 9) - (OPINION_STATUS_ORDER[b.article!.status] ?? 9);
+      if (byStatus !== 0) return byStatus;
+      return (a.slotAt ?? "9999").localeCompare(b.slotAt ?? "9999");
+    });
+}
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts`,
+  requireBotDeskAuth,
+  requireOpinionCapability("view"),
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = staffOpinionBoardQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "تاريخ بداية الأسبوع غير صالح",
+      });
+    }
+    try {
+      const board = await getStaffOpinionBoard({ weekStart: parsed.data.weekStart });
+      res.json({ ...board, items: flattenOpinionBoard(board) });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب مقالات الرأي");
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id`,
+  requireBotDeskAuth,
+  requireOpinionCapability("view"),
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const { item, nextSlot } = await getStaffOpinionItem(req.params.id);
+      const [draft, prep] = await Promise.all([
+        getOpinionDraftContent(req.params.id),
+        getOpinionPrepJob(req.params.id),
+      ]);
+      const pending = item.article?.status === "new_draft" || item.article?.status === "in_prep";
+      const warnings = pending && item.slotAt
+        ? await checkOpinionSlotClashes(req.params.id, new Date(item.slotAt))
+        : [];
+      res.json({ item, nextSlot, draft, warnings, prep });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب المقال");
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/slot-check`,
+  requireBotDeskAuth,
+  requireOpinionCapability("schedule"),
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = staffOpinionSlotCheckQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "صيغة وقت الجدولة غير صالحة",
+      });
+    }
+    try {
+      const scheduledAt = new Date(parsed.data.scheduledAt);
+      const warnings = await checkOpinionSlotClashes(req.params.id, scheduledAt);
+      res.json({ scheduledAt: scheduledAt.toISOString(), warnings });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر فحص الموعد");
+    }
+  },
+);
+
+/**
+ * «جهّز وجدول» — الدالة نفسها التي يستدعيها تطبيق الديسك (startOpinionPrep):
+ * تدقيق ← ملحقات (ملخص، كلمات مفتاحية، SEO، تصنيف) ← صورة GPT ← جدولة في موعد
+ * الكاتب الثابت (أو scheduledAt). يعمل في الخلفية: 202 + الحالة، ثم GET للمتابعة.
+ */
+router.post(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/prepare`,
+  requireBotDeskAuth,
+  requireOpinionCapability("schedule"),
+  botDeskWriteLimiter,
+  botDeskOpinionActionLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = staffOpinionPrepareSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "أرسل جسماً فارغاً أو scheduledAt",
+      });
+    }
+    try {
+      const { job, created } = await startOpinionPrep({
+        articleId: req.params.id,
+        actorId: req.botPrincipal!.userId,
+        scheduledAt: parsed.data.scheduledAt,
+      });
+      if (created) {
+        await auditBotDeskWrite(req, {
+          action: "opinion_prepare_start",
+          entityType: "article",
+          entityId: job.articleId,
+          extraMetadata: { scheduledAt: parsed.data.scheduledAt ?? "fixed_slot" },
+        });
+      }
+      res.status(202).json({ job });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر بدء التجهيز");
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/prepare`,
+  requireBotDeskAuth,
+  requireOpinionCapability("view"),
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const job = await getOpinionPrepJob(req.params.id);
+      if (!job) return sendError(res, 404, { code: "not_found", message: "لا يوجد تجهيز لهذا المقال" });
+      res.json({ job });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب حالة التجهيز");
+    }
+  },
+);
+
+router.post(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/schedule`,
+  requireBotDeskAuth,
+  requireOpinionCapability("schedule"),
+  botDeskWriteLimiter,
+  botDeskOpinionActionLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    // جسم فارغ = الموعد الثابت للكاتب (مثل mode=fixed_slot في التطبيق).
+    const rawBody = req.body && Object.keys(req.body).length > 0 ? req.body : { mode: "fixed_slot" };
+    const parsed = staffOpinionScheduleSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "أرسل جسماً فارغاً أو mode=fixed_slot أو scheduledAt (ISO مع المنطقة الزمنية)",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await scheduleOpinionFromDesk({
+        articleId: req.params.id,
+        actorId: req.botPrincipal!.userId,
+        request: parsed.data,
+      });
+      await auditBotDeskWrite(req, {
+        action: "opinion_schedule",
+        entityType: "article",
+        entityId: result.article.id,
+        oldValue: result.previous,
+        newValue: { status: result.article.status, scheduledAt: result.scheduledAt },
+        extraMetadata: {
+          mode: "mode" in parsed.data ? parsed.data.mode : "custom",
+          warnings: result.warnings.map((w) => w.otherArticleId),
+        },
+      });
+      res.json({
+        article: result.article,
+        scheduledAt: result.scheduledAt,
+        warnings: result.warnings,
+      });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذرت جدولة المقال");
+    }
+  },
+);
+
+router.post(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/publish`,
+  requireBotDeskAuth,
+  requireOpinionCapability("publish"),
+  botDeskWriteLimiter,
+  botDeskPublishLimiter,
+  botDeskOpinionActionLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = botDeskSocialPublishSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "النشر الفوري لا يقبل حقولاً في الجسم",
+      });
+    }
+    try {
+      const result = await publishOpinionFromDesk({
+        articleId: req.params.id,
+        actorId: req.botPrincipal!.userId,
+      });
+      await auditBotDeskWrite(req, {
+        action: "opinion_publish",
+        entityType: "article",
+        entityId: result.article.id,
+        oldValue: result.previous,
+        newValue: { status: result.article.status, publishedAt: result.article.publishedAt },
+      });
+      res.json({ article: result.article });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر نشر المقال");
+    }
+  },
+);
+
+router.post(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/return`,
+  requireBotDeskAuth,
+  requireOpinionCapability("returnToWriter"),
+  botDeskWriteLimiter,
+  botDeskOpinionActionLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = staffOpinionReturnSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "اكتب ملاحظتك للكاتب",
+      });
+    }
+    try {
+      const result = await returnOpinionToWriterFromDesk({
+        articleId: req.params.id,
+        actorId: req.botPrincipal!.userId,
+        note: parsed.data.note,
+      });
+      await auditBotDeskWrite(req, {
+        action: "opinion_return_to_writer",
+        entityType: "article",
+        entityId: result.article.id,
+        oldValue: result.previous,
+        newValue: { status: result.article.status, reviewStatus: result.article.reviewStatus },
+        extraMetadata: { noteLength: parsed.data.note.length },
+      });
+      res.json({ article: result.article });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذرت إعادة المقال إلى الكاتب");
     }
   },
 );

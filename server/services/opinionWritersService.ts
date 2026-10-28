@@ -949,6 +949,7 @@ export async function notifyOpinionDraftDeskChannels(input: {
           articleId: input.articleId,
           articleTitle: input.articleTitle,
           authorName: input.authorName,
+          authorId: input.authorId,
           slotLine: input.notice.slotLine,
           nextSlotIso: input.nextSlot,
         });
