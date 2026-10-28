@@ -72,7 +72,8 @@ function fallbackWriter(id: string): StaffOpinionWriter {
 
 /**
  * يوزّع المقالات على أسبوع من سبعة أيام يبدأ weekStart بتوقيت الرياض:
- *  1) لكل كاتب بموعد ثابت خانة في يومه: نُشر ← مجدول ← مسودة بانتظار المكتب ← لم تصل.
+ *  1) لكل كاتب بموعد ثابت وصلت مادته خانة في يومه: نُشر ← مجدول ← مسودة بانتظار المكتب
+ *     (الخانة التي لم تصل مسودتها لا تُعرض).
  *  2) مقالات مجدولة أخرى داخل الأسبوع تظهر في موعدها الفعلي.
  *  3) مسودات زائدة لكاتب بموعد ثابت تأخذ موعده التالي؛ ومسودات من لا موعد له ← unslotted.
  */
@@ -165,9 +166,8 @@ export function buildStaffOpinionBoard(input: {
     } else if (pending) {
       slots.push(item(writer, slotAt, past ? "late" : "arrived", pending));
       occupy(writer.id, slotAt);
-    } else {
-      slots.push(item(writer, slotAt, past ? "late" : "missing", null));
     }
+    // خانة بلا مسودة لا تُعرض: التبويب للمواد التي وصلت فقط.
   }
 
   // 2) مجدولات أخرى داخل الأسبوع (كاتب بلا موعد ثابت، أو موعد مختلف)
@@ -204,7 +204,10 @@ export function buildStaffOpinionBoard(input: {
     }
   }
 
-  slots.sort((a, b) => (a.slotAt ?? "").localeCompare(b.slotAt ?? ""));
+  // بانتظار المكتب أولاً، ثم المجدول، ثم المنشور أسفل القائمة؛ وداخل كل مجموعة بالموعد.
+  const rank = (s: StaffOpinionItem) =>
+    s.article && isPending(s.article.status) ? 0 : s.article?.status === "scheduled" ? 1 : 2;
+  slots.sort((a, b) => rank(a) - rank(b) || (a.slotAt ?? "").localeCompare(b.slotAt ?? ""));
   unslotted.sort((a, b) => (b.article?.submittedAt ?? "").localeCompare(a.article?.submittedAt ?? ""));
 
   for (const s of slots) {
@@ -215,7 +218,6 @@ export function buildStaffOpinionBoard(input: {
     if (status === "new_draft") day.counts.draft += 1;
     else if (status === "in_prep") day.counts.prep += 1;
     else if (status === "scheduled") day.counts.scheduled += 1;
-    else if (!s.article) day.counts.missing += 1;
   }
 
   const pendingCount = [...slots, ...unslotted].filter(

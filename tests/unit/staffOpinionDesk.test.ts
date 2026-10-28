@@ -182,19 +182,21 @@ describe("buildStaffOpinionBoard", () => {
       row("a4", "w4", "scheduled", "approved", { scheduledAt: new Date("2026-11-01T07:00:00.000Z") }),
       row("a3", "w3", "draft", "pending_review"),
       row("ax", "w5", "draft", "needs_changes"),
+      row("a6", "w6", "published", "approved", { publishedAt: new Date("2026-10-28T03:00:00.000Z") }),
     ],
   });
 
-  it("puts every fixed slot on the timeline, sorted, with its state", () => {
+  it("shows only arrived material: pending first, then scheduled, published last", () => {
     expect(board.weekStart).toBe("2026-10-28");
     expect(board.slots.map((s) => [s.writer.id, s.slotAt, s.state, s.article?.status ?? null])).toEqual([
-      ["w6", "2026-10-28T03:00:00.000Z", "late", null],
       ["w1", "2026-10-29T06:00:00.000Z", "arrived", "new_draft"],
       ["w2", "2026-10-31T05:00:00.000Z", "arrived", "in_prep"],
       ["w4", "2026-11-01T07:00:00.000Z", "scheduled", "scheduled"],
-      ["w5", "2026-11-03T06:00:00.000Z", "missing", null],
+      ["w6", "2026-10-28T03:00:00.000Z", "published", "published"],
     ]);
-    expect(board.slots[1].deeplink).toBe("sabqdesk://opinion/a1");
+    expect(board.slots[0].deeplink).toBe("sabqdesk://opinion/a1");
+    // w5 لم تصل مسودته: لا خانة له.
+    expect(board.slots.some((s) => s.article === null)).toBe(false);
   });
 
   it("lists writers without a fixed slot separately and counts the badge", () => {
@@ -208,8 +210,8 @@ describe("buildStaffOpinionBoard", () => {
     expect(byDate["2026-10-29"]).toEqual({ draft: 1, prep: 0, scheduled: 0, missing: 0 });
     expect(byDate["2026-10-31"]).toEqual({ draft: 0, prep: 1, scheduled: 0, missing: 0 });
     expect(byDate["2026-11-01"]).toEqual({ draft: 0, prep: 0, scheduled: 1, missing: 0 });
-    expect(byDate["2026-11-03"]).toEqual({ draft: 0, prep: 0, scheduled: 0, missing: 1 });
-    expect(byDate["2026-10-28"].missing).toBe(1);
+    expect(byDate["2026-11-03"]).toEqual({ draft: 0, prep: 0, scheduled: 0, missing: 0 });
+    expect(byDate["2026-10-28"].missing).toBe(0);
   });
 
   it("gives a second pending draft of a slotted writer the following fixed slot", () => {

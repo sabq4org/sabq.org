@@ -3,9 +3,9 @@ import SabqDeskKit
 import SwiftUI
 
 /// «الرأي» (approved concept C, 2026-10-28): the week first — a strip of seven
-/// Riyadh days with a dot per slot state — then an hourly timeline in the
-/// style of «مجدول» in المكتب. Every fixed slot keeps its place even before
-/// its draft arrives; writers without a fixed slot close the list.
+/// Riyadh days with a dot per slot state — then the material that arrived:
+/// drafts waiting for the desk first, then scheduled, published last
+/// (owner feedback 2026-10-28: empty «لم تصل بعد» slots are not shown).
 struct OpinionView: View {
     @Environment(AppModel.self) private var app
     @Environment(AppLockController.self) private var appLock
@@ -53,8 +53,9 @@ struct OpinionView: View {
                 .onChange(of: model?.board) { _, _ in scroll(to: focusID, proxy: proxy) }
                 .onChange(of: model?.linked) { _, _ in scroll(to: focusID, proxy: proxy) }
                 .onChange(of: selectedDay) { _, day in
-                    guard let day else { return }
-                    withAnimation { proxy.scrollTo(Self.dayAnchor(day), anchor: .top) }
+                    guard let day, let first = board.map(sections)?.flatMap(\.items)
+                        .first(where: { $0.slotAt.map(RiyadhTime.dayString) == day }) else { return }
+                    withAnimation { proxy.scrollTo(first.id, anchor: .top) }
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -155,24 +156,17 @@ struct OpinionView: View {
                                message: "المواعيد الثابتة محجوزة لكتّابها، وتظهر كل مسودة في خانة موعدها فور وصولها.")
                     .padding(.top, -DeskLayout.space8)
             }
-            let groups = dayGroups(board.slots)
-            ForEach(groups, id: \.day) { group in
-                dayHeader(RiyadhTime.dayTitle(group.start), anchor: Self.dayAnchor(group.day))
-                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+            ForEach(sections(board), id: \.title) { section in
+                dayHeader(section.title, anchor: section.anchor)
+                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
                     timelineRow(item,
-                                isFirst: group.day == groups.first?.day && index == 0,
-                                isLast: index == group.items.count - 1,
-                                unslotted: false)
+                                isFirst: false,
+                                isLast: index == section.items.count - 1,
+                                unslotted: item.slotAt == nil)
                 }
             }
-            if !board.unslotted.isEmpty {
-                dayHeader("بلا موعد ثابت", anchor: "unslotted")
-                ForEach(Array(board.unslotted.enumerated()), id: \.element.id) { index, item in
-                    timelineRow(item, isFirst: false, isLast: index == board.unslotted.count - 1, unslotted: true)
-                }
-            }
-            if board.slots.isEmpty, board.unslotted.isEmpty, !board.hasNoDrafts {
-                DeskEmptyState(title: "لا مواعيد هذا الأسبوع", message: "لا يوجد كتّاب بمواعيد ثابتة في هذه الأيام.")
+            if sections(board).isEmpty, !board.hasNoDrafts {
+                DeskEmptyState(title: "لا مقالات هذا الأسبوع", message: "تظهر هنا مقالات الرأي فور وصولها.")
             }
         } else if model?.isLoading ?? true {
             HStack { Spacer(); ProgressView(); Spacer() }
@@ -180,29 +174,28 @@ struct OpinionView: View {
         }
     }
 
-    private struct DayGroup {
-        let day: String
-        let start: Date
+    private struct Section {
+        let title: String
+        let anchor: String
         let items: [StaffOpinionItem]
     }
 
-    private func dayGroups(_ items: [StaffOpinionItem]) -> [DayGroup] {
-        var order: [String] = []
-        var byDay: [String: [StaffOpinionItem]] = [:]
-        var starts: [String: Date] = [:]
-        for item in items {
-            guard let at = item.slotAt else { continue }
-            let key = RiyadhTime.dayString(at)
-            if byDay[key] == nil {
-                order.append(key)
-                starts[key] = RiyadhTime.dayKey(at)
-            }
-            byDay[key, default: []].append(item)
+    /// المسودات بانتظارك أولاً، ثم المجدول، والمنشور أسفل القائمة. الخانات
+    /// التي لم تصل مسودتها لا تُعرض (الخادم لا يرسلها، والنسخ الأقدم تُرشَّح هنا).
+    private func sections(_ board: StaffOpinionBoard) -> [Section] {
+        let arrived = board.allItems.filter { $0.article != nil }
+        let bySlot: (StaffOpinionItem, StaffOpinionItem) -> Bool = {
+            ($0.slotAt ?? .distantFuture) < ($1.slotAt ?? .distantFuture)
         }
-        return order.sorted().map { DayGroup(day: $0, start: starts[$0] ?? Date(), items: byDay[$0] ?? []) }
+        let pending = arrived.filter { $0.article?.status.isPending == true }.sorted(by: bySlot)
+        let scheduled = arrived.filter { $0.article?.status == .scheduled }.sorted(by: bySlot)
+        let published = arrived.filter { $0.article?.status == .published }.sorted(by: bySlot)
+        return [
+            Section(title: "بانتظارك", anchor: "pending", items: pending),
+            Section(title: "مجدولة", anchor: "scheduled", items: scheduled),
+            Section(title: "نُشرت", anchor: "published", items: published),
+        ].filter { !$0.items.isEmpty }
     }
-
-    private static func dayAnchor(_ day: String) -> String { "day-\(day)" }
 
     private func dayHeader(_ title: String, anchor: String?) -> some View {
         HStack(spacing: DeskLayout.space8) {
@@ -390,7 +383,6 @@ private struct OpinionWeekStrip: View {
         if c.draft > 0 { parts.append("\(c.draft) مسودة جديدة") }
         if c.prep > 0 { parts.append("\(c.prep) قيد التجهيز") }
         if c.scheduled > 0 { parts.append("\(c.scheduled) مجدول") }
-        if c.missing > 0 { parts.append("\(c.missing) لم تصل بعد") }
         return parts.joined(separator: "، ")
     }
 }
@@ -403,9 +395,6 @@ private struct OpinionDayDots: View {
             if counts.draft > 0 { dot(OpinionStateStyle.newDraft.ink) }
             if counts.prep > 0 { dot(OpinionStateStyle.inPrep.ink) }
             if counts.scheduled > 0 { dot(OpinionStateStyle.scheduled.ink) }
-            if counts.missing > 0 {
-                Circle().strokeBorder(DeskTheme.outline, lineWidth: 1.5).frame(width: 6, height: 6)
-            }
         }
         .frame(height: 6)
         .accessibilityHidden(true)
@@ -422,10 +411,6 @@ private struct OpinionLegend: View {
             item(OpinionStateStyle.newDraft)
             item(OpinionStateStyle.inPrep)
             item(OpinionStateStyle.scheduled)
-            HStack(spacing: DeskLayout.space4) {
-                Circle().strokeBorder(DeskTheme.outline, lineWidth: 1.5).frame(width: 7, height: 7)
-                Text(OpinionStateStyle.missing.title)
-            }
         }
         .deskText(DeskType.timestamp)
         .foregroundStyle(DeskTheme.textSecondary)
@@ -489,8 +474,15 @@ private struct OpinionTimeColumn: View {
     var body: some View {
         VStack(spacing: 2) {
             if let date {
-                LTRText(text: RiyadhTime.timeString(date), role: DeskType.timelineTime,
+                Text(RiyadhTime.shortWeekday(date))
+                    .deskText(DeskType.tag)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .lineLimit(1)
+                    .fixedSize()
+                LTRText(text: RiyadhTime.timeString(date), role: DeskType.rowTitle,
                         color: isFirst ? DeskInk.link : DeskTheme.textPrimary)
+                    .lineLimit(1)
+                    .fixedSize()
                 if let countdown = RiyadhTime.slotCountdown(to: date) {
                     Text(countdown)
                         .deskText(DeskType.tag)
@@ -500,7 +492,7 @@ private struct OpinionTimeColumn: View {
                 }
             } else {
                 Text(verbatim: "—")
-                    .deskText(DeskType.timelineTime)
+                    .deskText(DeskType.rowTitle)
                     .foregroundStyle(DeskTheme.textTertiary)
             }
             if !isLast {
