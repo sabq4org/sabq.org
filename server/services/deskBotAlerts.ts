@@ -350,20 +350,24 @@ export async function sendDeskAlertEmails(
   recipients: readonly string[],
   payload: { subject: string; text: string; html: string },
   logPrefix = "[DeskBotAlerts]",
-): Promise<void> {
+): Promise<number> {
   const unique = parseDeskAlertEmailList(recipients);
-  await Promise.all(
+  const results = await Promise.all(
     unique.map(async (to) => {
       try {
-        await sendEmailNotification({
+        const r = await sendEmailNotification({
           to,
           subject: payload.subject,
           text: payload.text,
           html: payload.html,
         });
+        return r?.success === true ? 1 : 0;
       } catch (err) {
         console.error(`${logPrefix} email notify failed for ${to}:`, err);
+        return 0;
       }
     }),
   );
+  // عدد الرسائل التي قبلها مزوّد البريد (للتشخيص؛ المستدعون القدامى يتجاهلونه).
+  return results.reduce<number>((a, b) => a + b, 0);
 }
