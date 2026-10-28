@@ -800,6 +800,8 @@
 }
 .article-dock-aa { font-size: 15px; font-weight: 700; }
 .article-dock-count { font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Phones and tablets only; this file loads after Tailwind, so lg:hidden alone would lose. */
+@media (min-width: 1024px) { .article-dock { display: none; } }
 /* The dock takes the bottom of the screen, so the footer's back-to-top button steps aside on phones. */
 @media (max-width: 1023px) {
   body.article-dock-on [data-testid="scroll-to-top"] { opacity: 0; pointer-events: none; }
