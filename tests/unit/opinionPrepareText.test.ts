@@ -56,7 +56,6 @@ describe("parseOpinionEnrichment", () => {
       bullets: ["أ", "ب", "ب", "ج", "د"],
       keywords: ["k1", "k2", "", 5],
       metaDescription: "و".repeat(300),
-      imageBrief: "مشهد",
       categorySlug: " economy ",
     }) + "\n```";
     const out = parseOpinionEnrichment(raw);
@@ -65,7 +64,6 @@ describe("parseOpinionEnrichment", () => {
     expect(out.keywords).toEqual(["k1", "k2"]);
     expect(out.metaDescription?.length).toBe(170);
     expect(out.socialTitle).toBeNull();
-    expect(out.imageBrief).toBe("مشهد");
     expect(out.categorySlug).toBe("economy");
   });
 
@@ -77,11 +75,14 @@ describe("parseOpinionEnrichment", () => {
 });
 
 describe("buildOpinionImagePrompt", () => {
-  it("prefers the symbolic brief and always forbids text and real faces", () => {
-    const withBrief = buildOpinionImagePrompt({ title: "ع", summary: "م", imageBrief: "ميزان" });
-    expect(withBrief).toContain("ميزان");
-    expect(withBrief).toContain("بلا أي نص مكتوب");
-    const fallback = buildOpinionImagePrompt({ title: "عنوان", summary: "موجز", imageBrief: null });
-    expect(fallback).toContain("صورة توضيحية لمقال رأي: عنوان\nموجز");
+  it("mirrors the web GPT dialog: title + summary + the symbolic preset, no scene", () => {
+    const out = buildOpinionImagePrompt({ title: "عنوان", summary: "  موجز   المقال " });
+    expect(out).toBe("صورة توضيحية للخبر: عنوان\nموجز المقال\nتكوين فني تعبيري رمزي هادئ وعميق يناسب المقالات والتحليلات الصحفية، ألوان متناسقة، بدون أي نصوص أو حروف داخل الصورة.");
+  });
+
+  it("caps the summary so the house style stays dominant", () => {
+    const out = buildOpinionImagePrompt({ title: "ع", summary: "س".repeat(1000) });
+    expect(out).toContain("س".repeat(300));
+    expect(out).not.toContain("س".repeat(301));
   });
 });

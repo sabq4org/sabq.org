@@ -87,7 +87,6 @@ export interface OpinionEnrichment {
   imageAltText: string | null;
   newsletterSubtitle: string | null;
   newsletterExcerpt: string | null;
-  imageBrief: string | null;
   categorySlug: string | null;
 }
 
@@ -139,15 +138,17 @@ export function parseOpinionEnrichment(raw: string): OpinionEnrichment {
     imageAltText: cleanString(obj.imageAltText, 200),
     newsletterSubtitle: cleanString(obj.newsletterSubtitle, 100),
     newsletterExcerpt: cleanString(obj.newsletterExcerpt, 300),
-    imageBrief: cleanString(obj.imageBrief, 1200),
     categorySlug: cleanString(obj.categorySlug, 120),
   };
 }
 
-/** وصف الصورة المرسل لـ GPT: المشهد الرمزي إن وُجد، وإلا العنوان والموجز (نمط محرر الويب). */
-export function buildOpinionImagePrompt(input: { title: string; summary: string; imageBrief: string | null }): string {
-  const base = input.imageBrief
-    ? `صورة رمزية لمقال رأي بعنوان «${input.title}».\nالمشهد: ${input.imageBrief}`
-    : `صورة توضيحية لمقال رأي: ${input.title}\n${input.summary}`;
-  return `${base}\nبلا أي نص مكتوب، وبلا وجوه أشخاص حقيقيين أو شعارات.`.slice(0, 4000);
+/**
+ * وصف الصورة المرسل لـ GPT، بنفس صيغة نافذة «صور GPT» في محرر الويب (العنوان
+ * والموجز + نمط «تعبيري رمزي»)، فيبقى أسلوب سبق في الغلاف هو المسيطر. لا مشهد
+ * تفصيلي من النموذج: المشهد المكتوب كان يغيّر الأسلوب كلياً (إضاءة ليلية سينمائية).
+ */
+export function buildOpinionImagePrompt(input: { title: string; summary: string }): string {
+  const summary = input.summary.replace(/\s+/g, " ").trim().slice(0, 300);
+  const base = `صورة توضيحية للخبر: ${input.title}${summary ? `\n${summary}` : ""}`;
+  return `${base}\nتكوين فني تعبيري رمزي هادئ وعميق يناسب المقالات والتحليلات الصحفية، ألوان متناسقة، بدون أي نصوص أو حروف داخل الصورة.`.slice(0, 4000);
 }

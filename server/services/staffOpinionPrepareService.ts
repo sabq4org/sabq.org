@@ -214,7 +214,6 @@ const ENRICH_SYSTEM_PROMPT = `أنت محرر في صحيفة سبق تجهّز 
   "imageAltText": "وصف الصورة الرئيسية لقارئ الشاشة (15-25 كلمة)",
   "newsletterSubtitle": "عنوان فرعي للنشرة البريدية أقل من 80 حرفاً",
   "newsletterExcerpt": "جملة أو جملتان للنشرة البريدية",
-  "imageBrief": "مشهد بصري رمزي يعبّر عن فكرة المقال لصورة توضيحية: بلا نص مكتوب، وبلا وجوه أشخاص حقيقيين أو شعارات",
   "categorySlug": "slug واحد فقط من قائمة التصنيفات المرسلة، الأقرب لموضوع المقال"
 }`;
 
@@ -387,7 +386,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     if (!before.imageUrl) {
       try {
         updates.imageUrl = await generateImage(
-          buildOpinionImagePrompt({ title: newTitle, summary: enrichment.summary, imageBrief: enrichment.imageBrief }),
+          buildOpinionImagePrompt({ title: newTitle, summary: enrichment.summary }),
           job.actorId,
         );
         updates.isAiGeneratedImage = true;
