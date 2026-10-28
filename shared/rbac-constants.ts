@@ -211,6 +211,10 @@ export const PERMISSION_CODES = {
 
   // مواعيدك — تحرير الصفحة العامة /mawaeed. الأدمن يمر عبر "*".
   MAWAEED_EDIT: "mawaeed.edit",
+
+  // مزادات إنفاذ — حساب إنفاذ يُدخل ويرسل، ومحرر سبق يعتمد. الأدمن يمر عبر "*".
+  INFATH_SUBMIT: "infath.submit",
+  INFATH_APPROVE: "infath.approve",
 } as const;
 
 // Role to permissions mapping (for UI display)

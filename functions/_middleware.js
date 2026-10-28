@@ -1061,6 +1061,7 @@ const FULL_QUERY_API_CACHE_ROUTES = [
   { match: (p) => p === "/api/audio-bulletin/current", ttl: 30 },
   { match: (p) => p === "/api/muqtarab/topics/featured", ttl: 60 },
   { match: (p) => p === "/api/mawaeed", ttl: 60 },
+  { match: (p) => p === "/api/infath", ttl: 60 },
   // Live-score reads (sports/today, rsl/hero) are cached by the shared burst
   // cache (cloudflare-worker/public-api-burst-cache.js), which follows the
   // origin's 5 s TTL while a match is on and stores nothing on no-store.

@@ -71,6 +71,7 @@ import {
   Briefcase,
   Bot,
   Radio,
+  Gavel,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -431,6 +432,15 @@ export const navConfig: NavItem[] = [
         icon: CalendarDays,
         roles: ["admin"],
         permissions: ["mawaeed.edit"],
+      },
+      {
+        id: "infath",
+        labelKey: "nav.infath",
+        labelAr: "مزادات إنفاذ",
+        path: "/dashboard/infath",
+        icon: Gavel,
+        roles: ["admin"],
+        permissions: ["infath.submit", "infath.approve"],
       },
       {
         id: "media_library",
