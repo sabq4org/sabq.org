@@ -13,6 +13,7 @@ import {
   type UpsertOpinionWriterSchedule,
 } from "@shared/schema";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
+import { buildOpinionDraftNotice } from "./opinionDraftDeskNotice";
 import {
   mediaLicenseFlags,
   resolveMediaLicenseReviewStatus,
@@ -806,15 +807,95 @@ export async function notifyOpinionArticleSubmittedForReview(article: {
       body: bodyText,
     });
 
+    // الموعد الثابت القادم للكاتب (يُستثنى المقال نفسه من «الأرضية» حتى لا يحجز موعده بنفسه).
+    let nextSlot: string | null = null;
+    try {
+      nextSlot = (await getNextSlotForWriter(article.authorId, article.id))?.nextSlot ?? null;
+    } catch (slotErr) {
+      console.error("[opinion-writers] next slot for submit notice failed:", slotErr);
+    }
+    const deskNotice = buildOpinionDraftNotice({
+      authorName,
+      articleTitle: article.title,
+      nextSlot,
+    });
+
     const { sendDraftSubmittedNotification } = await import("../notificationService");
     await sendDraftSubmittedNotification(
       { id: article.id, title: article.title, slug: article.slug },
       authorName,
       article.authorId,
+      {
+        title: deskNotice.title,
+        body: deskNotice.body,
+        metadata: { articleType: "opinion", nextSlot },
+      },
     );
+
+    // تطبيق الديسك وبريد البوت في الخلفية: لا يؤخّران ولا يُفشلان الإرسال.
+    void notifyOpinionDraftDeskChannels({
+      articleId: article.id,
+      articleTitle: article.title,
+      authorId: article.authorId,
+      authorName,
+      nextSlot,
+      notice: deskNotice,
+    });
   } catch (err) {
     console.error("[opinion-writers] notifyOpinionArticleSubmittedForReview failed:", err);
   }
+}
+
+/**
+ * Push «مكتب سبق» لمن يملك opinion.review أو articles.schedule، وبريد
+ * `[sabq-desk] type=opinion_draft id=<articleId>` لمستلمي بوت الديسك
+ * (DESK_BOT_ALERT_EMAILS + editor_alerts.deskBotAlertEmails). لا يرمي.
+ */
+export async function notifyOpinionDraftDeskChannels(input: {
+  articleId: string;
+  articleTitle: string;
+  authorId: string | null;
+  authorName: string;
+  nextSlot: string | null;
+  notice: { title: string; body: string; slotLine: string };
+}): Promise<void> {
+  await Promise.all([
+    (async () => {
+      try {
+        const { notifyStaffDeskOfOpinionDraft } = await import("./staffAppPushService");
+        await notifyStaffDeskOfOpinionDraft({
+          articleId: input.articleId,
+          title: input.notice.title,
+          body: input.notice.body,
+          authorId: input.authorId,
+          nextSlot: input.nextSlot,
+        });
+      } catch (pushErr) {
+        console.error("[opinion-writers] desk push for opinion draft failed:", pushErr);
+      }
+    })(),
+    (async () => {
+      try {
+        const {
+          buildDeskOpinionDraftAlertEmail,
+          getDeskBotAlertRecipients,
+          sendDeskAlertEmails,
+        } = await import("./deskBotAlerts");
+        const recipients = await getDeskBotAlertRecipients();
+        if (recipients.length === 0) return;
+        const payload = buildDeskOpinionDraftAlertEmail({
+          articleId: input.articleId,
+          articleTitle: input.articleTitle,
+          authorName: input.authorName,
+          slotLine: input.notice.slotLine,
+          nextSlotIso: input.nextSlot,
+        });
+        await sendDeskAlertEmails(recipients, payload, "[opinion-writers] desk bot email");
+      } catch (mailErr) {
+        console.error("[opinion-writers] desk bot email for opinion draft failed:", mailErr);
+      }
+    })(),
+  ]);
 }
 
 /**

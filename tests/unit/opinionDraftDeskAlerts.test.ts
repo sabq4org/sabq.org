@@ -1,0 +1,192 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const h = vi.hoisted(() => {
+  const rowsQueue: unknown[][] = [];
+  const chain = (): any => {
+    const obj: any = {};
+    for (const m of ["from", "where", "innerJoin", "leftJoin", "limit", "orderBy", "groupBy"]) {
+      obj[m] = () => obj;
+    }
+    obj.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
+      Promise.resolve(rowsQueue.length ? rowsQueue.shift() : []).then(resolve, reject);
+    return obj;
+  };
+  return {
+    rowsQueue,
+    mockDb: {
+      select: vi.fn(() => chain()),
+      insert: vi.fn(() => ({ values: vi.fn(async () => undefined) })),
+    },
+    sendDraftSubmittedNotification: vi.fn(async () => undefined),
+    notifyStaffDeskOfOpinionDraft: vi.fn(async () => 1),
+    getDeskBotAlertRecipients: vi.fn(async () => ["desk-bot@example.com"]),
+    sendDeskAlertEmails: vi.fn(async () => undefined),
+    emit: vi.fn(),
+  };
+});
+
+vi.mock("../../server/db", () => ({ db: h.mockDb }));
+vi.mock("../../server/notificationBus", () => ({ notificationBus: { emit: h.emit } }));
+vi.mock("../../server/notificationService", () => ({
+  sendDraftSubmittedNotification: h.sendDraftSubmittedNotification,
+}));
+vi.mock("../../server/services/staffAppPushService", () => ({
+  notifyStaffDeskOfOpinionDraft: h.notifyStaffDeskOfOpinionDraft,
+}));
+vi.mock("../../server/services/deskBotAlerts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../server/services/deskBotAlerts")>();
+  return {
+    ...actual,
+    getDeskBotAlertRecipients: h.getDeskBotAlertRecipients,
+    sendDeskAlertEmails: h.sendDeskAlertEmails,
+  };
+});
+vi.mock("../../server/services/email", () => ({ sendEmailNotification: vi.fn() }));
+
+import {
+  buildOpinionDraftNotice,
+  buildOpinionDraftSlotLine,
+  formatOpinionSlotRiyadh,
+  OPINION_DRAFT_NO_SLOT_LINE,
+} from "../../server/services/opinionDraftDeskNotice";
+import { buildDeskOpinionDraftAlertEmail } from "../../server/services/deskBotAlerts";
+import {
+  notifyOpinionArticleSubmittedForReview,
+  notifyOpinionDraftDeskChannels,
+} from "../../server/services/opinionWritersService";
+import { DEFAULT_STAFF_ALERT_PREFS, staffAlertPrefsUpdateSchema } from "@shared/staffApp";
+import { normalizeStaffAlertPrefs } from "../../server/services/staffAlertPrefsService";
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe("opinion draft notice text", () => {
+  it("formats the fixed slot in Riyadh time (day, date, time)", () => {
+    // 06:00Z → 09:00 Riyadh, Thursday 29 Oct 2026.
+    expect(formatOpinionSlotRiyadh(new Date("2026-10-29T06:00:00Z"))).toBe("الخميس 29 أكتوبر 09:00 (الرياض)");
+    // 22:30Z on Friday → 01:30 Saturday in Riyadh.
+    expect(formatOpinionSlotRiyadh(new Date("2026-10-30T22:30:00Z"))).toBe("السبت 31 أكتوبر 01:30 (الرياض)");
+  });
+
+  it("falls back to «بلا موعد ثابت» when there is no slot", () => {
+    expect(buildOpinionDraftSlotLine(null)).toBe(OPINION_DRAFT_NO_SLOT_LINE);
+    expect(buildOpinionDraftSlotLine("not-a-date")).toBe(OPINION_DRAFT_NO_SLOT_LINE);
+    expect(buildOpinionDraftSlotLine("2026-10-29T06:00:00.000Z")).toBe(
+      "موعده الثابت: الخميس 29 أكتوبر 09:00 (الرياض)",
+    );
+  });
+
+  it("titles the notice with the writer name and puts the article title + slot in the body", () => {
+    const n = buildOpinionDraftNotice({
+      authorName: "سعد الكاتب",
+      articleTitle: "  الاقتصاد\nوالرؤية ",
+      nextSlot: "2026-10-29T06:00:00.000Z",
+    });
+    expect(n.title).toBe("مقال رأي جديد: سعد الكاتب");
+    expect(n.body).toBe("«الاقتصاد والرؤية» — موعده الثابت: الخميس 29 أكتوبر 09:00 (الرياض)");
+    expect(n.title).not.toContain("مراسل");
+    expect(buildOpinionDraftNotice({ authorName: "", articleTitle: "x", nextSlot: null })).toEqual({
+      title: "مقال رأي جديد: كاتب رأي",
+      body: "«x» — بلا موعد ثابت",
+      slotLine: "بلا موعد ثابت",
+    });
+  });
+});
+
+describe("desk bot email type=opinion_draft", () => {
+  it("carries the [sabq-desk] header with the article id", () => {
+    const mail = buildDeskOpinionDraftAlertEmail({
+      articleId: "art-123",
+      articleTitle: "عنوان <المقال>",
+      authorName: "سعد",
+      slotLine: "بلا موعد ثابت",
+      nextSlotIso: null,
+    });
+    expect(mail.header).toBe("[sabq-desk] type=opinion_draft id=art-123");
+    expect(mail.subject).toContain("[sabq-desk] type=opinion_draft id=art-123");
+    expect(mail.subject).toContain("مقال رأي جديد: سعد");
+    expect(mail.text.split("\n")[0]).toBe("[sabq-desk] type=opinion_draft id=art-123");
+    expect(mail.text).toContain("next_slot: none");
+    expect(mail.text).toContain("بلا موعد ثابت");
+    expect(mail.html).toContain("عنوان &lt;المقال&gt;");
+    expect(mail.html).not.toContain("<المقال>");
+  });
+});
+
+describe("opinionDrafts alert preference (JSON prefs, no migration)", () => {
+  it("defaults on and can be switched off", () => {
+    expect(DEFAULT_STAFF_ALERT_PREFS.opinionDrafts).toBe(true);
+    expect(normalizeStaffAlertPrefs({})).toMatchObject({ opinionDrafts: true });
+    expect(normalizeStaffAlertPrefs({ opinionDrafts: false }).opinionDrafts).toBe(false);
+    expect(staffAlertPrefsUpdateSchema.safeParse({ opinionDrafts: false }).success).toBe(true);
+    expect(staffAlertPrefsUpdateSchema.safeParse({ opinionDrafts: "no" }).success).toBe(false);
+  });
+});
+
+describe("notifyOpinionArticleSubmittedForReview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.rowsQueue.length = 0;
+  });
+
+  const article = { id: "art-1", title: "مقال تجريبي", slug: "maqal", authorId: "writer-1" };
+
+  it("sends the corrected web notice, the desk push and the desk bot email", async () => {
+    // 1) author lookup, 2) writer schedules (none → بلا موعد ثابت)
+    h.rowsQueue.push([{ firstName: "سعد", lastName: "الكاتب" }], []);
+    await notifyOpinionArticleSubmittedForReview(article);
+    await flush();
+
+    expect(h.sendDraftSubmittedNotification).toHaveBeenCalledTimes(1);
+    const [, authorName, authorId, override] = h.sendDraftSubmittedNotification.mock.calls[0] as any[];
+    expect(authorName).toBe("سعد الكاتب");
+    expect(authorId).toBe("writer-1");
+    expect(override.title).toBe("مقال رأي جديد: سعد الكاتب");
+    expect(override.body).toBe("«مقال تجريبي» — بلا موعد ثابت");
+
+    expect(h.notifyStaffDeskOfOpinionDraft).toHaveBeenCalledWith({
+      articleId: "art-1",
+      title: "مقال رأي جديد: سعد الكاتب",
+      body: "«مقال تجريبي» — بلا موعد ثابت",
+      authorId: "writer-1",
+      nextSlot: null,
+    });
+
+    expect(h.sendDeskAlertEmails).toHaveBeenCalledTimes(1);
+    const [recipients, payload] = h.sendDeskAlertEmails.mock.calls[0] as any[];
+    expect(recipients).toEqual(["desk-bot@example.com"]);
+    expect(payload.subject).toContain("[sabq-desk] type=opinion_draft id=art-1");
+  });
+
+  it("never throws when the push or the email fail", async () => {
+    h.rowsQueue.push([{ firstName: "سعد", lastName: "" }], []);
+    h.notifyStaffDeskOfOpinionDraft.mockRejectedValueOnce(new Error("apns down"));
+    h.getDeskBotAlertRecipients.mockRejectedValueOnce(new Error("db down"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(notifyOpinionArticleSubmittedForReview(article)).resolves.toBeUndefined();
+    await flush();
+    expect(h.sendDraftSubmittedNotification).toHaveBeenCalledTimes(1);
+    errSpy.mockRestore();
+  });
+
+  it("never throws when the web notice itself fails", async () => {
+    h.rowsQueue.push([{ firstName: "سعد", lastName: "" }], []);
+    h.sendDraftSubmittedNotification.mockRejectedValueOnce(new Error("insert failed"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(notifyOpinionArticleSubmittedForReview(article)).resolves.toBeUndefined();
+    errSpy.mockRestore();
+  });
+
+  it("skips the desk bot email when no recipient is configured", async () => {
+    h.getDeskBotAlertRecipients.mockResolvedValueOnce([]);
+    await notifyOpinionDraftDeskChannels({
+      articleId: "art-2",
+      articleTitle: "t",
+      authorId: "w",
+      authorName: "n",
+      nextSlot: null,
+      notice: { title: "a", body: "b", slotLine: "بلا موعد ثابت" },
+    });
+    expect(h.sendDeskAlertEmails).not.toHaveBeenCalled();
+    expect(h.notifyStaffDeskOfOpinionDraft).toHaveBeenCalledTimes(1);
+  });
+});

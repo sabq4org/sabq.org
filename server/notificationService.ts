@@ -336,8 +336,12 @@ export async function sendArticleNotification(
 export async function sendDraftSubmittedNotification(
   article: { id: string; title: string; slug: string },
   reporterName: string,
-  reporterId: string
+  reporterId: string,
+  /** نص مخصص (مقالات الرأي: «مقال رأي جديد: <الكاتب>» مع الموعد الثابت). */
+  override?: { title?: string; body?: string; metadata?: Record<string, unknown> }
 ): Promise<void> {
+  const noticeTitle = override?.title || "📝 مسودة جديدة من مراسل";
+  const noticeBody = override?.body || `أرسل ${reporterName} خبراً جديداً: ${article.title}`;
   try {
     console.log(`📝 [DRAFT-NOTIFY] Reporter "${reporterName}" submitted draft: ${article.title}`);
 
@@ -389,11 +393,12 @@ export async function sendDraftSubmittedNotification(
         await db.insert(notificationsInbox).values({
           userId: editor.userId,
           type: "DraftSubmitted",
-          title: "📝 مسودة جديدة من مراسل",
-          body: `أرسل ${reporterName} خبراً جديداً: ${article.title}`,
+          title: noticeTitle,
+          body: noticeBody,
           deeplink: `/dashboard/articles?status=draft&id=${article.id}`,
           read: false,
           metadata: {
+            ...(override?.metadata ?? {}),
             articleId: article.id,
             articleSlug: article.slug,
             reporterId: reporterId,
@@ -405,8 +410,8 @@ export async function sendDraftSubmittedNotification(
         notificationBus.emit('new-notification', {
           userId: editor.userId,
           type: "DraftSubmitted",
-          title: "📝 مسودة جديدة من مراسل",
-          body: `أرسل ${reporterName} خبراً جديداً: ${article.title}`,
+          title: noticeTitle,
+          body: noticeBody,
         });
 
       } catch (error) {
