@@ -12,7 +12,13 @@ import {
   type StaffQuietHours,
 } from "@shared/staffApp";
 
-const STAFF_ALERT_KINDS: StaffAlertKind[] = ["aiAlerts", "adminAlerts", "writerMessages", "socialProposals"];
+const STAFF_ALERT_KINDS: StaffAlertKind[] = [
+  "aiAlerts",
+  "adminAlerts",
+  "writerMessages",
+  "socialProposals",
+  "opinionDrafts",
+];
 
 function isQuietHours(value: unknown): value is StaffQuietHours {
   return typeof value === "string" && (STAFF_QUIET_HOURS as readonly string[]).includes(value);

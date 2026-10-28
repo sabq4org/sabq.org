@@ -144,6 +144,8 @@ export interface StaffAlertPrefs {
   writerMessages: boolean;
   /** مقترحات النشر على X من الكتّاب والوكالات. */
   socialProposals: boolean;
+  /** مقالات الرأي الجديدة بانتظار المراجعة والجدولة (منذ 2026-10-28). */
+  opinionDrafts: boolean;
   quietHours: StaffQuietHours;
 }
 
@@ -152,11 +154,17 @@ export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
   adminAlerts: true,
   writerMessages: true,
   socialProposals: true,
+  opinionDrafts: true,
   quietHours: "off",
 };
 
 /** أنواع التنبيه التي يمكن إطفاؤها (كل حقل منطقي في التفضيلات). */
-export type StaffAlertKind = "aiAlerts" | "adminAlerts" | "writerMessages" | "socialProposals";
+export type StaffAlertKind =
+  | "aiAlerts"
+  | "adminAlerts"
+  | "writerMessages"
+  | "socialProposals"
+  | "opinionDrafts";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
@@ -164,6 +172,7 @@ export const staffAlertPrefsUpdateSchema = z
     adminAlerts: z.boolean().optional(),
     writerMessages: z.boolean().optional(),
     socialProposals: z.boolean().optional(),
+    opinionDrafts: z.boolean().optional(),
     quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();

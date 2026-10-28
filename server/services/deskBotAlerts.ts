@@ -90,8 +90,10 @@ export async function getAgencySocialAlertRecipients(): Promise<string[]> {
   return resolveAgencySocialAlertRecipients({ settingEmails });
 }
 
+export type DeskAlertType = "ticket" | "social_proposal" | "opinion_draft";
+
 export function buildDeskAlertHeader(input: {
-  type: "ticket" | "social_proposal";
+  type: DeskAlertType;
   id: string;
 }): string {
   return `[sabq-desk] type=${input.type} id=${input.id}`;
@@ -270,6 +272,73 @@ export function buildDeskSocialProposalAlertEmail(input: DeskSocialProposalAlert
     ${input.articleUrl ? `<p style="margin:4px 0"><strong>رابط المادة:</strong> <a href="${escapeHtml(input.articleUrl)}">${escapeHtml(input.articleUrl)}</a></p>` : ""}
     <div style="white-space:pre-wrap;background:#f1f5f9;border-right:4px solid #0ea5e9;border-radius:8px;padding:12px;margin:12px 0">${escapeHtml(input.text)}</div>
     <p style="margin-top:16px"><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600">مراجعة المقترح في اللوحة</a></p>
+  </div>
+</body>
+</html>`;
+
+  return { header, subject, text: textLines.join("\n"), html };
+}
+
+export interface DeskOpinionDraftAlertEmailInput {
+  articleId: string;
+  articleTitle: string;
+  authorName: string;
+  /** سطر الموعد الجاهز: «موعده الثابت: …» أو «بلا موعد ثابت». */
+  slotLine: string;
+  /** الموعد الثابت القادم (ISO) إن وُجد. */
+  nextSlotIso?: string | null;
+  excerpt?: string | null;
+  dashboardUrl?: string;
+  occurredAt?: Date;
+}
+
+/** بريد «مقال رأي جديد» لبوت الديسك: `[sabq-desk] type=opinion_draft id=<articleId>`. */
+export function buildDeskOpinionDraftAlertEmail(input: DeskOpinionDraftAlertEmailInput): {
+  header: string;
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const header = buildDeskAlertHeader({ type: "opinion_draft", id: input.articleId });
+  const authorName = input.authorName?.trim() || "كاتب رأي";
+  const timeRiyadh = formatDeskAlertRiyadhTime(input.occurredAt ?? new Date());
+  const articleTitle = clipDeskAlertExcerpt(input.articleTitle || "مقال رأي", 120);
+  const excerpt = input.excerpt ? clipDeskAlertExcerpt(input.excerpt, 220) : "";
+  const origin = (process.env.FRONTEND_URL || process.env.PUBLIC_SITE_URL || "https://sabq.org").replace(/\/$/, "");
+  const dashboardUrl =
+    input.dashboardUrl || `${origin}/dashboard/articles?status=draft&id=${encodeURIComponent(input.articleId)}`;
+  const headline = `مقال رأي جديد: ${authorName}`;
+
+  const subject = `سبق | ${headline} — «${clipDeskAlertExcerpt(articleTitle, 80)}» | ${header}`;
+  const textLines = [
+    header,
+    `author: ${authorName}`,
+    `time: ${timeRiyadh}`,
+    `title: ${articleTitle}`,
+    `next_slot: ${input.nextSlotIso || "none"}`,
+    ...(excerpt ? [`excerpt: ${excerpt}`] : []),
+    "",
+    headline,
+    `العنوان: «${articleTitle}»`,
+    input.slotLine,
+    `وقت الإرسال (Asia/Riyadh): ${timeRiyadh}`,
+    ...(excerpt ? [`المقتطف: ${excerpt}`] : []),
+    "",
+    `افتح المسودة: ${dashboardUrl}`,
+  ];
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"></head>
+<body style="font-family:'Tajawal',Arial,sans-serif;direction:rtl;text-align:right;background:#f8fafc;padding:20px;color:#0f172a">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
+    <pre dir="ltr" style="background:#f1f5f9;padding:8px 12px;border-radius:6px;font-size:12px;color:#334155;overflow-x:auto">${escapeHtml(header)}</pre>
+    <h3 style="margin:12px 0 8px;color:#0f172a">${escapeHtml(headline)}</h3>
+    <p style="margin:4px 0"><strong>العنوان:</strong> «${escapeHtml(articleTitle)}»</p>
+    <p style="margin:4px 0">${escapeHtml(input.slotLine)}</p>
+    <p style="margin:4px 0"><strong>وقت الإرسال (Asia/Riyadh):</strong> <span dir="ltr">${escapeHtml(timeRiyadh)}</span></p>
+    ${excerpt ? `<div style="white-space:pre-wrap;background:#f8fafc;border-right:4px solid #0ea5e9;border-radius:6px;padding:12px;margin:12px 0">${escapeHtml(excerpt)}</div>` : ""}
+    <p style="margin-top:16px"><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600">فتح المسودة في اللوحة</a></p>
   </div>
 </body>
 </html>`;
