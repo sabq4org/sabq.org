@@ -18,6 +18,9 @@ struct OpinionView: View {
     @State private var busyID: String?
     @State private var errorText: String?
     @State private var notice: String?
+    @State private var successText: String?
+    /// «جهّز وجدول» jobs in flight or just finished, by article id.
+    @State private var prepJobs: [String: StaffOpinionPrepJob] = [:]
 
     @State private var publishTarget: StaffOpinionItem?
     @State private var returnTarget: StaffOpinionItem?
@@ -126,6 +129,13 @@ struct OpinionView: View {
                 ErrorLine(message: text)
                     .padding(.horizontal, DeskLayout.pageMargin + 4)
             }
+            if let successText {
+                Label(successText, systemImage: "checkmark.circle")
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.success)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DeskLayout.pageMargin + 4)
+            }
             if let notice {
                 Label(notice, systemImage: "exclamationmark.triangle")
                     .deskText(DeskType.meta)
@@ -219,6 +229,7 @@ struct OpinionView: View {
                         isUnslotted: unslotted,
                         isHighlighted: highlighted == item.id,
                         isBusy: busyID == item.id,
+                        prepJob: item.article.flatMap { prepJobs[$0.id] },
                         actions: actions(for: item))
                 .padding(.bottom, DeskLayout.space12)
         }
@@ -286,9 +297,53 @@ struct OpinionView: View {
         }
     }
 
+    /// Starts «جهّز وجدول» on the server, then follows it until it finishes.
+    /// Leaving the screen is fine: the server keeps going and pushes the result.
     private func prepare(_ item: StaffOpinionItem) async {
         guard OpinionFeatureFlags.autoPrepEnabled, let id = item.article?.id else { return }
-        await run(item) { _ = try await app.client.prepareOpinion(id: id) }
+        if prepJobs[id]?.status == .running { return }
+        errorText = nil
+        notice = nil
+        successText = nil
+        busyID = item.id
+        do {
+            let job = try await app.client.prepareOpinion(id: id)
+            busyID = nil
+            prepJobs[id] = job
+            await follow(id: id, title: item.article?.title ?? "")
+        } catch {
+            busyID = nil
+            if !app.handle(error) {
+                errorText = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func follow(id: String, title: String) async {
+        // Image generation alone can take ~2.5 minutes; give up polling after 10.
+        for _ in 0..<150 {
+            guard let job = prepJobs[id], !job.isFinished else { break }
+            try? await Task.sleep(for: .seconds(4))
+            if Task.isCancelled { return }
+            if let fresh = try? await app.client.opinionPrepStatus(id: id) { prepJobs[id] = fresh }
+        }
+        guard let job = prepJobs[id], job.isFinished else { return }
+        prepJobs[id] = nil
+        switch job.status {
+        case .done:
+            var parts = ["جُهّز «\(title)» وجُدول"]
+            if let at = job.scheduledAt { parts[0] += " · \(RiyadhTime.shortWeekday(at)) \(RiyadhTime.timeString(at))" }
+            if job.titleChanged { parts.append("صُحّح العنوان") }
+            if job.contentFixes > 0 { parts.append("\(job.contentFixes) تصحيحات في النص") }
+            if job.image == "generated" { parts.append("صورة جديدة") }
+            successText = parts.joined(separator: " · ")
+            if let message = job.message { notice = message }
+        case .failed:
+            errorText = job.message ?? "تعذر إكمال التجهيز"
+        case .running:
+            break
+        }
+        await reload()
     }
 
     /// Confirmation dialog → Face ID → publish.
@@ -524,7 +579,10 @@ private struct OpinionCard: View {
     let isUnslotted: Bool
     let isHighlighted: Bool
     let isBusy: Bool
+    let prepJob: StaffOpinionPrepJob?
     let actions: Actions
+
+    private var isPreparing: Bool { prepJob?.status == .running }
 
     private var style: OpinionStateStyle { OpinionStateStyle(item: item) }
     private var status: StaffOpinionStatus? { item.article?.status }
@@ -611,11 +669,19 @@ private struct OpinionCard: View {
                             Label(status == .newDraft ? "جهّز وجدول" : "أكمل التجهيز", systemImage: "sparkles")
                         }
                         .buttonStyle(OpinionButtonStyle(kind: .primary))
-                        .disabled(!OpinionFeatureFlags.autoPrepEnabled)
+                        .disabled(!OpinionFeatureFlags.autoPrepEnabled || isPreparing)
                     }
-                    if caps.publish { publishButton }
+                    if caps.publish { publishButton.disabled(isPreparing) }
                 }
-                if caps.schedule, !OpinionFeatureFlags.autoPrepEnabled {
+                if isPreparing {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("يجهّز الآن: \(prepJob?.stepLabel ?? "التدقيق")")
+                            .deskText(DeskType.timestamp)
+                            .foregroundStyle(DeskTheme.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                } else if caps.schedule, !OpinionFeatureFlags.autoPrepEnabled {
                     Text("التجهيز الآلي قريبًا")
                         .deskText(DeskType.timestamp)
                         .foregroundStyle(DeskTheme.textTertiary)

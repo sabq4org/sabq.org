@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   scheduleOpinionFromDesk: vi.fn(),
   publishOpinionFromDesk: vi.fn(),
   returnOpinionToWriterFromDesk: vi.fn(),
+  startOpinionPrep: vi.fn(),
+  getOpinionPrepJob: vi.fn(),
 }));
 
 const staffUser = {
@@ -72,6 +74,11 @@ vi.mock("../../server/services/staffOpinionDeskService", async () => {
     returnOpinionToWriterFromDesk: (...a: unknown[]) => mocks.returnOpinionToWriterFromDesk(...a),
   };
 });
+
+vi.mock("../../server/services/staffOpinionPrepareService", () => ({
+  startOpinionPrep: (...a: unknown[]) => mocks.startOpinionPrep(...a),
+  getOpinionPrepJob: (...a: unknown[]) => mocks.getOpinionPrepJob(...a),
+}));
 
 import staffAppMobileRouter from "../../server/routes/staffAppMobile";
 import { StaffOpinionDeskError } from "../../server/services/staffOpinionDeskService";
@@ -392,11 +399,35 @@ describe("/api/v1/staff/opinion routes", () => {
     expect((await call("POST", "/opinion/a1/publish", { force: true })).status).toBe(400);
   });
 
-  it("prepare is a 501 stub, flag or not", async () => {
+  it("prepare starts in the background (202), audits once, and reports status", async () => {
+    const job = {
+      articleId: "a1", status: "running", step: "proofread", stepLabel: "تدقيق العنوان والنص",
+      startedAt: "2026-10-28T06:00:00.000Z", finishedAt: null, scheduledAt: null,
+      titleChanged: false, contentFixes: 0, image: null, message: null,
+    };
+    mocks.startOpinionPrep.mockResolvedValueOnce({ job, created: true });
     const res = await call("POST", "/opinion/a1/prepare", {});
-    expect(res.status).toBe(501);
-    expect(await res.json()).toEqual({ code: "not_implemented", message: "التجهيز الآلي قريبًا" });
-    vi.stubEnv("OPINION_AUTO_PREP_ENABLED", "true");
-    expect((await call("POST", "/opinion/a1/prepare", {})).status).toBe(501);
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ job });
+    expect(mocks.startOpinionPrep).toHaveBeenCalledWith({ articleId: "a1", actorId: "staff-1", scheduledAt: undefined });
+    expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: "staff_opinion_prepare_start" }));
+
+    mocks.logActivity.mockClear();
+    mocks.startOpinionPrep.mockResolvedValueOnce({ job, created: false });
+    expect((await call("POST", "/opinion/a1/prepare", {})).status).toBe(202);
+    expect(mocks.logActivity).not.toHaveBeenCalled();
+
+    expect((await call("POST", "/opinion/a1/prepare", { scheduledAt: "tomorrow" })).status).toBe(400);
+    expect((await call("POST", "/opinion/a1/prepare", { force: true })).status).toBe(400);
+
+    mocks.startOpinionPrep.mockRejectedValueOnce(new StaffOpinionDeskError(409, "conflict", "لا موعد ثابت"));
+    expect((await call("POST", "/opinion/a1/prepare", {})).status).toBe(409);
+
+    mocks.getOpinionPrepJob.mockResolvedValueOnce({ ...job, status: "done", scheduledAt: "2026-11-01T06:00:00.000Z" });
+    const status = await call("GET", "/opinion/a1/prepare");
+    expect(status.status).toBe(200);
+    expect((await status.json()).job.status).toBe("done");
+    mocks.getOpinionPrepJob.mockResolvedValueOnce(null);
+    expect((await call("GET", "/opinion/a1/prepare")).status).toBe(404);
   });
 });
