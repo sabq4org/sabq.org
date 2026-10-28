@@ -53,7 +53,12 @@ import { buildDeskOpinionDraftAlertEmail } from "../../server/services/deskBotAl
 import {
   notifyOpinionArticleSubmittedForReview,
   notifyOpinionDraftDeskChannels,
+  resendOpinionDraftDeskAlert,
 } from "../../server/services/opinionWritersService";
+import {
+  renotifyOpinionDraftFromDesk,
+  StaffOpinionDeskError,
+} from "../../server/services/staffOpinionDeskService";
 import { DEFAULT_STAFF_ALERT_PREFS, staffAlertPrefsUpdateSchema } from "@shared/staffApp";
 import { normalizeStaffAlertPrefs } from "../../server/services/staffAlertPrefsService";
 
@@ -190,3 +195,86 @@ describe("notifyOpinionArticleSubmittedForReview", () => {
     expect(h.notifyStaffDeskOfOpinionDraft).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("desk renotify (POST /api/v1/staff/opinion/:id/renotify)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.rowsQueue.length = 0;
+  });
+
+  const pendingRow = {
+    id: "art-9",
+    title: "مقال بانتظار المكتب",
+    authorId: "writer-9",
+    status: "draft",
+    reviewStatus: "pending_review",
+    source: "web",
+    scheduledAt: null,
+    publishedAt: null,
+    updatedAt: new Date("2026-10-28T06:00:00Z"),
+    slug: "maqal-9",
+  };
+
+  it("resends only the desk push + bot email (no writer/editor notices, no DB writes)", async () => {
+    // 1) author lookup, 2) writer schedules (none)
+    h.rowsQueue.push([{ firstName: "سعد", lastName: "الكاتب" }], []);
+    h.notifyStaffDeskOfOpinionDraft.mockResolvedValueOnce(3);
+    h.sendDeskAlertEmails.mockResolvedValueOnce(1 as never);
+    const result = await resendOpinionDraftDeskAlert({ id: "art-9", title: "مقال بانتظار المكتب", authorId: "writer-9" });
+
+    expect(result).toEqual({ pushSent: 3, emailRecipients: 1, emailSent: true });
+    expect(h.notifyStaffDeskOfOpinionDraft).toHaveBeenCalledWith({
+      articleId: "art-9",
+      title: "مقال رأي جديد: سعد الكاتب",
+      body: "«مقال بانتظار المكتب» — بلا موعد ثابت",
+      authorId: "writer-9",
+      nextSlot: null,
+    });
+    const [, payload] = h.sendDeskAlertEmails.mock.calls[0] as any[];
+    expect(payload.subject).toContain("[sabq-desk] type=opinion_draft id=art-9");
+    expect(h.sendDraftSubmittedNotification).not.toHaveBeenCalled();
+    expect(h.mockDb.insert).not.toHaveBeenCalled();
+    expect(h.emit).not.toHaveBeenCalled();
+  });
+
+  it("reports emailSent=false when no recipient is configured or the provider refuses", async () => {
+    h.rowsQueue.push([{ firstName: "سعد", lastName: "" }], []);
+    h.getDeskBotAlertRecipients.mockResolvedValueOnce([]);
+    expect(await resendOpinionDraftDeskAlert({ id: "a", title: "t", authorId: "w" })).toEqual({
+      pushSent: 1, emailRecipients: 0, emailSent: false,
+    });
+    h.rowsQueue.push([{ firstName: "سعد", lastName: "" }], []);
+    h.sendDeskAlertEmails.mockResolvedValueOnce(0 as never);
+    expect(await resendOpinionDraftDeskAlert({ id: "a", title: "t", authorId: "w" })).toEqual({
+      pushSent: 1, emailRecipients: 1, emailSent: false,
+    });
+  });
+
+  it("409 when the draft is not pending_review; nothing is sent", async () => {
+    h.rowsQueue.push([{ ...pendingRow, reviewStatus: "approved" }]);
+    const err = await renotifyOpinionDraftFromDesk({ articleId: "art-9" }).catch((e) => e);
+    expect(err).toBeInstanceOf(StaffOpinionDeskError);
+    expect(err.status).toBe(409);
+    expect(h.notifyStaffDeskOfOpinionDraft).not.toHaveBeenCalled();
+    expect(h.sendDeskAlertEmails).not.toHaveBeenCalled();
+  });
+
+  it("404 when the article is missing or not an opinion", async () => {
+    h.rowsQueue.push([]);
+    const err = await renotifyOpinionDraftFromDesk({ articleId: "nope" }).catch((e) => e);
+    expect(err).toBeInstanceOf(StaffOpinionDeskError);
+    expect(err.status).toBe(404);
+    expect(h.notifyStaffDeskOfOpinionDraft).not.toHaveBeenCalled();
+  });
+
+  it("pending draft: returns the channel counts with the article id", async () => {
+    h.rowsQueue.push([pendingRow], [{ firstName: "سعد", lastName: "الكاتب" }], []);
+    h.sendDeskAlertEmails.mockResolvedValueOnce(1 as never);
+    expect(await renotifyOpinionDraftFromDesk({ articleId: "art-9" })).toEqual({
+      articleId: "art-9", pushSent: 1, emailRecipients: 1, emailSent: true,
+    });
+    expect(h.sendDraftSubmittedNotification).not.toHaveBeenCalled();
+    expect(h.mockDb.insert).not.toHaveBeenCalled();
+  });
+});
+
