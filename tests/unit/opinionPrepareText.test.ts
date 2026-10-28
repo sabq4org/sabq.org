@@ -57,6 +57,7 @@ describe("parseOpinionEnrichment", () => {
       keywords: ["k1", "k2", "", 5],
       metaDescription: "و".repeat(300),
       imageBrief: "مشهد",
+      categorySlug: " economy ",
     }) + "\n```";
     const out = parseOpinionEnrichment(raw);
     expect(out.summary).toBe("موجز المقال");
@@ -65,6 +66,7 @@ describe("parseOpinionEnrichment", () => {
     expect(out.metaDescription?.length).toBe(170);
     expect(out.socialTitle).toBeNull();
     expect(out.imageBrief).toBe("مشهد");
+    expect(out.categorySlug).toBe("economy");
   });
 
   it("finds the object inside prose and rejects a missing summary", () => {

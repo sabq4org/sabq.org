@@ -88,6 +88,7 @@ export interface OpinionEnrichment {
   newsletterSubtitle: string | null;
   newsletterExcerpt: string | null;
   imageBrief: string | null;
+  categorySlug: string | null;
 }
 
 function cleanString(value: unknown, max: number): string | null {
@@ -139,6 +140,7 @@ export function parseOpinionEnrichment(raw: string): OpinionEnrichment {
     newsletterSubtitle: cleanString(obj.newsletterSubtitle, 100),
     newsletterExcerpt: cleanString(obj.newsletterExcerpt, 300),
     imageBrief: cleanString(obj.imageBrief, 1200),
+    categorySlug: cleanString(obj.categorySlug, 120),
   };
 }
 

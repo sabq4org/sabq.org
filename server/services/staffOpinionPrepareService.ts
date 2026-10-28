@@ -11,9 +11,9 @@
 // حالة العملية في system_settings (staff_app.opinion_prep:<articleId>) لأن الخادم
 // يعمل بأكثر من نسخة: الطلب التالي قد يصل نسخة أخرى. لا تغيير في المخطط.
 import { randomUUID } from "crypto";
-import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articleEditLocks, articles, systemSettings, type Article } from "@shared/schema";
+import { articleEditLocks, articles, categories, systemSettings, type Article } from "@shared/schema";
 import {
   STAFF_APP_BUNDLE_ID,
   STAFF_OPINION_PREP_STEP_LABELS,
@@ -214,18 +214,39 @@ const ENRICH_SYSTEM_PROMPT = `أنت محرر في صحيفة سبق تجهّز 
   "imageAltText": "وصف الصورة الرئيسية لقارئ الشاشة (15-25 كلمة)",
   "newsletterSubtitle": "عنوان فرعي للنشرة البريدية أقل من 80 حرفاً",
   "newsletterExcerpt": "جملة أو جملتان للنشرة البريدية",
-  "imageBrief": "مشهد بصري رمزي يعبّر عن فكرة المقال لصورة توضيحية: بلا نص مكتوب، وبلا وجوه أشخاص حقيقيين أو شعارات"
+  "imageBrief": "مشهد بصري رمزي يعبّر عن فكرة المقال لصورة توضيحية: بلا نص مكتوب، وبلا وجوه أشخاص حقيقيين أو شعارات",
+  "categorySlug": "slug واحد فقط من قائمة التصنيفات المرسلة، الأقرب لموضوع المقال"
 }`;
 
-async function generateEnrichment(title: string, plainText: string, actorId: string): Promise<OpinionEnrichment> {
+interface PrepCategory { id: string; slug: string; name: string }
+
+/** التصنيفات الظاهرة للقرّاء فقط، بلا تصنيفات iFox الآلية. */
+async function loadVisibleCategories(): Promise<PrepCategory[]> {
+  const rows = await db
+    .select({ id: categories.id, slug: categories.slug, nameAr: categories.nameAr, nameEn: categories.nameEn })
+    .from(categories)
+    .where(and(inArray(categories.status, ["visible", "active"]), eq(categories.isIfoxCategory, false)))
+    .limit(200);
+  return rows
+    .filter((r) => !r.slug.startsWith("ai-"))
+    .map((r) => ({ id: r.id, slug: r.slug, name: r.nameAr || r.nameEn || r.slug }));
+}
+
+async function generateEnrichment(
+  title: string,
+  plainText: string,
+  actorId: string,
+  cats: PrepCategory[],
+): Promise<OpinionEnrichment> {
   const content = plainText.length > 12_000 ? `${plainText.slice(0, 12_000)}…` : plainText;
+  const catList = cats.map((c) => `- ${c.slug}: ${c.name}`).join("\n");
   const response = await aiGateway.complete({
     feature: OPINION_PREP_FEATURE_KEY,
     userId: actorId,
     timeoutMs: ENRICH_TIMEOUT_MS,
     messages: [
       { role: "system", content: ENRICH_SYSTEM_PROMPT },
-      { role: "user", content: `العنوان:\n${title}\n\nالنص:\n${content}` },
+      { role: "user", content: `التصنيفات المتاحة:\n${catList}\n\nالعنوان:\n${title}\n\nالنص:\n${content}` },
     ],
     options: { jsonMode: true, maxTokens: 2000, cacheSystemPrompt: true },
   });
@@ -318,7 +339,9 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     await advance({ step: "enrich", titleChanged: newTitle !== before.title, contentFixes: fixed.applied });
 
     // 2) الملحقات (على النص بعد التدقيق)
-    const enrichment = await generateEnrichment(newTitle, stripHtmlToText(fixed.html), job.actorId);
+    const cats = await loadVisibleCategories();
+    const enrichment = await generateEnrichment(newTitle, stripHtmlToText(fixed.html), job.actorId, cats);
+    const category = enrichment.categorySlug ? cats.find((c) => c.slug === enrichment.categorySlug) : undefined;
     await advance({ step: "image" });
 
     // 3) الحقول ثم الصورة. فشل الصورة لا يوقف الحفظ ولا الجدولة.
@@ -329,6 +352,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     const now = new Date();
     const updates: Partial<Article> = {
       title: newTitle,
+      ...(category ? { categoryId: category.id } : {}),
       content: fixed.html,
       aiSummary: enrichment.summary,
       aiBullets: enrichment.bullets.length > 0 ? enrichment.bullets : before.aiBullets,
@@ -376,6 +400,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     } else {
       job.image = "kept";
     }
+    job.categoryName = category?.name ?? null;
     await advance({ step: "schedule" });
 
     // 4) حفظ واحد: يفشل إن عُدّل المقال أثناء التجهيز أو فتحه زميل للتحرير.

@@ -22,7 +22,7 @@ public enum StaffOpinionStatus: String, Codable, Sendable, CaseIterable {
 
     public var title: String {
         switch self {
-        case .newDraft: return "مسودة جديدة"
+        case .newDraft: return "مسودة"
         case .inPrep: return "قيد التجهيز"
         case .scheduled: return "مجدول"
         case .published: return "نُشر"
@@ -302,6 +302,8 @@ public struct StaffOpinionPrepJob: Codable, Sendable, Equatable {
     public var contentFixes: Int
     /// `generated` = a new image; `kept` = the article already had one.
     public var image: String?
+    /// The category the preparation picked, or nil when the writer's stayed.
+    public var categoryName: String?
     public var message: String?
 
     public var isFinished: Bool { status != .running }
@@ -316,11 +318,12 @@ public struct StaffOpinionPrepJob: Codable, Sendable, Equatable {
         titleChanged = try c.decodeIfPresent(Bool.self, forKey: .titleChanged) ?? false
         contentFixes = try c.decodeIfPresent(Int.self, forKey: .contentFixes) ?? 0
         image = try c.decodeIfPresent(String.self, forKey: .image)
+        categoryName = try c.decodeIfPresent(String.self, forKey: .categoryName)
         message = try c.decodeIfPresent(String.self, forKey: .message)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case articleId, status, step, stepLabel, scheduledAt, titleChanged, contentFixes, image, message
+        case articleId, status, step, stepLabel, scheduledAt, titleChanged, contentFixes, image, categoryName, message
     }
 }
 
