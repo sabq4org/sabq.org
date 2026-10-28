@@ -18,7 +18,7 @@ struct OpinionView: View {
     @State private var busyID: String?
     @State private var errorText: String?
     @State private var notice: String?
-    @State private var successText: String?
+    @State private var success: PrepSuccess?
     /// «جهّز وجدول» jobs in flight or just finished, by article id.
     @State private var prepJobs: [String: StaffOpinionPrepJob] = [:]
 
@@ -129,11 +129,8 @@ struct OpinionView: View {
                 ErrorLine(message: text)
                     .padding(.horizontal, DeskLayout.pageMargin + 4)
             }
-            if let successText {
-                Label(successText, systemImage: "checkmark.circle")
-                    .deskText(DeskType.meta)
-                    .foregroundStyle(DeskTheme.success)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if let success {
+                PrepSuccessLabel(success: success)
                     .padding(.horizontal, DeskLayout.pageMargin + 4)
             }
             if let notice {
@@ -304,7 +301,7 @@ struct OpinionView: View {
         if prepJobs[id]?.status == .running { return }
         errorText = nil
         notice = nil
-        successText = nil
+        success = nil
         busyID = item.id
         do {
             let job = try await app.client.prepareOpinion(id: id)
@@ -331,12 +328,13 @@ struct OpinionView: View {
         prepJobs[id] = nil
         switch job.status {
         case .done:
-            var parts = ["جُهّز «\(title)» وجُدول"]
-            if let at = job.scheduledAt { parts[0] += " · \(RiyadhTime.shortWeekday(at)) \(RiyadhTime.timeString(at))" }
+            var parts = ["جُهّز وجُدول"]
+            if let at = job.scheduledAt { parts.append("\(RiyadhTime.shortWeekday(at)) \(RiyadhTime.timeString(at))") }
+            if let category = job.categoryName { parts.append(category) }
             if job.titleChanged { parts.append("صُحّح العنوان") }
-            if job.contentFixes > 0 { parts.append("\(job.contentFixes) تصحيحات في النص") }
+            if job.contentFixes > 0 { parts.append("\(job.contentFixes) تصحيحات") }
             if job.image == "generated" { parts.append("صورة جديدة") }
-            successText = parts.joined(separator: " · ")
+            success = PrepSuccess(headline: parts.joined(separator: " · "), title: title)
             if let message = job.message { notice = message }
         case .failed:
             errorText = job.message ?? "تعذر إكمال التجهيز"
@@ -592,7 +590,7 @@ private struct OpinionCard: View {
             topLine
             if let article = item.article {
                 Text(article.title)
-                    .font(DeskFonts.app(size: 15, weight: .semibold, relativeTo: .subheadline))
+                    .font(DeskFonts.app(size: 14, weight: .semibold, relativeTo: .footnote))
                     .lineSpacing(4)
                     .foregroundStyle(DeskTheme.textPrimary)
                     .lineLimit(2)
@@ -635,12 +633,12 @@ private struct OpinionCard: View {
                             .accessibilityLabel("جديد")
                     }
                     Text(item.writer.name)
-                        .deskText(DeskRowType.nameRead)
+                        .font(DeskFonts.app(size: 14, weight: .semibold, relativeTo: .footnote))
                         .foregroundStyle(DeskTheme.textPrimary)
                         .lineLimit(1)
                 }
                 Text(metaLine)
-                    .deskText(DeskType.timestamp)
+                    .font(DeskFonts.app(size: 10, weight: .regular, relativeTo: .caption2))
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(1)
             }
@@ -862,3 +860,41 @@ private struct ReturnToWriterSheet: View {
         .deskPreviewEnvironment(emptyOpinion: true)
 }
 #endif
+
+// MARK: - Preparation result
+
+struct PrepSuccess: Equatable {
+    let headline: String
+    let title: String
+}
+
+/// «جُهّز وجُدول» result: a light green label, the summary on one line and
+/// the article title on its own line (never split mid-phrase).
+private struct PrepSuccessLabel: View {
+    let success: PrepSuccess
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(DeskTone.success.ink)
+                .font(DeskFonts.app(size: 14, weight: .semibold, relativeTo: .footnote))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(success.headline)
+                    .font(DeskFonts.app(size: 12, weight: .semibold, relativeTo: .caption))
+                    .foregroundStyle(DeskTone.success.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Text(success.title)
+                    .font(DeskFonts.app(size: 12, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(DeskTone.success.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}

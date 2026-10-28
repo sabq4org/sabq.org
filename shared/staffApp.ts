@@ -308,6 +308,8 @@ export interface StaffOpinionPrepJob {
   contentFixes: number;
   /** generated = صورة جديدة؛ kept = للمقال صورة فأُبقيت؛ failed = تعذرت فجُدول بلا صورة. */
   image: "generated" | "kept" | "failed" | null;
+  /** التصنيف الذي اختاره التجهيز (اسمه العربي)، أو null إن بقي تصنيف الكاتب. */
+  categoryName?: string | null;
   message: string | null;
 }
 
