@@ -43,25 +43,27 @@ export function NewsEnhancedFilterBar({
   categories,
 }: EnhancedFilterBarProps) {
   return (
-    <div className="mb-4 space-y-2" data-testid="news-filter-bar">
+    <div className="news-filters mb-4 space-y-3" data-testid="news-filter-bar" role="search" aria-label="البحث وتصفية الأخبار">
       <div className="relative">
         <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
+          aria-label="ابحث في الأخبار"
+          enterKeyHint="search"
           placeholder="ابحث في الأخبار..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-10 pr-10"
+          className="min-h-11 pr-10 text-base md:text-base"
           data-testid="input-search-news"
         />
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <Select value={sortOption} onValueChange={onSortChange}>
-          <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-sort">
+      <div className="news-filter-controls">
+        <Select dir="rtl" value={sortOption} onValueChange={onSortChange}>
+          <SelectTrigger className="news-filter-select" aria-label="ترتيب الأخبار" data-testid="select-sort">
             <SelectValue placeholder="ترتيب حسب" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="news-filter-menu">
             <SelectItem value="default">الترتيب الافتراضي</SelectItem>
             <SelectItem value="newest">الأحدث</SelectItem>
             <SelectItem value="oldest">الأقدم</SelectItem>
@@ -70,11 +72,11 @@ export function NewsEnhancedFilterBar({
           </SelectContent>
         </Select>
 
-        <Select value={timeRange} onValueChange={onTimeRangeChange}>
-          <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-time-range">
+        <Select dir="rtl" value={timeRange} onValueChange={onTimeRangeChange}>
+          <SelectTrigger className="news-filter-select" aria-label="الفترة الزمنية" data-testid="select-time-range">
             <SelectValue placeholder="الوقت" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="news-filter-menu">
             <SelectItem value="all">كل الأوقات</SelectItem>
             <SelectItem value="today">اليوم</SelectItem>
             <SelectItem value="week">هذا الأسبوع</SelectItem>
@@ -82,11 +84,11 @@ export function NewsEnhancedFilterBar({
           </SelectContent>
         </Select>
 
-        <Select value={selectedCategory} onValueChange={onCategoryChange}>
-          <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="select-category">
+        <Select dir="rtl" value={selectedCategory} onValueChange={onCategoryChange}>
+          <SelectTrigger className="news-filter-select" aria-label="تصنيف الأخبار" data-testid="select-category">
             <SelectValue placeholder="الفئة" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="news-filter-menu">
             <SelectItem value="all">كل الفئات</SelectItem>
             {(categories || []).map((cat) => (
               <SelectItem key={cat.id} value={cat.id}>
@@ -96,14 +98,15 @@ export function NewsEnhancedFilterBar({
           </SelectContent>
         </Select>
 
-        <div className="mr-auto flex shrink-0 gap-1 rounded-md border p-0.5">
+        <div className="news-view-controls flex gap-1 rounded-md border p-0.5" role="group" aria-label="طريقة عرض الأخبار">
           <Button
             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => onViewModeChange('grid')}
-            className="h-8 w-8 p-0"
+            className="h-11 w-11 p-0"
             data-testid="button-view-grid"
             aria-label="عرض شبكي"
+            aria-pressed={viewMode === 'grid'}
           >
             <Grid3x3 className="h-4 w-4" />
           </Button>
@@ -111,9 +114,10 @@ export function NewsEnhancedFilterBar({
             variant={viewMode === 'list' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => onViewModeChange('list')}
-            className="h-8 w-8 p-0"
+            className="h-11 w-11 p-0"
             data-testid="button-view-list"
             aria-label="عرض قائمة"
+            aria-pressed={viewMode === 'list'}
           >
             <List className="h-4 w-4" />
           </Button>
@@ -121,9 +125,10 @@ export function NewsEnhancedFilterBar({
             variant={viewMode === 'compact' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => onViewModeChange('compact')}
-            className="h-8 w-8 p-0"
+            className="h-11 w-11 p-0"
             data-testid="button-view-compact"
             aria-label="عرض مضغوط"
+            aria-pressed={viewMode === 'compact'}
           >
             <ListOrdered className="h-4 w-4" />
           </Button>
@@ -132,7 +137,7 @@ export function NewsEnhancedFilterBar({
 
       {/* Active Filters Badge */}
       {(searchQuery || timeRange !== 'all' || selectedCategory !== 'all') && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="news-active-filters flex items-center gap-2 flex-wrap">
           <span className="text-sm text-muted-foreground">الفلاتر النشطة:</span>
           {searchQuery && (
             <Badge variant="secondary" className="gap-1">
