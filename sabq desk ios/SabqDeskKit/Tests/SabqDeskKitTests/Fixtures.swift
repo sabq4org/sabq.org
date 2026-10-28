@@ -261,6 +261,45 @@ enum Fixtures {
     static let loginNeeds2FA = """
     { "success": false, "requires2FA": true, "challengeToken": "challenge-xyz", "message": "أدخل رمز التحقق" }
     """
+
+    /// `GET /opinion/board` (shape from server/services/staffOpinionBoard.ts), fictional writers.
+    static let opinionBoard = """
+    {
+      "weekStart": "2026-10-28",
+      "days": [
+        { "date": "2026-10-28", "weekday": 3, "counts": { "draft": 0, "prep": 0, "scheduled": 0, "missing": 0 } },
+        { "date": "2026-10-29", "weekday": 4, "counts": { "draft": 1, "prep": 0, "scheduled": 0, "missing": 0 } },
+        { "date": "2026-11-03", "weekday": 2, "counts": { "missing": 1 } }
+      ],
+      "slots": [
+        { "writer": { "id": "w1", "name": "د. كاتب الرأي", "avatarUrl": null, "jobTitle": null,
+                      "fixedSlot": { "weekday": 4, "publishTime": "09:00" } },
+          "slotAt": "2026-10-29T06:00:00.000Z", "state": "arrived",
+          "article": { "id": "a1", "title": "الاقتصاد الرقمي", "status": "new_draft",
+                       "submittedAt": "2026-10-28T05:48:00.000Z", "scheduledAt": null, "publishedAt": null },
+          "deeplink": "sabqdesk://opinion/a1" },
+        { "writer": { "id": "w5", "name": "د. كاتب المقال", "fixedSlot": { "weekday": 2, "publishTime": "09:00" } },
+          "slotAt": "2026-11-03T06:00:00.000Z", "state": "missing", "article": null, "deeplink": null },
+        { "writer": { "id": "w9", "name": "كاتب جديد", "fixedSlot": null },
+          "slotAt": "2026-11-01T07:00:00.000Z", "state": "on_hold",
+          "article": { "id": "a9", "title": "حالة من خادم أحدث", "status": "frozen" } }
+      ],
+      "unslotted": [
+        { "writer": { "id": "w3", "name": "كاتب ضيف", "fixedSlot": null }, "slotAt": null, "state": "arrived",
+          "article": { "id": "a3", "title": "ماذا تعلّمنا من موسم الرياض؟", "status": "new_draft",
+                       "submittedAt": "2026-10-28T05:20:00Z" },
+          "deeplink": "sabqdesk://opinion/a3" }
+      ],
+      "pendingCount": 2
+    }
+    """
+
+    static let opinionScheduleResult = """
+    { "article": { "id": "a1", "status": "scheduled", "scheduledAt": "2026-10-29T06:00:00.000Z" },
+      "scheduledAt": "2026-10-29T06:00:00.000Z",
+      "warnings": [ { "code": "slot_clash", "message": "تنبيه: الكاتب ب مجدول في الموعد نفسه",
+                      "otherWriterName": "ب", "otherArticleId": "a7" } ] }
+    """
 }
 
 extension String {

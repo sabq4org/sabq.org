@@ -25,6 +25,39 @@ final class DeepLinkAndRulesTests: XCTestCase {
         XCTAssertNil(DeskDeepLink(pushPayload: ["aps": ["alert": "x"]]))
     }
 
+    func testOpinionLinksFromURLAndDeskPush() {
+        XCTAssertEqual(DeskDeepLink(url: URL(string: "sabqdesk://opinion/art-1")!), .opinion(id: "art-1"))
+        XCTAssertEqual(DeskDeepLink.opinion(id: "art-1").url.absoluteString, "sabqdesk://opinion/art-1")
+        XCTAssertNil(DeskDeepLink(url: URL(string: "sabqdesk://opinion/a/b")!))
+        // Exactly what notifyStaffDeskOfOpinionDraft sends (server/services/staffAppPushService.ts).
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.opinion_draft",
+                                                 "deeplink": "sabqdesk://opinion/art-1",
+                                                 "articleId": "art-1"]), .opinion(id: "art-1"))
+        // Without the deeplink the type + articleId still route.
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.opinion_draft", "articleId": "art-2"]), .opinion(id: "art-2"))
+        XCTAssertNil(DeskDeepLink(pushPayload: ["type": "desk.opinion_draft", "articleId": "../x"]))
+        XCTAssertNil(DeskDeepLink(pushPayload: ["type": "desk.opinion_draft"]))
+    }
+
+    func testOpinionCapabilitiesOpenTheApp() {
+        let caps = StaffCapabilities(canOpinion: .init(view: true))
+        XCTAssertTrue(caps.canOpenApp)
+        XCTAssertFalse(caps.canOpenInbox)
+        XCTAssertFalse(StaffCapabilities.none.canOpinion.view)
+    }
+
+    func testOpinionCountdownAndWeekTitle() throws {
+        let now = try XCTUnwrap(StaffJSON.parseDate("2026-10-28T07:00:00Z"))
+        XCTAssertEqual(RiyadhTime.slotCountdown(to: now.addingTimeInterval(23 * 3600), now: now), "بعد 23 س")
+        XCTAssertEqual(RiyadhTime.slotCountdown(to: now.addingTimeInterval(4 * 86400), now: now), "بعد 4 أيام")
+        XCTAssertEqual(RiyadhTime.slotCountdown(to: now.addingTimeInterval(12 * 60), now: now), "بعد 12 د")
+        XCTAssertNil(RiyadhTime.slotCountdown(to: now.addingTimeInterval(-60), now: now))
+        let start = try XCTUnwrap(StaffJSON.parseDate("2026-10-27T21:00:00Z"))
+        XCTAssertEqual(RiyadhTime.weekTitle(from: start), "أسبوع 28 أكتوبر – 3 نوفمبر")
+        XCTAssertEqual(RiyadhTime.shortWeekday(start), "أربعاء")
+        XCTAssertEqual(StaffOpinionFixedSlot(weekday: 4, publishTime: "09:00").everyLabel, "كل خميس")
+    }
+
     func testRejectionReasonComposition() {
         XCTAssertEqual(SocialRejectionPreset.allCases.map(\.title),
                        ["لا يناسب سياسة الحساب", "معلومة غير دقيقة", "مكرر", "يحتاج إعادة صياغة"])

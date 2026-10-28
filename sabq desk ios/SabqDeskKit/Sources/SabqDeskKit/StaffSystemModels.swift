@@ -44,19 +44,22 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
     public var adminAlerts: Bool
     public var writerMessages: Bool
     public var socialProposals: Bool
+    /// New opinion drafts waiting for review and scheduling (server key `opinionDrafts`).
+    public var opinionDrafts: Bool
     public var quietHours: StaffQuietHours
 
     private enum CodingKeys: String, CodingKey {
-        case aiAlerts, adminAlerts, writerMessages, socialProposals, quietHours
+        case aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, quietHours
     }
 
     public init(aiAlerts: Bool = true, adminAlerts: Bool = true,
                 writerMessages: Bool = true, socialProposals: Bool = true,
-                quietHours: StaffQuietHours = .off) {
+                opinionDrafts: Bool = true, quietHours: StaffQuietHours = .off) {
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
         self.writerMessages = writerMessages
         self.socialProposals = socialProposals
+        self.opinionDrafts = opinionDrafts
         self.quietHours = quietHours
     }
 
@@ -66,6 +69,7 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
         adminAlerts = try container.decodeIfPresent(Bool.self, forKey: .adminAlerts) ?? true
         writerMessages = try container.decodeIfPresent(Bool.self, forKey: .writerMessages) ?? true
         socialProposals = try container.decodeIfPresent(Bool.self, forKey: .socialProposals) ?? true
+        opinionDrafts = try container.decodeIfPresent(Bool.self, forKey: .opinionDrafts) ?? true
         quietHours = (try? container.decodeIfPresent(StaffQuietHours.self, forKey: .quietHours)) ?? .off
     }
 }
@@ -76,15 +80,17 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
     public var adminAlerts: Bool?
     public var writerMessages: Bool?
     public var socialProposals: Bool?
+    public var opinionDrafts: Bool?
     public var quietHours: StaffQuietHours?
 
     public init(aiAlerts: Bool? = nil, adminAlerts: Bool? = nil,
                 writerMessages: Bool? = nil, socialProposals: Bool? = nil,
-                quietHours: StaffQuietHours? = nil) {
+                opinionDrafts: Bool? = nil, quietHours: StaffQuietHours? = nil) {
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
         self.writerMessages = writerMessages
         self.socialProposals = socialProposals
+        self.opinionDrafts = opinionDrafts
         self.quietHours = quietHours
     }
 
@@ -95,6 +101,7 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
         if let adminAlerts { out.adminAlerts = adminAlerts }
         if let writerMessages { out.writerMessages = writerMessages }
         if let socialProposals { out.socialProposals = socialProposals }
+        if let opinionDrafts { out.opinionDrafts = opinionDrafts }
         if let quietHours { out.quietHours = quietHours }
         return out
     }

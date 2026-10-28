@@ -17,7 +17,7 @@ extension StaffCapabilities {
     public var canSystemTab: Bool { canSystemHealth || canAdminAlerts }
 
     /// Anything to show besides «حسابي».
-    public var canOpenApp: Bool { canOpenInbox || canSystemTab }
+    public var canOpenApp: Bool { canOpenInbox || canSystemTab || canOpinion.view }
 
     /// Segments the inbox shows; a single-domain account gets no «الكل».
     public var inboxFilters: [StaffInboxFilter] {

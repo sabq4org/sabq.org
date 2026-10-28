@@ -13,6 +13,7 @@ import {
   type UpsertOpinionWriterSchedule,
 } from "@shared/schema";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
+import { buildOpinionDraftNotice } from "./opinionDraftDeskNotice";
 import {
   mediaLicenseFlags,
   resolveMediaLicenseReviewStatus,
@@ -42,7 +43,7 @@ const REMINDER_WINDOW_MS = 2 * DAY_MS;
  * مقالة «أُرسلت» وتنتظر التحرير: مراجعة معلّقة، أو مسودة موبايل قديمة
  * بلا reviewStatus (إرسال iOS/Android كان يحفظ draft فقط قبل الإصلاح).
  */
-const awaitingEditorialSql = sql`(
+export const awaitingEditorialSql = sql`(
   ${articles.reviewStatus} = 'pending_review'
   OR (
     ${articles.status} = 'draft'
@@ -100,7 +101,7 @@ export type OpinionWriterSummary = {
  * أعمدة timestamp تُخزَّن UTC بلا منطقة زمنية؛ نتائج sql`` الخام تصل نصاً
  * ويفسّرها new Date بتوقيت الجهاز — نثبّت التفسير على UTC دائماً.
  */
-function parseDbTimestamp(v: string | Date | null | undefined): Date | null {
+export function parseDbTimestamp(v: string | Date | null | undefined): Date | null {
   if (!v) return null;
   const d =
     v instanceof Date
@@ -120,7 +121,7 @@ function toIsoOrNull(v: string | Date | null | undefined): string | null {
   return d ? d.toISOString() : null;
 }
 
-function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: number } {
+export function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: number } {
   const shifted = new Date(d.getTime() + RIYADH_OFFSET_MS);
   return {
     y: shifted.getUTCFullYear(),
@@ -131,7 +132,7 @@ function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: n
 }
 
 /** يبني تاريخ UTC من يوم رياضي محدد + وقت HH:mm بتوقيت الرياض */
-function riyadhDateTime(y: number, m: number, d: number, publishTime: string): Date {
+export function riyadhDateTime(y: number, m: number, d: number, publishTime: string): Date {
   const mm = String(m).padStart(2, "0");
   const dd = String(d).padStart(2, "0");
   // اقبل HH:mm أو HH:mm:ss — غير ذلك → 06:00 افتراضي
@@ -806,15 +807,95 @@ export async function notifyOpinionArticleSubmittedForReview(article: {
       body: bodyText,
     });
 
+    // الموعد الثابت القادم للكاتب (يُستثنى المقال نفسه من «الأرضية» حتى لا يحجز موعده بنفسه).
+    let nextSlot: string | null = null;
+    try {
+      nextSlot = (await getNextSlotForWriter(article.authorId, article.id))?.nextSlot ?? null;
+    } catch (slotErr) {
+      console.error("[opinion-writers] next slot for submit notice failed:", slotErr);
+    }
+    const deskNotice = buildOpinionDraftNotice({
+      authorName,
+      articleTitle: article.title,
+      nextSlot,
+    });
+
     const { sendDraftSubmittedNotification } = await import("../notificationService");
     await sendDraftSubmittedNotification(
       { id: article.id, title: article.title, slug: article.slug },
       authorName,
       article.authorId,
+      {
+        title: deskNotice.title,
+        body: deskNotice.body,
+        metadata: { articleType: "opinion", nextSlot },
+      },
     );
+
+    // تطبيق الديسك وبريد البوت في الخلفية: لا يؤخّران ولا يُفشلان الإرسال.
+    void notifyOpinionDraftDeskChannels({
+      articleId: article.id,
+      articleTitle: article.title,
+      authorId: article.authorId,
+      authorName,
+      nextSlot,
+      notice: deskNotice,
+    });
   } catch (err) {
     console.error("[opinion-writers] notifyOpinionArticleSubmittedForReview failed:", err);
   }
+}
+
+/**
+ * Push «مكتب سبق» لمن يملك opinion.review أو articles.schedule، وبريد
+ * `[sabq-desk] type=opinion_draft id=<articleId>` لمستلمي بوت الديسك
+ * (DESK_BOT_ALERT_EMAILS + editor_alerts.deskBotAlertEmails). لا يرمي.
+ */
+export async function notifyOpinionDraftDeskChannels(input: {
+  articleId: string;
+  articleTitle: string;
+  authorId: string | null;
+  authorName: string;
+  nextSlot: string | null;
+  notice: { title: string; body: string; slotLine: string };
+}): Promise<void> {
+  await Promise.all([
+    (async () => {
+      try {
+        const { notifyStaffDeskOfOpinionDraft } = await import("./staffAppPushService");
+        await notifyStaffDeskOfOpinionDraft({
+          articleId: input.articleId,
+          title: input.notice.title,
+          body: input.notice.body,
+          authorId: input.authorId,
+          nextSlot: input.nextSlot,
+        });
+      } catch (pushErr) {
+        console.error("[opinion-writers] desk push for opinion draft failed:", pushErr);
+      }
+    })(),
+    (async () => {
+      try {
+        const {
+          buildDeskOpinionDraftAlertEmail,
+          getDeskBotAlertRecipients,
+          sendDeskAlertEmails,
+        } = await import("./deskBotAlerts");
+        const recipients = await getDeskBotAlertRecipients();
+        if (recipients.length === 0) return;
+        const payload = buildDeskOpinionDraftAlertEmail({
+          articleId: input.articleId,
+          articleTitle: input.articleTitle,
+          authorName: input.authorName,
+          slotLine: input.notice.slotLine,
+          nextSlotIso: input.nextSlot,
+        });
+        await sendDeskAlertEmails(recipients, payload, "[opinion-writers] desk bot email");
+      } catch (mailErr) {
+        console.error("[opinion-writers] desk bot email for opinion draft failed:", mailErr);
+      }
+    })(),
+  ]);
 }
 
 /**

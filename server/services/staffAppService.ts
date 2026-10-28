@@ -23,6 +23,7 @@ import { composeXPostText, validateXPostText } from "@shared/socialPostText";
 import {
   STAFF_APP_BUNDLE_ID,
   computeStaffCanceledBySelf,
+  computeStaffOpinionCapabilities,
   decodeStaffInboxCursor,
   encodeStaffInboxCursor,
   type StaffCapabilities,
@@ -150,6 +151,10 @@ export async function resolveStaffCapabilitiesAndRoles(
     canCreateSocial,
     canAiHubView,
     canAiHubManage,
+    canOpinionReview,
+    canArticlesSchedule,
+    canArticlesPublish,
+    canArticlesEditAny,
   ] = await Promise.all([
     typeof getUserRoleNames === "function"
       ? getUserRoleNames(userId).catch(() => (legacyRole ? [legacyRole] : []))
@@ -162,6 +167,10 @@ export async function resolveStaffCapabilitiesAndRoles(
     userHasPermission(userId, PERMISSION_CODES.SOCIAL_PUBLISH_CREATE),
     userHasPermission(userId, STAFF_SYSTEM_HEALTH_PERMISSION),
     userHasPermission(userId, STAFF_BALANCE_MANAGE_PERMISSION),
+    userHasPermission(userId, PERMISSION_CODES.OPINION_REVIEW),
+    userHasPermission(userId, PERMISSION_CODES.ARTICLES_SCHEDULE),
+    userHasPermission(userId, PERMISSION_CODES.ARTICLES_PUBLISH),
+    userHasPermission(userId, PERMISSION_CODES.ARTICLES_EDIT_ANY),
   ]);
 
   const roleList =
@@ -184,6 +193,12 @@ export async function resolveStaffCapabilitiesAndRoles(
       canSystemHealth: Boolean(canAiHubView),
       canAdminAlerts: Boolean(canAiHubView),
       canManageBalances: Boolean(canAiHubView && canAiHubManage),
+      canOpinion: computeStaffOpinionCapabilities({
+        opinionReview: Boolean(canOpinionReview),
+        articlesSchedule: Boolean(canArticlesSchedule),
+        articlesPublish: Boolean(canArticlesPublish),
+        articlesEditAny: Boolean(canArticlesEditAny),
+      }),
     },
   };
 }

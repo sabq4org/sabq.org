@@ -167,7 +167,49 @@ final class DecodingTests: XCTestCase {
         XCTAssertFalse(me.capabilities.canAdminAlerts)
         XCTAssertFalse(me.capabilities.canManageBalances)
         XCTAssertFalse(me.capabilities.canSystemTab)
+        XCTAssertEqual(me.capabilities.canOpinion, .init())
         XCTAssertNil(me.alertPrefs)
+    }
+
+    func testCanOpinionDecodesAndToleratesPartialObjects() throws {
+        let json = #"{"canTickets":false,"canSocial":{"view":false,"publish":false,"schedule":false,"reject":false},"canOpinion":{"view":true,"publish":true}}"#
+        let caps = try decoder.decode(StaffCapabilities.self, from: json.data)
+        XCTAssertEqual(caps.canOpinion, .init(view: true, schedule: false, publish: true, returnToWriter: false))
+    }
+
+    func testAlertPrefsCarryOpinionDrafts() throws {
+        XCTAssertTrue(try decoder.decode(StaffAlertPrefs.self, from: "{}".data).opinionDrafts)
+        XCTAssertFalse(try decoder.decode(StaffAlertPrefs.self, from: #"{"opinionDrafts":false}"#.data).opinionDrafts)
+        let update = StaffAlertPrefsUpdate(opinionDrafts: false)
+        XCTAssertFalse(update.applied(to: StaffAlertPrefs()).opinionDrafts)
+        let body = jsonObject(try StaffJSON.makeEncoder().encode(update))
+        XCTAssertEqual(body["opinionDrafts"] as? Bool, false)
+    }
+
+    func testOpinionBoardDecodesTimelineAndUnknownValues() throws {
+        let board = try decoder.decode(StaffOpinionBoard.self, from: Fixtures.opinionBoard.data)
+        XCTAssertEqual(board.weekStart, "2026-10-28")
+        XCTAssertEqual(board.pendingCount, 2)
+        XCTAssertEqual(board.days[2].counts, .init(missing: 1))
+        let first = try XCTUnwrap(board.slots.first)
+        XCTAssertEqual(first.writer.fixedSlot, StaffOpinionFixedSlot(weekday: 4, publishTime: "09:00"))
+        XCTAssertEqual(first.article?.status, .newDraft)
+        XCTAssertEqual(first.state, .arrived)
+        XCTAssertEqual(first.slotAt, StaffJSON.parseDate("2026-10-29T06:00:00Z"))
+        XCTAssertTrue(board.slots[1].isAwaitingDraft)
+        XCTAssertEqual(board.slots[1].state, .missing)
+        XCTAssertEqual(board.slots[2].state, .unknown)
+        XCTAssertEqual(board.slots[2].article?.status, .unknown)
+        XCTAssertEqual(board.unslotted.first?.writer.fixedSlot, nil)
+        XCTAssertEqual(board.item(articleID: "a3")?.writer.name, "كاتب ضيف")
+        XCTAssertFalse(board.hasNoDrafts)
+        XCTAssertNotEqual(board.slots[1].id, board.slots[0].id)
+    }
+
+    func testOpinionScheduleResultCarriesWarnings() throws {
+        let result = try decoder.decode(StaffOpinionScheduleResult.self, from: Fixtures.opinionScheduleResult.data)
+        XCTAssertEqual(result.article.status, "scheduled")
+        XCTAssertEqual(result.warnings.first?.displayText, "تنبيه: الكاتب ب مجدول في الموعد نفسه")
     }
 
     func testAdminMeDecodesSystemCapabilitiesAndPrefs() throws {

@@ -304,3 +304,73 @@ export async function notifyStaffDeskOfSocialProposal(input: {
     console.error("[StaffAppPush] notifyStaffDeskOfSocialProposal failed:", err);
   }
 }
+
+/**
+ * مستلمو تنبيه «مقال رأي جديد»: كل عضو نشط يملك مراجعة الرأي (`opinion.review`)
+ * أو الجدولة (`articles.schedule`) — الصلاحيتان نفسهما اللتان يشترطهما
+ * `GET /api/opinion-writers/:writerId/next-slot` و`week-board`.
+ */
+export const OPINION_DESK_RECIPIENT_PERMISSIONS = [
+  PERMISSION_CODES.OPINION_REVIEW,
+  PERMISSION_CODES.ARTICLES_SCHEDULE,
+] as const;
+
+export async function listOpinionDeskRecipientUserIds(
+  excludeUserId?: string | null,
+): Promise<string[]> {
+  const lists = await Promise.all(
+    OPINION_DESK_RECIPIENT_PERMISSIONS.map((code) =>
+      listStaffPermissionRecipientUserIds(code, excludeUserId),
+    ),
+  );
+  return [...new Set(lists.flat())];
+}
+
+/**
+ * إشعار تطبيق الديسك بمقال رأي جديد بانتظار المراجعة. يحترم مفتاح
+ * «مقالات الرأي» (`opinionDrafts`) والساعات الهادئة. لا يرمي.
+ *
+ * الرابط `sabqdesk://opinion/<id>`: التطبيق الحالي لا يعرف هذا المسار بعد،
+ * فيتجاهله ويفتح التطبيق على شاشته الحالية (لا نضع ticketId/postId في data
+ * حتى لا يُفسَّر كتذكرة أو تغريدة).
+ */
+export async function notifyStaffDeskOfOpinionDraft(input: {
+  articleId: string;
+  title: string;
+  body: string;
+  authorId?: string | null;
+  nextSlot?: string | null;
+}): Promise<number> {
+  try {
+    const recipientIds = await listOpinionDeskRecipientUserIds(input.authorId);
+    if (recipientIds.length === 0) return 0;
+    const prefs = await loadStaffDeskPrefs(recipientIds);
+    const results = await Promise.all(
+      recipientIds.map(async (recipientId) => {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), "opinionDrafts", {
+          title: input.title,
+          body: input.body,
+          type: "desk.opinion_draft",
+          deeplink: `sabqdesk://opinion/${input.articleId}`,
+          data: {
+            articleId: input.articleId,
+            ...(input.nextSlot ? { nextSlot: input.nextSlot } : {}),
+          },
+          collapseId: `desk-opinion-${input.articleId}`,
+        });
+        if (!message) return 0;
+        try {
+          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
+          return r.sent;
+        } catch (pushErr) {
+          console.error("[StaffAppPush] opinion draft push to recipient failed:", pushErr);
+          return 0;
+        }
+      }),
+    );
+    return results.reduce((a, b) => a + b, 0);
+  } catch (err) {
+    console.error("[StaffAppPush] notifyStaffDeskOfOpinionDraft failed:", err);
+    return 0;
+  }
+}

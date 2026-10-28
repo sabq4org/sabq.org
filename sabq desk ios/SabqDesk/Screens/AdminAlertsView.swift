@@ -166,6 +166,9 @@ struct AdminAlertsView: View {
         case .ticket(let id)?:
             guard app.capabilities.canTickets else { return nil }
             return { open(.ticket(id: id)) }
+        case .opinion(let id)?:
+            guard app.capabilities.canOpinion.view else { return nil }
+            return { app.pendingLink = .opinion(id: id) }  // RootView switches to «الرأي»
         case .balances?:
             guard app.capabilities.canSystemHealth else { return nil }
             return { open(.balances) }

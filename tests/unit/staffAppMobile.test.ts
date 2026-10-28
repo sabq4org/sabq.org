@@ -410,6 +410,7 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
       canSystemHealth: false,
       canAdminAlerts: false,
       canManageBalances: false,
+      canOpinion: { view: false, schedule: false, publish: false, returnToWriter: false },
     });
     // Every member gets their own prefs now (writer messages, X proposals, quiet hours).
     expect(body.alertPrefs).toEqual(DEFAULT_STAFF_ALERT_PREFS);

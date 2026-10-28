@@ -3,10 +3,12 @@ import Foundation
 /// `sabqdesk://ticket/<id>`, `sabqdesk://social/<id>`, and the host-only
 /// admin screens `sabqdesk://system` and `sabqdesk://alerts`, from a URL or a
 /// push payload. `sabqdesk://balances` and `sabqdesk://balances/<provider>`
-/// open «أرصدة النماذج».
+/// open «أرصدة النماذج». `sabqdesk://opinion/<articleId>` opens «الرأي».
 public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case ticket(id: String)
     case social(id: String)
+    /// An opinion article on the «الرأي» timeline.
+    case opinion(id: String)
     /// «حالة النظام».
     case systemHealth
     /// «تنبيهات الإدارة».
@@ -22,6 +24,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         switch self {
         case .ticket(let id): return URL(string: "\(Self.scheme)://ticket/\(id)")!
         case .social(let id): return URL(string: "\(Self.scheme)://social/\(id)")!
+        case .opinion(let id): return URL(string: "\(Self.scheme)://opinion/\(id)")!
         case .systemHealth: return URL(string: "\(Self.scheme)://system")!
         case .alerts: return URL(string: "\(Self.scheme)://alerts")!
         case .balances: return URL(string: "\(Self.scheme)://balances")!
@@ -61,12 +64,13 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         switch kind {
         case "ticket": self = .ticket(id: id)
         case "social": self = .social(id: id)
+        case "opinion": self = .opinion(id: id)
         default: return nil
         }
     }
 
-    /// Prefers the explicit `deeplink`, then the admin `type`s (`ai_status`,
-    /// `admin_alert`), then falls back to the `ticketId` / `postId` fields the
+    /// Prefers the explicit `deeplink`, then the `type`s (`ai_status`,
+    /// `admin_alert`, `desk.opinion_draft` + `articleId`), then falls back to the `ticketId` / `postId` fields the
     /// server sends alongside it.
     public init?(pushPayload userInfo: [AnyHashable: Any]) {
         if let raw = userInfo["deeplink"] as? String, let url = URL(string: raw), let link = DeskDeepLink(url: url) {
@@ -80,6 +84,12 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case "admin_alert":
             self = .alerts
             return
+        case "desk.opinion_draft":
+            // Server: notifyStaffDeskOfOpinionDraft sends data.articleId.
+            if let id = userInfo["articleId"] as? String, Self.isValidID(id) {
+                self = .opinion(id: id)
+                return
+            }
         default:
             break
         }

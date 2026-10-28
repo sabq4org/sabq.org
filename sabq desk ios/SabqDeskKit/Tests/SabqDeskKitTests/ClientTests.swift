@@ -273,4 +273,38 @@ final class ClientTests: XCTestCase {
         }
         XCTAssertNotNil(store.load())
     }
+
+    // MARK: - Opinion
+
+    func testOpinionScheduleSendsFixedSlotOrRiyadhTime() async throws {
+        let (client, transport, _) = makeClient([.init(status: 200, body: Fixtures.opinionScheduleResult),
+                                                 .init(status: 200, body: Fixtures.opinionScheduleResult)],
+                                                session: liveSession)
+        let result = try await client.scheduleOpinion(id: "a1", .fixedSlot)
+        XCTAssertEqual(result.warnings.count, 1)
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/schedule")
+        XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["mode"] as? String, "fixed_slot")
+
+        let date = try XCTUnwrap(StaffJSON.parseDate("2026-10-29T06:00:00Z"))
+        _ = try await client.scheduleOpinion(id: "a1", .at(date))
+        XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["scheduledAt"] as? String, "2026-10-29T09:00:00+03:00")
+    }
+
+    func testReturnToWriterNeedsANoteAndPrepareSurfaces501() async throws {
+        let (client, transport, _) = makeClient([.init(status: 501, body: #"{"code":"not_implemented","message":"التجهيز الآلي قريبًا"}"#)],
+                                                session: liveSession)
+        do {
+            _ = try await client.returnOpinionToWriter(id: "a1", note: " a ")
+            XCTFail("expected validation error")
+        } catch let error as StaffAPIError {
+            if case .validation = error {} else { XCTFail("\(error)") }
+        }
+        XCTAssertNil(transport.lastRequest, "a blank note never reaches the server")
+        do {
+            _ = try await client.prepareOpinion(id: "a1")
+            XCTFail("expected 501")
+        } catch {
+            XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/prepare")
+        }
+    }
 }

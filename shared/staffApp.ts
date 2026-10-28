@@ -114,7 +114,157 @@ export interface StaffCapabilities {
   canAdminAlerts: boolean;
   /** تحديث أرصدة النماذج وحدود تنبيهها (ai_hub.view + ai_hub.manage). القراءة تكفيها canSystemHealth. */
   canManageBalances: boolean;
+  /**
+   * تبويب «الرأي» (منذ 2026-10-28). اختياري في فك ترميز iOS (الافتراضي كله false).
+   * القواعد في computeStaffOpinionCapabilities.
+   */
+  canOpinion: StaffOpinionCapabilities;
 }
+
+export interface StaffOpinionCapabilities {
+  view: boolean;
+  schedule: boolean;
+  publish: boolean;
+  returnToWriter: boolean;
+}
+
+/**
+ * صلاحيات تبويب الرأي من RBAC الحي، مطابقة لمسارات الويب:
+ *  - view: opinion.review أو articles.schedule (مثل week-board وnext-slot).
+ *  - schedule: articles.schedule أو articles.publish (جدولة الويب schedule-article تشترط articles.publish).
+ *  - publish: articles.publish (مثل /api/dashboard/opinion/:id/publish).
+ *  - returnToWriter: opinion.review أو articles.edit_any (request-revision على الويب يشترط edit_any).
+ * أي فعل يشترط view أيضاً، فلا يظهر زر بلا شاشة.
+ */
+export function computeStaffOpinionCapabilities(has: {
+  opinionReview: boolean;
+  articlesSchedule: boolean;
+  articlesPublish: boolean;
+  articlesEditAny: boolean;
+}): StaffOpinionCapabilities {
+  const view = has.opinionReview || has.articlesSchedule;
+  return {
+    view,
+    schedule: view && (has.articlesSchedule || has.articlesPublish),
+    publish: view && has.articlesPublish,
+    returnToWriter: view && (has.opinionReview || has.articlesEditAny),
+  };
+}
+
+// ── تبويب الرأي (/opinion/*) ─────────────────────────────────────────
+
+/** حالة المقال كما يراها المكتب. published للعرض فقط (بلا أزرار). */
+export const STAFF_OPINION_ARTICLE_STATUSES = ["new_draft", "in_prep", "scheduled", "published"] as const;
+export type StaffOpinionArticleStatus = (typeof STAFF_OPINION_ARTICLE_STATUSES)[number];
+
+export type StaffOpinionSlotState = "arrived" | "missing" | "scheduled" | "published" | "late";
+
+/**
+ * يحوّل صف مقال رأي إلى حالة المكتب، أو null إن لم يكن من شأن المكتب
+ * (مسودة الكاتب الخاصة، أعيد للكاتب، مرفوض، مؤرشف).
+ *  - new_draft: بانتظار التحرير (pending_review أو مسودة موبايل قديمة بلا reviewStatus).
+ *  - in_prep: معتمد (approved) ولم يُجدول بعد.
+ */
+export function resolveStaffOpinionArticleStatus(row: {
+  status: string | null | undefined;
+  reviewStatus: string | null | undefined;
+  source?: string | null;
+}): StaffOpinionArticleStatus | null {
+  if (row.status === "published") return "published";
+  if (row.status === "scheduled") return "scheduled";
+  if (row.status !== "draft") return null;
+  if (row.reviewStatus === "approved") return "in_prep";
+  if (row.reviewStatus === "pending_review") return "new_draft";
+  if (row.reviewStatus == null && (row.source === "ios-app" || row.source === "android-app")) {
+    return "new_draft";
+  }
+  return null;
+}
+
+export interface StaffOpinionWriter {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  jobTitle: string | null;
+  /** weekday: 0 = الأحد … 6 = السبت؛ publishTime HH:mm بتوقيت الرياض. */
+  fixedSlot: { weekday: number; publishTime: string } | null;
+}
+
+export interface StaffOpinionItem {
+  writer: StaffOpinionWriter;
+  /** موعد الخانة (أو موعد الجدولة الفعلي للمجدول). null = بلا موعد ثابت. */
+  slotAt: string | null;
+  state: StaffOpinionSlotState;
+  article: {
+    id: string;
+    title: string;
+    status: StaffOpinionArticleStatus;
+    /** آخر إرسال/تعديل من الكاتب (updatedAt). */
+    submittedAt: string | null;
+    scheduledAt: string | null;
+    publishedAt: string | null;
+  } | null;
+  deeplink: string | null;
+}
+
+export interface StaffOpinionBoardDay {
+  /** YYYY-MM-DD بتوقيت الرياض */
+  date: string;
+  weekday: number;
+  counts: { draft: number; prep: number; scheduled: number; missing: number };
+}
+
+export interface StaffOpinionBoard {
+  weekStart: string;
+  days: StaffOpinionBoardDay[];
+  slots: StaffOpinionItem[];
+  unslotted: StaffOpinionItem[];
+  /** new_draft + in_prep — شارة التبويب. */
+  pendingCount: number;
+}
+
+export interface StaffOpinionWarning {
+  code: "slot_clash";
+  message: string;
+  otherWriterName: string;
+  otherArticleId: string;
+}
+
+const isoDateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "صيغة التاريخ YYYY-MM-DD");
+
+export const staffOpinionBoardQuerySchema = z.object({
+  weekStart: isoDateOnly.optional(),
+});
+
+export const staffOpinionScheduleSchema = z.union([
+  z.object({ mode: z.literal("fixed_slot") }).strict(),
+  z
+    .object({
+      scheduledAt: z
+        .string()
+        .datetime({ offset: true, message: "صيغة وقت الجدولة غير صالحة (ISO مع المنطقة الزمنية)" }),
+    })
+    .strict(),
+]);
+
+export const staffOpinionSlotCheckQuerySchema = z.object({
+  scheduledAt: z
+    .string()
+    .datetime({ offset: true, message: "صيغة وقت الجدولة غير صالحة (ISO مع المنطقة الزمنية)" }),
+});
+
+export const staffOpinionReturnSchema = z
+  .object({
+    note: z
+      .string({ error: "اكتب ملاحظتك للكاتب" })
+      .trim()
+      .min(3, "اكتب ملاحظتك للكاتب (3 أحرف على الأقل)")
+      .max(2000, "الملاحظة طويلة جداً"),
+  })
+  .strict();
+
+export type StaffOpinionScheduleInput = z.infer<typeof staffOpinionScheduleSchema>;
+export type StaffOpinionReturnInput = z.infer<typeof staffOpinionReturnSchema>;
 
 /**
  * الساعات الهادئة لتطبيق الديسك (بتوقيت الرياض): ما يصل خلالها يصل بصمت
@@ -144,6 +294,8 @@ export interface StaffAlertPrefs {
   writerMessages: boolean;
   /** مقترحات النشر على X من الكتّاب والوكالات. */
   socialProposals: boolean;
+  /** مقالات الرأي الجديدة بانتظار المراجعة والجدولة (منذ 2026-10-28). */
+  opinionDrafts: boolean;
   quietHours: StaffQuietHours;
 }
 
@@ -152,11 +304,17 @@ export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
   adminAlerts: true,
   writerMessages: true,
   socialProposals: true,
+  opinionDrafts: true,
   quietHours: "off",
 };
 
 /** أنواع التنبيه التي يمكن إطفاؤها (كل حقل منطقي في التفضيلات). */
-export type StaffAlertKind = "aiAlerts" | "adminAlerts" | "writerMessages" | "socialProposals";
+export type StaffAlertKind =
+  | "aiAlerts"
+  | "adminAlerts"
+  | "writerMessages"
+  | "socialProposals"
+  | "opinionDrafts";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
@@ -164,6 +322,7 @@ export const staffAlertPrefsUpdateSchema = z
     adminAlerts: z.boolean().optional(),
     writerMessages: z.boolean().optional(),
     socialProposals: z.boolean().optional(),
+    opinionDrafts: z.boolean().optional(),
     quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();
@@ -270,6 +429,7 @@ export type StaffAppErrorCode =
   | "conflict"
   | "rate_limited"
   | "publish_failed"
+  | "not_implemented"
   | "server_error";
 
 export interface StaffAppErrorBody {
