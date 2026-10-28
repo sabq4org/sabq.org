@@ -9,6 +9,8 @@ struct ScheduleSheet: View {
     @Environment(\.dismiss) private var dismiss
     let scheduledTimes: [Date]
     let onConfirm: (Date) -> Void
+    private let title: String
+    private let prompt: String
 
     @State private var date: Date
     @State private var selectedPreset: String?
@@ -16,7 +18,12 @@ struct ScheduleSheet: View {
     private let earliest: Date
     private let presets: [SchedulePreset]
 
-    init(initial: Date?, scheduledTimes: [Date] = [], onConfirm: @escaping (Date) -> Void) {
+    init(initial: Date?, scheduledTimes: [Date] = [],
+         title: String = "جدولة التغريدة",
+         prompt: String = "متى تُنشر التغريدة؟ الأوقات بتوقيت الرياض مهما كان توقيت جهازك.",
+         onConfirm: @escaping (Date) -> Void) {
+        self.title = title
+        self.prompt = prompt
         let now = Date()
         let earliest = RiyadhTime.earliestSchedulableDate(now: now)
         let presets = SchedulePreset.defaults(now: now)
@@ -45,7 +52,7 @@ struct ScheduleSheet: View {
                 VStack(alignment: .leading, spacing: DeskLayout.space16) {
                     HStack(alignment: .top, spacing: DeskLayout.space8) {
                         DeskMascot(size: 40)
-                        AssistantBubble(text: "متى تُنشر التغريدة؟ الأوقات بتوقيت الرياض مهما كان توقيت جهازك.")
+                        AssistantBubble(text: prompt)
                     }
                     presetGrid
                     if showsPicker {
@@ -76,7 +83,7 @@ struct ScheduleSheet: View {
                 .background(DeskTheme.background)
             }
             .background(DeskTheme.background)
-            .navigationTitle("جدولة التغريدة")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } }
