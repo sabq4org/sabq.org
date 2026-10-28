@@ -310,9 +310,13 @@ export default function InfathManagement() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const parsed = useMemo(() => (pasteText.trim() ? parseInfathPaste(pasteText, newId) : { rows: [], errors: [] }), [pasteText]);
+  // لا نقتطع بصمت: اللصق الذي يتجاوز الحد يُرفض بزر معطّل ورسالة.
+  const appendFits = rows.length + parsed.rows.length <= INFATH_MAX_AUCTIONS;
+  const replaceFits = parsed.rows.length <= INFATH_MAX_AUCTIONS;
   const applyPaste = (mode: "append" | "replace") => {
+    if (mode === "append" ? !appendFits : !replaceFits) return;
     const incoming = parsed.rows.map(inputToDraft);
-    setRows((current) => (mode === "replace" ? incoming : [...current, ...incoming]).slice(0, INFATH_MAX_AUCTIONS));
+    setRows((current) => (mode === "replace" ? incoming : [...current, ...incoming]));
     setDirty(true);
     setPasteOpen(false);
     setPasteText("");
@@ -437,14 +441,14 @@ export default function InfathManagement() {
                     <h2 className="text-base font-semibold">مزادات {formatWeekRange(detail.weekStart)}</h2>
                     <span className="text-sm text-muted-foreground">({rows.length} / {INFATH_MAX_AUCTIONS})</span>
                     <div className="ms-auto flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setPasteOpen(true)}><ClipboardPaste className="me-1.5 h-4 w-4" />لصق من Excel</Button>
-                      <Button size="sm" variant="outline" onClick={addRow} disabled={rows.length >= INFATH_MAX_AUCTIONS}><Plus className="me-1.5 h-4 w-4" />مزاد</Button>
+                      <Button size="sm" variant="outline" disabled={busy} onClick={() => setPasteOpen(true)}><ClipboardPaste className="me-1.5 h-4 w-4" />لصق من Excel</Button>
+                      <Button size="sm" variant="outline" onClick={addRow} disabled={busy || rows.length >= INFATH_MAX_AUCTIONS}><Plus className="me-1.5 h-4 w-4" />مزاد</Button>
                     </div>
                   </div>
                   {!rows.length ? (
                     <p className="p-10 text-center text-muted-foreground">لا مزادات في هذا الأسبوع بعد. أضف مزادًا أو الصق الجدول من Excel.</p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <fieldset disabled={busy} className="min-w-0 overflow-x-auto" aria-busy={busy}>
                       <table className="w-full min-w-[1320px] text-sm">
                         <thead className="bg-slate-50 text-xs text-muted-foreground">
                           <tr>
@@ -507,7 +511,7 @@ export default function InfathManagement() {
                           })}
                         </tbody>
                       </table>
-                    </div>
+                    </fieldset>
                   )}
                 </section>
 
@@ -568,13 +572,20 @@ export default function InfathManagement() {
           <Textarea rows={10} dir="rtl" value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder={INFATH_PASTE_COLUMNS.join("\t")} />
           {pasteText.trim() && (
             <div className="space-y-1 text-sm">
+              {!appendFits && (
+                <p className="font-medium text-rose-700">
+                  {replaceFits
+                    ? `الإضافة تتجاوز حد ${INFATH_MAX_AUCTIONS} مزادًا في الأسبوع (في الجدول ${rows.length}). احذف صفوفًا أو استبدل الجدول.`
+                    : `اللصق فيه ${parsed.rows.length} صفًا وهو أكثر من حد ${INFATH_MAX_AUCTIONS} مزادًا في الأسبوع.`}
+                </p>
+              )}
               <p className="font-medium">فُهم {parsed.rows.length} صفًا{parsed.errors.length ? ` وتعذّر ${parsed.errors.length}` : ""}.</p>
               {parsed.errors.slice(0, 8).map((e) => <p key={e} className="text-rose-700">{e}</p>)}
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" disabled={!parsed.rows.length} onClick={() => applyPaste("replace")}>استبدال الجدول</Button>
-            <Button disabled={!parsed.rows.length} onClick={() => applyPaste("append")}>إضافة {parsed.rows.length} صفًا</Button>
+            <Button variant="outline" disabled={!parsed.rows.length || !replaceFits} onClick={() => applyPaste("replace")}>استبدال الجدول</Button>
+            <Button disabled={!parsed.rows.length || !appendFits} onClick={() => applyPaste("append")}>إضافة {parsed.rows.length} صفًا</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
