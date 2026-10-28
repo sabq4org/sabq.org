@@ -99,6 +99,7 @@ struct NotificationPrefsView: View {
         var out: [PushKind] = []
         if caps.canTickets { out.append(.writerMessages) }
         if caps.canSocial.view { out.append(.socialProposals) }
+        if caps.canOpinion.view { out.append(.opinionDrafts) }
         if caps.canAdminAlerts { out.append(.adminAlerts) }
         if caps.canSystemHealth { out.append(.aiAlerts) }
         return out
@@ -153,12 +154,13 @@ private enum PrefsType {
 // MARK: - Kinds
 
 private enum PushKind: Hashable {
-    case writerMessages, socialProposals, adminAlerts, aiAlerts
+    case writerMessages, socialProposals, opinionDrafts, adminAlerts, aiAlerts
 
     var title: String {
         switch self {
         case .writerMessages: return "رسائل الكتّاب"
         case .socialProposals: return "مقترحات النشر على X"
+        case .opinionDrafts: return "مقالات الرأي"
         case .adminAlerts: return "تنبيهات الإدارة"
         case .aiAlerts: return "نماذج الذكاء الاصطناعي"
         }
@@ -168,6 +170,7 @@ private enum PushKind: Hashable {
         switch self {
         case .writerMessages: return "استفسار جديد أو رد من كاتب"
         case .socialProposals: return "مقترح ينتظر موافقتك"
+        case .opinionDrafts: return "مسودة رأي جديدة تنتظر المراجعة والجدولة"
         case .adminAlerts: return "فشل نشر تغريدة أو ما يحتاج تدخلك"
         case .aiAlerts: return "تعطل نموذج أو اقتراب الرصيد من نهايته"
         }
@@ -177,6 +180,7 @@ private enum PushKind: Hashable {
         switch self {
         case .writerMessages: return "رسالة جديدة من كاتب رأي تنتظر ردك."
         case .socialProposals: return "مقترح نشر على X ينتظر موافقتك."
+        case .opinionDrafts: return "مقال رأي جديد ينتظر مراجعتك وجدولته."
         case .adminAlerts: return "فشل نشر تغريدة، افتح التنبيهات لإعادة المحاولة."
         case .aiAlerts: return "أحد نماذج الذكاء الاصطناعي متوقف الآن."
         }
@@ -187,6 +191,7 @@ private enum PushKind: Hashable {
         case .writerMessages: return DeskTheme.bubbleBlue
         case .socialProposals, .aiAlerts: return DeskTheme.chipGrey
         case .adminAlerts: return PrefsInk.amberTint
+        case .opinionDrafts: return DeskTone.teal.fill
         }
     }
 
@@ -195,6 +200,7 @@ private enum PushKind: Hashable {
         case .writerMessages: return DeskTheme.link
         case .socialProposals, .aiAlerts: return DeskTheme.navy
         case .adminAlerts: return PrefsInk.amberInk
+        case .opinionDrafts: return DeskTheme.teal
         }
     }
 
@@ -202,6 +208,7 @@ private enum PushKind: Hashable {
         switch self {
         case .writerMessages: return prefs.writerMessages
         case .socialProposals: return prefs.socialProposals
+        case .opinionDrafts: return prefs.opinionDrafts
         case .adminAlerts: return prefs.adminAlerts
         case .aiAlerts: return prefs.aiAlerts
         }
@@ -211,6 +218,7 @@ private enum PushKind: Hashable {
         switch self {
         case .writerMessages: return StaffAlertPrefsUpdate(writerMessages: value)
         case .socialProposals: return StaffAlertPrefsUpdate(socialProposals: value)
+        case .opinionDrafts: return StaffAlertPrefsUpdate(opinionDrafts: value)
         case .adminAlerts: return StaffAlertPrefsUpdate(adminAlerts: value)
         case .aiAlerts: return StaffAlertPrefsUpdate(aiAlerts: value)
         }
@@ -354,6 +362,8 @@ private struct KindRow: View {
             Image(systemName: "bubble.left").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
         case .socialProposals:
             Text(verbatim: "X").font(.system(size: 18, weight: .bold)).foregroundStyle(kind.ink)
+        case .opinionDrafts:
+            Image(systemName: "square.and.pencil").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
         case .adminAlerts:
             Image(systemName: "exclamationmark.triangle").font(.system(size: 17, weight: .medium)).foregroundStyle(kind.ink)
         case .aiAlerts:

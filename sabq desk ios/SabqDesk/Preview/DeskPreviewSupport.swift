@@ -10,6 +10,7 @@ import SwiftUI
 /// Answers the staff endpoints the previewed screens call with canned JSON.
 struct DeskPreviewTransport: HTTPTransport {
     let emptyInbox: Bool
+    let emptyOpinion: Bool
 
     nonisolated func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
         let url = request.url ?? StaffAPIClient.productionBaseURL
@@ -21,6 +22,9 @@ struct DeskPreviewTransport: HTTPTransport {
         case "/api/v1/staff/alerts": body = Self.alertsJSON
         case "/api/v1/staff/me/alert-prefs": body = #"{"aiAlerts":true,"adminAlerts":true}"#
         case "/api/v1/staff/system/balances": body = Self.balancesJSON
+        case "/api/v1/staff/opinion/board": body = Self.opinionBoardJSON(empty: emptyOpinion)
+        case let path where path.hasPrefix("/api/v1/staff/opinion/"):
+            body = Self.opinionActionJSON(path: path)
         case let path where path.hasPrefix("/api/v1/staff/system/balances/"):
             // GET …/balances/<p>, POST …/<p>/topup and PUT …/<p>/threshold all answer the detail.
             let provider = path.dropFirst("/api/v1/staff/system/balances/".count).split(separator: "/").first
@@ -215,6 +219,111 @@ struct DeskPreviewTransport: HTTPTransport {
     }
 }
 
+// MARK: - «الرأي» (concept C), fictional placeholder writers only
+
+extension DeskPreviewTransport {
+    /// A Riyadh time `days` after today at `hour:minute`, as server JSON.
+    nonisolated static func riyadh(days: Int, hour: Int, minute: Int = 0, now: Date = Date()) -> String {
+        let calendar = RiyadhTime.calendar
+        let today = calendar.startOfDay(for: now)
+        let day = calendar.date(byAdding: .day, value: days, to: today) ?? today
+        let at = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+        return iso(at)
+    }
+
+    nonisolated static func iso(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
+    nonisolated static func writer(_ id: String, _ name: String, weekdayOffset: Int?, time: String,
+                                   now: Date = Date()) -> [String: Any] {
+        var out: [String: Any] = ["id": id, "name": name, "avatarUrl": NSNull(), "jobTitle": NSNull()]
+        if let weekdayOffset {
+            let calendar = RiyadhTime.calendar
+            let day = calendar.date(byAdding: .day, value: weekdayOffset, to: now) ?? now
+            out["fixedSlot"] = ["weekday": calendar.component(.weekday, from: day) - 1, "publishTime": time]
+        } else {
+            out["fixedSlot"] = NSNull()
+        }
+        return out
+    }
+
+    nonisolated static func article(_ id: String, _ title: String, _ status: String,
+                                    submittedMinutesAgo: Int, scheduledAt: String? = nil) -> [String: Any] {
+        ["id": id, "title": title, "status": status,
+         "submittedAt": iso(Date().addingTimeInterval(TimeInterval(-submittedMinutesAgo * 60))),
+         "scheduledAt": scheduledAt ?? NSNull(), "publishedAt": NSNull()]
+    }
+
+    /// The concept's week: tomorrow 09:00 new draft, +3 days 08:00 in prep,
+    /// +4 days 10:00 scheduled, +6 days 09:00 not arrived, and a guest
+    /// without a fixed slot. `empty`: no drafts, one reserved slot tomorrow.
+    nonisolated static func opinionBoardJSON(empty: Bool) -> String {
+        let now = Date()
+        let calendar = RiyadhTime.calendar
+        let today = calendar.startOfDay(for: now)
+        var counts: [Int: [String: Int]] = [:]
+        func bump(_ day: Int, _ key: String) { counts[day, default: [:]][key, default: 0] += 1 }
+
+        var slots: [[String: Any]] = []
+        var unslotted: [[String: Any]] = []
+        if empty {
+            slots.append(["writer": writer("w1", "د. كاتب الرأي", weekdayOffset: 1, time: "09:00"),
+                          "slotAt": riyadh(days: 1, hour: 9), "state": "missing", "article": NSNull(), "deeplink": NSNull()])
+            bump(1, "missing")
+        } else {
+            slots = [
+                ["writer": writer("w1", "د. كاتب الرأي", weekdayOffset: 1, time: "09:00"),
+                 "slotAt": riyadh(days: 1, hour: 9), "state": "arrived",
+                 "article": article("preview-op-1", "الاقتصاد الرقمي وفرص الشباب في سوق العمل الجديد", "new_draft",
+                                    submittedMinutesAgo: 12),
+                 "deeplink": "sabqdesk://opinion/preview-op-1"],
+                ["writer": writer("w2", "أ. كاتبة الرأي", weekdayOffset: 3, time: "08:00"),
+                 "slotAt": riyadh(days: 3, hour: 8), "state": "arrived",
+                 "article": article("preview-op-2", "حين تصبح المدن أكثر إنصاتًا لسكانها: قراءة في تجارب الأحياء الذكية",
+                                    "in_prep", submittedMinutesAgo: 120),
+                 "deeplink": "sabqdesk://opinion/preview-op-2"],
+                ["writer": writer("w4", "م. كاتب الأسبوع", weekdayOffset: 4, time: "10:00"),
+                 "slotAt": riyadh(days: 4, hour: 10), "state": "scheduled",
+                 "article": article("preview-op-4", "الرياضة المدرسية استثمار مؤجل في صحة جيل كامل", "scheduled",
+                                    submittedMinutesAgo: 26 * 60, scheduledAt: riyadh(days: 4, hour: 10)),
+                 "deeplink": "sabqdesk://opinion/preview-op-4"],
+                ["writer": writer("w5", "د. كاتب المقال", weekdayOffset: 6, time: "09:00"),
+                 "slotAt": riyadh(days: 6, hour: 9), "state": "missing", "article": NSNull(), "deeplink": NSNull()],
+            ]
+            unslotted = [
+                ["writer": writer("w3", "كاتب ضيف", weekdayOffset: nil, time: ""),
+                 "slotAt": NSNull(), "state": "arrived",
+                 "article": article("preview-op-3", "ماذا تعلّمنا من موسم الرياض هذا العام؟", "new_draft",
+                                    submittedMinutesAgo: 40),
+                 "deeplink": "sabqdesk://opinion/preview-op-3"],
+            ]
+            bump(1, "draft"); bump(3, "prep"); bump(4, "scheduled"); bump(6, "missing")
+        }
+        let days: [[String: Any]] = (0..<7).map { offset in
+            let day = calendar.date(byAdding: .day, value: offset, to: today) ?? today
+            return ["date": RiyadhTime.dayString(day),
+                    "weekday": calendar.component(.weekday, from: day) - 1,
+                    "counts": counts[offset] ?? [:]]
+        }
+        let board: [String: Any] = ["weekStart": RiyadhTime.dayString(today), "days": days,
+                                    "slots": slots, "unslotted": unslotted, "pendingCount": empty ? 0 : 3]
+        guard let data = try? JSONSerialization.data(withJSONObject: board) else { return "{}" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Writes answer like the server; prepare is the 501 stub's body (decoded leniently by previews).
+    nonisolated static func opinionActionJSON(path: String) -> String {
+        if path.hasSuffix("/slot-check") { return #"{"warnings":[]}"# }
+        if path.hasSuffix("/schedule") {
+            return #"{"article":{"id":"preview-op-1","status":"scheduled"},"warnings":[]}"#
+        }
+        return #"{"article":{"id":"preview-op-1","status":"published"}}"#
+    }
+}
+
 enum DeskPreviewFixtures {
     static let balances: StaffAIBalances = {
         (try? StaffJSON.makeDecoder().decode(StaffAIBalances.self, from: Data(DeskPreviewTransport.balancesJSON.utf8)))
@@ -230,14 +339,16 @@ enum DeskPreviewFixtures {
                                                             canSocial: .init(view: true, publish: true,
                                                                              schedule: true, reject: false),
                                                             canSystemHealth: true, canAdminAlerts: true,
-                                                            canManageBalances: true),
+                                                            canManageBalances: true,
+                                                            canOpinion: .init(view: true, schedule: true,
+                                                                              publish: true, returnToWriter: true)),
                             alertPrefs: StaffAlertPrefs())
 
-    static func client(emptyInbox: Bool) -> StaffAPIClient {
+    static func client(emptyInbox: Bool, emptyOpinion: Bool = false) -> StaffAPIClient {
         StaffAPIClient(configuration: .init(installationID: "preview-installation", appVersion: "1.0.0"),
                        sessionStore: InMemorySessionStore(session: StaffSession(token: "preview", expiresAt: nil,
                                                                                 userId: me.id)),
-                       transport: DeskPreviewTransport(emptyInbox: emptyInbox))
+                       transport: DeskPreviewTransport(emptyInbox: emptyInbox, emptyOpinion: emptyOpinion))
     }
 }
 
@@ -249,11 +360,14 @@ struct DeskPreviewHost<Content: View>: View {
     @State private var appLock: AppLockController
     private let content: Content
 
-    init(emptyInbox: Bool, content: Content) {
+    init(emptyInbox: Bool, emptyOpinion: Bool = false, content: Content) {
         DeskFonts.registerAll()
-        _model = State(initialValue: AppModel.preview(me: DeskPreviewFixtures.me,
-                                                      unread: StaffUnreadCounts(tickets: 2, social: 3, total: 5),
-                                                      client: DeskPreviewFixtures.client(emptyInbox: emptyInbox)))
+        let model = AppModel.preview(me: DeskPreviewFixtures.me,
+                                     unread: StaffUnreadCounts(tickets: 2, social: 3, total: 5),
+                                     client: DeskPreviewFixtures.client(emptyInbox: emptyInbox,
+                                                                        emptyOpinion: emptyOpinion))
+        model.setOpinionPending(emptyOpinion ? 0 : 3)
+        _model = State(initialValue: model)
         let defaults = UserDefaults(suiteName: "com.sabq.desk.preview") ?? .standard
         _appLock = State(initialValue: AppLockController(preference: AppLockPreference(defaults: defaults),
                                                          hasSession: { true }))
@@ -272,8 +386,8 @@ struct DeskPreviewHost<Content: View>: View {
 
 extension View {
     @MainActor
-    func deskPreviewEnvironment(emptyInbox: Bool = false) -> some View {
-        DeskPreviewHost(emptyInbox: emptyInbox, content: self)
+    func deskPreviewEnvironment(emptyInbox: Bool = false, emptyOpinion: Bool = false) -> some View {
+        DeskPreviewHost(emptyInbox: emptyInbox, emptyOpinion: emptyOpinion, content: self)
     }
 }
 
@@ -282,14 +396,30 @@ extension View {
 /// instead of the real session. Release builds never compile this.
 enum DeskScreenshotScene: String {
     case balances, openai, update, banner
+    /// «الرأي» (concept C): the timeline, scrolled to the scheduled card +
+    /// missing slot + «بلا موعد ثابت», and the empty week.
+    case opinion, opinionmid, opinionempty
+    /// Scrolled to the «بلا موعد ثابت» section (guest writer card).
+    case opinionnoslot
 
     static let current = ProcessInfo.processInfo.environment["DESK_SHOT"].flatMap(Self.init(rawValue:))
 
-    var link: DeskDeepLink {
+    var link: DeskDeepLink? {
         switch self {
         case .balances: return .balances
         case .openai, .update: return .balance(provider: "openai")
         case .banner: return .systemHealth
+        case .opinion, .opinionempty: return nil
+        // Focusing the scheduled card scrolls past the first two slots.
+        case .opinionmid: return .opinion(id: "preview-op-4")
+        case .opinionnoslot: return .opinion(id: "preview-op-3")
+        }
+    }
+
+    var tab: MainTabView.Tab? {
+        switch self {
+        case .opinion, .opinionmid, .opinionempty, .opinionnoslot: return .opinion
+        default: return nil
         }
     }
 }
@@ -299,7 +429,7 @@ struct DeskScreenshotHost: View {
 
     var body: some View {
         DeskScreenshotRouter(scene: scene)
-            .deskPreviewEnvironment()
+            .deskPreviewEnvironment(emptyOpinion: scene == .opinionempty)
             .preferredColorScheme(.light)
     }
 }
@@ -309,9 +439,9 @@ private struct DeskScreenshotRouter: View {
     let scene: DeskScreenshotScene
 
     var body: some View {
-        MainTabView()
+        MainTabView(initialTab: scene.tab)
             .background(DeskTheme.background)
-            .task { model.pendingLink = scene.link }
+            .task { if let link = scene.link { model.pendingLink = link } }
     }
 }
 #endif

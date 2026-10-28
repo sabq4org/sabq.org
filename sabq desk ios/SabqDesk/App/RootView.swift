@@ -69,15 +69,18 @@ struct RootView: View {
     }
 }
 
-/// Up to four tabs (approved redesign 2026-10-25, desk v2): المكتب for tweet
-/// proposals, الرسائل for contributors' messages, النظام for admins (alerts
-/// and system health), حسابي for the account. A member sees only the tabs
-/// their permissions open.
+/// Up to five tabs (approved redesign 2026-10-25, desk v2; «الرأي» concept C
+/// 2026-10-28): المكتب for tweet proposals, الرأي for opinion drafts on the
+/// week's fixed slots, الرسائل for contributors' messages, النظام for admins
+/// (alerts and system health), حسابي for the account. A member sees only the
+/// tabs their permissions open.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
 
-    enum Tab: Hashable { case desk, messages, system, account }
+    enum Tab: Hashable { case desk, opinion, messages, system, account }
+    /// Screenshot scenes open a given tab; nil picks the first allowed one.
+    var initialTab: Tab?
     @State private var tab: Tab = .desk
     @State private var systemSection: SystemSection = .alerts
 
@@ -88,6 +91,12 @@ struct MainTabView: View {
                     .tabItem { Label("المكتب", systemImage: "tray.full") }
                     .badge(model.unread.social)
                     .tag(Tab.desk)
+            }
+            if model.capabilities.canOpinion.view {
+                OpinionView(openAccount: { tab = .account })
+                    .tabItem { Label("الرأي", systemImage: "square.and.pencil") }
+                    .badge(model.opinionPending)
+                    .tag(Tab.opinion)
             }
             if model.capabilities.canTickets {
                 MessagesView()
@@ -107,7 +116,7 @@ struct MainTabView: View {
         }
         .tint(DeskInk.link)
         .onAppear {
-            tab = firstTab
+            tab = initialTab ?? firstTab
             if !model.capabilities.canAdminAlerts { systemSection = .health }
             route(model.pendingLink)
         }
@@ -120,6 +129,7 @@ struct MainTabView: View {
     private var firstTab: Tab {
         let caps = model.capabilities
         if caps.canSocial.view { return .desk }
+        if caps.canOpinion.view { return .opinion }
         if caps.canTickets { return .messages }
         if caps.canSystemTab { return .system }
         return .account
@@ -130,6 +140,13 @@ struct MainTabView: View {
         switch link {
         case .social?: if caps.canSocial.view { tab = .desk }
         case .ticket?: if caps.canTickets { tab = .messages }
+        case .opinion?:
+            // OpinionView consumes the link and scrolls to the article.
+            if caps.canOpinion.view {
+                tab = .opinion
+            } else {
+                model.pendingLink = nil
+            }
         case .systemHealth?:
             // Host-only links have no list screen to consume them.
             model.pendingLink = nil
@@ -161,7 +178,7 @@ struct NoAccessView: View {
 
     var body: some View {
         DeskMessageView(title: "لا تملك صلاحية المكتب",
-                        message: "يحتاج حسابك صلاحية الاستفسارات أو سجل النشر الاجتماعي. تواصل مع مدير النظام.") {
+                        message: "يحتاج حسابك صلاحية الاستفسارات أو سجل النشر الاجتماعي أو مراجعة مقالات الرأي. تواصل مع مدير النظام.") {
             Button("تسجيل الخروج") { Task { await model.signOut() } }
                 .buttonStyle(DeskSecondaryButtonStyle())
         }
