@@ -22,6 +22,10 @@ import {
   staffAiBalanceThresholdSchema,
   staffAiBalanceTopupSchema,
   staffInboxQuerySchema,
+  staffOpinionBoardQuerySchema,
+  staffOpinionReturnSchema,
+  staffOpinionScheduleSchema,
+  staffOpinionSlotCheckQuerySchema,
   staffSocialPublishSchema,
   staffSocialRejectSchema,
   staffSocialScheduleSchema,
@@ -53,6 +57,15 @@ import { SocialProviderError } from "../services/socialPublishing/types";
 import { getStaffAdminAlerts } from "../services/staffAdminAlertsService";
 import { getStaffAlertPrefs, updateStaffAlertPrefs } from "../services/staffAlertPrefsService";
 import { getStaffSystemHealth } from "../services/staffSystemHealthService";
+import {
+  StaffOpinionDeskError,
+  checkOpinionSlotClashes,
+  getStaffOpinionBoard,
+  getStaffOpinionItem,
+  publishOpinionFromDesk,
+  returnOpinionToWriterFromDesk,
+  scheduleOpinionFromDesk,
+} from "../services/staffOpinionDeskService";
 import {
   AiBalanceInputError,
   auditSnapshot as auditBalanceSnapshot,
@@ -955,6 +968,229 @@ for (const prefix of ["/social", "/social/posts"] as const) {
     handleReturnSocialPostToDraft,
   );
 }
+
+// ── 5) تبويب الرأي (/opinion/*) ──────────────────────────────────────
+// الصلاحيات في computeStaffOpinionCapabilities (shared/staffApp.ts).
+
+function requireOpinionCapability(key: keyof StaffCapabilities["canOpinion"]) {
+  return (req: StaffRequest, res: Response, next: NextFunction) => {
+    const ctx = req.staffAuth;
+    if (!ctx) {
+      return sendError(res, 401, { code: "unauthorized", message: "Unauthorized" });
+    }
+    const caps = ctx.capabilities.canOpinion;
+    if (!caps?.view || !caps[key]) {
+      return sendError(res, 403, {
+        code: "forbidden",
+        message: "لا تملك صلاحية هذا الإجراء على مقالات الرأي",
+      });
+    }
+    return next();
+  };
+}
+
+const staffOpinionActionLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: () => Number(process.env.STAFF_APP_OPINION_RATE_LIMIT) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: (req) =>
+    `staff-app-opinion:${(req as StaffRequest).staffAuth?.user.id ?? "anonymous"}`,
+  handler: (_req, res) =>
+    sendError(res, 429, {
+      code: "rate_limited",
+      message: "محاولات كثيرة خلال فترة قصيرة؛ انتظر قليلاً",
+    }),
+});
+
+function handleOpinionError(res: Response, error: unknown, fallback: string): void {
+  if (error instanceof StaffOpinionDeskError) {
+    return sendError(res, error.status, { code: error.code, message: error.message });
+  }
+  console.error("[StaffApp opinion]", error);
+  sendError(res, 500, { code: "server_error", message: fallback });
+}
+
+subRouter.get(
+  "/opinion/board",
+  requireStaffAuth,
+  requireOpinionCapability("view"),
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffOpinionBoardQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "تاريخ بداية الأسبوع غير صالح",
+      });
+    }
+    try {
+      res.json(await getStaffOpinionBoard({ weekStart: parsed.data.weekStart }));
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب مقالات الرأي");
+    }
+  },
+);
+
+subRouter.get(
+  "/opinion/:id/slot-check",
+  requireStaffAuth,
+  requireOpinionCapability("schedule"),
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffOpinionSlotCheckQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "صيغة وقت الجدولة غير صالحة",
+      });
+    }
+    try {
+      const scheduledAt = new Date(parsed.data.scheduledAt);
+      const warnings = await checkOpinionSlotClashes(req.params.id, scheduledAt);
+      res.json({ scheduledAt: scheduledAt.toISOString(), warnings });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر فحص الموعد");
+    }
+  },
+);
+
+subRouter.get(
+  "/opinion/:id",
+  requireStaffAuth,
+  requireOpinionCapability("view"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      res.json(await getStaffOpinionItem(req.params.id));
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب المقال");
+    }
+  },
+);
+
+subRouter.post(
+  "/opinion/:id/schedule",
+  requireStaffAuth,
+  requireOpinionCapability("schedule"),
+  staffOpinionActionLimiter,
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffOpinionScheduleSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "أرسل mode=fixed_slot أو scheduledAt (ISO مع المنطقة الزمنية)",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await scheduleOpinionFromDesk({
+        articleId: req.params.id,
+        actorId: req.staffAuth!.user.id,
+        request: parsed.data,
+      });
+      await auditStaffAppWrite(req, {
+        action: "staff_opinion_schedule",
+        entityType: "article",
+        entityId: result.article.id,
+        oldValue: result.previous,
+        newValue: { status: result.article.status, scheduledAt: result.scheduledAt },
+        extraMetadata: {
+          mode: "mode" in parsed.data ? parsed.data.mode : "custom",
+          warnings: result.warnings.map((w) => w.otherArticleId),
+        },
+      });
+      res.json({
+        article: result.article,
+        scheduledAt: result.scheduledAt,
+        warnings: result.warnings,
+      });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذرت جدولة المقال");
+    }
+  },
+);
+
+subRouter.post(
+  "/opinion/:id/publish",
+  requireStaffAuth,
+  requireOpinionCapability("publish"),
+  staffOpinionActionLimiter,
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffSocialPublishSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "النشر الفوري لا يقبل حقولاً في الجسم",
+      });
+    }
+    try {
+      const result = await publishOpinionFromDesk({
+        articleId: req.params.id,
+        actorId: req.staffAuth!.user.id,
+      });
+      await auditStaffAppWrite(req, {
+        action: "staff_opinion_publish",
+        entityType: "article",
+        entityId: result.article.id,
+        oldValue: result.previous,
+        newValue: { status: result.article.status, publishedAt: result.article.publishedAt },
+      });
+      res.json({ article: result.article });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر نشر المقال");
+    }
+  },
+);
+
+subRouter.post(
+  "/opinion/:id/return-to-writer",
+  requireStaffAuth,
+  requireOpinionCapability("returnToWriter"),
+  staffOpinionActionLimiter,
+  async (req: StaffRequest, res: Response) => {
+    const parsed = staffOpinionReturnSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "اكتب ملاحظتك للكاتب",
+      });
+    }
+    try {
+      const result = await returnOpinionToWriterFromDesk({
+        articleId: req.params.id,
+        actorId: req.staffAuth!.user.id,
+        note: parsed.data.note,
+      });
+      await auditStaffAppWrite(req, {
+        action: "staff_opinion_return_to_writer",
+        entityType: "article",
+        entityId: result.article.id,
+        oldValue: result.previous,
+        newValue: { status: result.article.status, reviewStatus: result.article.reviewStatus },
+        extraMetadata: { noteLength: parsed.data.note.length },
+      });
+      res.json({ article: result.article });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذرت إعادة المقال إلى الكاتب");
+    }
+  },
+);
+
+/**
+ * «جهّز وجدول»: التجهيز الآلي مرحلة لاحقة. يبقى 501 حتى مع
+ * OPINION_AUTO_PREP_ENABLED=true إلى أن يُبنى (الفرق في الرسالة فقط).
+ */
+subRouter.post(
+  "/opinion/:id/prepare",
+  requireStaffAuth,
+  requireOpinionCapability("schedule"),
+  (_req: StaffRequest, res: Response) => {
+    const enabled = process.env.OPINION_AUTO_PREP_ENABLED === "true";
+    return sendError(res, 501, {
+      code: "not_implemented",
+      message: enabled ? "التجهيز الآلي قيد البناء" : "التجهيز الآلي قريبًا",
+    });
+  },
+);
 
 // يقبل التركيب المباشر app.use(staffAppMobileRouter) أو app.use("/api/v1/staff", staffAppMobileRouter)
 router.use(STAFF_APP_BASE_PATH, subRouter);

@@ -43,7 +43,7 @@ const REMINDER_WINDOW_MS = 2 * DAY_MS;
  * مقالة «أُرسلت» وتنتظر التحرير: مراجعة معلّقة، أو مسودة موبايل قديمة
  * بلا reviewStatus (إرسال iOS/Android كان يحفظ draft فقط قبل الإصلاح).
  */
-const awaitingEditorialSql = sql`(
+export const awaitingEditorialSql = sql`(
   ${articles.reviewStatus} = 'pending_review'
   OR (
     ${articles.status} = 'draft'
@@ -101,7 +101,7 @@ export type OpinionWriterSummary = {
  * أعمدة timestamp تُخزَّن UTC بلا منطقة زمنية؛ نتائج sql`` الخام تصل نصاً
  * ويفسّرها new Date بتوقيت الجهاز — نثبّت التفسير على UTC دائماً.
  */
-function parseDbTimestamp(v: string | Date | null | undefined): Date | null {
+export function parseDbTimestamp(v: string | Date | null | undefined): Date | null {
   if (!v) return null;
   const d =
     v instanceof Date
@@ -121,7 +121,7 @@ function toIsoOrNull(v: string | Date | null | undefined): string | null {
   return d ? d.toISOString() : null;
 }
 
-function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: number } {
+export function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: number } {
   const shifted = new Date(d.getTime() + RIYADH_OFFSET_MS);
   return {
     y: shifted.getUTCFullYear(),
@@ -132,7 +132,7 @@ function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: n
 }
 
 /** يبني تاريخ UTC من يوم رياضي محدد + وقت HH:mm بتوقيت الرياض */
-function riyadhDateTime(y: number, m: number, d: number, publishTime: string): Date {
+export function riyadhDateTime(y: number, m: number, d: number, publishTime: string): Date {
   const mm = String(m).padStart(2, "0");
   const dd = String(d).padStart(2, "0");
   // اقبل HH:mm أو HH:mm:ss — غير ذلك → 06:00 افتراضي
