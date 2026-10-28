@@ -116,7 +116,7 @@ struct OpinionView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
-            DeskScreenHeader(title: "الرأي", subtitle: "مقالات الرأي · \(weekTitle)") {
+            DeskScreenHeader(title: "الرأي", subtitle: "مقالات الرأي", detail: weekTitle) {
                 HStack(spacing: 6) {
                     if counts.pending > 0 {
                         CountPill(text: "\(counts.pending) بانتظارك", tone: .warning)
@@ -173,9 +173,11 @@ struct OpinionView: View {
                 timelineRow(linked, isFirst: false, unslotted: linked.slotAt == nil)
             }
             if board.hasNoDrafts {
-                DeskEmptyState(title: "لا مسودات بانتظارك هذا الأسبوع",
-                               message: "المواعيد الثابتة محجوزة لكتّابها، وتظهر كل مسودة في خانة موعدها فور وصولها.")
-                    .padding(.top, -DeskLayout.space8)
+                DeskInlineEmpty(systemImage: "tray",
+                                title: "لا مسودات بانتظارك هذا الأسبوع",
+                                message: "كل مسودة تظهر هنا في خانة موعد كاتبها فور وصولها")
+                    .padding(.horizontal, DeskLayout.pageMargin + 4)
+                    .padding(.top, DeskLayout.space12)
             }
             ForEach(sections(board), id: \.title) { section in
                 dayHeader(section.title, anchor: section.anchor)

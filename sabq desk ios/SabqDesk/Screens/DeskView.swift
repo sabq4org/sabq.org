@@ -102,12 +102,19 @@ struct DeskView: View {
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
-            DeskSummaryCard(systemImage: "tray.full", label: "بانتظارك الآن",
-                            value: pendingTotal == 0 ? "لا شيء" : DeskCount.tasks(pendingTotal),
-                            detail: pendingDetail,
-                            note: upcoming.first == nil ? nil : "أقرب منشور",
-                            noteValue: upcoming.first?.scheduledAt.map { RiyadhTime.timeString($0) })
-                .padding(.horizontal, DeskLayout.pageMargin + 4)
+            Group {
+                if pendingTotal == 0 {
+                    // Nothing waiting: one quiet line, so the lists lead.
+                    DeskCalmHero(title: "لا شيء بانتظارك", detail: calmDetail)
+                } else {
+                    DeskSummaryCard(systemImage: "tray.full", label: "بانتظارك الآن",
+                                    value: DeskCount.tasks(pendingTotal),
+                                    detail: pendingDetail,
+                                    note: upcoming.first == nil ? nil : "أقرب منشور",
+                                    noteValue: upcoming.first?.scheduledAt.map { RiyadhTime.timeString($0) })
+                }
+            }
+            .padding(.horizontal, DeskLayout.pageMargin + 4)
             DeskWeekStrip(counts: weekCounts, selection: $selectedDay)
                 .padding(.horizontal, DeskLayout.pageMargin + 4)
             SectionChipBar(sections: DeskSocialSection.allCases, selection: $section,
@@ -134,6 +141,11 @@ struct DeskView: View {
         if showsMessages, app.unread.tickets > 0 { parts.append("\(DeskCount.messages(app.unread.tickets)) من المساهمين") }
         if parts.isEmpty { return "أنجزت كل شيء، وما يصل يظهر هنا." }
         return parts.joined(separator: " · ")
+    }
+
+    private var calmDetail: String {
+        guard let at = upcoming.first?.scheduledAt else { return "أنجزت كل شيء، وما يصل يظهر هنا." }
+        return "أقرب منشور مجدول: \(RiyadhTime.displayString(at))"
     }
 
     /// Scheduled posts per Riyadh day, for the week strip.
@@ -163,6 +175,8 @@ struct DeskView: View {
             }
         } else if section == .scheduled {
             timeline(model)
+        } else if section == .published {
+            publishedDays(model)
         } else {
             ForEach(model.items, id: \.listID) { item in
                 row(item, model: model)
@@ -272,6 +286,37 @@ struct DeskView: View {
                     .foregroundStyle(DeskTheme.textSecondary)
                     .padding(.top, DeskLayout.space8)
             }
+        }
+    }
+
+    // MARK: - Published, grouped by day
+
+    /// One white group per Riyadh day («اليوم», «أمس · …»), compact rows.
+    @ViewBuilder
+    private func publishedDays(_ model: InboxModel) -> some View {
+        let groups = Dictionary(grouping: model.items) { RiyadhTime.dayKey($0.publishedAt ?? $0.updatedAt) }
+            .map { DayGroup(id: $0.key, items: $0.value.sorted { ($0.publishedAt ?? $0.updatedAt) > ($1.publishedAt ?? $1.updatedAt) }) }
+            .sorted { $0.id > $1.id }
+        ForEach(groups) { group in
+            VStack(alignment: .leading, spacing: DeskLayout.space8) {
+                Text(RiyadhTime.dayTitle(group.id))
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .padding(.horizontal, 4)
+                VStack(spacing: 0) {
+                    ForEach(Array(group.items.enumerated()), id: \.element.listID) { index, item in
+                        Button { path.append(.social(id: item.id)) } label: {
+                            PublishedRow(item: item, showsDivider: index < group.items.count - 1)
+                        }
+                        .buttonStyle(.plain)
+                        .task { await model.loadMoreIfNeeded(after: item) }
+                    }
+                }
+                .background(DeskCardBackground(radius: 22))
+            }
+            .listRowInsets(EdgeInsets(top: 6, leading: DeskLayout.pageMargin + 4, bottom: 6, trailing: DeskLayout.pageMargin + 4))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
     }
 
@@ -433,6 +478,40 @@ private struct SocialRow: View {
                 .accessibilityLabel("مرتبط بـ «\(title)»")
             }
         }
+    }
+}
+
+/// A published tweet in its day group: small avatar, «تغريدة · sender»
+/// in the sender's tone, the tweet on one line, the publish time.
+private struct PublishedRow: View {
+    let item: StaffInboxItem
+    let showsDivider: Bool
+
+    var body: some View {
+        HStack(spacing: DeskLayout.space12) {
+            SenderAvatar(name: item.sender.name, kind: item.sender.kind, imageURL: item.sender.avatarUrl, size: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("تغريدة · \(item.sender.name)")
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(item.sender.kind.tone == .neutral ? DeskTheme.textSecondary : item.sender.kind.tone.ink)
+                    .lineLimit(1)
+                Text(item.listPreview)
+                    .deskText(DeskType.rowTitle)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: DeskLayout.space4)
+            LTRText(text: RiyadhTime.timeString(item.publishedAt ?? item.updatedAt),
+                    role: DeskType.timestamp, color: DeskTheme.textTertiary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) {
+            if showsDivider { Rectangle().fill(DeskInk.hairline).frame(height: 1) }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 

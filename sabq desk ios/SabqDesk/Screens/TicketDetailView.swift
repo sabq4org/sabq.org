@@ -3,11 +3,13 @@ import SabqDeskKit
 import SwiftUI
 import UIKit
 
-/// A contributor's message as a chat: writer bubbles in grey, desk replies in
-/// blue, day separators, «ردًا على» quotes and quick replies above the composer.
+/// A contributor's message as a chat: writer bubbles in white, desk replies in
+/// soft blue, day separators, «ردًا على» quotes and quick replies above the composer.
 struct TicketDetailView: View {
     @Environment(AppModel.self) private var app
     let ticketID: String
+    /// A quick reply picked on the list card, put in the composer unsent.
+    var initialDraft: String = ""
     /// Reports the ticket's latest status back to the list row.
     let onChange: (String?) -> Void
 
@@ -51,7 +53,10 @@ struct TicketDetailView: View {
             Text("لن يتمكن أحد من الرد بعد الإغلاق حتى تُعاد فتحها.")
         }
         .task { await load() }
-        .onAppear { quickReplies = QuickReplyStore().replies }
+        .onAppear {
+            quickReplies = QuickReplyStore().replies
+            if draft.isEmpty, !initialDraft.isEmpty { draft = initialDraft }
+        }
     }
 
     private func titleView(_ ticket: StaffTicket) -> some View {
@@ -72,6 +77,10 @@ struct TicketDetailView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DeskLayout.space8) {
                     subjectHeader(detail.ticket)
+                    if let context = detail.writerContext {
+                        WriterContextLine(context: context)
+                            .padding(.bottom, DeskLayout.space8)
+                    }
                     ForEach(Array(detail.messages.enumerated()), id: \.element.id) { index, message in
                         // The subject line already carries the opening date.
                         let previous = index == 0 ? detail.ticket.createdAt : detail.messages[index - 1].createdAt
@@ -195,7 +204,8 @@ struct TicketDetailView: View {
                         .focused($composerFocused)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(DeskInk.chip, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .background(DeskTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .shadow(color: DeskTheme.shadow, radius: 4, y: 1)
                     Button {
                         Task { await send() }
                     } label: {
@@ -294,6 +304,37 @@ struct TicketDetailView: View {
     }
 }
 
+/// One white row above a writer's chat: last published, next scheduled, so the
+/// desk can answer «لماذا لم يُنشر مقالي؟» without leaving the thread.
+private struct WriterContextLine: View {
+    let context: StaffWriterOpinionContext
+
+    var body: some View {
+        let scheduled = context.nextScheduledAt != nil
+        HStack(spacing: DeskLayout.space12) {
+            Image(systemName: "calendar")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(scheduled ? DeskTheme.success : DeskTheme.warning)
+                .frame(width: 32, height: 32)
+                .background(scheduled ? DeskTheme.success.opacity(0.12) : DeskTheme.warning.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(context.headline)
+                    .deskText(DeskType.metaEmphasis)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                Text(context.detail)
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .deskRowCard(padding: 12)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// «اليوم · الأحد 25 أكتوبر» between days.
 private struct DaySeparator: View {
     let date: Date
@@ -311,8 +352,8 @@ private struct DaySeparator: View {
     }
 }
 
-/// Writer on the reading side (right in RTL) in grey; the desk on the other
-/// side in blue with white text. Long-press or swipe the menu to quote.
+/// Writer on the reading side (right in RTL) in white; the desk on the other
+/// side in soft blue with dark text (no dark fills). Long-press or swipe the menu to quote.
 private struct ChatBubble: View {
     let message: StaffTicketMessage
     let writerName: String
@@ -329,29 +370,31 @@ private struct ChatBubble: View {
                 if let quoted {
                     HStack(spacing: 6) {
                         Rectangle()
-                            .fill(isDesk ? Color.white.opacity(0.8) : DeskInk.action)
+                            .fill(DeskInk.action)
                             .frame(width: 3)
                         Text(quoted.message)
                             .deskText(DeskType.meta)
                             .lineLimit(2)
-                            .foregroundStyle(isDesk ? Color.white.opacity(0.9) : DeskTheme.textSecondary)
+                            .foregroundStyle(DeskTheme.textSecondary)
                     }
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(message.message)
                     .deskText(DeskType.body)
-                    .foregroundStyle(isDesk ? Color.white : DeskTheme.textPrimary)
+                    .foregroundStyle(DeskTheme.textPrimary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(isDesk ? DeskInk.link : DeskInk.chip,
-                        in: UnevenRoundedRectangle(topLeadingRadius: 22,
-                                                   bottomLeadingRadius: isDesk ? 22 : 6,
-                                                   bottomTrailingRadius: isDesk ? 6 : 22,
-                                                   topTrailingRadius: 22,
-                                                   style: .continuous))
+            .background(
+                UnevenRoundedRectangle(topLeadingRadius: 22,
+                                       bottomLeadingRadius: isDesk ? 22 : 6,
+                                       bottomTrailingRadius: isDesk ? 6 : 22,
+                                       topTrailingRadius: 22,
+                                       style: .continuous)
+                    .fill(isDesk ? DeskInk.bubble : DeskTheme.surface)
+                    .shadow(color: isDesk ? .clear : DeskTheme.shadow, radius: 6, y: 2))
             .contextMenu {
                 if canReply {
                     Button { onReply() } label: { Label("رد على هذه الرسالة", systemImage: "arrowshape.turn.up.left") }

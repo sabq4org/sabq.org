@@ -324,14 +324,14 @@ private struct StatusCard: View {
             HStack(spacing: DeskLayout.space12) {
                 Image(systemName: systemImage)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(ink)
                     .frame(width: 36, height: 36)
-                    .background(ink, in: Circle())
+                    .background(DeskTheme.surface, in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .deskText(DeskTextRole(size: 17, weight: .bold, style: .headline, lineSpacing: 0))
-                        .foregroundStyle(tone == .danger ? DeskTheme.danger : DeskTheme.textPrimary)
+                        .foregroundStyle(tone == .neutral ? DeskTheme.textPrimary : ink)
                     if let meta, !meta.isEmpty {
                         Text(meta)
                             .deskText(DeskType.meta)
@@ -438,36 +438,68 @@ private struct TweetBody: View {
     }
 }
 
+/// The publish log, always visible: one white group, a dot per attempt
+/// (green when it went out, amber when it did not), newest first.
 private struct AttemptsList: View {
     let attempts: [StaffSocialAttempt]
 
+    private static func succeeded(_ attempt: StaffSocialAttempt) -> Bool {
+        ["succeeded", "success", "published", "ok"].contains(attempt.outcome ?? "")
+    }
+
+    private static func failed(_ attempt: StaffSocialAttempt) -> Bool {
+        ["failed", "error"].contains(attempt.outcome ?? "") || attempt.errorCode != nil || attempt.errorMessage != nil
+    }
+
+    private static func outcomeText(_ attempt: StaffSocialAttempt) -> String {
+        if succeeded(attempt) { return "نُشرت" }
+        if failed(attempt) { return "تعذرت" }
+        return attempt.outcome ?? attempt.phase ?? "—"
+    }
+
     var body: some View {
-        DisclosureGroup {
-            VStack(alignment: .leading, spacing: DeskLayout.space8) {
-                ForEach(attempts) { attempt in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text([attempt.phase, attempt.outcome].compactMap { $0 }.joined(separator: " · "))
-                                .deskText(DeskType.metaEmphasis)
-                                .foregroundStyle(attempt.outcome == "failed" ? DeskTheme.danger : DeskTheme.textSecondary)
-                            Spacer()
-                            Text(verbatim: RiyadhTime.shortString(attempt.createdAt))
-                                .deskText(DeskType.timestamp)
-                                .foregroundStyle(DeskTheme.textTertiary)
+        let ordered = attempts.sorted { $0.createdAt > $1.createdAt }
+        VStack(alignment: .leading, spacing: DeskLayout.space8) {
+            Text("سجل النشر")
+                .deskText(DeskType.meta)
+                .foregroundStyle(DeskTheme.textSecondary)
+                .padding(.horizontal, 4)
+            VStack(spacing: 0) {
+                ForEach(Array(ordered.enumerated()), id: \.element.id) { index, attempt in
+                    HStack(alignment: .firstTextBaseline, spacing: DeskLayout.space12) {
+                        Circle()
+                            .fill(Self.succeeded(attempt) ? DeskTheme.success
+                                  : Self.failed(attempt) ? DeskTheme.warning : DeskTheme.textTertiary)
+                            .frame(width: 10, height: 10)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("المحاولة \(ordered.count - index) · \(Self.outcomeText(attempt))")
+                                .deskText(DeskType.rowTitle)
+                                .foregroundStyle(DeskTheme.textPrimary)
+                            if let message = attempt.errorMessage ?? attempt.errorCode, !message.isEmpty {
+                                Text(message)
+                                    .deskText(DeskType.meta)
+                                    .foregroundStyle(DeskTheme.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                            }
                         }
-                        if let message = attempt.errorMessage ?? attempt.errorCode {
-                            Text(message)
-                                .deskText(DeskType.meta)
-                                .foregroundStyle(DeskTheme.textTertiary)
+                        Spacer(minLength: 0)
+                        Text(verbatim: RiyadhTime.shortString(attempt.createdAt))
+                            .deskText(DeskType.timestamp)
+                            .foregroundStyle(DeskTheme.textTertiary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .overlay(alignment: .bottom) {
+                        if index < ordered.count - 1 {
+                            Rectangle().fill(DeskInk.hairline).frame(height: 1)
                         }
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
-            .padding(.top, DeskLayout.space8)
-        } label: {
-            Text("سجل المحاولات (\(attempts.count))")
-                .deskText(DeskType.metaEmphasis)
-                .foregroundStyle(DeskTheme.textSecondary)
+            .background(DeskCardBackground(radius: 22))
         }
     }
 }

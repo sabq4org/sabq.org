@@ -585,3 +585,33 @@ export async function renotifyOpinionDraftFromDesk(input: {
   });
   return { articleId: existing.id, ...result };
 }
+
+export interface StaffWriterOpinionContext {
+  lastPublishedAt: string | null;
+  nextScheduledAt: string | null;
+  hasPendingDraft: boolean;
+}
+
+/**
+ * سياق الكاتب أعلى محادثته في «مكتب سبق»: آخر مقال نُشر له، وأقرب مقال مجدول،
+ * وهل له مسودة بانتظار المراجعة. null إن لم يكن له أي مقال رأي.
+ */
+export async function getWriterOpinionContext(writerId: string, now = new Date()): Promise<StaffWriterOpinionContext | null> {
+  const byWriter = and(eq(articles.authorId, writerId), eq(articles.articleType, "opinion"));
+  const [published, scheduled, pending] = await Promise.all([
+    db.select({ at: articles.publishedAt }).from(articles)
+      .where(and(byWriter, eq(articles.status, "published")))
+      .orderBy(desc(articles.publishedAt)).limit(1),
+    db.select({ at: articles.scheduledAt }).from(articles)
+      .where(and(byWriter, eq(articles.status, "scheduled"), gte(articles.scheduledAt, now)))
+      .orderBy(articles.scheduledAt).limit(1),
+    db.select({ id: articles.id }).from(articles)
+      .where(and(byWriter, eq(articles.status, "draft"), awaitingEditorialSql))
+      .limit(1),
+  ]);
+  const lastPublishedAt = published[0]?.at?.toISOString() ?? null;
+  const nextScheduledAt = scheduled[0]?.at?.toISOString() ?? null;
+  const hasPendingDraft = pending.length > 0;
+  if (!lastPublishedAt && !nextScheduledAt && !hasPendingDraft) return null;
+  return { lastPublishedAt, nextScheduledAt, hasPendingDraft };
+}

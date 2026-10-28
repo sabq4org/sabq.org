@@ -76,11 +76,13 @@ struct AssistantBubble: View {
     }
 }
 
-/// Screen header: a short grey line over a large title, and an optional
-/// trailing view (a count pill, a search or account button).
+/// Screen header: a short grey line over a large title, an optional grey
+/// detail line under it (the week on «الرأي»), and an optional trailing view
+/// (a count pill, a search or account button).
 struct DeskScreenHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
+    var detail: String? = nil
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
@@ -96,6 +98,14 @@ struct DeskScreenHeader<Trailing: View>: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .accessibilityAddTraits(.isHeader)
+                if let detail {
+                    Text(detail)
+                        .deskText(DeskType.meta)
+                        .foregroundStyle(DeskTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: DeskLayout.space8)
             trailing()
@@ -348,6 +358,37 @@ struct DeskEmptyState: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, DeskLayout.space32)
         .padding(.horizontal, DeskLayout.space24)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A one-line empty state for a list that still has other content under
+/// it: a soft icon tile, the line, and a short hint, on a white row.
+struct DeskInlineEmpty: View {
+    let systemImage: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        HStack(spacing: DeskLayout.space12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(DeskInk.action)
+                .frame(width: 36, height: 36)
+                .background(DeskInk.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .deskText(DeskType.rowTitle)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                Text(message)
+                    .deskText(DeskType.meta)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .deskRowCard(padding: 12)
         .accessibilityElement(children: .combine)
     }
 }

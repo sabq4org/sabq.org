@@ -65,6 +65,7 @@ import {
   getStaffOpinionBoard,
   getStaffOpinionItem,
   getStaffOpinionPreview,
+  getWriterOpinionContext,
   publishOpinionFromDesk,
   renotifyOpinionDraftFromDesk,
   returnOpinionToWriterFromDesk,
@@ -642,6 +643,13 @@ subRouter.get(
         viewerId: req.staffAuth!.user.id,
         isAdmin: true,
       });
+      // سطر سياق الكاتب أعلى المحادثة؛ تعذره لا يُفشل فتح الرسالة.
+      const writerContext = detail.ticket.authorKind === "opinion_author" || detail.ticket.authorKind === "angle_writer"
+        ? await getWriterOpinionContext(detail.ticket.writerId).catch((err) => {
+          console.warn("[staff] writer context failed", { ticketId: detail.ticket.id, err: err instanceof Error ? err.message : String(err) });
+          return null;
+        })
+        : null;
       res.json({
         ticket: {
           ...detail.ticket,
@@ -649,6 +657,7 @@ subRouter.get(
           deeplink: `sabqdesk://ticket/${detail.ticket.id}`,
         },
         messages: detail.messages,
+        writerContext,
       });
     } catch (error) {
       handleTicketError(res, error, "detail");
