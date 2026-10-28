@@ -44,6 +44,7 @@ struct DeskView: View {
                 makeListsIfNeeded()
                 await model?.reload()
                 if section != .scheduled { await lists[.scheduled]?.reload() }
+                if section == .scheduled, selectedDay != nil { await model?.loadAll() }
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: DeskDeepLink.self) { link in
@@ -60,7 +61,14 @@ struct DeskView: View {
         }
         .onChange(of: app.pendingLink) { _, _ in consumePendingLink() }
         .onChange(of: selectedDay) { _, day in
-            if day != nil { section = .scheduled }
+            guard day != nil else { return }
+            // The day filter hides rows, so every scheduled page is fetched
+            // up front (here, or by the section task after its reload).
+            if section == .scheduled {
+                Task { await lists[.scheduled]?.loadAll() }
+            } else {
+                section = .scheduled
+            }
         }
         .onChange(of: section) { _, newSection in
             if newSection != .scheduled { selectedDay = nil }
