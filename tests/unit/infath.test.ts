@@ -168,6 +168,14 @@ describe("parseInfathPaste", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("السطر 4");
   });
+
+  it("rejects decimal and negative asset counts instead of rewriting them", () => {
+    const base = "25/10/2026\t10:00\tالرياض\tالرياض\tفلل\tسكني\t";
+    const { rows, errors } = parseInfathPaste([`${base}10.0\tإلكتروني`, `${base}-5\tإلكتروني`, `${base}1,200\tإلكتروني`].join("\n"), id);
+    expect(rows.map((r) => r.assetsCount)).toEqual([1200]);
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toContain("عدد الأصول");
+  });
 });
 
 describe("public view", () => {

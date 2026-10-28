@@ -532,7 +532,9 @@ export function parseInfathPaste(text: string, makeId: () => string): PasteResul
     const region = matchLabel(INFATH_REGIONS, regionRaw || "", REGION_ALIASES);
     const category = matchLabel(INFATH_CATEGORIES, categoryRaw || "", CATEGORY_ALIASES);
     const format = matchLabel(INFATH_FORMATS, formatRaw || "", FORMAT_ALIASES);
-    const count = Number(latinDigits(countRaw || "").replace(/[^\d]/g, ""));
+    // نزيل فواصل الآلاف فقط؛ «10.0» أو «-5» لا تتحول إلى أعداد أخرى بل تُرفض.
+    const countText = latinDigits(countRaw || "").replace(/[,٬\s]/g, "");
+    const count = /^\d+$/.test(countText) ? Number(countText) : 0;
     const problems: string[] = [];
     if (!date) problems.push("التاريخ");
     if (!time) problems.push("الوقت");
