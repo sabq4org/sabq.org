@@ -9,7 +9,7 @@
 2. **الصندوق الموحد (`GET /inbox`) والعدادات (`GET /unread-counts`):** دمج استفسارات المساهمين (التذاكر) ومقترحات النشر الاجتماعي (كتّاب الرأي والوكالات) في تدفق زمني واحد مرتب من الأحدث إلى الأقدم مع ترقيم بمؤشر معتم (Opaque Cursor Pagination).
 3. **استفسارات المساهمين (`Tickets`):** قراءة سلسلة رسائل التذكرة، الرد باسم المنسوب مع نقل الحالة من `open` إلى `answered`، وتحديث حالة التذكرة (`open | answered | closed`).
 4. **مقترحات النشر الاجتماعي على X (`Social`):** معاينة التغريدة المقترحة والكاتب/الوكالة وسجل المحاولات، والنشر الفوري (`publish`) أو الجدولة (`schedule`) أو الرفض (`reject` مع سبب إلزامي إلا عند سحب صاحب المقترح لمقترحه).
-5. **إشعارات الدفع الفوري الموجهة لتطبيق الديسك (`com.sabq.desk`):** إرسال إشعارات APNs/FCM عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` مع روابط عميقة `sabqdesk://ticket/<id>` و`sabqdesk://social/<id>` عند وصول تذكرة/رسالة جديدة أو مقترح نشر اجتماعي من كاتب رأي أو وكالة، مع عزل تام لإشعارات تطبيق القارئ (`com.sabq.sabqorg`).
+5. **إشعارات الدفع الفوري الموجهة لتطبيق الديسك (`com.sabq.desk`):** إرسال إشعارات APNs/FCM عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` مع روابط عميقة `sabqdesk://ticket/<id>` و`sabqdesk://social/<id>` عند وصول تذكرة/رسالة جديدة أو مقترح نشر اجتماعي من كاتب رأي أو وكالة، و`sabqdesk://opinion/<articleId>` عند وصول مقال رأي جديد للمراجعة (2026-10-28)، مع عزل تام لإشعارات تطبيق القارئ (`com.sabq.sabqorg`).
 6. **أدوات المشرفين (`ai_hub.view`) — 2026-10-25:** صحة النظام (`GET /system/health`)، تنبيهات الإدارة (`GET /alerts`)، وتفضيلات التنبيهات (`GET|PUT /me/alert-prefs`)، مع إشعارات دفع لتغيّر حالة نماذج الذكاء الاصطناعي وحدود الميزانية وفشل نشر التغريدات.
 7. **أرصدة النماذج (`ai_hub.view`، والكتابة `ai_hub.manage`) — 2026-10-25:** `GET /system/balances` و`GET /system/balances/:provider` و`POST /system/balances/:provider/topup` و`PUT /system/balances/:provider/threshold` (§2-10)، مع إشعار دفع واحد عند عبور الرصيد إلى «منخفض» أو «حرج» ورابط `sabqdesk://balances/<provider>`.
 
@@ -111,7 +111,7 @@ Content-Type: application/json
 ```
 - `canSystemHealth` و`canAdminAlerts` كلاهما = `ai_hub.view`.
 - `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
-- `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
+- `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
 يعيد قائمة موحدة من التذاكر ومقترحات النشر الاجتماعي مرتبة من الأحدث إلى الأقدم (`updatedAt DESC`).
@@ -265,9 +265,9 @@ Content-Type: application/json
 
 ### 8. `GET` / `PUT /api/v1/staff/me/alert-prefs` (كل عضو)
 - **`GET`** يعيد `{ "aiAlerts": true, "adminAlerts": true }`. غياب الصف = الاثنان مفعّلان.
-- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean, "writerMessages"?: boolean, "socialProposals"?: boolean, "quietHours"?: "off" | "night" | "offhours" }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير صالحة ← `400 validation_error`). منذ 2026-10-26 متاح لكل عضو؛ مفتاحا `aiAlerts`/`adminAlerts` لا أثر لهما إلا لمن يملك `ai_hub.view`.
+- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean, "writerMessages"?: boolean, "socialProposals"?: boolean, "opinionDrafts"?: boolean, "quietHours"?: "off" | "night" | "offhours" }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير صالحة ← `400 validation_error`). منذ 2026-10-26 متاح لكل عضو؛ مفتاحا `aiAlerts`/`adminAlerts` لا أثر لهما إلا لمن يملك `ai_hub.view`.
 - **الساعات الهادئة** (بتوقيت الرياض): `night` = 23:00–07:00، `offhours` = 17:00–08:00. كل إشعار ديسك خلالها يُرسل بـ `interruption-level: passive` وبلا صوت، فيبقى في مركز الإشعارات دون إزعاج. لا يُؤجَّل ولا يُجمع.
-- **رسائل الكتّاب** (`writerMessages`) و**مقترحات X** (`socialProposals`) تخص إشعار الجوال فقط؛ الصندوق الداخلي والبريد لا يتغيران. يعيد التفضيلات بعد الحفظ ويُسجَّل `staff_alert_prefs_update`.
+- **رسائل الكتّاب** (`writerMessages`) و**مقترحات X** (`socialProposals`) و**مقالات الرأي** (`opinionDrafts`، منذ 2026-10-28، الافتراضي مفعّل) تخص إشعار الجوال فقط؛ الصندوق الداخلي والبريد لا يتغيران. يعيد التفضيلات بعد الحفظ ويُسجَّل `staff_alert_prefs_update`.
 - التخزين: صف `system_settings` بالمفتاح `staff_app.alert_prefs:<userId>` (الفئة `staff_app`) بلا تغيير مخطط. الحفظ upsert ذري يدمج الحقول المرسلة فقط في قيمة jsonb المخزنة (`stored || patch`)، فلا يعيد طلبان متزامنان يغيّر كل منهما مفتاحاً مختلفاً تفعيلَ الآخر. جسم بلا حقول منطقية لا يكتب شيئاً ويعيد القيمة الحالية.
 
 ### 9. سبب الرفض في إلغاء الويب ورفض المكتب
@@ -358,7 +358,7 @@ Content-Type: application/json
 ```
 تمت إضافة `com.sabq.desk` إلى قائمة الحزم المسموحة (`ALLOWED_MEMBER_PUSH_BUNDLE_IDS`) في `server/services/deviceRegistrationPolicy.ts`.
 
-### ب) الخطافات الثلاثة وحمولات الدفع (`sendPushToUserApp`)
+### ب) خطافات الكتّاب وحمولات الدفع (`sendPushToUserApp`)
 جميع إشعارات الديسك تُرسل عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` (مغلفة بـ `try/catch` بحيث لا يُفشل عطل الدفع حفظ التذكرة أو المقترح أبداً، وبالتوازي مع تنبيهات البريد والصندوق الداخلي القائمة):
 
 1. **استفسار جديد أو رد من مساهم (`notifyDeskOfWriterInquiry` في `server/services/opinionTicketNotifications.ts`):**
@@ -379,8 +379,18 @@ Content-Type: application/json
    - **الحمولة الإضافية (`data`):** `{ "postId": "<postId>", "proposalKind": "agency" }`
    - **معرّف الدمج (`collapseId`):** `desk-social-<postId>`
 
+4. **مقال رأي جديد بانتظار المراجعة (`notifyStaffDeskOfOpinionDraft` في `server/services/staffAppPushService.ts`، يُستدعى من `notifyOpinionArticleSubmittedForReview` لكل مسارات الإرسال) — 2026-10-28:**
+   - **المستلمون:** `listOpinionDeskRecipientUserIds(authorId)`: كل عضو نشط يملك `opinion.review` **أو** `articles.schedule` (فحص RBAC حي، وتُستثنى الكاتبة/الكاتب نفسه)، وهما الصلاحيتان اللتان يشترطهما `GET /api/opinion-writers/:writerId/next-slot`.
+   - **التفضيل:** `opinionDrafts` («مقالات الرأي») + الساعات الهادئة.
+   - **العنوان:** «مقال رأي جديد: <اسم الكاتب>»؛ **النص:** ««<عنوان المقال>» — موعده الثابت: <اليوم التاريخ HH:mm> (الرياض)» من `getNextSlotForWriter(authorId, articleId)`، أو «بلا موعد ثابت».
+   - **النوع (`type`):** `desk.opinion_draft`
+   - **الرابط العميق (`deeplink`):** `sabqdesk://opinion/<articleId>` — نسخة iOS الحالية لا تعرف هذا المسار فتتجاهله وتفتح التطبيق فقط؛ الشاشة تأتي في المرحلة 2.
+   - **الحمولة الإضافية (`data`):** `{ "articleId": "<articleId>", "nextSlot"?: "<ISO>" }` (بلا `ticketId`/`postId` عمداً حتى لا يفسّرها التطبيق الحالي كتذكرة أو تغريدة).
+   - **معرّف الدمج (`collapseId`):** `desk-opinion-<articleId>`
+   - يُرسل في الخلفية مع بريد البوت (`[sabq-desk] type=opinion_draft id=<articleId>`)؛ فشلهما لا يُفشل الإرسال ولا يؤخّره.
+
 ### ب-2) إشعارات المشرفين (`sendStaffAdminPush` في `server/services/staffAppPushService.ts`)
-المستلمون: المستخدمون النشطون الذين يملكون `ai_hub.view` ولم يطفئوا التفضيل المعني في `/me/alert-prefs` (إن تعذّرت قراءة التفضيلات يُرسل للجميع). كل إشعارات الديسك (هنا وفي الخطافات الثلاثة أعلاه) تمر على `applyStaffDeskPrefs` في `staffAppPushService.ts`: نوع مطفأ لا يُرسل، وفي الساعات الهادئة يصل صامتاً. لا ترمي هذه الدوال، ولا يمس فشلها مسار الذكاء الاصطناعي أو النشر.
+المستلمون: المستخدمون النشطون الذين يملكون `ai_hub.view` ولم يطفئوا التفضيل المعني في `/me/alert-prefs` (إن تعذّرت قراءة التفضيلات يُرسل للجميع). كل إشعارات الديسك (هنا وفي خطافات الكتّاب أعلاه) تمر على `applyStaffDeskPrefs` في `staffAppPushService.ts`: نوع مطفأ لا يُرسل، وفي الساعات الهادئة يصل صامتاً. لا ترمي هذه الدوال، ولا يمس فشلها مسار الذكاء الاصطناعي أو النشر.
 
 | الحدث | التفضيل | المصدر | `type` | `deeplink` | `collapseId` |
 |-------|---------|--------|--------|------------|--------------|

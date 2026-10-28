@@ -7,7 +7,7 @@
 توفّر واجهة `/api/internal/bot-desk/*` نقاط دخول آمنة لبوت مساعد موثوق للتعامل مع:
 1. **استفسارات المساهمين (التذاكر):** استعراض التذاكر، قراءة سلسلة المحادثة الكاملة، الرد باسم مالك التوكن (مع تحويل الحالة من `open` إلى `answered`)، وتحديث حالة التذكرة (`open | answered | closed`).
 2. **مقترحات النشر الاجتماعي على X:** استعراض المقترحات المعلقة من كتّاب الرأي والوكالات، قراءة تفاصيل المنشور وسجل محاولاته، والرفض (`reject` → `canceled` مع إشعار صاحب المقترح) أو النشر الفوري (`publish`) أو الجدولة (`schedule`) على منشورات أنشأها مستخدمون آخرون.
-3. **تنبيهات البريد الإلكتروني القابلة للتحليل آلياً:** إشعار البوت بريدياً فور وصول تذكرة/رسالة جديدة من مساهم أو مقترح تغريدة من كاتب رأي أو وكالة، مع سطر ثابت قابل للتحليل الآلي (`[sabq-desk] type=ticket id=<id>` أو `[sabq-desk] type=social_proposal id=<id>`) ليجلب البوت السجل الكامل بالمعرّف.
+3. **تنبيهات البريد الإلكتروني القابلة للتحليل آلياً:** إشعار البوت بريدياً فور وصول تذكرة/رسالة جديدة من مساهم أو مقترح تغريدة من كاتب رأي أو وكالة، مع سطر ثابت قابل للتحليل الآلي (`[sabq-desk] type=ticket id=<id>` أو `[sabq-desk] type=social_proposal id=<id>` أو `[sabq-desk] type=opinion_draft id=<articleId>` لمقال رأي جديد بانتظار المراجعة منذ 2026-10-28) ليجلب البوت السجل الكامل بالمعرّف.
 
 ---
 
@@ -168,6 +168,9 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
   `[sabq-desk] type=ticket id=<ticketId>`
 - لمقترحات النشر الاجتماعي (كاتب رأي أو وكالة):
   `[sabq-desk] type=social_proposal id=<postId>`
+- لمقال رأي جديد بانتظار المراجعة والجدولة (منذ 2026-10-28، من `notifyOpinionArticleSubmittedForReview` لكل مسارات الإرسال: الويب والجوال ولوحة الرأي):
+  `[sabq-desk] type=opinion_draft id=<articleId>`
+  المتن: `author` و`time` و`title` و`next_slot` (ISO للموعد الثابت القادم للكاتب، أو `none`)، ثم سطر عربي «موعده الثابت: <اليوم التاريخ الساعة> (الرياض)» أو «بلا موعد ثابت». المستلمون: `DESK_BOT_ALERT_EMAILS` + `editor_alerts.deskBotAlertEmails` فقط (`getDeskBotAlertRecipients()`). المنشئ `buildDeskOpinionDraftAlertEmail` في `server/services/deskBotAlerts.ts`. فشل البريد لا يُفشل الإرسال.
 
 ويتبعها في المتن:
 - `sender`: اسم المرسل
