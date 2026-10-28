@@ -773,14 +773,7 @@ export async function notifyOpinionArticleSubmittedForReview(article: {
 }): Promise<void> {
   if (!article.authorId) return;
   try {
-    const [author] = await db
-      .select({ firstName: users.firstName, lastName: users.lastName })
-      .from(users)
-      .where(eq(users.id, article.authorId))
-      .limit(1);
-    const authorName = author
-      ? [author.firstName, author.lastName].filter(Boolean).join(" ") || "كاتب رأي"
-      : "كاتب رأي";
+    const { authorName } = await loadOpinionDraftAuthorName(article.authorId);
 
     const titleText = "تم إرسال مقالتك لهيئة التحرير";
     const bodyText = `وصلت مقالتك «${article.title}» إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.`;
@@ -807,17 +800,11 @@ export async function notifyOpinionArticleSubmittedForReview(article: {
       body: bodyText,
     });
 
-    // الموعد الثابت القادم للكاتب (يُستثنى المقال نفسه من «الأرضية» حتى لا يحجز موعده بنفسه).
-    let nextSlot: string | null = null;
-    try {
-      nextSlot = (await getNextSlotForWriter(article.authorId, article.id))?.nextSlot ?? null;
-    } catch (slotErr) {
-      console.error("[opinion-writers] next slot for submit notice failed:", slotErr);
-    }
-    const deskNotice = buildOpinionDraftNotice({
-      authorName,
+    const { nextSlot, notice: deskNotice } = await buildOpinionDraftDeskNotice({
+      articleId: article.id,
       articleTitle: article.title,
-      nextSlot,
+      authorId: article.authorId,
+      authorName,
     });
 
     const { sendDraftSubmittedNotification } = await import("../notificationService");
@@ -846,6 +833,79 @@ export async function notifyOpinionArticleSubmittedForReview(article: {
   }
 }
 
+async function loadOpinionDraftAuthorName(authorId: string): Promise<{ authorName: string }> {
+  const [author] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, authorId))
+    .limit(1);
+  const authorName = author
+    ? [author.firstName, author.lastName].filter(Boolean).join(" ") || "كاتب رأي"
+    : "كاتب رأي";
+  return { authorName };
+}
+
+/** نص تنبيه المكتب + الموعد الثابت القادم (يُستثنى المقال نفسه من «الأرضية» حتى لا يحجز موعده بنفسه). */
+async function buildOpinionDraftDeskNotice(input: {
+  articleId: string;
+  articleTitle: string;
+  authorId: string;
+  authorName: string;
+}): Promise<{ nextSlot: string | null; notice: ReturnType<typeof buildOpinionDraftNotice> }> {
+  let nextSlot: string | null = null;
+  try {
+    nextSlot = (await getNextSlotForWriter(input.authorId, input.articleId))?.nextSlot ?? null;
+  } catch (slotErr) {
+    console.error("[opinion-writers] next slot for submit notice failed:", slotErr);
+  }
+  const notice = buildOpinionDraftNotice({
+    authorName: input.authorName,
+    articleTitle: input.articleTitle,
+    nextSlot,
+  });
+  return { nextSlot, notice };
+}
+
+export interface OpinionDraftDeskChannelsResult {
+  /** عدد أجهزة تطبيق الديسك التي قبلت الـ push. */
+  pushSent: number;
+  /** عدد مستلمي بريد البوت المهيّئين. */
+  emailRecipients: number;
+  /** وصل البريد لمستلم واحد على الأقل (حسب مزوّد البريد). */
+  emailSent: boolean;
+}
+
+/**
+ * إعادة تنبيه المكتب لمسودة رأي قائمة (POST /api/v1/staff/opinion/:id/renotify):
+ * نفس نص التنبيه، ويُرسل push الديسك وبريد البوت فقط — بلا إشعار للكاتب ولا
+ * إشعارات المحررين داخل الموقع ولا أي كتابة على المقال.
+ */
+export async function resendOpinionDraftDeskAlert(article: {
+  id: string;
+  title: string;
+  authorId: string | null;
+}): Promise<OpinionDraftDeskChannelsResult> {
+  const { authorName } = article.authorId
+    ? await loadOpinionDraftAuthorName(article.authorId)
+    : { authorName: "كاتب رأي" };
+  const { nextSlot, notice } = article.authorId
+    ? await buildOpinionDraftDeskNotice({
+        articleId: article.id,
+        articleTitle: article.title,
+        authorId: article.authorId,
+        authorName,
+      })
+    : { nextSlot: null, notice: buildOpinionDraftNotice({ authorName, articleTitle: article.title, nextSlot: null }) };
+  return notifyOpinionDraftDeskChannels({
+    articleId: article.id,
+    articleTitle: article.title,
+    authorId: article.authorId,
+    authorName,
+    nextSlot,
+    notice,
+  });
+}
+
 /**
  * Push «مكتب سبق» لمن يملك opinion.review أو articles.schedule، وبريد
  * `[sabq-desk] type=opinion_draft id=<articleId>` لمستلمي بوت الديسك
@@ -858,23 +918,25 @@ export async function notifyOpinionDraftDeskChannels(input: {
   authorName: string;
   nextSlot: string | null;
   notice: { title: string; body: string; slotLine: string };
-}): Promise<void> {
-  await Promise.all([
-    (async () => {
+}): Promise<OpinionDraftDeskChannelsResult> {
+  const [pushSent, email] = await Promise.all([
+    (async (): Promise<number> => {
       try {
         const { notifyStaffDeskOfOpinionDraft } = await import("./staffAppPushService");
-        await notifyStaffDeskOfOpinionDraft({
+        const sent = await notifyStaffDeskOfOpinionDraft({
           articleId: input.articleId,
           title: input.notice.title,
           body: input.notice.body,
           authorId: input.authorId,
           nextSlot: input.nextSlot,
         });
+        return Number(sent) || 0;
       } catch (pushErr) {
         console.error("[opinion-writers] desk push for opinion draft failed:", pushErr);
+        return 0;
       }
     })(),
-    (async () => {
+    (async (): Promise<{ recipients: number; delivered: number }> => {
       try {
         const {
           buildDeskOpinionDraftAlertEmail,
@@ -882,7 +944,7 @@ export async function notifyOpinionDraftDeskChannels(input: {
           sendDeskAlertEmails,
         } = await import("./deskBotAlerts");
         const recipients = await getDeskBotAlertRecipients();
-        if (recipients.length === 0) return;
+        if (recipients.length === 0) return { recipients: 0, delivered: 0 };
         const payload = buildDeskOpinionDraftAlertEmail({
           articleId: input.articleId,
           articleTitle: input.articleTitle,
@@ -890,12 +952,15 @@ export async function notifyOpinionDraftDeskChannels(input: {
           slotLine: input.notice.slotLine,
           nextSlotIso: input.nextSlot,
         });
-        await sendDeskAlertEmails(recipients, payload, "[opinion-writers] desk bot email");
+        const delivered = await sendDeskAlertEmails(recipients, payload, "[opinion-writers] desk bot email");
+        return { recipients: recipients.length, delivered: Number(delivered) || 0 };
       } catch (mailErr) {
         console.error("[opinion-writers] desk bot email for opinion draft failed:", mailErr);
+        return { recipients: 0, delivered: 0 };
       }
     })(),
   ]);
+  return { pushSent, emailRecipients: email.recipients, emailSent: email.delivered > 0 };
 }
 
 /**

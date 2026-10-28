@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   returnOpinionToWriterFromDesk: vi.fn(),
   startOpinionPrep: vi.fn(),
   getOpinionPrepJob: vi.fn(),
+  renotifyOpinionDraftFromDesk: vi.fn(),
 }));
 
 const staffUser = {
@@ -72,6 +73,7 @@ vi.mock("../../server/services/staffOpinionDeskService", async () => {
     scheduleOpinionFromDesk: (...a: unknown[]) => mocks.scheduleOpinionFromDesk(...a),
     publishOpinionFromDesk: (...a: unknown[]) => mocks.publishOpinionFromDesk(...a),
     returnOpinionToWriterFromDesk: (...a: unknown[]) => mocks.returnOpinionToWriterFromDesk(...a),
+    renotifyOpinionDraftFromDesk: (...a: unknown[]) => mocks.renotifyOpinionDraftFromDesk(...a),
   };
 });
 
@@ -300,6 +302,7 @@ describe("/api/v1/staff/opinion routes", () => {
       ["POST", "/opinion/a1/publish", {}],
       ["POST", "/opinion/a1/schedule", { mode: "fixed_slot" }],
       ["POST", "/opinion/a1/return-to-writer", { note: "عدّل المقدمة" }],
+      ["POST", "/opinion/a1/renotify", {}],
     ] as const) {
       const res = await call(method, path, body);
       expect(res.status, `${method} ${path}`).toBe(403);
@@ -429,5 +432,74 @@ describe("/api/v1/staff/opinion routes", () => {
     expect((await status.json()).job.status).toBe("done");
     mocks.getOpinionPrepJob.mockResolvedValueOnce(null);
     expect((await call("GET", "/opinion/a1/prepare")).status).toBe(404);
+  });
+
+  describe("POST /opinion/:id/renotify", () => {
+    const sent = { articleId: "", pushSent: 2, emailRecipients: 1, emailSent: true };
+
+    it("403 without opinion.review / articles.schedule; never calls the desk channels", async () => {
+      granted = ["articles.publish", "articles.edit_any"];
+      const res = await call("POST", "/opinion/rn-forbidden/renotify", {});
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("forbidden");
+      expect(mocks.renotifyOpinionDraftFromDesk).not.toHaveBeenCalled();
+    });
+
+    it("works with articles.schedule alone (same as view)", async () => {
+      granted = ["articles.schedule"];
+      mocks.renotifyOpinionDraftFromDesk.mockResolvedValue({ ...sent, articleId: "rn-sched" });
+      expect((await call("POST", "/opinion/rn-sched/renotify", {})).status).toBe(200);
+    });
+
+    it("404 / 409 from the service pass through and do not burn the rate limit", async () => {
+      mocks.renotifyOpinionDraftFromDesk.mockRejectedValueOnce(
+        new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود"),
+      );
+      expect((await call("POST", "/opinion/rn-missing/renotify", {})).status).toBe(404);
+
+      mocks.renotifyOpinionDraftFromDesk.mockRejectedValueOnce(
+        new StaffOpinionDeskError(409, "conflict", "إعادة التنبيه متاحة فقط لمسودة رأي بانتظار المراجعة"),
+      );
+      const conflict = await call("POST", "/opinion/rn-409/renotify", {});
+      expect(conflict.status).toBe(409);
+      expect((await conflict.json()).code).toBe("conflict");
+      expect(mocks.logActivity).not.toHaveBeenCalled();
+
+      // الطلب الفاشل لا يُحتسب: نفس المقال ينجح بعد أن يصبح pending_review.
+      mocks.renotifyOpinionDraftFromDesk.mockResolvedValueOnce({ ...sent, articleId: "rn-409" });
+      expect((await call("POST", "/opinion/rn-409/renotify", {})).status).toBe(200);
+    });
+
+    it("returns what the desk channels reported and audits staff_opinion_renotify", async () => {
+      mocks.renotifyOpinionDraftFromDesk.mockResolvedValue({ ...sent, articleId: "rn-ok" });
+      const res = await call("POST", "/opinion/rn-ok/renotify", {});
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, pushSent: 2, emailSent: true, emailRecipients: 1 });
+      expect(mocks.renotifyOpinionDraftFromDesk).toHaveBeenCalledWith({ articleId: "rn-ok" });
+      expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+        userId: "staff-1",
+        action: "staff_opinion_renotify",
+        entityType: "article",
+        entityId: "rn-ok",
+        metadata: expect.objectContaining({ channel: "staff-app", pushSent: 2, emailSent: true }),
+      }));
+      // لا جدولة ولا نشر ولا إعادة للكاتب.
+      expect(mocks.scheduleOpinionFromDesk).not.toHaveBeenCalled();
+      expect(mocks.publishOpinionFromDesk).not.toHaveBeenCalled();
+      expect(mocks.returnOpinionToWriterFromDesk).not.toHaveBeenCalled();
+    });
+
+    it("429 on a second renotify of the same article within 5 minutes; other articles unaffected", async () => {
+      mocks.renotifyOpinionDraftFromDesk.mockImplementation(async ({ articleId }: { articleId: string }) => ({
+        ...sent,
+        articleId,
+      }));
+      expect((await call("POST", "/opinion/rn-limit/renotify", {})).status).toBe(200);
+      const limited = await call("POST", "/opinion/rn-limit/renotify", {});
+      expect(limited.status).toBe(429);
+      expect((await limited.json()).code).toBe("rate_limited");
+      expect(mocks.renotifyOpinionDraftFromDesk).toHaveBeenCalledTimes(1);
+      expect((await call("POST", "/opinion/rn-limit-other/renotify", {})).status).toBe(200);
+    });
   });
 });

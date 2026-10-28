@@ -17,8 +17,10 @@ import {
 import {
   awaitingEditorialSql,
   getNextSlotForWriter,
+  resendOpinionDraftDeskAlert,
   riyadhDateParts,
   scheduleApprovedOpinionArticle,
+  type OpinionDraftDeskChannelsResult,
 } from "./opinionWritersService";
 import {
   buildOpinionSlotClashWarnings,
@@ -470,4 +472,27 @@ export async function returnOpinionToWriterFromDesk(input: {
     article: { id: updated.id, status: updated.status, reviewStatus: updated.reviewStatus },
     previous: { status: existing.status, reviewStatus: existing.reviewStatus },
   };
+}
+
+/**
+ * «أعد التنبيه»: يعيد إرسال push الديسك وبريد البوت (type=opinion_draft) لمسودة
+ * رأي ما زالت بانتظار المراجعة. لا يكتب على المقال ولا يُشعر الكاتب أو المحررين.
+ */
+export async function renotifyOpinionDraftFromDesk(input: {
+  articleId: string;
+}): Promise<{ articleId: string } & OpinionDraftDeskChannelsResult> {
+  const existing = await loadOpinionArticle(input.articleId);
+  if (existing.reviewStatus !== "pending_review") {
+    throw new StaffOpinionDeskError(
+      409,
+      "conflict",
+      "إعادة التنبيه متاحة فقط لمسودة رأي بانتظار المراجعة",
+    );
+  }
+  const result = await resendOpinionDraftDeskAlert({
+    id: existing.id,
+    title: existing.title,
+    authorId: existing.authorId,
+  });
+  return { articleId: existing.id, ...result };
 }
