@@ -320,4 +320,32 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(finished.contentFixes, 3)
         XCTAssertNotNil(finished.scheduledAt)
     }
+
+    func testOpinionContentDecodesAndLinksOnlyWhenPublished() async throws {
+        let published = #"{"id":"a1","title":"عنوان المقال","subtitle":null,"slug":"s-1","status":"published","reviewStatus":null,"reviewNotes":null,"content":"<p>الفقرة الأولى</p><h2>عنوان فرعي</h2><p>ثانية &amp; أخيرة</p>","excerpt":"مقتطف","imageUrl":"https://media.sabq.org/news/a.webp","albumImages":[],"isAiGeneratedImage":false,"category":{"id":"c1","name":"مقالات"},"aiSummary":null,"seo":null,"updatedAt":"2026-10-28T06:00:00.000Z","publicUrl":"https://sabq.org/opinion/s-1"}"#
+        let draft = #"{"id":"a2","title":"مسودة","status":"draft","content":"نص بلا وسوم","publicUrl":null}"#
+        let (client, transport, _) = makeClient([.init(status: 200, body: published), .init(status: 200, body: draft)],
+                                                session: liveSession)
+        let live = try await client.opinionContent(id: "a1")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/content")
+        XCTAssertEqual(live.category?.name, "مقالات")
+        XCTAssertEqual(live.publicPageURL?.absoluteString, "https://sabq.org/opinion/s-1")
+        XCTAssertEqual(live.blocks, [.init(.paragraph, "الفقرة الأولى"), .init(.heading, "عنوان فرعي"),
+                                     .init(.paragraph, "ثانية & أخيرة")])
+
+        let pending = try await client.opinionContent(id: "a2")
+        XCTAssertNil(pending.publicPageURL)
+        XCTAssertEqual(pending.blocks, [.init(.paragraph, "نص بلا وسوم")])
+    }
+
+    func testArticleBlocksDropScriptsAndKeepQuotesAndLists() {
+        let html = "<script>alert(1)</script><blockquote><p>اقتباس</p></blockquote><ul><li>أولًا</li><li>ثانيًا</li></ul><p>سطر<br>ثانٍ</p><p>&nbsp;</p>"
+        XCTAssertEqual(StaffArticleBlock.parse(html: html), [
+            .init(.quote, "اقتباس"), .init(.listItem, "أولًا"), .init(.listItem, "ثانيًا"),
+            .init(.paragraph, "سطر\nثانٍ"),
+        ])
+        XCTAssertNil(StaffOpinionContent(id: "x", title: "t", status: "published", content: "",
+                                         publicUrl: "http://sabq.org/opinion/x").publicPageURL)
+    }
 }

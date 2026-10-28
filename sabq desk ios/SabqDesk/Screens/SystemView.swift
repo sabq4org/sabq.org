@@ -109,13 +109,14 @@ struct SystemSectionPicker: View {
     }
 }
 
-/// Outlined group of rows on the white page (hairline #EEF2F6, no shadow).
+/// A group of rows on one white rounded surface with a soft shadow,
+/// on the light grey-blue page (owner-approved look, 2026-10-28).
 struct DeskOutlinedGroup: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: DeskRadius.large, style: .continuous)
         content
-            .background(DeskTheme.background, in: shape)
-            .overlay(shape.stroke(DeskTheme.hairline, lineWidth: 1))
+            .background(DeskTheme.surface, in: shape)
+            .shadow(color: DeskShadow.card.color, radius: DeskShadow.card.radius, y: DeskShadow.card.y)
     }
 }
 

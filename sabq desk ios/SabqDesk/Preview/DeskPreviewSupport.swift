@@ -361,7 +361,6 @@ struct DeskPreviewHost<Content: View>: View {
     private let content: Content
 
     init(emptyInbox: Bool, emptyOpinion: Bool = false, content: Content) {
-        DeskFonts.registerAll()
         let model = AppModel.preview(me: DeskPreviewFixtures.me,
                                      unread: StaffUnreadCounts(tickets: 2, social: 3, total: 5),
                                      client: DeskPreviewFixtures.client(emptyInbox: emptyInbox,

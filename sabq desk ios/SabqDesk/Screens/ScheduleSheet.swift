@@ -163,7 +163,7 @@ private struct SlotButton: View {
             }
             .foregroundStyle(isSelected ? Color.white : DeskTheme.textPrimary)
             .frame(maxWidth: .infinity, minHeight: 60)
-            .background(isSelected ? DeskInk.strong : DeskInk.chip,
+            .background(isSelected ? DeskInk.selected : DeskInk.chip,
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }

@@ -10,10 +10,6 @@ struct SabqDeskApp: App {
     @State private var model = AppModel.shared
     @State private var appLock = AppLockController(hasSession: { AppModel.shared.client.hasSession })
 
-    init() {
-        DeskFonts.registerAll()
-    }
-
     var body: some Scene {
         WindowGroup {
             #if DEBUG

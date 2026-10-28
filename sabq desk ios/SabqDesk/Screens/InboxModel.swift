@@ -75,6 +75,17 @@ final class InboxModel {
         }
     }
 
+    /// Fetches the remaining pages (at most `maxPages`), for a filter that
+    /// hides rows and so never reaches the last row's `loadMoreIfNeeded`.
+    func loadAll(maxPages: Int = 10) async {
+        for _ in 0..<maxPages {
+            guard hasMore, let last = items.last else { return }
+            let before = items.count
+            await loadMoreIfNeeded(after: last)
+            if items.count == before { return }
+        }
+    }
+
     /// Reflects a change made on a detail screen without a full reload. A row
     /// whose new status no longer belongs to this tab leaves the list.
     func apply(_ link: DeskDeepLink, status: String?) {

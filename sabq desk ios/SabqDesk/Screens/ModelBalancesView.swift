@@ -228,7 +228,7 @@ struct ProviderInitialTile: View {
                 Circle()
                     .fill(balance.effectiveState == .notConfigured ? DeskTheme.textTertiary : balance.tone.ink)
                     .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(DeskTheme.background, lineWidth: 2))
+                    .overlay(Circle().stroke(DeskTheme.surface, lineWidth: 2))
                     .offset(x: 3, y: -3)
             }
             .accessibilityHidden(true)

@@ -64,6 +64,7 @@ import {
   checkOpinionSlotClashes,
   getStaffOpinionBoard,
   getStaffOpinionItem,
+  getStaffOpinionPreview,
   publishOpinionFromDesk,
   renotifyOpinionDraftFromDesk,
   returnOpinionToWriterFromDesk,
@@ -1084,6 +1085,21 @@ subRouter.get(
       res.json(await getStaffOpinionItem(req.params.id));
     } catch (error) {
       handleOpinionError(res, error, "تعذر جلب المقال");
+    }
+  },
+);
+
+// «استعراض المقال»: قبل النشر يقرأ المحرر النص داخل التطبيق، وبعده يفتح الصفحة المنشورة.
+subRouter.get(
+  "/opinion/:id/content",
+  requireStaffAuth,
+  requireOpinionCapability("view"),
+  async (req: StaffRequest, res: Response) => {
+    try {
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json(await getStaffOpinionPreview(req.params.id));
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب نص المقال");
     }
   },
 );

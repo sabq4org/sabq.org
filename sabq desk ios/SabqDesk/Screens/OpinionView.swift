@@ -25,6 +25,7 @@ struct OpinionView: View {
     @State private var publishTarget: StaffOpinionItem?
     @State private var returnTarget: StaffOpinionItem?
     @State private var scheduleTarget: StaffOpinionItem?
+    @State private var previewTarget: StaffOpinionItem?
     @State private var pendingSchedule: PendingSchedule?
 
     /// A schedule waiting for «جدول رغم ذلك» after a clash warning.
@@ -96,6 +97,12 @@ struct OpinionView: View {
                 Task { await returnToWriter(item, note: note) }
             }
         }
+        .sheet(item: $previewTarget) { item in
+            if let article = item.article {
+                OpinionPreviewSheet(articleID: article.id, writerName: item.writer.name, fallbackTitle: article.title,
+                                    opensLivePage: article.status == .published)
+            }
+        }
         .sheet(item: $scheduleTarget) { item in
             ScheduleSheet(initial: item.article?.scheduledAt ?? item.slotAt,
                           title: "موعد مقال الرأي",
@@ -109,13 +116,14 @@ struct OpinionView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
-            DeskScreenHeader(title: "مقالات الرأي", subtitle: weekTitle) {
-                if let me = app.me {
-                    Button(action: openAccount) {
-                        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 44)
+            DeskScreenHeader(title: "الرأي", subtitle: "مقالات الرأي · \(weekTitle)") {
+                HStack(spacing: 6) {
+                    if counts.pending > 0 {
+                        CountPill(text: "\(counts.pending) بانتظارك", tone: .warning)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("حسابي")
+                    if counts.scheduled > 0 {
+                        CountPill(text: "\(counts.scheduled) مجدولة", tone: .success)
+                    }
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
@@ -144,6 +152,12 @@ struct OpinionView: View {
         .padding(.top, DeskLayout.space8)
     }
 
+    /// Header pills: drafts waiting for the desk and articles already scheduled.
+    private var counts: (pending: Int, scheduled: Int) {
+        let items = board?.allItems.compactMap(\.article) ?? []
+        return (items.filter { $0.status.isPending }.count, items.filter { $0.status == .scheduled }.count)
+    }
+
     private var weekTitle: String {
         if let start = board?.days.first?.start { return RiyadhTime.weekTitle(from: start) }
         return RiyadhTime.weekTitle(from: RiyadhTime.dayKey(Date()))
@@ -156,7 +170,7 @@ struct OpinionView: View {
         if let board {
             if let linked = model?.linked {
                 dayHeader("من الإشعار", anchor: nil)
-                timelineRow(linked, isFirst: false, isLast: true, unslotted: linked.slotAt == nil)
+                timelineRow(linked, isFirst: false, unslotted: linked.slotAt == nil)
             }
             if board.hasNoDrafts {
                 DeskEmptyState(title: "لا مسودات بانتظارك هذا الأسبوع",
@@ -165,10 +179,9 @@ struct OpinionView: View {
             }
             ForEach(sections(board), id: \.title) { section in
                 dayHeader(section.title, anchor: section.anchor)
-                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
+                ForEach(section.items) { item in
                     timelineRow(item,
                                 isFirst: false,
-                                isLast: index == section.items.count - 1,
                                 unslotted: item.slotAt == nil)
                 }
             }
@@ -210,7 +223,7 @@ struct OpinionView: View {
                 .deskText(DeskType.metaEmphasis)
                 .foregroundStyle(DeskTheme.textSecondary)
                 .accessibilityAddTraits(.isHeader)
-            Rectangle().fill(DeskInk.hairline).frame(height: 1)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, DeskLayout.pageMargin + 4)
         .padding(.top, DeskLayout.space16)
@@ -218,9 +231,9 @@ struct OpinionView: View {
         .id(anchor ?? "linked")
     }
 
-    private func timelineRow(_ item: StaffOpinionItem, isFirst: Bool, isLast: Bool, unslotted: Bool) -> some View {
+    private func timelineRow(_ item: StaffOpinionItem, isFirst: Bool, unslotted: Bool) -> some View {
         HStack(alignment: .top, spacing: DeskLayout.space12) {
-            OpinionTimeColumn(date: unslotted ? nil : item.slotAt, isFirst: isFirst, isLast: isLast)
+            OpinionTimeColumn(date: unslotted ? nil : item.slotAt, isFirst: isFirst)
             OpinionCard(item: item,
                         caps: caps,
                         isUnslotted: unslotted,
@@ -240,6 +253,7 @@ struct OpinionView: View {
             publish: { publishTarget = item },
             scheduleFixed: { Task { await schedule(item, .fixedSlot, checked: false) } },
             changeTime: { scheduleTarget = item },
+            preview: { previewTarget = item },
             returnToWriter: { returnTarget = item })
     }
 
@@ -393,10 +407,27 @@ struct OpinionView: View {
     }
 }
 
+/// A small coloured count in the header («2 بانتظارك»).
+private struct CountPill: View {
+    let text: String
+    let tone: DeskTone
+
+    var body: some View {
+        Text(text)
+            .deskText(DeskType.tag)
+            .foregroundStyle(tone.ink)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(tone.fill, in: Capsule())
+    }
+}
+
 // MARK: - Week strip
 
-/// Seven day chips: the selected one dark navy, today's number in link blue,
-/// and one dot per state present that day.
+/// Seven day chips on white: the selected one filled Sabq blue, today's
+/// number in link blue, and one dot per state present that day.
 private struct OpinionWeekStrip: View {
     let days: [StaffOpinionDay]
     let today: String
@@ -410,17 +441,19 @@ private struct OpinionWeekStrip: View {
                     VStack(spacing: 1) {
                         Text(day.start.map(RiyadhTime.shortWeekday) ?? "")
                             .deskText(DeskType.timestamp)
-                            .foregroundStyle(isSelected ? Color(white: 0.75) : DeskTheme.textSecondary)
+                            .foregroundStyle(isSelected ? Color.white.opacity(0.85) : DeskTheme.textSecondary)
                         Text(verbatim: day.start.map(RiyadhTime.dayNumber) ?? "")
                             .font(DeskFonts.app(size: 17, weight: .bold, relativeTo: .headline))
                             .monospacedDigit()
                             .foregroundStyle(isSelected ? Color.white : (day.date == today ? DeskInk.link : DeskTheme.textPrimary))
                         OpinionDayDots(counts: day.counts)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 64)
-                    .background(isSelected ? DeskInk.strong : DeskInk.chip,
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(maxWidth: .infinity, minHeight: 72)
+                    .background(isSelected ? DeskInk.selected : DeskTheme.surface,
+                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: isSelected ? DeskInk.selected.opacity(0.3) : DeskTheme.shadow,
+                            radius: isSelected ? 10 : 4, y: isSelected ? 5 : 1)
+                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -518,11 +551,10 @@ private enum OpinionStateStyle {
 
 // MARK: - Timeline
 
-/// Big Riyadh time, the countdown under it, and the rail down to the next slot.
+/// Weekday, big Riyadh time and the countdown beside each card.
 private struct OpinionTimeColumn: View {
     let date: Date?
     let isFirst: Bool
-    let isLast: Bool
 
     var body: some View {
         VStack(spacing: 2) {
@@ -548,15 +580,8 @@ private struct OpinionTimeColumn: View {
                     .deskText(DeskType.rowTitle)
                     .foregroundStyle(DeskTheme.textTertiary)
             }
-            if !isLast {
-                Rectangle()
-                    .fill(DeskTheme.outline)
-                    .frame(width: 2)
-                    .frame(maxHeight: .infinity)
-                    .padding(.top, 6)
-            }
         }
-        .padding(.top, 6)
+        .padding(.top, 10)
         .frame(width: 62)
         .accessibilityElement(children: .combine)
     }
@@ -569,6 +594,7 @@ private struct OpinionCard: View {
         let publish: () -> Void
         let scheduleFixed: () -> Void
         let changeTime: () -> Void
+        let preview: () -> Void
         let returnToWriter: () -> Void
     }
 
@@ -589,15 +615,27 @@ private struct OpinionCard: View {
         VStack(alignment: .leading, spacing: 0) {
             topLine
             if let article = item.article {
-                Text(article.title)
-                    .font(DeskFonts.app(size: 14, weight: .semibold, relativeTo: .footnote))
-                    .lineSpacing(4)
-                    .foregroundStyle(DeskTheme.textPrimary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, DeskLayout.space8)
-                    .padding(.bottom, 10)
+                Button(action: actions.preview) {
+                    Text(article.title)
+                        .font(DeskFonts.app(size: 15, weight: .semibold, relativeTo: .subheadline))
+                        .lineSpacing(4)
+                        .foregroundStyle(DeskTheme.textPrimary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("يفتح استعراض المقال")
+                .padding(.top, DeskLayout.space8)
+                .padding(.bottom, 10)
                 actionArea
+                Button(action: actions.preview) {
+                    Label(status == .published ? "استعراض المنشور على سبق" : "استعراض المقال قبل النشر",
+                          systemImage: status == .published ? "safari" : "eye")
+                }
+                .buttonStyle(OpinionButtonStyle(kind: .tinted))
+                .padding(.top, status == .published ? 0 : 6)
                 footer
             } else {
                 Text(item.state == .late
@@ -753,15 +791,14 @@ private struct OpinionCard: View {
                 .overlay(shape.strokeBorder(isHighlighted ? DeskInk.action : DeskTheme.amberOutline,
                                             lineWidth: isHighlighted ? 2 : 1))
         } else {
-            shape.fill(isHighlighted ? DeskInk.bubble : DeskTheme.surface)
-                .overlay(shape.strokeBorder(isHighlighted ? DeskInk.action : DeskTheme.skyOutline,
-                                            lineWidth: isHighlighted ? 2 : 1))
+            shape.fill(isHighlighted ? DeskInk.soft : DeskTheme.surface)
+                .overlay(shape.strokeBorder(isHighlighted ? DeskInk.action : Color.clear, lineWidth: 2))
                 .shadow(color: DeskShadow.card.color, radius: DeskShadow.card.radius, y: DeskShadow.card.y)
         }
     }
 }
 
-/// Compact card buttons (36 pt): filled blue, grey, or tinted blue.
+/// Card pill buttons (40 pt): filled Sabq blue, grey, or soft blue.
 private struct OpinionButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, tinted }
     let kind: Kind
@@ -774,8 +811,8 @@ private struct OpinionButtonStyle: ButtonStyle {
             .minimumScaleFactor(0.85)
             .foregroundStyle(ink)
             .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 36)
-            .background(fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(fill, in: Capsule())
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 
@@ -793,7 +830,7 @@ private struct OpinionButtonStyle: ButtonStyle {
         switch kind {
         case .primary: return DeskInk.action
         case .secondary: return DeskInk.chip
-        case .tinted: return DeskInk.bubble
+        case .tinted: return DeskInk.soft
         }
     }
 }

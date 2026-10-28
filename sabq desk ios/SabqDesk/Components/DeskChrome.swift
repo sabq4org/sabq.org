@@ -9,7 +9,12 @@ import SwiftUI
 
 /// Spec colours under their original desk names; the values live in `DeskTheme`.
 enum DeskInk {
+    /// Strong text only; the desk has no dark fills.
     static let strong = DeskTheme.navy
+    /// Selected chip, day or segment fill (white text on it).
+    static let selected = DeskTheme.selectedFill
+    /// Soft blue behind a selected tab, initials or a highlight.
+    static let soft = DeskTheme.softBlue
     /// The assistant's bubble and the robot's halo.
     static let bubble = DeskTheme.bubbleBlue
     static let chip = DeskTheme.chipGrey
@@ -20,7 +25,7 @@ enum DeskInk {
     static let action = DeskTheme.buttonBlue
 }
 
-/// Row and header type sizes from the approved mockup (IBM Plex Sans Arabic).
+/// Row and header type sizes from the approved mockup (SF Arabic since 2026-10-28).
 enum DeskRowType {
     /// Sender name in lists: 15 bold when unread, 15 semibold otherwise.
     static let name = DeskTextRole(size: 15, weight: .bold, style: .subheadline, lineSpacing: 0)
@@ -52,7 +57,7 @@ struct DeskMascot: View {
     }
 }
 
-/// The assistant speaking: a soft blue bubble, its tail on the robot's side.
+/// A short guiding line on the soft blue gradient of the summary card.
 struct AssistantBubble: View {
     let text: String
 
@@ -64,30 +69,33 @@ struct AssistantBubble: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DeskInk.bubble,
-                        in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 6,
-                                                   bottomTrailingRadius: 18, topTrailingRadius: 18,
-                                                   style: .continuous))
+            .background(
+                LinearGradient(colors: [DeskTheme.heroStart, DeskTheme.heroEnd],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
-/// Screen header: robot, title and a line under it, and an optional trailing view.
+/// Screen header: a short grey line over a large title, and an optional
+/// trailing view (a count pill, a search or account button).
 struct DeskScreenHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: DeskLayout.space12) {
-            DeskMascot(size: 52)
+        HStack(alignment: .center, spacing: DeskLayout.space12) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .deskText(DeskType.pageTitle)
-                    .foregroundStyle(DeskTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
                 Text(subtitle)
                     .deskText(DeskType.meta)
                     .foregroundStyle(DeskTheme.textSecondary)
+                    .lineLimit(2)
+                Text(title)
+                    .deskText(DeskHomeType.name)
+                    .foregroundStyle(DeskTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .accessibilityAddTraits(.isHeader)
             }
             Spacer(minLength: DeskLayout.space8)
             trailing()
@@ -125,8 +133,7 @@ struct SenderAvatar: View {
     }
 }
 
-/// A sender avatar in a rail list: a hairline border, a ring of page colour
-/// that breaks the rail behind it, and an optional state badge.
+/// A sender avatar in a list row: a hairline border and an optional state badge.
 struct RailAvatar: View {
     enum Badge { case rejected, withdrawn }
 
@@ -140,7 +147,6 @@ struct RailAvatar: View {
     var body: some View {
         SenderAvatar(name: name, kind: kind, imageURL: imageURL, size: Self.size)
             .overlay(Circle().strokeBorder(DeskTheme.separator, lineWidth: 1))
-            .background(Circle().fill(DeskTheme.background).padding(-4))
             .overlay(alignment: .bottomTrailing) {
                 if let badge {
                     Image(systemName: badge == .rejected ? "xmark" : "arrow.uturn.backward")
@@ -148,29 +154,11 @@ struct RailAvatar: View {
                         .foregroundStyle(Color.white)
                         .frame(width: 19, height: 19)
                         .background(badge == .rejected ? DeskTheme.danger : DeskTheme.textTertiary, in: Circle())
-                        .overlay(Circle().stroke(DeskTheme.background, lineWidth: 2))
+                        .overlay(Circle().stroke(DeskTheme.surface, lineWidth: 2))
                         .offset(x: 3, y: 3)
                         .accessibilityHidden(true)
                 }
             }
-    }
-}
-
-extension View {
-    /// Draws the list rail behind a row whose `RailAvatar` sits `topPadding`
-    /// below the row's top. It starts at the first avatar's centre and stops
-    /// at the last one's.
-    func deskRail(isFirst: Bool, isLast: Bool, topPadding: CGFloat) -> some View {
-        let center = topPadding + RailAvatar.size / 2
-        return background(alignment: .topLeading) {
-            VStack(spacing: 0) {
-                DeskTheme.separator.opacity(isFirst ? 0 : 1).frame(height: center)
-                if !isLast { DeskTheme.separator }
-            }
-            .frame(width: 2)
-            .padding(.leading, RailAvatar.size / 2 - 1)
-            .accessibilityHidden(true)
-        }
     }
 }
 
@@ -192,8 +180,8 @@ struct QuietLine: View {
     }
 }
 
-/// The signed-in member's photo, else white initials on Sabq link blue
-/// (spec: 36 semibold at 96 pt, scaled proportionally for smaller sizes).
+/// The signed-in member's photo, else blue initials on soft blue with a white
+/// ring (spec: 36 semibold at 96 pt, scaled proportionally for smaller sizes).
 struct AccountAvatar: View {
     let name: String
     var imageURL: String?
@@ -205,12 +193,14 @@ struct AccountAvatar: View {
                 .font(DeskFonts.app(size: DeskType.accountAvatarInitials.size * size / 96,
                                     weight: DeskType.accountAvatarInitials.weight,
                                     relativeTo: DeskType.accountAvatarInitials.style))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(DeskInk.link)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .frame(width: size, height: size)
-                .background(DeskTheme.link, in: Circle())
+                .background(DeskInk.soft, in: Circle())
         }
+        .overlay(Circle().strokeBorder(Color.white, lineWidth: max(2, size / 24)))
+        .shadow(color: DeskTheme.shadow, radius: 6, y: 2)
     }
 }
 
@@ -281,7 +271,7 @@ extension StaffSenderKind {
     }
 }
 
-/// One tab chip: dark when selected, quiet grey otherwise, with an optional count.
+/// One tab chip: Sabq blue when selected, white otherwise, with an optional count.
 struct SectionChip: View {
     let title: String
     var count: Int = 0
@@ -296,14 +286,17 @@ struct SectionChip: View {
                     Text(verbatim: "\(count)")
                         .monospacedDigit()
                         .padding(.horizontal, 7)
-                        .background(isSelected ? DeskInk.link : DeskTheme.surfaceStrong, in: Capsule())
+                        .foregroundStyle(isSelected ? Color.white : DeskInk.link)
+                        .background(isSelected ? Color.white.opacity(0.25) : DeskInk.soft, in: Capsule())
                 }
             }
-            .deskText(isSelected ? DeskType.metaEmphasis : DeskType.meta)
+            .deskText(DeskType.metaEmphasis)
             .foregroundStyle(isSelected ? Color.white : DeskTheme.textPrimary)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 38)
-            .background(isSelected ? DeskInk.strong : DeskInk.chip, in: Capsule())
+            .padding(.horizontal, 16)
+            .frame(minHeight: 40)
+            .background(isSelected ? DeskInk.selected : DeskTheme.surface, in: Capsule())
+            .shadow(color: isSelected ? DeskInk.selected.opacity(0.28) : DeskTheme.shadow,
+                    radius: isSelected ? 8 : 4, y: isSelected ? 4 : 1)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -329,6 +322,7 @@ struct SectionChipBar<Item: Hashable & Identifiable>: View {
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
+            .padding(.vertical, 6)
         }
     }
 }

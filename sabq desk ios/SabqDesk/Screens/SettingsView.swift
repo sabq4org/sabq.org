@@ -5,7 +5,7 @@ import UIKit
 
 /// «حسابي»: the member's avatar with the robot beside it, one row for what
 /// they may do, then security, notifications (a page of its own), quick
-/// replies and about, each group in a light outline.
+/// replies and about, each group on a white rounded surface.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppLockController.self) private var appLock
@@ -317,9 +317,10 @@ private struct RowLabel: View {
     var body: some View {
         HStack(spacing: DeskLayout.space12) {
             Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .regular))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(DeskInk.link)
-                .frame(width: 26)
+                .frame(width: 36, height: 36)
+                .background(DeskInk.soft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)

@@ -16,6 +16,8 @@ struct DeskView: View {
     @State private var rejectTarget: StaffInboxItem?
     @State private var rowError: String?
     @State private var busyRow: String?
+    /// A day picked on the week strip; the scheduled timeline shows only it.
+    @State private var selectedDay: Date?
 
     private var model: InboxModel? { lists[section] }
 
@@ -42,6 +44,7 @@ struct DeskView: View {
                 makeListsIfNeeded()
                 await model?.reload()
                 if section != .scheduled { await lists[.scheduled]?.reload() }
+                if section == .scheduled, selectedDay != nil { await model?.loadAll() }
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: DeskDeepLink.self) { link in
@@ -57,6 +60,19 @@ struct DeskView: View {
             consumePendingLink()
         }
         .onChange(of: app.pendingLink) { _, _ in consumePendingLink() }
+        .onChange(of: selectedDay) { _, day in
+            guard day != nil else { return }
+            // The day filter hides rows, so every scheduled page is fetched
+            // up front (here, or by the section task after its reload).
+            if section == .scheduled {
+                Task { await lists[.scheduled]?.loadAll() }
+            } else {
+                section = .scheduled
+            }
+        }
+        .onChange(of: section) { _, newSection in
+            if newSection != .scheduled { selectedDay = nil }
+        }
         .onChange(of: path) { _, newPath in
             if newPath.isEmpty { Task { await refreshAfterDetail() } }
         }
@@ -75,18 +91,24 @@ struct DeskView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: DeskLayout.space16) {
-            DeskScreenHeader(title: "مكتب سبق", subtitle: RiyadhTime.dayTitle(Date())) {
+        VStack(alignment: .leading, spacing: 18) {
+            DeskGreetingHeader(name: app.me?.displayName, subtitle: "كل ما ينتظرك اليوم في مكان واحد") {
                 if let me = app.me {
                     Button(action: openAccount) {
-                        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 44)
+                        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 48)
                     }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("حسابي")
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("حسابي")
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
-            AssistantBubble(text: greeting)
+            DeskSummaryCard(systemImage: "tray.full", label: "بانتظارك الآن",
+                            value: pendingTotal == 0 ? "لا شيء" : DeskCount.tasks(pendingTotal),
+                            detail: pendingDetail,
+                            note: upcoming.first == nil ? nil : "أقرب منشور",
+                            noteValue: upcoming.first?.scheduledAt.map { RiyadhTime.timeString($0) })
+                .padding(.horizontal, DeskLayout.pageMargin + 4)
+            DeskWeekStrip(counts: weekCounts, selection: $selectedDay)
                 .padding(.horizontal, DeskLayout.pageMargin + 4)
             SectionChipBar(sections: DeskSocialSection.allCases, selection: $section,
                            title: \.title,
@@ -98,14 +120,25 @@ struct DeskView: View {
         }
     }
 
-    private var greeting: String {
-        var line = DeskCount.greeting(name: app.me?.displayName, pendingTweets: app.unread.social,
-                                      openMessages: app.unread.tickets, showsTweets: true,
-                                      showsMessages: app.capabilities.canTickets)
-        if let next = upcoming.first?.scheduledAt {
-            line += " وأقرب منشور مجدول الساعة \u{2066}\(RiyadhTime.timeString(next))\u{2069}."
-        }
-        return line
+    private var showsMessages: Bool { app.capabilities.canTickets }
+
+    /// Tweets waiting for a decision, plus open contributor messages when
+    /// the member answers them.
+    private var pendingTotal: Int {
+        app.unread.social + (showsMessages ? app.unread.tickets : 0)
+    }
+
+    private var pendingDetail: String {
+        var parts: [String] = []
+        if app.unread.social > 0 { parts.append("\(DeskCount.tweets(app.unread.social)) بانتظار قرارك") }
+        if showsMessages, app.unread.tickets > 0 { parts.append("\(DeskCount.messages(app.unread.tickets)) من المساهمين") }
+        if parts.isEmpty { return "أنجزت كل شيء، وما يصل يظهر هنا." }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Scheduled posts per Riyadh day, for the week strip.
+    private var weekCounts: [Date: Int] {
+        Dictionary(grouping: upcoming.compactMap(\.scheduledAt), by: RiyadhTime.dayKey).mapValues(\.count)
     }
 
     // MARK: - Content
@@ -159,12 +192,10 @@ struct DeskView: View {
         let caps = app.capabilities.canSocial
         let status = StaffSocialStatus(rawValue: item.status) ?? .unknown
         return Button { path.append(.social(id: item.id)) } label: {
-            SocialRow(item: item, section: section,
-                      isFirst: item.listID == model.items.first?.listID,
-                      isLast: item.listID == model.items.last?.listID)
+            SocialRow(item: item, section: section)
         }
         .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 0, leading: DeskLayout.pageMargin + 4, bottom: 0, trailing: DeskLayout.pageMargin + 4))
+        .listRowInsets(EdgeInsets(top: 5, leading: DeskLayout.pageMargin + 4, bottom: 5, trailing: DeskLayout.pageMargin + 4))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .disabled(busyRow == item.listID)
@@ -208,17 +239,23 @@ struct DeskView: View {
 
     @ViewBuilder
     private func timeline(_ model: InboxModel) -> some View {
-        let groups = Dictionary(grouping: upcoming) { RiyadhTime.dayKey($0.scheduledAt ?? $0.updatedAt) }
+        let shown = selectedDay.map { day in upcoming.filter { RiyadhTime.dayKey($0.scheduledAt ?? $0.updatedAt) == day } } ?? upcoming
+        if let selectedDay, shown.isEmpty {
+            DeskEmptyState(title: "لا منشورات مجدولة في هذا اليوم",
+                           message: "\(RiyadhTime.dayTitle(selectedDay)). اضغط اليوم مرة أخرى لعرض كل الأيام.")
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+        }
+        let groups = Dictionary(grouping: shown) { RiyadhTime.dayKey($0.scheduledAt ?? $0.updatedAt) }
             .map { DayGroup(id: $0.key, items: $0.value) }
             .sorted { $0.id < $1.id }
         ForEach(groups) { group in
             Section {
                 ForEach(Array(group.items.enumerated()), id: \.element.listID) { index, item in
                     NavigationLink(value: DeskDeepLink.social(id: item.id)) {
-                        TimelineRow(item: item, isFirst: index == 0 && group.id == groups.first?.id,
-                                    isLast: index == group.items.count - 1)
+                        TimelineRow(item: item, isFirst: index == 0 && group.id == groups.first?.id)
                     }
-                    .listRowInsets(EdgeInsets(top: 0, leading: DeskLayout.pageMargin + 4, bottom: 0, trailing: DeskLayout.pageMargin + 4))
+                    .listRowInsets(EdgeInsets(top: 5, leading: DeskLayout.pageMargin + 4, bottom: 5, trailing: DeskLayout.pageMargin + 4))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -290,14 +327,10 @@ struct DeskView: View {
 
 /// Tweet proposal row: avatar, name and label, the tweet, then one line
 /// that depends on the tab (linked article, failure, publish time, reason).
-/// Rows are separated by space, with a rail running behind the avatars.
+/// Each row sits on its own white rounded card.
 private struct SocialRow: View {
     let item: StaffInboxItem
     let section: DeskSocialSection
-    let isFirst: Bool
-    let isLast: Bool
-
-    private static let verticalPadding: CGFloat = 16
 
     private var status: StaffSocialStatus { StaffSocialStatus(rawValue: item.status) ?? .unknown }
 
@@ -331,9 +364,8 @@ private struct SocialRow: View {
                 footer
             }
         }
-        .padding(.vertical, Self.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .deskRail(isFirst: isFirst, isLast: isLast, topPadding: Self.verticalPadding)
+        .deskRowCard()
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.hasUnread ? "جديد" : "")
@@ -433,12 +465,11 @@ private struct RejectionReasonBubble: View {
     }
 }
 
-/// Scheduled timeline row: big Riyadh time and countdown on a rail, then
-/// who sent it and the tweet.
+/// Scheduled timeline row on a card: big Riyadh time and countdown, then
+/// who sent it and the tweet. The next post due leads in blue.
 private struct TimelineRow: View {
     let item: StaffInboxItem
     let isFirst: Bool
-    let isLast: Bool
 
     private static let timeRole = DeskType.timelineTime
 
@@ -454,15 +485,11 @@ private struct TimelineRow: View {
                             .foregroundStyle(isFirst ? DeskInk.link : DeskTheme.textSecondary)
                     }
                 }
-                if !isLast {
-                    Rectangle()
-                        .fill(DeskTheme.outline)
-                        .frame(width: 2)
-                        .frame(maxHeight: .infinity)
-                        .padding(.top, 6)
-                }
             }
             .frame(width: 66)
+            .padding(.vertical, 6)
+            .background(isFirst ? DeskInk.soft : DeskTheme.background,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             VStack(alignment: .leading, spacing: DeskLayout.space4) {
                 HStack(spacing: 6) {
                     Text(item.sender.name)
@@ -476,13 +503,9 @@ private struct TimelineRow: View {
                     .foregroundStyle(DeskTheme.textSecondary)
                     .lineLimit(2)
             }
-            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .bottom) {
-                if !isLast { Rectangle().fill(DeskInk.hairline).frame(height: 1) }
-            }
         }
-        .padding(.top, 4)
+        .deskRowCard(padding: 12)
         .accessibilityElement(children: .combine)
     }
 }

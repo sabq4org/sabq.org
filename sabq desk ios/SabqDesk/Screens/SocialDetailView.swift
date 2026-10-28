@@ -6,7 +6,6 @@ import SwiftUI
 /// and the decisions the member may take.
 struct SocialDetailView: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.openURL) private var openURL
     let postID: String
     /// Other scheduled times, for the clash note in the schedule sheet.
     var scheduledTimes: [Date] = []
@@ -22,6 +21,8 @@ struct SocialDetailView: View {
     @State private var showSchedule = false
     @State private var showReject = false
     @State private var notice: String?
+    /// The linked article, opened inside the app.
+    @State private var webPage: DeskWebPage?
 
     private enum BusyAction { case publish, schedule, reject, draft }
 
@@ -59,6 +60,9 @@ struct SocialDetailView: View {
             ScheduleSheet(initial: detail?.post.scheduledAt, scheduledTimes: scheduledTimes) { date in
                 Task { await schedule(date) }
             }
+        }
+        .fullScreenCover(item: $webPage) { page in
+            SafariView(url: page.url).ignoresSafeArea()
         }
         .sheet(isPresented: $showReject) {
             RejectSheet { reason in
@@ -119,7 +123,7 @@ struct SocialDetailView: View {
 
     private func articleRow(_ article: StaffArticleRef) -> some View {
         Button {
-            if let raw = article.url, let url = URL(string: raw) { openURL(url) }
+            if let url = DeskAvatarURL.https(article.url) { webPage = DeskWebPage(url: url) }
         } label: {
             HStack(spacing: DeskLayout.space8) {
                 Image(systemName: "doc.text")
@@ -134,7 +138,8 @@ struct SocialDetailView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(article.url == nil)
+        .disabled(DeskAvatarURL.https(article.url) == nil)
+        .accessibilityHint("يفتح الخبر داخل التطبيق")
     }
 
     private func repeatsTweet(_ article: StaffArticleRef, preview: StaffSocialPreview) -> Bool {
