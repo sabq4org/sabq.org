@@ -31,6 +31,7 @@ import {
   notifyOpinionArticleSubmittedForReview,
   selfAssignWriterSchedule,
 } from "../services/opinionWritersService";
+import { scheduleOpinionResubmitNotification } from "../services/opinionResubmitNotify";
 import {
   coachWriterIdea,
   generateWriterIdeas,
@@ -5450,9 +5451,16 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
         status: articles.status,
         reviewStatus: articles.reviewStatus,
         articleType: articles.articleType,
+        authorId: articles.authorId,
       });
 
     console.log(`[Mobile API] /articles/${articleId}/resubmit by ${session.userId}`);
+
+    // مقال رأي عاد إلى pending_review: نفس تنبيه الإرسال على الويب
+    // (الكاتب + المحررون + push الديسك + بريد بوت «مكتب سبق»)، في الخلفية.
+    if (updated) {
+      scheduleOpinionResubmitNotification(existing.reviewStatus, updated);
+    }
 
     // Shape the response so the iOS `ArticleSubmissionResponse`
     // decoder doesn't need any optional gymnastics — `kind` is the

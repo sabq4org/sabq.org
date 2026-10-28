@@ -232,6 +232,17 @@ export interface StaffOpinionWarning {
 
 const isoDateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "صيغة التاريخ YYYY-MM-DD");
 
+/** POST /opinion/:id/renotify — ما أرسلته قنوات المكتب فعلاً (لا تغيير على المقال). */
+export interface StaffOpinionRenotifyResponse {
+  ok: true;
+  /** عدد أجهزة تطبيق الديسك التي قبلت الـ push (0 إن عطّل الجميع تنبيه مسودات الرأي). */
+  pushSent: number;
+  /** قبل مزوّد البريد رسالة واحدة على الأقل لبوت «مكتب سبق». */
+  emailSent: boolean;
+  /** عدد مستلمي بريد البوت المهيّئين (DESK_BOT_ALERT_EMAILS + deskBotAlertEmails). */
+  emailRecipients: number;
+}
+
 export const staffOpinionBoardQuerySchema = z.object({
   weekStart: isoDateOnly.optional(),
 });

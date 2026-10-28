@@ -33,6 +33,7 @@ import {
   staffTicketStatusSchema,
   type StaffAppErrorBody,
   type StaffCapabilities,
+  type StaffOpinionRenotifyResponse,
 } from "@shared/staffApp";
 import { logActivity } from "../rbac";
 import { verifyMemberBearer } from "../services/memberSessionService";
@@ -63,6 +64,7 @@ import {
   getStaffOpinionBoard,
   getStaffOpinionItem,
   publishOpinionFromDesk,
+  renotifyOpinionDraftFromDesk,
   returnOpinionToWriterFromDesk,
   scheduleOpinionFromDesk,
 } from "../services/staffOpinionDeskService";
@@ -1004,6 +1006,23 @@ const staffOpinionActionLimiter = rateLimit({
     }),
 });
 
+/** إعادة التنبيه: مرة لكل مقال لكل مستخدم كل 5 دقائق (الطلبات الفاشلة 4xx/5xx لا تُحتسب). */
+const staffOpinionRenotifyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: () => Number(process.env.STAFF_APP_OPINION_RENOTIFY_RATE_LIMIT) || 1,
+  skipFailedRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: (req) =>
+    `staff-app-opinion-renotify:${(req as StaffRequest).staffAuth?.user.id ?? "anonymous"}:${req.params?.id ?? ""}`,
+  handler: (_req, res) =>
+    sendError(res, 429, {
+      code: "rate_limited",
+      message: "أُرسل تنبيه هذا المقال قبل قليل؛ أعد المحاولة بعد 5 دقائق",
+    }),
+});
+
 function handleOpinionError(res: Response, error: unknown, fallback: string): void {
   if (error instanceof StaffOpinionDeskError) {
     return sendError(res, error.status, { code: error.code, message: error.message });
@@ -1171,6 +1190,41 @@ subRouter.post(
       res.json({ article: result.article });
     } catch (error) {
       handleOpinionError(res, error, "تعذرت إعادة المقال إلى الكاتب");
+    }
+  },
+);
+
+/**
+ * «أعد التنبيه»: يعيد push تطبيق الديسك وبريد بوت «مكتب سبق» (type=opinion_draft)
+ * لمسودة رأي بانتظار المراجعة. لا يغيّر المقال ولا يُشعر الكاتب.
+ */
+subRouter.post(
+  "/opinion/:id/renotify",
+  requireStaffAuth,
+  requireOpinionCapability("view"),
+  staffOpinionRenotifyLimiter,
+  async (req: StaffRequest, res: Response) => {
+    try {
+      const result = await renotifyOpinionDraftFromDesk({ articleId: req.params.id });
+      await auditStaffAppWrite(req, {
+        action: "staff_opinion_renotify",
+        entityType: "article",
+        entityId: result.articleId,
+        extraMetadata: {
+          pushSent: result.pushSent,
+          emailRecipients: result.emailRecipients,
+          emailSent: result.emailSent,
+        },
+      });
+      const body: StaffOpinionRenotifyResponse = {
+        ok: true,
+        pushSent: result.pushSent,
+        emailSent: result.emailSent,
+        emailRecipients: result.emailRecipients,
+      };
+      res.json(body);
+    } catch (error) {
+      handleOpinionError(res, error, "تعذرت إعادة إرسال التنبيه");
     }
   },
 );
