@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   archive: vi.fn(),
   visibility: vi.fn(),
   verdict: vi.fn(),
+  regenerate: vi.fn(),
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
@@ -55,6 +56,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   archiveBotDraft: state.archive,
   updateBotDraftVisibility: state.visibility,
   recordBotReviewerVerdict: state.verdict,
+  regenerateBotDraftExtras: state.regenerate,
 }));
 
 import router from "../../server/routes/botDrafts";
@@ -478,6 +480,33 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     expect(limited.status).toBe(429);
     expect((await limited.json()).code).toBe("rate_limited");
     expect((await call("GET", "/api/internal/bot-drafts/art-1", undefined, GROK)).status).not.toBe(429);
+  });
+  it("routes POST /regenerate-extras with an optional fields list", async () => {
+    const result = { draft: draft({ status: "published" }), regenerated: { fields: ["summary", "keywords", "seo"] } };
+    state.regenerate.mockResolvedValue(result);
+    const all = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", {});
+    expect(all.status).toBe(200);
+    expect(await all.json()).toEqual(result);
+    expect(state.regenerate).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", {}, expect.anything());
+
+    const some = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", { fields: ["seo"] });
+    expect(some.status).toBe(200);
+    expect(state.regenerate).toHaveBeenLastCalledWith({ name: "nashr-sabq" }, "art-1", { fields: ["seo"] }, expect.anything());
+  });
+  it("validates regenerate-extras bodies and surfaces service errors", async () => {
+    const bad = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", { fields: ["title"] });
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).code).toBe("validation_error");
+    const forbidden = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", { status: "published" });
+    expect(forbidden.status).toBe(422);
+    expect((await forbidden.json()).code).toBe("forbidden_fields");
+    expect(state.regenerate).not.toHaveBeenCalled();
+
+    state.regenerate.mockRejectedValueOnce(new BotDraftError(502, "generation_failed", "تعذر توليد الملحقات"));
+    const failed = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", {});
+    expect(failed.status).toBe(502);
+    expect((await failed.json()).code).toBe("generation_failed");
+    expect((await call("GET", "/api/internal/bot-drafts/art-1/regenerate-extras")).status).toBe(403);
   });
   it("refuses unknown sub-actions and non-POST verbs on publish", async () => {
     for (const action of ["submit-review", "delete"]) {
@@ -1139,10 +1168,11 @@ describe("published bot content edit rules", () => {
     expect(botDraftContentEditBlock(null)).toMatchObject({ httpStatus: 404, code: "not_found" });
   });
 
-  it("rejects category and draft-only fields on a published article and keeps the public identity", () => {
-    expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", categorySlug: "local", imageUrls: [] })).toEqual([
-      "categorySlug",
-      "imageUrls",
+  it("rejects only bot-reference fields on a published article and keeps the public identity", () => {
+    expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", categorySlug: "local", imageUrls: [] })).toEqual([]);
+    expect(findDisallowedPublishedContentFields({ categoryId: "cat-1", notes: "ملاحظة", clientReference: "r" })).toEqual([
+      "clientReference",
+      "notes",
     ]);
     expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", keywords: ["سبق"] })).toEqual([]);
     expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", seoTitle: "عنوان SEO" })).toEqual([]);

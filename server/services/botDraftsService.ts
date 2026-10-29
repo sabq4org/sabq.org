@@ -17,6 +17,7 @@ import { SYSTEM_ADMIN_TIER_ROLES } from "@shared/rbac-constants";
 import { botDraftsPublisherDisplayName } from "@shared/staffNotifications";
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
+  BOT_DRAFT_EXTRAS,
   BOT_DRAFT_PUBLISHABLE_STATUSES,
   BOT_DRAFT_READY_STATUS,
   BOT_DRAFT_SOURCE,
@@ -26,6 +27,9 @@ import {
   type BotDraftArchiveInput,
   type BotDraftCreateInput,
   type BotDraftErrorCode,
+  type BotDraftExtra,
+  type BotDraftRegenerateExtrasInput,
+  type BotDraftRegenerateExtrasResponse,
   type BotDraftPublishOperationResponse,
   type BotDraftResponse,
   type BotDraftUpdateInput,
@@ -643,6 +647,8 @@ export function isBotOwnedContentEditable(row: { status: string; source?: string
  * ولا الإسناد. `editorialModifiedAt` يُدمج ذرياً في `seo_metadata` عندما يتغير حقل
  * ظاهر للقارئ — نفس مساعد `storage.updateArticle` الذي يغذّي `dateModified`.
  * `excerpt` يزامن `aiSummary` ويمسح نقاط الموجز كما يفعل حفظ المحرر.
+ * `imageUrls` تُلحق أسفل المتن الجديد إن أُرسل، وإلا أسفل المتن القائم، بلا تكرار.
+ * `categoryId` يأتي من `options` بعد التحقق من التصنيف، لا من الجسم مباشرة.
  */
 /** كتابة عمود أو تعبير SQL (دمج `editorialModifiedAt`) كما يقبلها `db.update().set()`. */
 type ArticleColumnWrite = {
@@ -650,16 +656,23 @@ type ArticleColumnWrite = {
 };
 
 export function buildPublishedBotContentPatch(
-  existing: Pick<ArticleRow, "seo">,
+  existing: Pick<ArticleRow, "seo"> & Partial<Pick<ArticleRow, "content" | "categoryId">>,
   input: BotDraftUpdateInput,
   now: Date,
+  options: { categoryId?: string } = {},
 ): ArticleColumnWrite {
   const patch: ArticleColumnWrite = { updatedAt: now };
 
   if (input.title !== undefined) patch.title = input.title;
   if (input.subtitle !== undefined) patch.subtitle = input.subtitle;
   if (input.content !== undefined) {
-    patch.content = normalizeDraftContent(input.content, input.contentFormat);
+    patch.content = normalizeDraftContent(input.content, input.contentFormat, input.imageUrls);
+  } else if (input.imageUrls !== undefined) {
+    const appended = appendBotDraftBodyImages(existing.content ?? "", input.imageUrls);
+    if (appended !== (existing.content ?? "")) patch.content = appended;
+  }
+  if (options.categoryId && options.categoryId !== existing.categoryId) {
+    patch.categoryId = options.categoryId;
   }
   if (input.excerpt !== undefined) {
     const nextSummary = typeof input.excerpt === "string" ? input.excerpt.trim() || null : null;
@@ -693,7 +706,6 @@ export function buildPublishedBotContentPatch(
   delete guarded.authorId;
   delete guarded.reporterId;
   delete guarded.scheduledAt;
-  delete guarded.categoryId;
   delete guarded.draftCreatedAt;
   delete guarded.correctedAt;
   delete guarded.verdictAt;
@@ -705,6 +717,8 @@ function publishedChangeLabels(input: BotDraftUpdateInput): string[] {
   if (input.title !== undefined) labels.push("العنوان");
   if (input.subtitle !== undefined) labels.push("العنوان الفرعي");
   if (input.content !== undefined || input.contentFormat !== undefined) labels.push("المحتوى");
+  if (input.imageUrls !== undefined) labels.push("صور المتن");
+  if (input.categoryId !== undefined || input.categorySlug !== undefined) labels.push("التصنيف");
   if (input.excerpt !== undefined) labels.push("الملخص");
   if (input.imageUrl !== undefined) labels.push("الصورة");
   if (input.sourceUrl !== undefined) labels.push("المصدر");
@@ -1250,17 +1264,17 @@ export async function updateBotDraft(
       throw new BotDraftError(
         422,
         "forbidden_fields",
-        "تعديل الخبر المنشور يقبل العنوان والعنوان الفرعي والموجز والمتن والصورة والكلمات والمصدر فقط. التصنيف يبقى للمسودة",
+        "مرجع البوت (clientReference) والملاحظات (notes) لا يتغيران بعد النشر",
         { fields: disallowed },
       );
     }
   }
   await throwIfEditLocked(articleId);
+  const category = await resolveCategory(input);
   if (existing.status === "published") {
-    return updatePublishedBotArticle(bot, existing, input, ctx);
+    return updatePublishedBotArticle(bot, existing, input, ctx, category);
   }
 
-  const category = await resolveCategory(input);
   const patch: Partial<typeof articles.$inferInsert> = { updatedAt: new Date() };
 
   if (input.title !== undefined) patch.title = input.title;
@@ -1328,22 +1342,27 @@ export async function updateBotDraft(
 }
 
 /**
- * تعديل محتوى خبر بوت منشور. الحالة وتاريخ النشر والرابط العام لا تتغير.
+ * تعديل خبر بوت منشور. الحالة وتاريخ النشر والرابط العام لا تتغير.
  * لا إشعار دفع ولا IndexNow ولا إعادة نشر — الإبطال فقط مثل حفظ المحرر.
+ * تغيير التصنيف مثل `PATCH /api/admin/articles/:id`: الرابط `/article/<englishSlug>`
+ * لا يحمل التصنيف فلا تحويل 301، و`invalidateArticleWrite` يمسح أرشيف الأقسام
+ * (`^category-articles:`) والقوائم ورابط المقال ويطهّر الحافة.
  */
 async function updatePublishedBotArticle(
   bot: BotIdentity,
   existing: ArticleRow,
   input: BotDraftUpdateInput,
   ctx: BotRequestContext,
+  category: { id: string; slug: string } | null,
 ): Promise<BotDraftResponse> {
   const now = new Date();
-  const patch = buildPublishedBotContentPatch(existing, input, now);
+  const patch = buildPublishedBotContentPatch(existing, input, now, { categoryId: category?.id });
   const contentPatch: Record<string, unknown> = {};
   if (input.title !== undefined) contentPatch.title = input.title;
   if (input.subtitle !== undefined) contentPatch.subtitle = input.subtitle;
   if (input.excerpt !== undefined) contentPatch.excerpt = patch.excerpt ?? null;
-  if (input.content !== undefined) contentPatch.content = patch.content;
+  if (patch.content !== undefined) contentPatch.content = patch.content;
+  if (patch.categoryId !== undefined) contentPatch.categoryId = patch.categoryId;
   if (input.imageUrl !== undefined) contentPatch.imageUrl = input.imageUrl;
   if (input.riskLabel !== undefined) contentPatch.riskLabel = input.riskLabel;
   const plan = await maybePlanPublishedRevision({
@@ -1387,7 +1406,166 @@ async function updatePublishedBotArticle(
     { changedFields: publishedChangeLabels(input) },
   );
   console.log(`[BotDrafts] updated published ${row.id} by bot=${bot.name} fields=${Object.keys(input).join(",")}`);
-  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+  return toBotDraftResponse(row, category?.slug ?? (await categorySlugFor(row.categoryId)));
+}
+
+// ────────────────────────────────────────────────────────────────────
+// إعادة توليد الملحقات (موجز، كلمات مفتاحية، SEO)
+// ────────────────────────────────────────────────────────────────────
+
+/** نفس حد زر «توليد SEO»/«التلخيص» في محرر اللوحة (`useArticleAiTools`). */
+export const BOT_DRAFT_EXTRAS_MIN_CONTENT_CHARS = 100;
+
+function plainTextOf(html: string | null | undefined): string {
+  return (html ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** قص عند آخر مسافة قبل الحد حتى لا تنقطع كلمة. */
+function clampAtWord(value: string, max: number): string {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (trimmed.length <= max) return trimmed;
+  const cut = trimmed.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return (space > max * 0.6 ? cut.slice(0, space) : cut).trim();
+}
+
+export interface GeneratedBotDraftExtras {
+  summary?: string | null;
+  seo?: { metaTitle?: string | null; metaDescription?: string | null; keywords?: unknown } | null;
+}
+
+/**
+ * يحوّل ناتج المولّدات إلى جسم `PATCH` صالح لعقد البوت (نفس حدود botDraftUpdateSchema).
+ * الملخص → `excerpt`، كلمات SEO → `keywords`، metaTitle/metaDescription → seoTitle/seoDescription.
+ * القيم الفارغة لا تُكتب: إعادة التوليد لا تمسح قيمة قائمة.
+ */
+export function buildRegeneratedExtrasInput(
+  fields: readonly BotDraftExtra[],
+  generated: GeneratedBotDraftExtras,
+): BotDraftUpdateInput {
+  const input: BotDraftUpdateInput = {};
+  if (fields.includes("summary")) {
+    const summary = clampAtWord(generated.summary ?? "", 1000);
+    if (summary) input.excerpt = summary;
+  }
+  if (fields.includes("keywords") && Array.isArray(generated.seo?.keywords)) {
+    const seen = new Set<string>();
+    const keywords: string[] = [];
+    for (const raw of generated.seo!.keywords as unknown[]) {
+      if (typeof raw !== "string") continue;
+      const keyword = raw.trim();
+      if (!keyword || keyword.length > 60 || seen.has(keyword)) continue;
+      seen.add(keyword);
+      keywords.push(keyword);
+      if (keywords.length === 20) break;
+    }
+    if (keywords.length) input.keywords = keywords;
+  }
+  if (fields.includes("seo")) {
+    const title = clampAtWord(generated.seo?.metaTitle ?? "", 70);
+    const description = clampAtWord(generated.seo?.metaDescription ?? "", 160);
+    if (title) input.seoTitle = title;
+    if (description) input.seoDescription = description;
+  }
+  return input;
+}
+
+/**
+ * يعيد توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت أو خبر بوت منشور.
+ * المولّدات نفسها التي يستدعيها زر «الذكاء الشامل» في محرر اللوحة:
+ * `summarizeArticle` (POST /api/ai/summarize) و`generateSeoMetadata` (POST /api/seo/generate).
+ * الحفظ يمر عبر `updateBotDraft` فيرث القفل والحالة وسجل النسخ وإبطال الكاش.
+ */
+export async function regenerateBotDraftExtras(
+  bot: BotIdentity,
+  articleId: string,
+  input: BotDraftRegenerateExtrasInput,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftRegenerateExtrasResponse> {
+  assertPersonalCapability(bot, "edit");
+  const existing = await findArticleById(articleId, bot);
+  const block = botDraftContentEditBlock(existing);
+  if (block || !existing) {
+    throw new BotDraftError(
+      block?.httpStatus ?? 404,
+      block?.code ?? "not_found",
+      block?.message ?? "المسودة غير موجودة",
+      block?.details,
+    );
+  }
+  // قبل نداء الذكاء: لا ندفع كلفة توليد لن يُحفظ.
+  await throwIfEditLocked(articleId);
+
+  const content = existing.content ?? "";
+  if (plainTextOf(content).length < BOT_DRAFT_EXTRAS_MIN_CONTENT_CHARS) {
+    throw new BotDraftError(
+      422,
+      "content_too_short",
+      `المتن أقصر من ${BOT_DRAFT_EXTRAS_MIN_CONTENT_CHARS} حرف — لا يكفي لتوليد الملحقات`,
+      { minChars: BOT_DRAFT_EXTRAS_MIN_CONTENT_CHARS },
+    );
+  }
+
+  const fields = Array.from(new Set(input.fields ?? BOT_DRAFT_EXTRAS));
+  const wantsSummary = fields.includes("summary");
+  const wantsSeo = fields.includes("keywords") || fields.includes("seo");
+
+  let generated: GeneratedBotDraftExtras;
+  let seoProvider: string | undefined;
+  let seoModel: string | undefined;
+  try {
+    const [summary, seo] = await Promise.all([
+      wantsSummary
+        ? import("../openai").then(({ summarizeArticle, withRetry }) =>
+            withRetry(() => summarizeArticle(content), 3, "Summarize"),
+          )
+        : Promise.resolve(null),
+      wantsSeo
+        ? import("../seo-generator").then(({ generateSeoMetadata }) =>
+            generateSeoMetadata(
+              {
+                id: existing.id,
+                title: existing.title,
+                subtitle: existing.subtitle || undefined,
+                content,
+                excerpt: existing.excerpt || undefined,
+              },
+              "ar",
+            ),
+          )
+        : Promise.resolve(null),
+    ]);
+    generated = { summary, seo: seo?.content ?? null };
+    seoProvider = seo?.provider;
+    seoModel = seo?.model;
+  } catch (error) {
+    console.error(`[BotDrafts] regenerate-extras ${articleId} by bot=${bot.name} failed:`, error);
+    throw new BotDraftError(502, "generation_failed", "تعذر توليد الملحقات — أعد المحاولة بعد قليل");
+  }
+
+  const update = buildRegeneratedExtrasInput(fields, generated);
+  if (Object.keys(update).length === 0) {
+    throw new BotDraftError(502, "generation_failed", "لم يرجع المولّد قيماً صالحة — لم يُحفظ شيء", { fields });
+  }
+
+  const draft = await updateBotDraft(bot, articleId, update, ctx);
+  console.log(`[BotDrafts] regenerated extras ${articleId} by bot=${bot.name} fields=${Object.keys(update).join(",")}`);
+  return {
+    draft,
+    regenerated: {
+      fields,
+      ...(update.excerpt !== undefined ? { excerpt: update.excerpt ?? undefined } : {}),
+      ...(update.keywords !== undefined ? { keywords: update.keywords } : {}),
+      ...(update.seoTitle !== undefined ? { seoTitle: update.seoTitle } : {}),
+      ...(update.seoDescription !== undefined ? { seoDescription: update.seoDescription } : {}),
+      ...(seoProvider ? { seoProvider } : {}),
+      ...(seoModel ? { seoModel } : {}),
+    },
+  };
 }
 
 /**

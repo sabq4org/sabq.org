@@ -403,6 +403,74 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/regenerate-extras:
+    post:
+      operationId: regenerateSabqDraftExtras
+      summary: إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة أو خبر منشور للبوت
+      description: >
+        المولّدات نفسها في محرر اللوحة (summarizeArticle وgenerateSeoMetadata). الحفظ يمر عبر
+        PATCH /{id} فيرث القفل والحالة وسجل النسخ وإبطال الكاش. سقف 10 طلبات في الدقيقة لكل بوت.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                fields:
+                  type: array
+                  minItems: 1
+                  items: { type: string, enum: [summary, keywords, seo] }
+                  description: غيابه يولّد الثلاثة. summary → excerpt، keywords → keywords، seo → seoTitle وseoDescription
+      responses:
+        "200":
+          description: المادة بعد الحفظ وما كُتب فعلاً
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draft, regenerated]
+                properties:
+                  draft: { $ref: "#/components/schemas/BotDraft" }
+                  regenerated:
+                    type: object
+                    required: [fields]
+                    properties:
+                      fields: { type: array, items: { type: string, enum: [summary, keywords, seo] } }
+                      excerpt: { type: string }
+                      keywords: { type: array, items: { type: string } }
+                      seoTitle: { type: string }
+                      seoDescription: { type: string }
+                      seoProvider: { type: string }
+                      seoModel: { type: string }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_a_draft أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: content_too_short (متن أقل من 100 حرف) أو forbidden_fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502":
+          description: generation_failed — فشل المولّد، ولم يُحفظ شيء
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/internal/bot-drafts/{id}/visibility:
     patch:
       operationId: setSabqDraftVisibility
@@ -499,9 +567,9 @@ components:
     BotDraftUpdate:
       description: >
         نفس حقول الإنشاء وكلها اختيارية وحقل واحد على الأقل. على خبر published
-        مصدره bot المسموح فقط title وsubtitle وexcerpt وcontent وcontentFormat
-        وsourceUrl وimageUrl وkeywords وseoTitle وseoDescription وriskLabel وupdateReason. categorySlug وcategoryId وimageUrls
-        وclientReference وnotes تُرفض 422. status وpublishedAt وslug لا تُكتب.
+        مصدره bot كل الحقول مسموحة ما عدا clientReference وnotes (422 forbidden_fields).
+        imageUrls تُلحق أسفل المتن بلا تكرار، وcategorySlug/categoryId ينقل التصنيف
+        (غير موجود → 422 category_not_found). status وpublishedAt وslug لا تُكتب.
       allOf:
         - $ref: "#/components/schemas/DraftFields"
         - minProperties: 1
@@ -581,7 +649,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error, content_too_short, generation_failed]
         message: { type: string }
         details: {}
   responses:

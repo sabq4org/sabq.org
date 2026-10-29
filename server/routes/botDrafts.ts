@@ -4,7 +4,8 @@
 // POST  /api/internal/bot-drafts        إنشاء مسودة عربية (status=draft دائماً)
 // POST  /api/internal/bot-drafts/images رفع صورة غلاف إلى R2 / media.sabq.org (forceR2)
 // GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير
-// PATCH /api/internal/bot-drafts/:id    تحديث مسودة أنشأها بوت وما زالت draft
+// PATCH /api/internal/bot-drafts/:id    تحديث مسودة بوت (draft) أو خبر بوت منشور
+// POST  /api/internal/bot-drafts/:id/regenerate-extras  إعادة توليد الموجز والكلمات وSEO
 // PATCH /api/internal/bot-drafts/:id/ready     draft → ready_to_publish (لا نشر)
 // POST  /api/internal/bot-drafts/:id/publish  نشر فوري لجسم فارغ
 // POST  /api/internal/bot-drafts/:id/schedule جدولة بجسم { publishAt }
@@ -34,6 +35,7 @@ import {
   botDraftArchiveSchema,
   botDraftCreateSchema,
   botDraftPublishSchema,
+  botDraftRegenerateExtrasSchema,
   botDraftVerdictSchema,
   botDraftReadySchema,
   botDraftScheduleSchema,
@@ -60,6 +62,7 @@ import {
   markBotDraftReady,
   publishBotDraft,
   recordBotReviewerVerdict,
+  regenerateBotDraftExtras,
   rescheduleBotDraft,
   scheduleBotDraft,
   unscheduleBotDraft,
@@ -125,6 +128,18 @@ const botWriteLimiter = rateLimit({
   skip: (req) => req.method === "GET" || req.method === "HEAD",
   handler: (_req, res) =>
     sendError(res, 429, { code: "rate_limited", message: "تجاوزت حد الكتابة للدقيقة — أعد المحاولة بعد قليل" }),
+});
+
+// توليد الملحقات نداءا ذكاء اصطناعي لكل طلب: سقف أضيق من محدد الكتابة.
+const botExtrasLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: () => Number(process.env.BOT_DRAFTS_EXTRAS_RATE_LIMIT) || 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: (req) => `bot-drafts-extras:${(req as BotRequest).bot?.name ?? "anonymous"}`,
+  handler: (_req, res) =>
+    sendError(res, 429, { code: "rate_limited", message: "تجاوزت حد توليد الملحقات للدقيقة — أعد المحاولة بعد قليل" }),
 });
 
 function rejectForbiddenFields(req: Request, res: Response, next: NextFunction) {
@@ -364,6 +379,30 @@ router.patch(
   },
 );
 
+router.post(
+  `${BOT_DRAFTS_BASE_PATH}/:id/regenerate-extras`,
+  requireBotToken,
+  botWriteLimiter,
+  botExtrasLimiter,
+  rejectForbiddenFields,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botDraftRegenerateExtrasSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "أرسل جسماً فارغاً أو fields من: summary، keywords، seo",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await regenerateBotDraftExtras(req.bot!, req.params.id, parsed.data, requestContext(req));
+      res.json(result);
+    } catch (error) {
+      handleError(res, error, "regenerate-extras");
+    }
+  },
+);
+
 router.patch(
   `${BOT_DRAFTS_BASE_PATH}/:id/ready`,
   requireBotToken,
@@ -580,7 +619,7 @@ router.all(`${BOT_DRAFTS_BASE_PATH}/:id/:action`, requireBotToken, (_req: Reques
   sendError(res, 403, {
     code: "forbidden_action",
     message:
-      "هذا الفعل غير متاح. النشر POST /publish، الجدولة POST /schedule، تغيير الموعد PATCH /schedule، إلغاء الجدولة DELETE /schedule، الأرشفة POST /archive، الظهور PATCH /visibility، الجاهزية PATCH /ready",
+      "هذا الفعل غير متاح. النشر POST /publish، الجدولة POST /schedule، تغيير الموعد PATCH /schedule، إلغاء الجدولة DELETE /schedule، الأرشفة POST /archive، الظهور PATCH /visibility، الجاهزية PATCH /ready، الملحقات POST /regenerate-extras",
   });
 });
 router.all(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, (_req: Request, res: Response) => {

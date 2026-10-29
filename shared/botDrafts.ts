@@ -109,9 +109,10 @@ export function findForbiddenBotDraftFields(body: unknown): BotDraftForbiddenFie
 }
 
 /**
- * حقول المحتوى المسموحة على خبر `published` و`source=bot` عبر `PATCH /:id`.
- * `categorySlug` و`categoryId` و`imageUrls` و`clientReference` و`notes` تبقى للمسودة:
- * نقل التصنيف يغيّر أرشيف القسم وخلاصات RSS و`articleSection` وليس تعديلاً نصياً آمناً.
+ * حقول التحرير المسموحة على خبر `published` و`source=bot` عبر `PATCH /:id`،
+ * وهي ما يغيّره محرر اللوحة في خبر منشور: النص والصور والتصنيف وSEO.
+ * `clientReference` و`notes` تبقى للمسودة: مرجع البوت وملاحظاته لا يتغيران بعد النشر.
+ * نقل التصنيف لا يغيّر الرابط العام (`/article/<englishSlug>`) ويمر بإبطال حفظ اللوحة نفسه.
  */
 export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
   "title",
@@ -119,8 +120,11 @@ export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
   "excerpt",
   "content",
   "contentFormat",
+  "categoryId",
+  "categorySlug",
   "sourceUrl",
   "imageUrl",
+  "imageUrls",
   "keywords",
   "seoTitle",
   "seoDescription",
@@ -296,6 +300,26 @@ export const botDraftVisibilitySchema = z
     { message: "أرسل حقلاً واحداً على الأقل: isFeatured أو newsType أو hideFromHomepage" },
   );
 
+/** ملحقات يعيد `POST /:id/regenerate-extras` توليدها. */
+export const BOT_DRAFT_EXTRAS = ["summary", "keywords", "seo"] as const;
+export type BotDraftExtra = (typeof BOT_DRAFT_EXTRAS)[number];
+
+/**
+ * POST /api/internal/bot-drafts/:id/regenerate-extras.
+ * `fields` اختياري؛ غيابه يعيد توليد الثلاثة. `summary` يكتب `excerpt` (ومعه الموجز الذكي)،
+ * `keywords` يكتب الكلمات المفتاحية، `seo` يكتب `seoTitle` و`seoDescription`.
+ */
+export const botDraftRegenerateExtrasSchema = z
+  .object({
+    fields: z
+      .array(z.enum(BOT_DRAFT_EXTRAS))
+      .min(1, "أرسل ملحقاً واحداً على الأقل أو احذف fields")
+      .max(BOT_DRAFT_EXTRAS.length)
+      .optional(),
+  })
+  .strict();
+export type BotDraftRegenerateExtrasInput = z.infer<typeof botDraftRegenerateExtrasSchema>;
+
 /** حقول الظهور المسموحة في مسار visibility رغم وجودها في قائمة المنع العامة. */
 export const BOT_DRAFT_VISIBILITY_FIELDS = ["isFeatured", "newsType", "hideFromHomepage"] as const;
 
@@ -426,6 +450,21 @@ export interface BotDraftResponse {
 }
 
 /** رد `POST /api/internal/bot-drafts/images` — `deliveryUrl` يصلح غلافاً (`imageUrl`) أو صورة متن (`imageUrls`). */
+/** رد `POST /:id/regenerate-extras`: المادة بعد الحفظ وما كُتب فعلاً. */
+export interface BotDraftRegenerateExtrasResponse {
+  draft: BotDraftResponse;
+  regenerated: {
+    fields: BotDraftExtra[];
+    excerpt?: string;
+    keywords?: string[];
+    seoTitle?: string | null;
+    seoDescription?: string | null;
+    /** مزود ونموذج مولّد SEO (`generateSeoMetadata`) عند توليد keywords أو seo. */
+    seoProvider?: string;
+    seoModel?: string;
+  };
+}
+
 export interface BotDraftImageUploadResponse {
   deliveryUrl: string;
   imageId: string | null;
@@ -461,6 +500,8 @@ export const BOT_DRAFT_ERROR_CODES = [
   "server_error",
   "operation_id_collision",
   "operation_not_found",
+  "content_too_short",
+  "generation_failed",
 ] as const;
 
 export type BotDraftErrorCode = (typeof BOT_DRAFT_ERROR_CODES)[number];
