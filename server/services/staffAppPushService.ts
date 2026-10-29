@@ -393,7 +393,7 @@ export async function notifyStaffDeskOfPublisherNews(input: {
     );
     if (recipientIds.length === 0) return 0;
     const prefs = await loadStaffDeskPrefs(recipientIds);
-    const title = input.publisherName ? `خبر جديد من ${input.publisherName}` : "خبر جديد عبر «نشر سبق»";
+    const title = input.publisherName ? `خبر جديد من ${input.publisherName}` : "خبر جديد عبر بوت النشر";
     const body = clipDeskAlertExcerpt(input.title, 160);
     const results = await Promise.all(
       recipientIds.map(async (recipientId) => {

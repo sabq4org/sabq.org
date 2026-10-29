@@ -14,6 +14,7 @@ import { db } from "../db";
 import { articleEditLocks, articlePublishOperations, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { SYSTEM_ADMIN_TIER_ROLES } from "@shared/rbac-constants";
+import { botDraftsPublisherDisplayName } from "@shared/staffNotifications";
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
   BOT_DRAFT_PUBLISHABLE_STATUSES,
@@ -1619,12 +1620,12 @@ export async function publishBotDraft(
     existing,
   );
   console.log(`[BotDrafts] published ${row!.id} by bot=${bot.name}`);
-  // مركز تنبيهات «مكتب سبق»: خبر جديد من «نشر سبق» بالناشر والعنوان + إشعار.
+  // مركز تنبيهات «مكتب سبق»: خبر جديد من بوت النشر (نشر سبق أو قروك…) بالناشر والعنوان + إشعار.
   void import("./staffDeskEventsService")
     .then(({ recordPublisherNewsEvent }) =>
       recordPublisherNewsEvent({
         article: row!,
-        publisherName: bot.personal?.name?.trim() || bot.personal?.label?.trim() || null,
+        publisherName: bot.personal?.name?.trim() || bot.personal?.label?.trim() || botDraftsPublisherDisplayName(bot.name),
         publisherUserId: bot.personal?.userId ?? null,
         publisherId: bot.personal?.publisherId ?? null,
       }),
