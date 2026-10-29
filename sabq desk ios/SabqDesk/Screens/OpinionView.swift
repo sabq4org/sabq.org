@@ -118,6 +118,8 @@ struct OpinionView: View {
         VStack(alignment: .leading, spacing: DeskLayout.space12) {
             DeskScreenHeader(title: "الرأي", subtitle: "مقالات الرأي", detail: weekTitle) {
                 HStack(spacing: 6) {
+                    // The bell lives here only when «المكتب» (which carries it) is hidden.
+                    if !app.capabilities.canSocial.view { DeskBellButton() }
                     if counts.pending > 0 {
                         CountPill(text: "\(counts.pending) بانتظارك", tone: .warning)
                     }

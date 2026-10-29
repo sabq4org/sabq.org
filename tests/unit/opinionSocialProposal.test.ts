@@ -11,6 +11,12 @@ const { mockDb, mockSendEmailNotification } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../server/db", () => ({ db: mockDb }));
+// مركز تنبيهات المكتب يقرأ اسم الكاتب من db؛ يُعزل هنا حتى لا يستهلك الاستعلامات المجهّزة.
+vi.mock("../../server/services/staffDeskEventsService", () => ({
+  recordTweetDraftEvent: vi.fn(async () => undefined),
+  recordTweetScheduledEvent: vi.fn(async () => undefined),
+  recordTweetPublishedEvent: vi.fn(async () => undefined),
+}));
 vi.mock("../../server/services/email", () => ({
   sendEmailNotification: (...args: unknown[]) => mockSendEmailNotification(...args),
 }));

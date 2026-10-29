@@ -640,6 +640,18 @@ export async function notifyOpinionAuthorArticleScheduled(articleId: string, sch
       return;
     }
 
+    // مركز تنبيهات «مكتب سبق»: كل مسارات جدولة الرأي تمر من هنا.
+    void import("./services/staffDeskEventsService")
+      .then(({ recordOpinionScheduledEvent }) =>
+        recordOpinionScheduledEvent({
+          articleId: article.id,
+          title: article.title,
+          authorId: article.authorId,
+          scheduledAt,
+        }),
+      )
+      .catch((err) => console.error("[OPINION AUTHOR SCHEDULE NOTIFY] desk timeline event failed:", err));
+
     // Check if article has an author assigned
     if (!article.authorId) {
       console.log(`📅 [OPINION AUTHOR SCHEDULE NOTIFY] No author assigned to article: ${article.title}`);

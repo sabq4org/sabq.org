@@ -65,8 +65,8 @@ struct SystemView: View {
                     ModelBalancesView()
                 case .balance(let provider):
                     ProviderBalanceDetailView(provider: provider)
-                case .systemHealth, .alerts, .opinion:
-                    // .opinion is routed by RootView to the «الرأي» tab.
+                case .systemHealth, .alerts, .opinion, .notifications:
+                    // .opinion / .notifications are routed by RootView.
                     EmptyView()
                 }
             }

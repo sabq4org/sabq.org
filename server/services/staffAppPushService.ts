@@ -374,3 +374,50 @@ export async function notifyStaffDeskOfOpinionDraft(input: {
     return 0;
   }
 }
+
+/**
+ * خبر جديد نشره زميل أو شريك من تطبيق «نشر سبق»: إشعار لكل من يملك
+ * articles.publish (عدا الناشر نفسه)، يحترم مفتاح «أخبار نشر سبق»
+ * (`publisherNews`) والساعات الهادئة. يفتح مركز التنبيهات. لا يرمي.
+ */
+export async function notifyStaffDeskOfPublisherNews(input: {
+  articleId: string;
+  title: string;
+  publisherName: string | null;
+  excludeUserId?: string | null;
+}): Promise<number> {
+  try {
+    const recipientIds = await listStaffPermissionRecipientUserIds(
+      PERMISSION_CODES.ARTICLES_PUBLISH,
+      input.excludeUserId,
+    );
+    if (recipientIds.length === 0) return 0;
+    const prefs = await loadStaffDeskPrefs(recipientIds);
+    const title = input.publisherName ? `خبر جديد من ${input.publisherName}` : "خبر جديد عبر «نشر سبق»";
+    const body = clipDeskAlertExcerpt(input.title, 160);
+    const results = await Promise.all(
+      recipientIds.map(async (recipientId) => {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), "publisherNews", {
+          title,
+          body,
+          type: "desk.publisher_news",
+          deeplink: "sabqdesk://notifications",
+          data: { articleId: input.articleId },
+          collapseId: `desk-news-${input.articleId}`,
+        });
+        if (!message) return 0;
+        try {
+          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
+          return r.sent;
+        } catch (pushErr) {
+          console.error("[StaffAppPush] publisher news push to recipient failed:", pushErr);
+          return 0;
+        }
+      }),
+    );
+    return results.reduce((a, b) => a + b, 0);
+  } catch (err) {
+    console.error("[StaffAppPush] notifyStaffDeskOfPublisherNews failed:", err);
+    return 0;
+  }
+}

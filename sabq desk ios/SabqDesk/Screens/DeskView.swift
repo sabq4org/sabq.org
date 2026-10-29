@@ -93,15 +93,21 @@ struct DeskView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 18) {
             DeskGreetingHeader(name: app.me?.displayName, subtitle: "كل ما ينتظرك اليوم في مكان واحد") {
-                if let me = app.me {
-                    Button(action: openAccount) {
-                        AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 48)
+                HStack(spacing: 10) {
+                    DeskBellButton()
+                    if let me = app.me {
+                        Button(action: openAccount) {
+                            AccountAvatar(name: me.displayName, imageURL: me.profileImageUrl, size: 48)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("حسابي")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("حسابي")
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
+            DeskLatestNotificationLine()
+                .padding(.horizontal, DeskLayout.pageMargin + 4)
+                .padding(.top, -10)
             Group {
                 if pendingTotal == 0 {
                     // Nothing waiting: one quiet line, so the lists lead.

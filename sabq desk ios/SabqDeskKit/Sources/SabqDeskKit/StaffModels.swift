@@ -32,6 +32,9 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
     public var canManageBalances: Bool
     /// «الرأي» tab. All false when an older server omits it.
     public var canOpinion: Opinion
+    /// «أخبار» in the notifications center: news published from «نشر سبق»
+    /// (`articles.publish`). False when an older server omits it.
+    public var canPublisherNews: Bool
 
     /// Opinion desk rights, computed server-side from live RBAC
     /// (`computeStaffOpinionCapabilities` in shared/staffApp.ts).
@@ -60,18 +63,20 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case canTickets, canSocial, canSystemHealth, canAdminAlerts, canManageBalances, canOpinion
+        case canTickets, canSocial, canSystemHealth, canAdminAlerts, canManageBalances, canOpinion, canPublisherNews
     }
 
     public init(canTickets: Bool = false, canSocial: Social = Social(),
                 canSystemHealth: Bool = false, canAdminAlerts: Bool = false,
-                canManageBalances: Bool = false, canOpinion: Opinion = Opinion()) {
+                canManageBalances: Bool = false, canOpinion: Opinion = Opinion(),
+                canPublisherNews: Bool = false) {
         self.canTickets = canTickets
         self.canSocial = canSocial
         self.canSystemHealth = canSystemHealth
         self.canAdminAlerts = canAdminAlerts
         self.canManageBalances = canManageBalances
         self.canOpinion = canOpinion
+        self.canPublisherNews = canPublisherNews
     }
 
     public init(from decoder: Decoder) throws {
@@ -82,6 +87,7 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
         canAdminAlerts = try container.decodeIfPresent(Bool.self, forKey: .canAdminAlerts) ?? false
         canManageBalances = try container.decodeIfPresent(Bool.self, forKey: .canManageBalances) ?? false
         canOpinion = (try? container.decodeIfPresent(Opinion.self, forKey: .canOpinion)) ?? Opinion()
+        canPublisherNews = try container.decodeIfPresent(Bool.self, forKey: .canPublisherNews) ?? false
     }
 
     public static let none = StaffCapabilities()

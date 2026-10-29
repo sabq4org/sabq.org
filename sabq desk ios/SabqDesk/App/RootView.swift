@@ -115,6 +115,11 @@ struct MainTabView: View {
                 .tag(Tab.account)
         }
         .tint(DeskInk.link)
+        .sheet(isPresented: Binding(get: { model.showsNotifications },
+                                    set: { model.showsNotifications = $0 })) {
+            NotificationsView()
+                .onDisappear { Task { await model.refreshNotifications() } }
+        }
         .onAppear {
             tab = initialTab ?? firstTab
             if !model.capabilities.canAdminAlerts { systemSection = .health }
@@ -168,6 +173,9 @@ struct MainTabView: View {
             } else {
                 model.pendingLink = nil
             }
+        case .notifications?:
+            model.pendingLink = nil
+            if model.canOpenNotifications { model.showsNotifications = true }
         case nil: break
         }
     }

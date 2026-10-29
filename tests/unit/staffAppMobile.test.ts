@@ -411,6 +411,7 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
       canAdminAlerts: false,
       canManageBalances: false,
       canOpinion: { view: false, schedule: false, publish: false, returnToWriter: false },
+      canPublisherNews: false,
     });
     // Every member gets their own prefs now (writer messages, X proposals, quiet hours).
     expect(body.alertPrefs).toEqual(DEFAULT_STAFF_ALERT_PREFS);
@@ -1120,7 +1121,7 @@ describe("Sabq Desk Staff API — Tickets, Social Actions, Schedule Validation, 
     expect(mocks.schedulePost).toHaveBeenCalledWith(
       "soc-10",
       new Date(futureIso),
-      { resetAttempts: true },
+      { resetAttempts: true, actorUserId: "staff-editor-1" },
     );
     expect(mocks.logActivity).toHaveBeenCalledWith(
       expect.objectContaining({

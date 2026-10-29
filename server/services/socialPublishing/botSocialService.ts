@@ -945,6 +945,7 @@ async function scheduleOriginalBotSocialPost(
   try {
     scheduled = await schedulePost(loaded.binding.post.id, when, {
       resetAttempts: loaded.binding.post.status === "failed",
+      actorUserId: loaded.actorId,
     });
   } catch (error) {
     rethrowKnown(error);
@@ -992,6 +993,7 @@ export async function scheduleBotSocialPost(
   try {
     scheduled = await schedulePost(loaded.binding.post.id, when, {
       resetAttempts: loaded.binding.post.status === "failed",
+      actorUserId: loaded.actorId,
     });
   } catch (error) {
     rethrowKnown(error);

@@ -313,7 +313,7 @@ export async function saveAgencySocialPost(
     return { outcome: "published", post: result };
   }
   if (input.action === "schedule") {
-    const scheduled = await schedulePost(post.id, requestedAt!);
+    const scheduled = await schedulePost(post.id, requestedAt!, { actorUserId: userId });
     whatsapp(`🗓️ وكالة جدولت تغريدة على حساب سبق (${riyadh(requestedAt!)})`);
     return { outcome: "scheduled", post: scheduled };
   }

@@ -73,6 +73,14 @@ import {
 } from "../services/staffOpinionDeskService";
 import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
 import {
+  StaffDeskEventsCursorError,
+  getStaffDeskUnread,
+  listStaffDeskNotifications,
+  markStaffDeskNotificationRead,
+  markStaffDeskNotificationsSeen,
+} from "../services/staffDeskEventsService";
+import { staffDeskNotificationsQuerySchema } from "@shared/staffNotifications";
+import {
   AiBalanceInputError,
   auditSnapshot as auditBalanceSnapshot,
   getAllBalances,
@@ -853,6 +861,7 @@ async function handleScheduleSocialPost(req: StaffRequest, res: Response) {
     }
     const post = await schedulePost(req.params.id, scheduledDate, {
       resetAttempts: true,
+      actorUserId: req.staffAuth!.user.id,
     });
     await auditStaffAppWrite(req, {
       action: "social_post_schedule",
@@ -1308,6 +1317,65 @@ subRouter.get(
     }
   },
 );
+
+// ── 6) مركز التنبيهات (/notifications) — 2026-10-29 ──────────────────
+// خط زمني لأحداث التغريدات ومقالات الرأي وأخبار «نشر سبق». كل عضو يرى
+// الفئات التي تفتحها صلاحياته فقط (visibleStaffDeskCategories).
+
+subRouter.get("/notifications", requireStaffAuth, async (req: StaffRequest, res: Response) => {
+  const parsed = staffDeskNotificationsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return sendError(res, 400, {
+      code: "validation_error",
+      message: "معاملات الاستعلام غير صالحة",
+      details: parsed.error.flatten(),
+    });
+  }
+  try {
+    const ctx = req.staffAuth!;
+    res.json(await listStaffDeskNotifications(ctx.capabilities, ctx.user.id, parsed.data));
+  } catch (error) {
+    if (error instanceof StaffDeskEventsCursorError) {
+      return sendError(res, 400, { code: "validation_error", message: error.message });
+    }
+    console.error("[StaffApp notifications] error:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر جلب التنبيهات" });
+  }
+});
+
+subRouter.get("/notifications/unread", requireStaffAuth, async (req: StaffRequest, res: Response) => {
+  try {
+    const ctx = req.staffAuth!;
+    res.json(await getStaffDeskUnread(ctx.capabilities, ctx.user.id));
+  } catch (error) {
+    console.error("[StaffApp notifications/unread] error:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر جلب عدد التنبيهات" });
+  }
+});
+
+subRouter.post("/notifications/seen", requireStaffAuth, async (req: StaffRequest, res: Response) => {
+  try {
+    const seenAt = await markStaffDeskNotificationsSeen(req.staffAuth!.user.id);
+    res.json({ unreadCount: 0, seenAt });
+  } catch (error) {
+    console.error("[StaffApp notifications/seen] error:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر تعليم التنبيهات كمقروءة" });
+  }
+});
+
+subRouter.post("/notifications/:id/read", requireStaffAuth, async (req: StaffRequest, res: Response) => {
+  const id = String(req.params.id || "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    return sendError(res, 400, { code: "validation_error", message: "معرّف التنبيه غير صالح" });
+  }
+  try {
+    await markStaffDeskNotificationRead(req.staffAuth!.user.id, id);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[StaffApp notifications/read] error:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر تعليم التنبيه كمقروء" });
+  }
+});
 
 // يقبل التركيب المباشر app.use(staffAppMobileRouter) أو app.use("/api/v1/staff", staffAppMobileRouter)
 router.use(STAFF_APP_BASE_PATH, subRouter);
