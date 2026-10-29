@@ -391,6 +391,7 @@ export async function getStaffDeskUnread(
   if (categories.length === 0) return { unreadCount: 0, latest: null };
   const seen = await getSeenState(userId).catch((): SeenState => ({ seenAt: null, readIds: [] }));
   const since = unreadSince(seen.seenAt, now);
+  const start = windowStart(now);
   const [[countRow], [latestRow]] = await Promise.all([
     db
       .select({ unread: sql<number>`count(*)::int` })
@@ -398,6 +399,8 @@ export async function getStaffDeskUnread(
       .where(
         and(
           inArray(staffDeskEvents.category, categories),
+          // نافذة المركز نفسها: لا يُحسب على الجرس ما لا يظهر في القائمة.
+          gte(staffDeskEvents.createdAt, start),
           sql`${staffDeskEvents.createdAt} > ${since}`,
           notReadSql(seen.readIds),
         ),
@@ -405,7 +408,7 @@ export async function getStaffDeskUnread(
     db
       .select()
       .from(staffDeskEvents)
-      .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, windowStart(now))))
+      .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, start)))
       .orderBy(desc(staffDeskEvents.createdAt), desc(staffDeskEvents.id))
       .limit(1),
   ]);

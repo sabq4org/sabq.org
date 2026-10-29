@@ -165,8 +165,10 @@ struct NotificationsView: View {
     // MARK: - Data
 
     private func load() async {
+        let requested = filter
         do {
-            let page = try await app.client.notifications(category: filter.category)
+            let page = try await app.client.notifications(category: requested.category)
+            guard requested == filter else { return }
             items = page.items
             nextCursor = page.nextCursor
             categories = page.categories
@@ -188,13 +190,16 @@ struct NotificationsView: View {
         guard let cursor = nextCursor, !isLoadingMore else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
+        // A page for a tab the member has since left is dropped, results and errors alike.
+        let requested = filter
         do {
-            let page = try await app.client.notifications(category: filter.category, cursor: cursor)
+            let page = try await app.client.notifications(category: requested.category, cursor: cursor)
+            guard requested == filter, cursor == nextCursor else { return }
             let known = Set(items.map(\.id))
             items.append(contentsOf: page.items.filter { !known.contains($0.id) })
             nextCursor = page.nextCursor
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, requested == filter, cursor == nextCursor else { return }
             nextCursor = nil
             if !app.handle(error) {
                 loadError = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
