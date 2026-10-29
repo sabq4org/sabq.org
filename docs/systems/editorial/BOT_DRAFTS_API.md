@@ -5,7 +5,7 @@
 ## الملخص (للبوت)
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
-2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على `draft`، وعلى `published` إن كان `source=bot`. ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: كل حقول التحرير (العنوان والعنوان الفرعي والمتن والموجز والغلاف وصور المتن `imageUrls` والتصنيف `categorySlug`/`categoryId` والكلمات وحقلا SEO والمصدر) ما عدا `clientReference` و`notes` (422). الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران.
+2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على مسودة البوت `draft`، وعلى **أي** خبر `published` أياً كان مصدره (بوت أو محرر أو وكيل بريد/واتساب). ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: كل حقول التحرير (العنوان والعنوان الفرعي والمتن والموجز والغلاف وصور المتن `imageUrls` والتصنيف `categorySlug`/`categoryId` والكلمات وحقلا SEO والمصدر) ما عدا `clientReference` و`notes` (422). الحالة تبقى `published` والرابط و`publishedAt` و`source` لا تتغير.
 3. **نشر فوري:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/publish` بجسم فارغ `{}`. يعمل على `draft` أو `ready_to_publish` فقط. يمكن إرسال `operationId` كـ UUID لإعادة المحاولة الآمنة. عند استخدامه تحفظ الخدمة إيصالاً دائماً مرتبطاً بالتوكن والمادة وبصمة الجسم؛ الرد يكون `{ operationId, articleId, action: "publish", status: "succeeded", response: <BotDraftResponse> }` بعد نجاح المعاملة، أو `status: "processing"` مع HTTP 202 إذا بقيت النتيجة غير محسومة. الفشل المؤكد قبل الكتابة يعاد في إيصال `status: "failed"` مع `error: { code, message }` و`executionOutcome: "not_applied"`، ولا يُستنتج الفشل من حالة المسودة. `GET .../<id>/operations/<operationId>` يعيد الإيصال نفسه. إعادة استخدام المعرّف مع جسم مختلف ترفض `409 operation_id_collision`، وملكية المادة تبقى شرطاً قبل قراءة الإيصال.
 4. **جدولة:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/schedule` بجسم `{ "publishAt": "2026-09-24T18:30:00+03:00" }`. وقت الرياض يُرسل بإزاحة `+03:00` أو ما يعادله UTC (`Z`). الماضي يُرفض 400. الرد: `status: "scheduled"` و`scheduledAt` و`editUrl`.
 5. **تغيير الموعد:** `PATCH .../<id>/schedule` بنفس جسم `publishAt`، والمادة حالتها `scheduled` فقط.
@@ -14,9 +14,11 @@
 8. **الظهور بعد النشر:** `PATCH .../<id>/visibility` بحقول `isFeatured` و/أو `newsType` (`breaking`|`regular`) و/أو `hideFromHomepage`. تعليم العاجل لا يرسل إشعار القرّاء.
 9. **جاهز للمناوب (بدون نشر):** `PATCH .../<id>/ready` بجسم فارغ `{}`. الحالة `ready_to_publish`. محرر الوردية ينشر من اللوحة، أو البوت ينشر/يجدول لاحقاً.
 10. **رفع صورة:** `POST .../images` بنفس التوكن. `deliveryUrl` غلاف (`imageUrl`) أو متن (`imageUrls`).
-11. **إعادة توليد الملحقات:** `POST .../<id>/regenerate-extras` بجسم `{}` أو `{ "fields": ["summary", "keywords", "seo"] }`. يعمل على `draft` و`published` للبوت، بمولّدات اللوحة نفسها، ويحفظ عبر مسار `PATCH`.
+11. **إعادة توليد الملحقات:** `POST .../<id>/regenerate-extras` بجسم `{}` أو `{ "fields": ["summary", "keywords", "seo"] }`. يعمل على مسودة البوت `draft` وعلى أي خبر `published`، بمولّدات اللوحة نفسها، ويحفظ عبر مسار `PATCH`.
 
-كل المسارات أعلاه تعمل فقط على مادة `source=bot`، باستثناء `PATCH /:id` على خبر منشور ليس للبوت: يرد `409 not_a_draft` لا `404`. بقية صفوف المحرر تبقى `404 not_found`. قفل التحرير النشط يُرجع `409 locked_by_editor`.
+12. **إيجاد خبر من رابطه العام:** `GET .../by-public-id/<x>` حيث `<x>` هو الجزء الأخير من `https://sabq.org/article/<x>`. يرد `id` الخبر المنشور ثم يُعدَّل عبر `PATCH /<id>`.
+
+كل المسارات أعلاه تعمل فقط على مادة `source=bot`، باستثناء أي خبر `published` (أياً كان مصدره): يُقرأ عبر `GET /:id` و`GET /by-public-id/:publicId`، ويُعدَّل محتواه عبر `PATCH /:id` و`POST /:id/regenerate-extras`. صفوف المحرر غير المنشورة (مسودة، جاهزة، مجدولة، مؤرشفة) تبقى `404 not_found`. قفل التحرير النشط يُرجع `409 locked_by_editor`. التوكن الشخصي (`botpub_`) يبقى محصوراً في صفوفه هو (`sourceMetadata.publisherUserId`) في كل المسارات، فلا يصل إلى أخبار المحررين.
 
 ---
 
@@ -38,9 +40,10 @@
 |-------|--------|-------|
 | `POST` | `/api/internal/bot-drafts` | إنشاء مسودة عربية جديدة (الحالة `draft` دائماً) |
 | `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة إلى R2 (`sabq-news-images` / `media.sabq.org`) عبر `newsImageStorageService` |
-| `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير |
+| `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير. إن لم يكن الصف للبوت يُقرأ أي خبر `published` (قراءة فقط) |
+| `GET` | `/api/internal/bot-drafts/by-public-id/:publicId` | إيجاد خبر `published` من رابطه العام `/article/<publicId>` (`englishSlug` أو `slug`) |
 | `GET` | `/api/internal/bot-drafts/history?ids=<id,id,…>` | إسقاط تاريخ محدود لتواريخ النشر؛ للتوكن الشخصي المالك فقط |
-| `PATCH` | `/api/internal/bot-drafts/:id` | تحديث محتوى مسودة `draft` أو خبر `published` أنشأه البوت. نفس شكل الجسم |
+| `PATCH` | `/api/internal/bot-drafts/:id` | تحديث محتوى مسودة بوت `draft` أو أي خبر `published` أياً كان مصدره. نفس شكل الجسم |
 | `PATCH` | `/api/internal/bot-drafts/:id/ready` | انتقال واحد: `draft` → `ready_to_publish`. جسم فارغ. لا نشر |
 | `POST` | `/api/internal/bot-drafts/:id/publish` | نشر فوري. جسم فارغ `{}`. من `draft` أو `ready_to_publish` |
 | `GET` | `/api/internal/bot-drafts/:id/operations/:operationId` | قراءة إيصال نشر UUID للمالك فقط؛ processing/succeeded/failed |
@@ -49,7 +52,7 @@
 | `DELETE` | `/api/internal/bot-drafts/:id/schedule` | إلغاء الجدولة والعودة إلى `draft`. جسم فارغ. لا حذف للصف |
 | `POST` | `/api/internal/bot-drafts/:id/archive` | أرشفة ناعمة لمادة `published`. الجسم `{}` أو `{ "reason": "…" }` |
 | `PATCH` | `/api/internal/bot-drafts/:id/visibility` | مميز / عاجل / إخفاء الرئيسية لمادة `published` |
-| `POST` | `/api/internal/bot-drafts/:id/regenerate-extras` | إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة `draft` أو خبر `published` أنشأه البوت |
+| `POST` | `/api/internal/bot-drafts/:id/regenerate-extras` | إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت `draft` أو أي خبر `published` |
 | أي فعل آخر | `PATCH /:id/publish` و`DELETE /:id` و`PUT` و`/:id/submit-review` … | `403 forbidden_action` أو `405`. `DELETE /:id` لا يحذف ولا يؤرشف |
 
 الكود: [`server/routes/botDrafts.ts`](../../../server/routes/botDrafts.ts) (HTTP) و[`server/services/botDraftsService.ts`](../../../server/services/botDraftsService.ts) (البيانات) و[`shared/botDrafts.ts`](../../../shared/botDrafts.ts) (العقد/Zod). ملف OpenAPI للاستيراد في أدوات البوتات: [`bot-drafts.openapi.yaml`](./bot-drafts.openapi.yaml).
@@ -101,7 +104,8 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 - الإدراج يكتب `status='draft'`, `reviewStatus=null`, `publishType='instant'`, `scheduledAt=null`, `publishedAt=null`, `articleType='news'`, `newsType='regular'`, `source='bot'` — قيم ثابتة في الخدمة لا تأتي من الطلب.
 - الإسناد من الخادم فقط: `authorId` و`reporterId` = حساب «صحيفة سبق» (`BOT_DRAFTS_AUTHOR_USER_ID` أو الافتراضي). البوت لا يرسلهما (`422 forbidden_fields`). عند `PATCH` المحتوى يُملأ `reporterId` فقط إن كان فارغاً — اختيار المحرر لا يُستبدل. حساب الإسناد غير موجود/غير نشط → `503 author_not_configured`.
-- تحديث المحتوى يضرب `source='bot'` في `draft` أو `published`. بعد `ready_to_publish` أو الجدولة أو الأرشفة أو الحذف يُرجع `409 not_a_draft`. خبر منشور ليس `source=bot` يُرجع `409 not_a_draft` أيضاً. صف محرر في حالة أخرى يبقى `404`.
+- تحديث المحتوى يضرب صف `source='bot'` في `draft`، أو أي صف `published` أياً كان `source`. صف البوت بعد `ready_to_publish` أو الجدولة أو الأرشفة أو الحذف يُرجع `409 not_a_draft`. صف ليس للبوت وغير منشور يبقى `404 not_found`.
+- تعديل خبر منشور ليس للبوت يمر بالمسار نفسه حرفياً: نفس الحقول المسموحة و`422 forbidden_fields` لـ`clientReference`/`notes`، وقفل المحرر، وحارس `draft_changed`، وإبطال الكاش، وسجل النسخ `article_revisions` عند تغيير حقل ظاهر، وسجل اللوحة (`recordArticleSave`). `source` و`sourceMetadata` والإسناد لا تُلمس، فيبقى الخبر خبر المحرر. بيانات الحدث تحمل `originalSource` (مصدر الصف قبل التعديل) و`clientReference: null` حين لا مرجع للبوت.
 - على `published`: الحقول المسموحة `title`, `subtitle`, `excerpt`, `content`, `contentFormat`, `categoryId`, `categorySlug`, `sourceUrl`, `imageUrl`, `imageUrls`, `keywords`, `seoTitle`, `seoDescription`, `riskLabel`, `updateReason`. `clientReference` و`notes` تُرفضان `422 forbidden_fields`: مرجع البوت وملاحظاته لا يتغيران بعد النشر. `imageUrls` تُلحق أسفل المتن الجديد إن أُرسل `content` في الطلب نفسه، وإلا أسفل المتن المخزّن، دون تكرار رابط موجود في المتن أو مكرر داخل المصفوفة. `categorySlug`/`categoryId` يمر بالتحقق نفسه للمسودة: غير موجود أو `inactive` → `422 category_not_found` بلا كتابة. `status` و`publishedAt` و`slug` لا تُكتب، وكذلك `draftCreatedAt` و`correctedAt` و`verdictAt`. `excerpt` يزامن `aiSummary` ويمسح `aiBullets` كما يفعل حفظ اللوحة، في الإنشاء والتحديث أيضاً. `seoTitle` و`seoDescription` يكتبان المفاتيح القانونية `seo.metaTitle` و`seo.metaDescription` مع دمج `keywords` وباقي مفاتيح SEO؛ `seoMetadata` يبقى للأثر الفني مثل `editorialModifiedAt`. `updatedAt` يتقدم، و`seo_metadata.editorialModifiedAt` يُدمج ذرياً عند تغيّر حقل ظاهر. مع علم `publish_first_revision_history` يُكتب صف في `article_revisions` إلى جانب `article_events`. `riskLabel` معلوماتي: `sensitive` لا يمنع النشر ولا الجدولة ولا تصحيح المحتوى (منذ 2026-10-11).
 - `POST /:id/verdict` بجسم `{ verdict: "ok"|"minor"|"major", reviewerName, note? }` وبنفس Bearer. `verdictAt` من الخادم ويُرفض إن أُرسل. الصف ليس `source=bot` → `404`. الحكم معلوماتي ولا يشترطه النشر.
 - تغيير التصنيف على المنشور يطابق `PATCH /api/admin/articles/:id`: الرابط العام `/article/<englishSlug>` لا يحمل التصنيف، فلا يتغير `slug` ولا `englishSlug` ولا يلزم تحويل 301. `categoryId` حقل ظاهر فيتقدم `editorialModifiedAt`، ويدخل سجل `article_revisions` مع علم السجل. أرشيف القسمين القديم والجديد في الذاكرة يُمسح عبر نمط `^category-articles:` داخل `invalidateArticleWrite`. اللوحة لا تطهّر صفحات الأقسام على Cloudflare عند نقل التصنيف، ومسار البوت يطابقها فلا يطهّرها أيضاً.
@@ -175,7 +179,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 { "title": "أمانة الرياض تطلق مبادرة لتشجير 500 حديقة خلال عام", "excerpt": "…" }
 ```
 
-الرد `200` بنفس شكل الإنشاء، ويضيف `status` و`publishedAt` و`updatable`. على المسودة `updatable: true`. على الخبر المنشور الذي أنشأه البوت `status` يبقى `"published"` و`updatable: true` و`publishedAt` والـ`slug` و`publicUrl` لا تتغير حتى لو تغيّر العنوان أو التصنيف (المحرر يغيّر الرابط من اللوحة إن لزم). `notes` أو `clientReference` على المنشور → `422 forbidden_fields`. مؤرشف أو محذوف → `409 not_a_draft`.
+الرد `200` بنفس شكل الإنشاء، ويضيف `status` و`publishedAt` و`updatable`. على المسودة `updatable: true`. على أي خبر منشور (للبوت أو لغيره) `status` يبقى `"published"` و`updatable: true` و`publishedAt` والـ`slug` و`publicUrl` لا تتغير حتى لو تغيّر العنوان أو التصنيف (المحرر يغيّر الرابط من اللوحة إن لزم). `notes` أو `clientReference` على المنشور → `422 forbidden_fields`. مؤرشف أو محذوف → `409 not_a_draft`.
 
 ### رفع صورة غلاف — `POST /api/internal/bot-drafts/images`
 
@@ -296,6 +300,41 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | `PATCH /:id/publish` (الفعل الخطأ) | `403 forbidden_action` — النشر الصحيح `POST` |
 
 ### مثال قراءة
+
+`GET /:id` يقرأ صف البوت بأي حالة. إن لم يكن الصف للبوت يُعاد أي خبر `published` بالشكل نفسه (`source` يحمل المصدر الأصلي، و`bot`/`clientReference` قد يكونان `null`، و`updatable: true`). صفوف المحرر غير المنشورة → `404 not_found`.
+
+### إيجاد خبر من رابطه العام — `GET /api/internal/bot-drafts/by-public-id/:publicId`
+
+`publicId` هو الجزء الأخير من `https://sabq.org/article/<publicId>`. يُطابق كما يحلّه الموقع (`storage.getArticleBySlug`): `english_slug = x` أو `slug = x`، وتطابق `english_slug` مقدَّم. أرسل المعرّف مرمّزاً URL مرة واحدة (Express يفكه مرة واحدة، لا فك ثانٍ) ويُقص الفراغ. نفس المصادقة وصلاحية `read` التي يطلبها `GET /:id`، والتوكن الشخصي محصور في صفوفه.
+
+```bash
+curl -sS "$B/api/internal/bot-drafts/by-public-id/abc12xy" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN"
+```
+
+```json
+{
+  "id": "7c1f…",
+  "status": "published",
+  "title": "عنوان الخبر",
+  "slug": "عنوان-الخبر",
+  "englishSlug": "abc12xy",
+  "source": "manual",
+  "categorySlug": "local",
+  "publishedAt": "2026-10-30T08:00:00.000Z",
+  "updatedAt": "2026-10-30T08:10:00.000Z",
+  "publicUrl": "https://sabq.org/article/abc12xy",
+  "updatable": true
+}
+```
+
+| الحالة | الرد |
+|--------|------|
+| خبر `published` يطابق | `200` بالشكل أعلاه |
+| لا خبر منشور يطابق (أو مسودة/مجدول/مؤرشف) | `404 not_found` |
+| `publicId` فارغ بعد القص أو أطول من 300 حرف | `400 validation_error` |
+| توكن مفقود أو خاطئ | `401 unauthorized` |
+| توكن شخصي بلا صلاحية `read` | `403 forbidden_action` |
 
 ### نشر فوري — `POST /api/internal/bot-drafts/:id/publish`
 
@@ -492,7 +531,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | تغيّرت المادة أثناء التوليد | `409 draft_changed` بلا كتابة. أعد الطلب |
 | `fields` فيه قيمة غير `summary`/`keywords`/`seo` | `400 validation_error` |
 | حقل ممنوع مثل `status` | `422 forbidden_fields` |
-| صف ليس للبوت، أو حالة غير `draft`/`published` | مثل `PATCH /:id` (`404` أو `409 not_a_draft`) |
+| صف ليس للبوت وغير منشور، أو صف بوت حالته غير `draft`/`published` | مثل `PATCH /:id` (`404` أو `409 not_a_draft`) |
 
 سقف خاص: 10 طلبات في الدقيقة لكل بوت (`BOT_DRAFTS_EXTRAS_RATE_LIMIT`) فوق سقف الكتابة العام.
 
@@ -504,9 +543,9 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | 401 | `unauthorized` | توكن مفقود أو غير مطابق (مع `WWW-Authenticate: Bearer`) |
 | 403 | `forbidden_action` | فعل فرعي غير معروف، أو `PATCH/PUT/DELETE` على `/publish` أو `/schedule` |
 | 403 | `license_required` | byline غير مؤسسي بلا ترخيص مهني ساري. التوكن الشخصي لخبر `news` ذي byline «صحيفة سبق» لا يطلب ترخيص مستخدم التوكن |
-| 404 | `not_found` | المعرّف غير موجود **أو** المادة ليست من إنشاء بوت (`source != 'bot'`) — لا نكشف مسودات المحررين |
+| 404 | `not_found` | المعرّف غير موجود **أو** المادة ليست من إنشاء بوت (`source != 'bot'`) وليست منشورة — لا نكشف مسودات المحررين. `by-public-id`: لا خبر منشور بهذا الرابط |
 | 405 | `forbidden_action` | `PUT`/`DELETE` على `/:id` |
-| 409 | `not_a_draft` | تحديث محتوى والمادة ليست `draft`، أو جاهزية والمادة ليست `draft`، أو نشر/جدولة أولى والمادة ليست `draft` ولا `ready_to_publish`. `details.status` = الحالة الحالية |
+| 409 | `not_a_draft` | تحديث محتوى وصف البوت ليس `draft` ولا `published`، أو جاهزية والمادة ليست `draft`، أو نشر/جدولة أولى والمادة ليست `draft` ولا `ready_to_publish`. `details.status` = الحالة الحالية |
 | 409 | `not_published` | أرشفة أو ظهور والمادة ليست `published`. `details.status` = الحالة الحالية |
 | 409 | `not_scheduled` | تغيير موعد أو إلغاء جدولة والمادة ليست `scheduled`. `details.status` = الحالة الحالية |
 | 409 | `locked_by_editor` | محرر يفتح المادة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
@@ -584,6 +623,10 @@ curl -sS -X POST "$B/api/internal/bot-drafts" \
 
 # قراءة
 curl -sS "$B/api/internal/bot-drafts/<id>" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "User-Agent: $UA"
+
+# إيجاد معرّف خبر منشور من رابطه العام https://sabq.org/article/<x>
+curl -sS "$B/api/internal/bot-drafts/by-public-id/<x>" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "User-Agent: $UA"
 
 # تحديث
@@ -715,7 +758,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
    - «لتغيير موعد مادة مجدولة: `PATCH /schedule` بنفس `publishAt`. لإلغاء الجدولة: `DELETE /schedule` بجسم فارغ فتعود مسودة. لا تحذف الصف.»
    - «لسحب خبر منشور من الموقع: `POST /archive` وليس `DELETE`. الأرشفة قابلة للاستعادة من اللوحة.»
    - «لمميز أو عاجل أو إخفاء الرئيسية على خبر منشور: `PATCH /visibility`. تعليم العاجل لا يرسل إشعاراً للقرّاء.»
-   - «لتحديث المحتوى: `PATCH` بالحقول المتغيرة فقط على مسودة `draft` أو على خبرك المنشور (`source=bot`). على المنشور لا ترسل `categorySlug` ولا `status`. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران. إن رجع 409 فالمادة ليست مسودة ولا خبراً منشوراً للبوت، أو يحررها محرر.»
+   - «لتحديث المحتوى: `PATCH` بالحقول المتغيرة فقط على مسودة `draft` أو على أي خبر منشور (لك أو لمحرر؛ إن كان معك الرابط العام فقط فاجلب المعرّف بـ `GET /by-public-id/<x>`). على المنشور لا ترسل `status` ولا `notes` ولا `clientReference`. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران. إن رجع 409 فمسودتك لم تعد مسودة، أو يحررها محرر. 404 يعني مسودة محرر غير منشورة.»
    - «`PATCH /ready` يعلّم المادة للمناوب دون نشر. استخدمه فقط إذا طُلب تركها لغرفة الأخبار.»
    - «لرفع صورة: `POST /images` وحقل `file`. الغلاف = `imageUrl`. المتن = `imageUrls`.»
 4. اجعل البوت يُرفق دائماً `notes` بما يجب على المحرر التحقق منه.
@@ -748,8 +791,10 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 | 5 | بنفس التوكن: `PATCH /api/admin/articles/<id>` أو `POST /api/admin/articles` | `401` (لا جلسة) — التوكن لا يعمل على المسارات الإدارية |
 | 6 | افتح المسودة في اللوحة (قفل تحرير نشط) ثم `PATCH` من البوت | `409 locked_by_editor` |
 | 7 | `PATCH /:id` على خبر بوت `published` بحقل `title` (وبلا `categorySlug`) | `200` و`status: "published"` و`updatable: true` و`slug` و`publishedAt` كما كانا |
+| 7b | `PATCH /:id` بحقل `title` على خبر `published` كتبه محرر | `200` و`source` يبقى مصدره الأصلي و`updatable: true`؛ سجل نسخ اللوحة يحمل `originalSource` |
+| 7c | `GET /by-public-id/<englishSlug>` لخبر منشور، ثم لرابط مسودة أو لرابط غير موجود | `200` بـ`id` و`publicUrl`، ثم `404 not_found` |
 | 8 | توكن خاطئ / بدون توكن | `401` مع `Cache-Control: private, no-store` ولا يظهر أي توكن في الرد أو اللوج |
-| 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت) | `404` — لا كشف لمسودات المحررين |
+| 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت وغير منشورة) | `404` — لا كشف لمسودات المحررين |
 | 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated/published/scheduled` و`marked ready` بلا توكنات |
 | 11 | `POST` بمتن نصي و`imageUrls` من `deliveryUrl` | `201` و`bodyImageUrls` فيها الروابط بالترتيب؛ معاينة اللوحة تعرض صوراً أسفل المتن لا نص الرابط. الغلاف يبقى في `imageUrl` فقط |
 

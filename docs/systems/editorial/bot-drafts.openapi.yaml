@@ -1,14 +1,16 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
     POST /{id}/publish ينشر فوراً. POST /{id}/schedule يجدول بـ publishAt.
     PATCH /{id}/schedule يغيّر موعد مادة مجدولة. DELETE /{id}/schedule يلغي الجدولة ويعيدها draft.
     POST /{id}/archive أرشفة ناعمة لمادة منشورة. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
     PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
-    المواد القابلة للإدارة source=bot فقط.
+    المواد القابلة للإدارة source=bot فقط، باستثناء أي خبر published أياً كان مصدره: يُقرأ عبر GET /{id}
+    وGET /by-public-id/{publicId}، ويُعدَّل محتواه عبر PATCH /{id} وPOST /{id}/regenerate-extras.
+    صفوف المحرر غير المنشورة تبقى 404. التوكن الشخصي يبقى محصوراً في صفوفه.
     التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يتطلب ترخيص مستخدم التوكن؛ تبقى صلاحيات RBAC والملكية والحصة سارية، وتبقى legacy/byline المخصصة والقنوات الأخرى خلف بوابة الترخيص القائمة.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
@@ -79,6 +81,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/internal/bot-drafts/by-public-id/{publicId}:
+    get:
+      operationId: findSabqArticleByPublicId
+      summary: إيجاد خبر منشور من رابطه العام /article/{publicId}
+      description: >
+        يطابق كما يحلّه الموقع (slug = x أو english_slug = x) مع تفضيل english_slug، وstatus=published فقط.
+        يُفك ترميز URL مرة واحدة (Express) ثم يُقص الفراغ. نفس مصادقة GET /{id} وصلاحية read، والتوكن الشخصي محصور في صفوفه.
+      parameters:
+        - name: publicId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 300 }
+          description: الجزء الأخير من https://sabq.org/article/{publicId} (englishSlug أو slug)
+      responses:
+        "200":
+          description: الخبر المنشور
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotPublicArticleLookup"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: forbidden_action — توكن شخصي بلا صلاحية read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/internal/bot-drafts/{id}:
     parameters:
       - name: id
@@ -89,6 +120,9 @@ paths:
     get:
       operationId: getSabqDraft
       summary: حالة المسودة ومعرّفها ورابط التحرير الداخلي
+      description: >
+        صف source=bot بأي حالة. إن لم يكن الصف للبوت يُعاد أي خبر published بالشكل نفسه (قراءة؛ التعديل عبر PATCH)،
+        وsource يحمل المصدر الأصلي. صفوف المحرر غير المنشورة → 404.
       parameters:
         - name: includeContent
           in: query
@@ -107,7 +141,11 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       operationId: updateSabqDraft
-      summary: تحديث محتوى مسودة draft أو خبر published أنشأه البوت (نفس شكل الجسم)
+      summary: تحديث محتوى مسودة بوت draft أو أي خبر published أياً كان مصدره (نفس شكل الجسم)
+      description: >
+        على المنشور: نفس الحقول المسموحة، وclientReference/notes → 422 forbidden_fields. status وpublishedAt وslug
+        وenglishSlug وsource والإسناد لا تتغير. سجل النسخ وسجل اللوحة يحملان originalSource.
+        صف ليس للبوت وغير منشور → 404.
       requestBody:
         required: true
         content:
@@ -125,7 +163,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: not_a_draft (ليست draft ولا published لصف source=bot، أو خبر منشور لم ينشئه البوت، أو مؤرشفة) أو locked_by_editor
+          description: not_a_draft (صف source=bot ليس draft ولا published، مثل الجاهزة أو المجدولة أو المؤرشفة) أو locked_by_editor
           content:
             application/json:
               schema:
@@ -406,7 +444,7 @@ paths:
   /api/internal/bot-drafts/{id}/regenerate-extras:
     post:
       operationId: regenerateSabqDraftExtras
-      summary: إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة أو خبر منشور للبوت
+      summary: إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت أو لأي خبر منشور
       description: >
         المولّدات نفسها في محرر اللوحة (summarizeArticle وgenerateSeoMetadata). الحفظ يمر عبر
         PATCH /{id} فيرث القفل والحالة وسجل النسخ وإبطال الكاش. سقف 10 طلبات في الدقيقة لكل بوت.
@@ -574,12 +612,27 @@ components:
       allOf:
         - $ref: "#/components/schemas/DraftFields"
         - minProperties: 1
+    BotPublicArticleLookup:
+      type: object
+      required: [id, status, title, slug, englishSlug, source, categorySlug, publishedAt, updatedAt, publicUrl, updatable]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [published] }
+        title: { type: string }
+        slug: { type: string }
+        englishSlug: { type: string, nullable: true }
+        source: { type: string, nullable: true, description: مصدر الصف الأصلي (bot أو manual أو email …) }
+        categorySlug: { type: string, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        publicUrl: { type: string, nullable: true }
+        updatable: { type: boolean, description: true دائماً للخبر المنشور }
     BotDraft:
       type: object
       properties:
         id: { type: string }
         status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
-        updatable: { type: boolean, description: true لمسودة draft ولخبر published مصدره bot. false بعد الجاهزية أو الجدولة أو الأرشفة، ولصف ليس source=bot. إلغاء الجدولة يعيدها true }
+        updatable: { type: boolean, description: true لمسودة بوت draft ولأي خبر published أياً كان مصدره. false بعد الجاهزية أو الجدولة أو الأرشفة. إلغاء الجدولة يعيدها true }
         title: { type: string }
         content: { type: string, description: يظهر فقط في GET مع includeContent=1، وهو HTML الكنسي المخزّن }
         contentFormat: { type: string, enum: [html], description: يظهر مع content في GET مع includeContent=1 فقط }
