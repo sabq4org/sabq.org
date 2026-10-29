@@ -16,6 +16,8 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/plus-preview',
   // صفحة معاينة داخلية لهيدر اليوم الوطني الـ96 — اختبار تصميم فقط
   '/nd96-preview',
+  // نسخة تجريبية من الواجهة لعرض بطاقة إنفاذ على العميل — لا تُفهرس
+  '/v2',
   '/profile', '/bookmarks', '/reading-history',
   '/my-follows', '/my-keywords', '/my-votes',
   '/notification-settings', '/recommendation-settings',

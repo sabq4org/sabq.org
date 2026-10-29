@@ -144,7 +144,7 @@ const STATIC_EXTENSIONS = [
 // them. KEEP IN SYNC with server/utils/noindexPaths.ts.
 const NOINDEX_PREFIXES = [
   "/survey", "/meet", "/verify", "/en/settings", "/ur/settings",
-  "/plus-preview", "/nd96-preview", "/preferences", "/loyalty",
+  "/plus-preview", "/nd96-preview", "/v2", "/preferences", "/loyalty",
   "/sports2", "/sports3", "/sports4", "/sports5",
   // dashboards / admin / internal tooling
   "/dashboard", "/en/dashboard", "/ur/dashboard",

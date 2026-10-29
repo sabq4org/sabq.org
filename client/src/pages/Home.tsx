@@ -43,6 +43,7 @@ const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
 const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCupHomeSection"));
 const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
+const InfathHomeCard = lazyDefault(() => import("@/components/infath/InfathHomeCard"));
 const SportsPortalStrip = lazyDefault(() => import("@/components/sports/SportsPortalStrip"));
 const MawaeedHomeStrip = lazyDefault(() => import("@/components/mawaeed/MawaeedHomeStrip"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
@@ -170,7 +171,8 @@ function reportHomepageEvent(event: "homepage_feed_degraded" | "homepage_feed_re
   }
 }
 
-export default function Home() {
+/** showInfathCard: نسخة /v2 التجريبية من الواجهة مع بطاقة مزادات إنفاذ تحت الهيرو. */
+export default function Home({ showInfathCard = false }: { showInfathCard?: boolean } = {}) {
   // Track when initial load is complete to defer non-critical queries
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
@@ -442,6 +444,16 @@ export default function Home() {
           {/* Hero Section */}
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
+
+        {showInfathCard && (
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+            <ErrorBoundary fallback={null}>
+              <Suspense fallback={<div className="min-h-[320px]" aria-hidden="true" />}>
+                <InfathHomeCard />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
+        )}
 
         {INLINE_NEWSLETTER_SIGNUP_ENABLED && (
           <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">

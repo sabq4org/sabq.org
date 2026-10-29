@@ -231,6 +231,7 @@ const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/LoyaltyAccou
 const LoyaltyAdminDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAdminDashboard")));
 const LoyaltyPreview = lazy(() => retryImport(() => import("@/pages/LoyaltyPreview")));
 const SabqPlusPreview = lazy(() => retryImport(() => import("@/pages/SabqPlusPreview")));
+const HomeV2 = lazy(() => retryImport(() => import("@/pages/HomeV2")));
 const NationalDay96HeaderPreview = lazy(() => retryImport(() => import("@/pages/NationalDay96HeaderPreview")));
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
@@ -740,6 +741,7 @@ function Router() {
         <Route path="/about">{() => <LazyRoute component={AboutPage} />}</Route>
         <Route path="/loyalty-preview">{() => <LazyRoute component={LoyaltyPreview} />}</Route>
         <Route path="/plus-preview">{() => <LazyRoute component={SabqPlusPreview} />}</Route>
+        <Route path="/v2">{() => <LazyRoute component={HomeV2} />}</Route>
         <Route path="/nd96-preview">{() => <LazyRoute component={NationalDay96HeaderPreview} />}</Route>
         <Route path="/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/ar/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
