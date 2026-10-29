@@ -75,7 +75,8 @@
 .inf-page .chip:focus-visible,.inf-page .day:focus-visible,.inf-page .weeknav button:focus-visible,.inf-page .go:focus-visible{outline:2px solid var(--btn);outline-offset:2px}
 .inf-page .next-what{font-size:17px;font-weight:600}
 .inf-page .next-meta{font-size:13px;color:var(--muted)}
-.inf-page .cd{display:flex;gap:10px;margin:10px 0 4px}
+/* العدّاد يُقرأ كالساعة: الأيام يسارًا والدقائق يمينًا */
+.inf-page .cd{display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:10px;margin:10px 0 4px}
 .inf-page .cd div{text-align:center;min-width:64px}
 .inf-page .cd b{display:block;font-size:44px;font-weight:700;color:var(--btn);line-height:1.05;font-variant-numeric:tabular-nums}
 .inf-page .cd small{font-size:12px;color:var(--muted)}

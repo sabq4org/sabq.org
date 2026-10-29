@@ -43,7 +43,8 @@
 .ixh .ixh-wc.now .d{color:var(--btn);font-weight:700}
 @keyframes ixh-grow{from{transform:scaleY(.05)}to{transform:scaleY(1)}}
 .ixh .ixh-nx{font-size:15px;font-weight:600;margin-top:4px}
-.ixh .ixh-cd{display:flex;gap:8px;margin:8px 0 2px}
+/* العدّاد يُقرأ كالساعة: الأيام يسارًا والدقائق يمينًا */
+.ixh .ixh-cd{display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:8px;margin:8px 0 2px}
 .ixh .ixh-cd div{text-align:center;min-width:52px}
 .ixh .ixh-cd b{display:block;font-size:38px;font-weight:700;color:var(--btn);line-height:1.05;font-variant-numeric:tabular-nums}
 .ixh .ixh-cd small{font-size:11.5px;color:var(--muted)}
