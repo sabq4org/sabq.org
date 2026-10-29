@@ -38,6 +38,7 @@ import {
 import { resolveUniqueArticleSlug } from "./articleSlugService";
 import { logArticleEvent } from "./articleEventsService";
 import { recordArticleSave } from "./articleHistoryService";
+import { matchesArticleVersion } from "./articleWriteVersion";
 import {
   clearOtherBreakingArticles,
   clearOtherEnBreakingArticles,
@@ -1240,11 +1241,33 @@ export async function getBotDraftHistory(
   };
 }
 
+/**
+ * حارس نسخة داخلي (لا يأتي من جسم الطلب): الحفظ يُكتب فقط إن بقي `updatedAt`
+ * كما قُرئ. يستعمله `regenerateBotDraftExtras` حتى لا يكتب ملحقات قديمة فوق
+ * عنوان أو متن عُدّل أثناء التوليد.
+ */
+export interface BotDraftWriteGuard {
+  expectedUpdatedAt: Date;
+}
+
+function botDraftChangedError(): BotDraftError {
+  return new BotDraftError(409, "draft_changed", "تغيّرت المادة أثناء التوليد — لم يُحفظ شيء، أعد الطلب");
+}
+
+function sameArticleVersion(actual: Date | string | null | undefined, expected: Date): boolean {
+  return actual != null && new Date(actual).getTime() === expected.getTime();
+}
+
+function botDraftVersionWhere(guard: BotDraftWriteGuard | undefined): SQL | undefined {
+  return guard ? matchesArticleVersion(guard.expectedUpdatedAt) : undefined;
+}
+
 export async function updateBotDraft(
   bot: BotIdentity,
   articleId: string,
   input: BotDraftUpdateInput,
   ctx: BotRequestContext = {},
+  guard?: BotDraftWriteGuard,
 ): Promise<BotDraftResponse> {
   assertPersonalCapability(bot, "edit");
   const existing = await findArticleById(articleId, bot);
@@ -1257,6 +1280,7 @@ export async function updateBotDraft(
       block?.details,
     );
   }
+  if (guard && !sameArticleVersion(existing.updatedAt, guard.expectedUpdatedAt)) throw botDraftChangedError();
   await assertBotSubtitle(input.subtitle);
   if (existing.status === "published") {
     const disallowed = findDisallowedPublishedContentFields(input);
@@ -1272,7 +1296,7 @@ export async function updateBotDraft(
   await throwIfEditLocked(articleId);
   const category = await resolveCategory(input);
   if (existing.status === "published") {
-    return updatePublishedBotArticle(bot, existing, input, ctx, category);
+    return updatePublishedBotArticle(bot, existing, input, ctx, category, guard);
   }
 
   const patch: Partial<typeof articles.$inferInsert> = { updatedAt: new Date() };
@@ -1327,9 +1351,10 @@ export async function updateBotDraft(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
+    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot), botDraftVersionWhere(guard)))
     .returning();
   if (!row) {
+    if (guard) throw botDraftChangedError();
     // سباق: تغيّرت الحالة بين القراءة والكتابة
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التحديث", { status: "unknown" });
   }
@@ -1354,6 +1379,7 @@ async function updatePublishedBotArticle(
   input: BotDraftUpdateInput,
   ctx: BotRequestContext,
   category: { id: string; slug: string } | null,
+  guard?: BotDraftWriteGuard,
 ): Promise<BotDraftResponse> {
   const now = new Date();
   const patch = buildPublishedBotContentPatch(existing, input, now, { categoryId: category?.id });
@@ -1376,9 +1402,10 @@ async function updatePublishedBotArticle(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
+    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot), botDraftVersionWhere(guard)))
     .returning();
   if (!row) {
+    if (guard) throw botDraftChangedError();
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التحديث", { status: "unknown" });
   }
 
@@ -1479,6 +1506,8 @@ export function buildRegeneratedExtrasInput(
  * المولّدات نفسها التي يستدعيها زر «الذكاء الشامل» في محرر اللوحة:
  * `summarizeArticle` (POST /api/ai/summarize) و`generateSeoMetadata` (POST /api/seo/generate).
  * الحفظ يمر عبر `updateBotDraft` فيرث القفل والحالة وسجل النسخ وإبطال الكاش.
+ * الحفظ مشروط ذرياً بـ`updatedAt` المقروء قبل التوليد: إن عُدّلت المادة أثناءه
+ * يرجع `409 draft_changed` بلا كتابة ولا سجل نسخ ولا إبطال كاش.
  */
 export async function regenerateBotDraftExtras(
   bot: BotIdentity,
@@ -1552,7 +1581,7 @@ export async function regenerateBotDraftExtras(
     throw new BotDraftError(502, "generation_failed", "لم يرجع المولّد قيماً صالحة — لم يُحفظ شيء", { fields });
   }
 
-  const draft = await updateBotDraft(bot, articleId, update, ctx);
+  const draft = await updateBotDraft(bot, articleId, update, ctx, { expectedUpdatedAt: new Date(existing.updatedAt) });
   console.log(`[BotDrafts] regenerated extras ${articleId} by bot=${bot.name} fields=${Object.keys(update).join(",")}`);
   return {
     draft,

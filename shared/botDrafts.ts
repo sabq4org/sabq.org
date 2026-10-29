@@ -490,6 +490,7 @@ export const BOT_DRAFT_ERROR_CODES = [
   "not_published",
   "not_scheduled",
   "locked_by_editor",
+  "draft_changed",
   "license_required",
   "forbidden_action",
   "rate_limited",
