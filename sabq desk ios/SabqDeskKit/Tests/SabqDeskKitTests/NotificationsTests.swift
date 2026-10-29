@@ -7,7 +7,7 @@ final class NotificationsTests: XCTestCase {
     private let page = #"""
     {
       "items": [
-        {"id":"e1","kind":"news_published","category":"news","label":"خبر جديد عبر «نشر سبق»","actionLabel":"فتح الخبر",
+        {"id":"e1","kind":"news_published","category":"news","label":"خبر جديد عبر بوت النشر","actionLabel":"فتح الخبر",
          "title":"عنوان الخبر","detail":"الناشر: وكالة الأفق","actorName":"وكالة الأفق","targetId":"a1",
          "linkUrl":"https://sabq.org/article/abc","deeplink":"sabqdesk://notifications","scheduledAt":null,
          "createdAt":"2026-10-29T09:50:00.000Z","isUnread":true},

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  botDraftsPublisherDisplayName,
   buildStaffDeskEventDetail,
   clipStaffDeskTitle,
   decodeStaffDeskEventCursor,
@@ -87,5 +88,14 @@ describe("staff desk notifications (shared)", () => {
   it("clips long tweet text to one line", () => {
     expect(clipStaffDeskTitle("سطر\nثانٍ   هنا")).toBe("سطر ثانٍ هنا");
     expect(clipStaffDeskTitle("أ".repeat(300)).length).toBe(160);
+  });
+
+  it("names the bot that published instead of always saying «نشر سبق»", () => {
+    expect(botDraftsPublisherDisplayName("grok-bot")).toBe("قروك بوت");
+    expect(botDraftsPublisherDisplayName("nashr-sabq")).toBe("نشر سبق");
+    expect(botDraftsPublisherDisplayName("other-agent")).toBe("other-agent");
+    expect(buildStaffDeskEventDetail({ kind: "news_published", actorName: null, scheduledAt: null }, NOW)).toBe(
+      "نُشر عبر بوت",
+    );
   });
 });

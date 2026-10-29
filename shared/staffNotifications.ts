@@ -28,8 +28,19 @@ export const STAFF_DESK_EVENT_LABELS: Record<StaffDeskEventKind, { label: string
   tweet_published: { label: "نُشرت تغريدة", action: "فتح التغريدة" },
   opinion_draft: { label: "مسودة مقال رأي جديدة", action: "مراجعة المقال" },
   opinion_scheduled: { label: "جُدول مقال رأي", action: "معاينة المقال" },
-  news_published: { label: "خبر جديد عبر «نشر سبق»", action: "فتح الخبر" },
+  news_published: { label: "خبر جديد عبر بوت النشر", action: "فتح الخبر" },
 };
+
+/**
+ * اسم يُعرض لبوت مسودات يستخدم توكن البيئة المشترك (بلا توكن شخصي). كل البوتات
+ * تمر على /api/internal/bot-drafts، فلا يصح نسبة كل خبر إلى «نشر سبق».
+ */
+export function botDraftsPublisherDisplayName(botName: string): string {
+  const name = botName.trim().toLowerCase();
+  if (name.includes("grok")) return "قروك بوت";
+  if (name === "nashr-sabq") return "نشر سبق";
+  return botName.trim();
+}
 
 /** التنبيهات المعروضة: آخر 30 يوماً فقط. */
 export const STAFF_DESK_EVENTS_WINDOW_DAYS = 30;
@@ -101,7 +112,7 @@ export function buildStaffDeskEventDetail(
     case "opinion_scheduled":
       return [actor, when ? `يُنشر ${when}` : null].filter(Boolean).join(" · ");
     case "news_published":
-      return actor ? `الناشر: ${actor}` : "نُشر عبر «نشر سبق»";
+      return actor ? `الناشر: ${actor}` : "نُشر عبر بوت";
   }
 }
 
