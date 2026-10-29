@@ -410,6 +410,7 @@ paths:
       description: >
         المولّدات نفسها في محرر اللوحة (summarizeArticle وgenerateSeoMetadata). الحفظ يمر عبر
         PATCH /{id} فيرث القفل والحالة وسجل النسخ وإبطال الكاش. سقف 10 طلبات في الدقيقة لكل بوت.
+        الحفظ مشروط ذرياً بـupdated_at المقروء قبل التوليد؛ إن عُدّلت المادة أثناءه يرجع 409 draft_changed بلا كتابة.
       parameters:
         - name: id
           in: path
@@ -453,7 +454,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: not_a_draft أو locked_by_editor
+          description: not_a_draft أو locked_by_editor أو draft_changed (عُدّلت المادة أثناء التوليد؛ لم يُحفظ شيء)
           content:
             application/json:
               schema:
@@ -649,7 +650,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error, content_too_short, generation_failed]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, draft_changed, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error, content_too_short, generation_failed]
         message: { type: string }
         details: {}
   responses:
