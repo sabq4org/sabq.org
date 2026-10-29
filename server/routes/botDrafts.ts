@@ -3,8 +3,9 @@
 //
 // POST  /api/internal/bot-drafts        إنشاء مسودة عربية (status=draft دائماً)
 // POST  /api/internal/bot-drafts/images رفع صورة غلاف إلى R2 / media.sabq.org (forceR2)
-// GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير
-// PATCH /api/internal/bot-drafts/:id    تحديث مسودة بوت (draft) أو خبر بوت منشور
+// GET   /api/internal/bot-drafts/by-public-id/:publicId  خبر منشور من رابطه العام /article/<x>
+// GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير (أو أي خبر منشور، قراءة)
+// PATCH /api/internal/bot-drafts/:id    تحديث مسودة بوت (draft) أو أي خبر منشور
 // POST  /api/internal/bot-drafts/:id/regenerate-extras  إعادة توليد الموجز والكلمات وSEO
 // PATCH /api/internal/bot-drafts/:id/ready     draft → ready_to_publish (لا نشر)
 // POST  /api/internal/bot-drafts/:id/publish  نشر فوري لجسم فارغ
@@ -55,11 +56,13 @@ import {
   assertPersonalCapability,
   createBotDraft,
   archiveBotDraft,
+  findPublishedArticleByPublicId,
   getBotDraft,
   getBotDraftHistory,
   getBotDraftPublishOperation,
   isBotDraftsConfigured,
   markBotDraftReady,
+  normalizeBotDraftPublicId,
   publishBotDraft,
   recordBotReviewerVerdict,
   regenerateBotDraftExtras,
@@ -76,7 +79,7 @@ import { authenticatePublisherToken } from "../services/botPublisherTokenService
 const router = Router();
 // Authentication failures are bounded too; internal routes bypass the global limiter.
 router.use(BOT_DRAFTS_BASE_PATH, rateLimit({
-  windowMs: 60_000, limit: 120, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60_000, limit: () => Number(process.env.BOT_DRAFTS_FAILED_RATE_LIMIT) || 120, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false,
   validate: { xForwardedForHeader: false },
 }));
 
@@ -337,6 +340,22 @@ router.get(`${BOT_DRAFTS_BASE_PATH}/history`, requireBotToken, async (req: BotRe
     res.json(history);
   } catch (error) {
     handleError(res, error, "history");
+  }
+});
+
+router.get(`${BOT_DRAFTS_BASE_PATH}/by-public-id/:publicId`, requireBotToken, async (req: BotRequest, res: Response) => {
+  const publicId = normalizeBotDraftPublicId(req.params.publicId);
+  if (!publicId) {
+    return sendError(res, 400, { code: "validation_error", message: "publicId مطلوب وطوله حتى 300 حرف" });
+  }
+  try {
+    const article = await findPublishedArticleByPublicId(publicId, req.bot!);
+    if (!article) {
+      return sendError(res, 404, { code: "not_found", message: "لا يوجد خبر منشور بهذا الرابط" });
+    }
+    res.json(article);
+  } catch (error) {
+    handleError(res, error, "by-public-id");
   }
 });
 

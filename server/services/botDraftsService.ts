@@ -9,7 +9,7 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "node:crypto";
-import { and, eq, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditLocks, articlePublishOperations, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
@@ -413,7 +413,7 @@ type ArticleRow = typeof articles.$inferSelect;
 
 /**
  * الحالات التي لا يُعدَّل محتواها من البوت.
- * `published` لصف `source=bot` مسموح في `PATCH /:id` ولا يمر من هنا.
+ * `published` (أياً كان المصدر) مسموح في `PATCH /:id` ولا يمر من هنا.
  */
 export function botDraftContentBlockedMessage(status: string): string {
   if (status === BOT_DRAFT_READY_STATUS) {
@@ -606,10 +606,9 @@ export type BotDraftContentEditBlock = {
 };
 
 /**
- * من يجوز له تعديل المحتوى عبر `PATCH /:id`.
- * مسودة بوت أو خبر بوت منشور: مسموح.
- * خبر منشور ليس `source=bot`: 409 `not_a_draft` (لا 404، حتى لا يُفهم كغياب الصف).
- * أي صف آخر ليس للبوت: 404 كما في بقية العقد.
+ * من يجوز له تعديل المحتوى عبر `PATCH /:id` و`POST /:id/regenerate-extras`.
+ * مسودة بوت: مسموح. أي خبر منشور، أياً كان مصدره (بوت أو محرر أو وكيل): مسموح.
+ * أي صف آخر ليس للبوت (مسودة محرر، مجدول، مؤرشف…): 404 كما في بقية العقد.
  * مؤرشف/محذوف/مجدول/جاهز لصف البوت: 409 `not_a_draft`.
  */
 export function botDraftContentEditBlock(
@@ -618,18 +617,11 @@ export function botDraftContentEditBlock(
   if (!row) {
     return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
   }
+  if (row.status === "published") return null;
   if (row.source !== BOT_DRAFT_SOURCE) {
-    if (row.status === "published") {
-      return {
-        httpStatus: 409,
-        code: "not_a_draft",
-        message: "لا يمكن للبوت تعديل خبر لم ينشئه",
-        details: { status: row.status },
-      };
-    }
     return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
   }
-  if (row.status === BOT_DRAFT_STATUS || row.status === "published") return null;
+  if (row.status === BOT_DRAFT_STATUS) return null;
   return {
     httpStatus: 409,
     code: "not_a_draft",
@@ -638,9 +630,12 @@ export function botDraftContentEditBlock(
   };
 }
 
-/** `true` لمسودة البوت ولخبره المنشور. الجاهزية والجدولة والأرشفة وصفوف المحرر تبقى `false`. */
-export function isBotOwnedContentEditable(row: { status: string; source?: string | null }): boolean {
-  return row.source === BOT_DRAFT_SOURCE && (row.status === BOT_DRAFT_STATUS || row.status === "published");
+/**
+ * `true` لمسودة البوت ولأي خبر منشور (بوت أو غيره). الجاهزية والجدولة والأرشفة
+ * ومسودات المحرر تبقى `false`.
+ */
+export function isBotContentEditable(row: { status: string; source?: string | null }): boolean {
+  return row.status === "published" || (row.source === BOT_DRAFT_SOURCE && row.status === BOT_DRAFT_STATUS);
 }
 
 /**
@@ -786,7 +781,7 @@ export function toBotDraftResponse(
   return {
     id: row.id,
     status: row.status,
-    updatable: isBotOwnedContentEditable(row),
+    updatable: isBotContentEditable(row),
     title: row.title,
     ...(options.includeContent ? { content: row.content, contentFormat: "html" as const } : {}),
     subtitle: row.subtitle ?? null,
@@ -1167,9 +1162,80 @@ export async function getBotDraft(
   options: { includeContent?: boolean } = {},
 ): Promise<BotDraftResponse | null> {
   if (bot) assertPersonalCapability(bot, "read");
-  const row = await findBotArticle(articleId, bot);
+  // صف البوت بأي حالة، وإلا أي خبر منشور (قراءة فقط؛ التعديل عبر PATCH). غيرهما 404.
+  let row = await findBotArticle(articleId, bot);
+  if (!row) {
+    const any = await findArticleById(articleId, bot);
+    row = any?.status === "published" ? any : null;
+  }
   if (!row) return null;
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId), options);
+}
+
+/** أقصى طول لمعرّف الرابط العام في `GET /by-public-id/:publicId`. */
+export const BOT_DRAFT_PUBLIC_ID_MAX_LENGTH = 300;
+
+export interface BotDraftPublicIdLookup {
+  id: string;
+  status: string;
+  title: string;
+  slug: string;
+  englishSlug: string | null;
+  source: string | null;
+  categorySlug: string | null;
+  publishedAt: string | null;
+  updatedAt: string;
+  publicUrl: string | null;
+  updatable: boolean;
+}
+
+/**
+ * يطبّع الجزء الأخير من `/article/<x>`: فك ترميز آمن (يبقي النص كما هو إن فشل
+ * الفك) ثم قص الفراغات. يعيد null إن فرغ أو تجاوز الحد.
+ */
+export function normalizeBotDraftPublicId(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  // Express يفك ترميز :publicId مرة واحدة؛ لا نفكّه ثانية حتى لا يتلف slug فيه «%».
+  const value = raw.trim();
+  if (!value || value.length > BOT_DRAFT_PUBLIC_ID_MAX_LENGTH) return null;
+  return value;
+}
+
+/**
+ * يجد خبراً منشوراً من رابطه العام كما يحلّه `storage.getArticleBySlug`
+ * (`slug = x OR english_slug = x`)، مع تفضيل تطابق `english_slug`.
+ * التوكن الشخصي يبقى محصوراً في صفوفه.
+ */
+export async function findPublishedArticleByPublicId(
+  publicId: string,
+  bot?: BotIdentity,
+): Promise<BotDraftPublicIdLookup | null> {
+  if (bot) assertPersonalCapability(bot, "read");
+  const rows = await db
+    .select()
+    .from(articles)
+    .where(and(
+      eq(articles.status, "published"),
+      or(eq(articles.englishSlug, publicId), eq(articles.slug, publicId)),
+      personalOwnershipWhere(bot),
+    ))
+    .orderBy(sql`CASE WHEN ${articles.englishSlug} = ${publicId} THEN 0 ELSE 1 END`)
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    title: row.title,
+    slug: row.slug,
+    englishSlug: row.englishSlug ?? null,
+    source: row.source ?? null,
+    categorySlug: await categorySlugFor(row.categoryId),
+    publishedAt: isoOrNull(row.publishedAt),
+    updatedAt: row.updatedAt.toISOString(),
+    publicUrl: botDraftPublicUrl(row.englishSlug, row.slug),
+    updatable: isBotContentEditable(row),
+  };
 }
 
 export interface BotDraftHistoryItem {
@@ -1296,7 +1362,7 @@ export async function updateBotDraft(
   await throwIfEditLocked(articleId);
   const category = await resolveCategory(input);
   if (existing.status === "published") {
-    return updatePublishedBotArticle(bot, existing, input, ctx, category, guard);
+    return updatePublishedArticle(bot, existing, input, ctx, category, guard);
   }
 
   const patch: Partial<typeof articles.$inferInsert> = { updatedAt: new Date() };
@@ -1367,13 +1433,14 @@ export async function updateBotDraft(
 }
 
 /**
- * تعديل خبر بوت منشور. الحالة وتاريخ النشر والرابط العام لا تتغير.
+ * تعديل خبر منشور أياً كان مصدره (`source=bot` أو محرر أو وكيل). الحالة وتاريخ
+ * النشر والرابط العام والمصدر لا تتغير.
  * لا إشعار دفع ولا IndexNow ولا إعادة نشر — الإبطال فقط مثل حفظ المحرر.
  * تغيير التصنيف مثل `PATCH /api/admin/articles/:id`: الرابط `/article/<englishSlug>`
  * لا يحمل التصنيف فلا تحويل 301، و`invalidateArticleWrite` يمسح أرشيف الأقسام
  * (`^category-articles:`) والقوائم ورابط المقال ويطهّر الحافة.
  */
-async function updatePublishedBotArticle(
+async function updatePublishedArticle(
   bot: BotIdentity,
   existing: ArticleRow,
   input: BotDraftUpdateInput,
@@ -1402,7 +1469,7 @@ async function updatePublishedBotArticle(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot), botDraftVersionWhere(guard)))
+    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), personalOwnershipWhere(bot), botDraftVersionWhere(guard)))
     .returning();
   if (!row) {
     if (guard) throw botDraftChangedError();
@@ -1430,7 +1497,7 @@ async function updatePublishedBotArticle(
     row,
     existing,
     undefined,
-    { changedFields: publishedChangeLabels(input) },
+    { changedFields: publishedChangeLabels(input), originalSource: existing.source },
   );
   console.log(`[BotDrafts] updated published ${row.id} by bot=${bot.name} fields=${Object.keys(input).join(",")}`);
   return toBotDraftResponse(row, category?.slug ?? (await categorySlugFor(row.categoryId)));
@@ -1502,7 +1569,7 @@ export function buildRegeneratedExtrasInput(
 }
 
 /**
- * يعيد توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت أو خبر بوت منشور.
+ * يعيد توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت أو لأي خبر منشور.
  * المولّدات نفسها التي يستدعيها زر «الذكاء الشامل» في محرر اللوحة:
  * `summarizeArticle` (POST /api/ai/summarize) و`generateSeoMetadata` (POST /api/seo/generate).
  * الحفظ يمر عبر `updateBotDraft` فيرث القفل والحالة وسجل النسخ وإبطال الكاش.

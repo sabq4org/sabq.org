@@ -27,6 +27,7 @@ vi.mock("../../server/db", () => ({
       from: () => ({
         where: () => {
           const query = {
+            orderBy: () => query,
             limit: async () => {
               if (dbState.limitQueue.length > 0) return dbState.limitQueue.shift()!;
               dbState.selects += 1;
@@ -79,6 +80,8 @@ import {
   archiveBotDraft,
   BotDraftError,
   buildRegeneratedExtrasInput,
+  findPublishedArticleByPublicId,
+  getBotDraft,
   regenerateBotDraftExtras,
   updateBotDraft,
 } from "../../server/services/botDraftsService";
@@ -260,16 +263,89 @@ describe("updateBotDraft on a published article", () => {
     }));
   });
 
-  it("rejects a published non-bot article with 409 and does not write", async () => {
-    dbState.article = publishedArticle({ source: "manual" });
-    await expect(updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان بعد النشر للخبر" })).rejects.toMatchObject({
-      httpStatus: 409,
-      code: "not_a_draft",
-      details: { status: "published" },
+  it("updates a published non-bot article through the same published edit path", async () => {
+    const existing = publishedArticle({ source: "manual", sourceMetadata: null });
+    dbState.article = existing;
+    dbState.updated = { ...existing, title: "عنوان عدّله البوت للخبر", updatedAt: new Date("2026-09-26T09:00:00.000Z") };
+
+    const result = await updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان عدّله البوت للخبر" });
+
+    expect(result).toMatchObject({
+      id: "art-pub",
+      status: "published",
+      source: "manual",
+      updatable: true,
+      bot: null,
+      clientReference: null,
+      publicUrl: "https://sabq.org/article/en-slug",
+    });
+    expect(dbState.updateCalls).toBe(1);
+    expect(dbState.setArg).toMatchObject({ title: "عنوان عدّله البوت للخبر" });
+    for (const key of ["status", "publishedAt", "slug", "englishSlug", "authorId", "source", "sourceMetadata"]) {
+      expect(dbState.setArg).not.toHaveProperty(key);
+    }
+    expect(invalidateArticleWrite).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "art-pub" }),
+      expect.objectContaining({ oldSlug: "عنوان-أصلي", oldEnglishSlug: "en-slug" }),
+    );
+    expect(recordArticleSave).toHaveBeenCalledWith(expect.objectContaining({
+      before: expect.objectContaining({ source: "manual" }),
+      metadata: expect.objectContaining({
+        originalSource: "manual",
+        clientReference: null,
+        changedFields: ["العنوان"],
+        channel: "bot-drafts-api",
+      }),
+    }));
+    expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      action: "updated",
+      metadata: expect.objectContaining({ originalSource: "manual" }),
+    }));
+    expect(sendArticleNotification).not.toHaveBeenCalled();
+  });
+
+  it("records originalSource=bot for a published bot article", async () => {
+    const existing = publishedArticle();
+    dbState.article = existing;
+    dbState.updated = { ...existing, updatedAt: new Date("2026-09-26T09:00:00.000Z") };
+    await updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان بعد النشر للخبر" });
+    expect(recordArticleSave).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ originalSource: "bot", clientReference: "ref-1" }),
+    }));
+  });
+
+  it("still rejects notes and clientReference on a published non-bot article", async () => {
+    dbState.article = publishedArticle({ source: "manual", sourceMetadata: null });
+    await expect(updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان بعد النشر للخبر", notes: "ملاحظة" })).rejects.toMatchObject({
+      httpStatus: 422,
+      code: "forbidden_fields",
+      details: { fields: ["notes"] },
     });
     expect(dbState.updateCalls).toBe(0);
-    expect(invalidateArticleWrite).not.toHaveBeenCalled();
   });
+
+  it("keeps the editor lock on a published non-bot article", async () => {
+    dbState.article = publishedArticle({ source: "manual", sourceMetadata: null });
+    dbState.lock = { userName: "محرر", expiresAt: new Date("2026-09-26T12:00:00.000Z") };
+    await expect(updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان بعد النشر للخبر" })).rejects.toMatchObject({
+      httpStatus: 409,
+      code: "locked_by_editor",
+    });
+    expect(dbState.updateCalls).toBe(0);
+  });
+
+  it.each(["draft", "scheduled", "archived", "ready_to_publish"])(
+    "hides a non-bot %s article as 404 not_found and does not write",
+    async (status) => {
+      dbState.article = publishedArticle({ source: "manual", sourceMetadata: null, status });
+      await expect(updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان بعد النشر للخبر" })).rejects.toMatchObject({
+        httpStatus: 404,
+        code: "not_found",
+      });
+      expect(dbState.updateCalls).toBe(0);
+      expect(invalidateArticleWrite).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects notes and clientReference on a published article", async () => {
     dbState.article = publishedArticle();
@@ -553,13 +629,83 @@ describe("regenerateBotDraftExtras", () => {
     expect(logArticleEvent).not.toHaveBeenCalled();
   });
 
-  it("rejects a non-bot article like PATCH does", async () => {
-    dbState.limitQueue = [[publishedArticle({ source: "manual", content: longContent })]];
+  it("rejects a non-bot draft with 404 like PATCH does", async () => {
+    dbState.limitQueue = [[publishedArticle({ source: "manual", status: "draft", content: longContent })]];
     await expect(regenerateBotDraftExtras({ name: "nashr-sabq" }, "art-pub", {})).rejects.toMatchObject({
-      httpStatus: 409,
-      code: "not_a_draft",
+      httpStatus: 404,
+      code: "not_found",
     });
     expect(summarizeArticle).not.toHaveBeenCalled();
+  });
+
+  it("regenerates extras on a published non-bot article", async () => {
+    const existing = publishedArticle({ source: "manual", sourceMetadata: null, content: longContent });
+    dbState.limitQueue = [[existing], [], [existing], []];
+    dbState.updated = { ...existing, excerpt: "موجز مولد", updatedAt: new Date("2026-09-26T09:00:00.000Z") };
+    summarizeArticle.mockResolvedValue("موجز مولد");
+
+    const result = await regenerateBotDraftExtras({ name: "nashr-sabq" }, "art-pub", { fields: ["summary"] });
+
+    expect(dbState.updateCalls).toBe(1);
+    expect(dbState.setArg).toMatchObject({ excerpt: "موجز مولد" });
+    expect(invalidateArticleWrite).toHaveBeenCalledTimes(1);
+    expect(result.draft).toMatchObject({ status: "published", source: "manual", updatable: true });
+    expect(recordArticleSave).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ originalSource: "manual" }),
+    }));
+  });
+});
+
+describe("bot reads of non-bot articles", () => {
+  beforeEach(() => {
+    dbState.selects = 0;
+    dbState.article = null;
+    dbState.lock = null;
+    dbState.updated = null;
+    dbState.limitQueue = [];
+    vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org");
+  });
+
+  it("GET /:id falls back to any published article, read-only response with updatable=true", async () => {
+    // صف بوت غائب، ثم الصف العام، ثم slug التصنيف
+    dbState.limitQueue = [[], [publishedArticle({ source: "manual", sourceMetadata: null, categoryId: "cat-1" })], [{ slug: "local" }]];
+    const result = await getBotDraft("art-pub", { name: "nashr-sabq" });
+    expect(result).toMatchObject({ id: "art-pub", status: "published", source: "manual", updatable: true, categorySlug: "local" });
+  });
+
+  it("GET /:id hides a non-bot unpublished article", async () => {
+    dbState.limitQueue = [[], [publishedArticle({ source: "manual", status: "draft" })]];
+    expect(await getBotDraft("art-pub", { name: "nashr-sabq" })).toBeNull();
+  });
+
+  it("finds a published article by public id with the lookup shape", async () => {
+    dbState.limitQueue = [[publishedArticle({ source: "manual", sourceMetadata: null, categoryId: "cat-1" })], [{ slug: "local" }]];
+    const result = await findPublishedArticleByPublicId("en-slug", { name: "nashr-sabq" });
+    expect(result).toEqual({
+      id: "art-pub",
+      status: "published",
+      title: "عنوان أصلي للخبر",
+      slug: "عنوان-أصلي",
+      englishSlug: "en-slug",
+      source: "manual",
+      categorySlug: "local",
+      publishedAt: publishedAt.toISOString(),
+      updatedAt: publishedAt.toISOString(),
+      publicUrl: "https://sabq.org/article/en-slug",
+      updatable: true,
+    });
+  });
+
+  it("returns null when no published article matches the public id", async () => {
+    dbState.limitQueue = [[]];
+    expect(await findPublishedArticleByPublicId("missing", { name: "nashr-sabq" })).toBeNull();
+  });
+
+  it("requires the read capability for personal tokens", async () => {
+    await expect(findPublishedArticleByPublicId("en-slug", {
+      name: "publisher-u",
+      personal: { userId: "u", tokenId: "t", capabilities: ["edit"] } as any,
+    })).rejects.toMatchObject({ httpStatus: 403, code: "forbidden_action" });
   });
 });
 

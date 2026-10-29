@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   visibility: vi.fn(),
   verdict: vi.fn(),
   regenerate: vi.fn(),
+  byPublicId: vi.fn(),
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
@@ -57,6 +58,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   updateBotDraftVisibility: state.visibility,
   recordBotReviewerVerdict: state.verdict,
   regenerateBotDraftExtras: state.regenerate,
+  findPublishedArticleByPublicId: state.byPublicId,
 }));
 
 import router from "../../server/routes/botDrafts";
@@ -67,6 +69,7 @@ import {
   generateArabicSlug,
   isAssignableBotCategoryStatus,
   isMissingBotDraftReporter,
+  normalizeBotDraftPublicId,
   isPersonalBotNewspaperNews,
   appendBotDraftBodyImages,
   normalizeDraftContent,
@@ -176,6 +179,7 @@ beforeEach(() => {
   state.isR2Configured.mockReturnValue(true);
   vi.stubEnv("BOT_DRAFTS_API_TOKENS", TOKENS);
   vi.stubEnv("BOT_DRAFTS_WRITE_RATE_LIMIT", "1000");
+  vi.stubEnv("BOT_DRAFTS_FAILED_RATE_LIMIT", "1000");
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -525,6 +529,85 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     expect(del.headers.get("allow")).toBe("GET, PATCH");
     const put = await call("PUT", "/api/internal/bot-drafts/art-1", { title: "x" });
     expect(put.status).toBe(405);
+  });
+});
+
+describe("GET /api/internal/bot-drafts/by-public-id/:publicId", () => {
+  const lookup = {
+    id: "art-7",
+    status: "published",
+    title: "خبر منشور من المحرر",
+    slug: "خبر-منشور",
+    englishSlug: "abc12xy",
+    source: "manual",
+    categorySlug: "local",
+    publishedAt: "2026-10-01T12:00:00.000Z",
+    updatedAt: "2026-10-01T12:30:00.000Z",
+    publicUrl: "https://sabq.org/article/abc12xy",
+    updatable: true,
+  };
+
+  it("returns the published article for an english slug", async () => {
+    state.byPublicId.mockResolvedValueOnce(lookup);
+    const response = await call("GET", "/api/internal/bot-drafts/by-public-id/abc12xy");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual(lookup);
+    expect(state.byPublicId).toHaveBeenCalledWith("abc12xy", { name: "nashr-sabq" });
+    expect(state.get).not.toHaveBeenCalled();
+  });
+
+  it("decodes and trims an Arabic slug before lookup", async () => {
+    state.byPublicId.mockResolvedValueOnce(lookup);
+    const response = await call("GET", `/api/internal/bot-drafts/by-public-id/${encodeURIComponent(" خبر-منشور ")}`);
+    expect(response.status).toBe(200);
+    expect(state.byPublicId).toHaveBeenCalledWith("خبر-منشور", { name: "nashr-sabq" });
+  });
+
+  it("returns 404 when no published article matches", async () => {
+    state.byPublicId.mockResolvedValueOnce(null);
+    const response = await call("GET", "/api/internal/bot-drafts/by-public-id/missing-slug");
+    expect(response.status).toBe(404);
+    expect((await response.json()).code).toBe("not_found");
+  });
+
+  it("rejects an empty or over-long publicId with 400 before querying", async () => {
+    for (const value of ["%20%20", "x".repeat(301)]) {
+      const response = await call("GET", `/api/internal/bot-drafts/by-public-id/${value}`);
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe("validation_error");
+    }
+    expect(state.byPublicId).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 without a valid token", async () => {
+    for (const token of [null, "wrong-token-that-is-long-enough-0123456789"]) {
+      const response = await call("GET", "/api/internal/bot-drafts/by-public-id/abc12xy", undefined, token);
+      expect(response.status).toBe(401);
+      expect((await response.json()).code).toBe("unauthorized");
+    }
+    expect(state.byPublicId).not.toHaveBeenCalled();
+  });
+
+  it("passes the personal identity so ownership applies, and maps a missing read capability to 403", async () => {
+    const principal = { userId: "u-1", tokenId: "t-1", email: "one@example.test", name: "ناشر", expiresAt: new Date("2027-01-01"), capabilities: ["edit"] };
+    state.personalAuth.mockResolvedValue(principal);
+    state.byPublicId.mockRejectedValueOnce(new BotDraftError(403, "forbidden_action", "حسابك لا يملك صلاحية هذه العملية"));
+    const response = await call("GET", "/api/internal/bot-drafts/by-public-id/abc12xy", undefined, "botpub_valid_personal_credential");
+    expect(response.status).toBe(403);
+    expect(state.byPublicId).toHaveBeenCalledWith("abc12xy", { name: "publisher-u-1", personal: principal });
+  });
+
+  it("normalizes publicId safely", () => {
+    expect(normalizeBotDraftPublicId("abc12xy")).toBe("abc12xy");
+    expect(normalizeBotDraftPublicId("  abc  ")).toBe("abc");
+    expect(normalizeBotDraftPublicId("%E0%A4%A")).toBe("%E0%A4%A");
+    expect(normalizeBotDraftPublicId("%D8%AE")).toBe("%D8%AE"); // لا فك ثانٍ: Express فكّ الترميز مسبقاً
+    expect(normalizeBotDraftPublicId(" خبر ")).toBe("خبر");
+    expect(normalizeBotDraftPublicId("   ")).toBeNull();
+    expect(normalizeBotDraftPublicId("x".repeat(300))).toHaveLength(300);
+    expect(normalizeBotDraftPublicId("x".repeat(301))).toBeNull();
+    expect(normalizeBotDraftPublicId(undefined)).toBeNull();
   });
 });
 
@@ -1004,7 +1087,7 @@ describe("pure helpers", () => {
     expect(botDraftReadyBlockedMessage("published")).toContain("لم تعد مسودة");
     expect(botDraftContentBlockedMessage("archived")).toContain("لم تعد مسودة");
   });
-  it("marks a published bot article as updatable and other states as not", () => {
+  it("marks a published article (any source) and a bot draft as updatable and other states as not", () => {
     vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org/");
     const now = new Date("2026-09-20T10:00:00Z");
     const row = {
@@ -1027,7 +1110,12 @@ describe("pure helpers", () => {
     expect(ready).toMatchObject({ status: BOT_DRAFT_READY_STATUS, updatable: false, editUrl: ready.editUrl, previewUrl: expect.stringContaining("/preview") });
     expect(toBotDraftResponse({ ...row, status: "archived" }, "local").updatable).toBe(false);
     expect(toBotDraftResponse({ ...row, status: "scheduled" }, "local").updatable).toBe(false);
-    expect(toBotDraftResponse({ ...row, source: "manual" }, "local").updatable).toBe(false);
+    expect(toBotDraftResponse({ ...row, source: "manual", sourceMetadata: null }, "local")).toMatchObject({
+      updatable: true, source: "manual", bot: null, clientReference: null,
+    });
+    expect(toBotDraftResponse({ ...row, source: "manual", status: "draft" }, "local").updatable).toBe(false);
+    expect(toBotDraftResponse({ ...row, source: "manual", status: "scheduled" }, "local").updatable).toBe(false);
+    expect(toBotDraftResponse({ ...row, source: "manual", status: "archived" }, "local").updatable).toBe(false);
     expect(toBotDraftResponse({ ...row, status: "draft" }, "local").updatable).toBe(true);
   });
   it("returns body image URLs and keeps the article text out of the response", () => {
@@ -1143,14 +1231,12 @@ describe("pure helpers", () => {
 describe("published bot content edit rules", () => {
   const dialect = new PgDialect();
 
-  it("allows a published bot row and rejects published non-bot, archived, and deleted rows", () => {
+  it("allows any published row and a bot draft, and rejects archived, deleted, and non-bot unpublished rows", () => {
     expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "published" })).toBeNull();
     expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "draft" })).toBeNull();
-    expect(botDraftContentEditBlock({ source: "manual", status: "published" })).toMatchObject({
-      httpStatus: 409,
-      code: "not_a_draft",
-      details: { status: "published" },
-    });
+    expect(botDraftContentEditBlock({ source: "manual", status: "published" })).toBeNull();
+    expect(botDraftContentEditBlock({ source: "email", status: "published" })).toBeNull();
+    expect(botDraftContentEditBlock({ source: null, status: "published" })).toBeNull();
     expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "archived" })).toMatchObject({
       httpStatus: 409,
       code: "not_a_draft",
@@ -1165,6 +1251,9 @@ describe("published bot content edit rules", () => {
       httpStatus: 404,
       code: "not_found",
     });
+    for (const status of ["scheduled", "archived", BOT_DRAFT_READY_STATUS]) {
+      expect(botDraftContentEditBlock({ source: "manual", status })).toMatchObject({ httpStatus: 404, code: "not_found" });
+    }
     expect(botDraftContentEditBlock(null)).toMatchObject({ httpStatus: 404, code: "not_found" });
   });
 
