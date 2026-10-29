@@ -4,6 +4,7 @@ import express from "express";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   computeStaffOpinionCapabilities,
+  guardOpinionTitleCommas,
   resolveStaffOpinionArticleStatus,
   type StaffOpinionWriter,
 } from "../../shared/staffApp";
@@ -534,5 +535,21 @@ describe("/api/v1/staff/opinion routes", () => {
       expect(mocks.renotifyOpinionDraftFromDesk).toHaveBeenCalledTimes(1);
       expect((await call("POST", "/opinion/rn-limit-other/renotify", {})).status).toBe(200);
     });
+  });
+});
+
+describe("guardOpinionTitleCommas", () => {
+  const orig = "فلسفة المظاهر وصدق الجوهر وخداع الانطباعات الأولى";
+  it("keeps the original when the model only added commas", () => {
+    expect(guardOpinionTitleCommas(orig, "فلسفة المظاهر، وصدق الجوهر، وخداع الانطباعات الأولى")).toBe(orig);
+    expect(guardOpinionTitleCommas(orig, "فلسفة المظاهر, وصدق الجوهر وخداع الانطباعات الأولى.")).toBe(orig);
+  });
+  it("keeps spelling fixes but strips added commas", () => {
+    expect(guardOpinionTitleCommas("اسرار المدينه وحكايات الناس", "أسرار المدينة، وحكايات الناس")).toBe(
+      "أسرار المدينة وحكايات الناس",
+    );
+  });
+  it("keeps commas that were already in the original", () => {
+    expect(guardOpinionTitleCommas("الرياض، مدينة المستقبل", "الرياض، مدينة المستقبل")).toBe("الرياض، مدينة المستقبل");
   });
 });
