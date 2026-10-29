@@ -227,6 +227,32 @@ public struct StaffAPIClient: Sendable {
         return envelope.job
     }
 
+    // MARK: - Notifications (the bell)
+
+    /// «التنبيهات», newest first. `category` nil = «الكل».
+    public func notifications(category: StaffNotificationCategory? = nil, cursor: String? = nil,
+                              limit: Int = 30) async throws -> StaffNotificationsPage {
+        var query = [URLQueryItem(name: "category", value: category?.rawValue ?? "all"),
+                     URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await send("GET", "/api/v1/staff/notifications", query: query)
+    }
+
+    /// The bell's number and the latest notification (the home line).
+    public func notificationsUnread() async throws -> StaffNotificationsUnread {
+        try await send("GET", "/api/v1/staff/notifications/unread")
+    }
+
+    /// «تعليم الكل كمقروء».
+    public func markNotificationsSeen() async throws {
+        let _: Ack = try await send("POST", "/api/v1/staff/notifications/seen", body: EmptyBody())
+    }
+
+    /// Opening one notification marks only it.
+    public func markNotificationRead(id: String) async throws {
+        let _: Ack = try await send("POST", "/api/v1/staff/notifications/\(try pathID(id))/read", body: EmptyBody())
+    }
+
     // MARK: - System (admins)
 
     /// «حالة النظام»: AI model health and monthly budgets. 403 without `canSystemHealth`.

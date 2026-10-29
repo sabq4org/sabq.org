@@ -199,6 +199,7 @@ export async function resolveStaffCapabilitiesAndRoles(
         articlesPublish: Boolean(canArticlesPublish),
         articlesEditAny: Boolean(canArticlesEditAny),
       }),
+      canPublisherNews: Boolean(canArticlesPublish),
     },
   };
 }

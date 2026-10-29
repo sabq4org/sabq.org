@@ -119,6 +119,11 @@ export interface StaffCapabilities {
    * القواعد في computeStaffOpinionCapabilities.
    */
   canOpinion: StaffOpinionCapabilities;
+  /**
+   * أخبار «نشر سبق» في مركز التنبيهات (articles.publish، منذ 2026-10-29).
+   * اختياري في فك ترميز iOS (الافتراضي false).
+   */
+  canPublisherNews: boolean;
 }
 
 export interface StaffOpinionCapabilities {
@@ -346,6 +351,8 @@ export interface StaffAlertPrefs {
   socialProposals: boolean;
   /** مقالات الرأي الجديدة بانتظار المراجعة والجدولة (منذ 2026-10-28). */
   opinionDrafts: boolean;
+  /** خبر جديد نشره زميل أو شريك من تطبيق «نشر سبق» (منذ 2026-10-29). */
+  publisherNews: boolean;
   quietHours: StaffQuietHours;
 }
 
@@ -355,6 +362,7 @@ export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
   writerMessages: true,
   socialProposals: true,
   opinionDrafts: true,
+  publisherNews: true,
   quietHours: "off",
 };
 
@@ -364,7 +372,8 @@ export type StaffAlertKind =
   | "adminAlerts"
   | "writerMessages"
   | "socialProposals"
-  | "opinionDrafts";
+  | "opinionDrafts"
+  | "publisherNews";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
@@ -373,6 +382,7 @@ export const staffAlertPrefsUpdateSchema = z
     writerMessages: z.boolean().optional(),
     socialProposals: z.boolean().optional(),
     opinionDrafts: z.boolean().optional(),
+    publisherNews: z.boolean().optional(),
     quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();

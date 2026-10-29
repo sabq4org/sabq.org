@@ -4,6 +4,7 @@ import Foundation
 /// admin screens `sabqdesk://system` and `sabqdesk://alerts`, from a URL or a
 /// push payload. `sabqdesk://balances` and `sabqdesk://balances/<provider>`
 /// open «أرصدة النماذج». `sabqdesk://opinion/<articleId>` opens «الرأي».
+/// `sabqdesk://notifications` opens the notifications center (the bell).
 public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case ticket(id: String)
     case social(id: String)
@@ -17,6 +18,8 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case balances
     /// One provider's balance (`deepseek`, `openai`, …).
     case balance(provider: String)
+    /// The notifications center behind the bell.
+    case notifications
 
     public static let scheme = "sabqdesk"
 
@@ -29,6 +32,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case .alerts: return URL(string: "\(Self.scheme)://alerts")!
         case .balances: return URL(string: "\(Self.scheme)://balances")!
         case .balance(let provider): return URL(string: "\(Self.scheme)://balances/\(provider)")!
+        case .notifications: return URL(string: "\(Self.scheme)://notifications")!
         }
     }
 
@@ -50,6 +54,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
             case "system": self = .systemHealth
             case "alerts": self = .alerts
             case "balances": self = .balances
+            case "notifications": self = .notifications
             default: return nil
             }
             return
@@ -83,6 +88,9 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
             return
         case "admin_alert":
             self = .alerts
+            return
+        case "desk.publisher_news":
+            self = .notifications
             return
         case "desk.opinion_draft":
             // Server: notifyStaffDeskOfOpinionDraft sends data.articleId.

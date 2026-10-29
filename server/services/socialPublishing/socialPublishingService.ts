@@ -41,6 +41,11 @@ import {
   notifyStaffDeskOfSocialProposal,
 } from "../staffAppPushService";
 import { roleNamesForUserIds } from "../opinionTicketsService";
+import {
+  recordTweetDraftEvent,
+  recordTweetPublishedEvent,
+  recordTweetScheduledEvent,
+} from "../staffDeskEventsService";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -321,6 +326,8 @@ export async function createDraftPost(input: CreatePostInput): Promise<SocialPos
       requestedAt: input.requestedAt ?? null,
     })
     .returning();
+  // مركز تنبيهات «مكتب سبق»: لا يؤخّر الإنشاء ولا يُفشله.
+  if (post) void recordTweetDraftEvent(post);
   return post;
 }
 
@@ -442,7 +449,7 @@ export function assertValidScheduleTime(scheduledAt: Date): void {
 export async function schedulePost(
   postId: string,
   scheduledAt: Date,
-  opts?: { resetAttempts?: boolean },
+  opts?: { resetAttempts?: boolean; actorUserId?: string | null },
 ): Promise<SocialPost> {
   assertValidScheduleTime(scheduledAt);
   const [updated] = await db
@@ -459,6 +466,7 @@ export async function schedulePost(
   if (!updated) {
     throw new SocialPublishValidationError("تعذرت الجدولة — تحقق من حالة المنشور", 409);
   }
+  void recordTweetScheduledEvent(updated, opts?.actorUserId);
   if (updated.articleId) {
     void notifyAuthorOfSocialPostStatus(updated.id, "social_scheduled").catch((err) => {
       console.error(`${LOG_PREFIX} فشل إشعار الكاتب بجدولة X:`, err);
@@ -957,6 +965,7 @@ export async function publishClaimedPost(
       .where(eq(socialPosts.id, claimed.id))
       .returning();
     console.log(`${LOG_PREFIX} نُشر ${claimed.id} → ${result.externalPostUrl}`);
+    if (updated) void recordTweetPublishedEvent(updated, actorUserId);
 
     if (updated?.articleId) {
       void notifyAuthorOfSocialPostStatus(updated.id, "social_published").catch((err) => {
@@ -1251,6 +1260,7 @@ export async function createOrUpdateAuthorSocialProposal(
     .returning();
 
   if (post) {
+    void recordTweetDraftEvent(post);
     await notifyDeskOfAuthorSocialProposal({
       post,
       articleTitle: article.title,

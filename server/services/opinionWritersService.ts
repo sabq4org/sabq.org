@@ -819,6 +819,18 @@ export async function notifyOpinionArticleSubmittedForReview(article: {
       },
     );
 
+    // مركز تنبيهات «مكتب سبق» (الخط الزمني).
+    void import("./staffDeskEventsService")
+      .then(({ recordOpinionDraftEvent }) =>
+        recordOpinionDraftEvent({
+          articleId: article.id,
+          title: article.title,
+          authorId: article.authorId,
+          authorName,
+        }),
+      )
+      .catch((err) => console.error("[opinion-writers] desk timeline event failed:", err));
+
     // تطبيق الديسك وبريد البوت في الخلفية: لا يؤخّران ولا يُفشلان الإرسال.
     void notifyOpinionDraftDeskChannels({
       articleId: article.id,

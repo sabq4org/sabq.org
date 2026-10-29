@@ -453,7 +453,10 @@
         "tests/unit/aiBalanceService.test.ts",
         "tests/unit/aiBalanceMath.test.ts",
         "server/services/staffBreakingExpiryLog.ts",
-        "tests/unit/staffDeskV2.test.ts"
+        "tests/unit/staffDeskV2.test.ts",
+        "shared/staffNotifications.ts",
+        "server/services/staffDeskEventsService.ts",
+        "tests/unit/staffNotifications.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -505,7 +508,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-28"
+      "lastReviewed": "2026-10-29"
     },
     {
       "id": "ifox",

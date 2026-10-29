@@ -1619,6 +1619,17 @@ export async function publishBotDraft(
     existing,
   );
   console.log(`[BotDrafts] published ${row!.id} by bot=${bot.name}`);
+  // مركز تنبيهات «مكتب سبق»: خبر جديد من «نشر سبق» بالناشر والعنوان + إشعار.
+  void import("./staffDeskEventsService")
+    .then(({ recordPublisherNewsEvent }) =>
+      recordPublisherNewsEvent({
+        article: row!,
+        publisherName: bot.personal?.name?.trim() || bot.personal?.label?.trim() || null,
+        publisherUserId: bot.personal?.userId ?? null,
+        publisherId: bot.personal?.publisherId ?? null,
+      }),
+    )
+    .catch((error) => console.error("[BotDrafts] desk timeline event failed:", error));
   return claimedOperation
     ? { operationId: claimedOperation.operationId, articleId, action: "publish", status: "succeeded", response: response! }
     : response!;

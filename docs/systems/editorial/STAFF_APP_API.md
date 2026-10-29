@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-28 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
+> آخر مراجعة: 2026-10-29 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
 
 ## الملخص
 
@@ -12,6 +12,7 @@
 5. **إشعارات الدفع الفوري الموجهة لتطبيق الديسك (`com.sabq.desk`):** إرسال إشعارات APNs/FCM عبر `sendPushToUserApp(userId, 'com.sabq.desk', ...)` مع روابط عميقة `sabqdesk://ticket/<id>` و`sabqdesk://social/<id>` عند وصول تذكرة/رسالة جديدة أو مقترح نشر اجتماعي من كاتب رأي أو وكالة، و`sabqdesk://opinion/<articleId>` عند وصول مقال رأي جديد للمراجعة (2026-10-28)، مع عزل تام لإشعارات تطبيق القارئ (`com.sabq.sabqorg`).
 6. **أدوات المشرفين (`ai_hub.view`) — 2026-10-25:** صحة النظام (`GET /system/health`)، تنبيهات الإدارة (`GET /alerts`)، وتفضيلات التنبيهات (`GET|PUT /me/alert-prefs`)، مع إشعارات دفع لتغيّر حالة نماذج الذكاء الاصطناعي وحدود الميزانية وفشل نشر التغريدات.
 7. **أرصدة النماذج (`ai_hub.view`، والكتابة `ai_hub.manage`) — 2026-10-25:** `GET /system/balances` و`GET /system/balances/:provider` و`POST /system/balances/:provider/topup` و`PUT /system/balances/:provider/threshold` (§2-10)، مع إشعار دفع واحد عند عبور الرصيد إلى «منخفض» أو «حرج» ورابط `sabqdesk://balances/<provider>`.
+8. **مركز التنبيهات (الجرس) — 2026-10-29:** `GET /notifications` و`GET /notifications/unread` و`POST /notifications/seen` و`POST /notifications/:id/read` (§2-12): خط زمني لأحداث التغريدات ومقالات الرأي والأخبار المنشورة عبر «نشر سبق»، مع إشعار دفع لأخبار «نشر سبق» (`desk.publisher_news`).
 
 ---
 
@@ -113,7 +114,8 @@ Content-Type: application/json
 - `canSystemHealth` و`canAdminAlerts` كلاهما = `ai_hub.view`.
 - `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
 - `canOpinion` (منذ 2026-10-28، `computeStaffOpinionCapabilities` في `shared/staffApp.ts`): `view` = `opinion.review` أو `articles.schedule`؛ `schedule` = `articles.schedule` أو `articles.publish`؛ `publish` = `articles.publish`؛ `returnToWriter` = `opinion.review` أو `articles.edit_any`. كل فعل يشترط `view` أيضاً. الخوادم الأقدم لا ترسله، فيعدّه التطبيق كله `false`.
-- `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
+- `canPublisherNews` (منذ 2026-10-29) = `articles.publish`: يفتح تبويب «أخبار» في مركز التنبيهات وإشعار أخبار «نشر سبق». الخوادم الأقدم لا ترسله فيعدّه التطبيق `false`.
+- `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
 يعيد قائمة موحدة من التذاكر ومقترحات النشر الاجتماعي مرتبة من الأحدث إلى الأقدم (`updatedAt DESC`).
@@ -268,7 +270,7 @@ Content-Type: application/json
 
 ### 8. `GET` / `PUT /api/v1/staff/me/alert-prefs` (كل عضو)
 - **`GET`** يعيد `{ "aiAlerts": true, "adminAlerts": true }`. غياب الصف = الاثنان مفعّلان.
-- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean, "writerMessages"?: boolean, "socialProposals"?: boolean, "opinionDrafts"?: boolean, "quietHours"?: "off" | "night" | "offhours" }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير صالحة ← `400 validation_error`). منذ 2026-10-26 متاح لكل عضو؛ مفتاحا `aiAlerts`/`adminAlerts` لا أثر لهما إلا لمن يملك `ai_hub.view`.
+- **`PUT`** الجسم: `{ "aiAlerts"?: boolean, "adminAlerts"?: boolean, "writerMessages"?: boolean, "socialProposals"?: boolean, "opinionDrafts"?: boolean, "publisherNews"?: boolean, "quietHours"?: "off" | "night" | "offhours" }` (`staffAlertPrefsUpdateSchema` صارم؛ قيمة غير صالحة ← `400 validation_error`). منذ 2026-10-26 متاح لكل عضو؛ مفتاحا `aiAlerts`/`adminAlerts` لا أثر لهما إلا لمن يملك `ai_hub.view`.
 - **الساعات الهادئة** (بتوقيت الرياض): `night` = 23:00–07:00، `offhours` = 17:00–08:00. كل إشعار ديسك خلالها يُرسل بـ `interruption-level: passive` وبلا صوت، فيبقى في مركز الإشعارات دون إزعاج. لا يُؤجَّل ولا يُجمع.
 - **رسائل الكتّاب** (`writerMessages`) و**مقترحات X** (`socialProposals`) و**مقالات الرأي** (`opinionDrafts`، منذ 2026-10-28، الافتراضي مفعّل) تخص إشعار الجوال فقط؛ الصندوق الداخلي والبريد لا يتغيران. يعيد التفضيلات بعد الحفظ ويُسجَّل `staff_alert_prefs_update`.
 - التخزين: صف `system_settings` بالمفتاح `staff_app.alert_prefs:<userId>` (الفئة `staff_app`) بلا تغيير مخطط. الحفظ upsert ذري يدمج الحقول المرسلة فقط في قيمة jsonb المخزنة (`stored || patch`)، فلا يعيد طلبان متزامنان يغيّر كل منهما مفتاحاً مختلفاً تفعيلَ الآخر. جسم بلا حقول منطقية لا يكتب شيئاً ويعيد القيمة الحالية.
@@ -350,6 +352,31 @@ Content-Type: application/json
 - **إعادة التنبيه (اختبار):** `curl -X POST https://api.sabq.org/api/v1/staff/opinion/<articleId>/renotify -H "Authorization: Bearer <member_session>" -H "X-Installation-Id: <id>"`. التنبيه الأصلي يطلقه `notifyOpinionArticleSubmittedForReview` عند كل إرسال (الويب، `POST /api/v1/articles/submit`، ومنذ 2026-10-28 `PUT /api/v1/articles/:id/resubmit` من الجوال عند عودة مقال رأي إلى `pending_review`).
 - **«جهّز وجدول»** (`server/services/staffOpinionPrepareService.ts`، والمنطق الخالص في `opinionPrepareText.ts`): (1) تدقيق العنوان والنص بـ`proofreadTitle`/`proofreadContent` وتطبيق التصحيحات على النص المرئي فقط؛ (2) نداء واحد عبر البوابة (الميزة `opinion-desk-prepare`) يولّد الموجز والنقاط الثلاث والكلمات المفتاحية وSEO والنشرة، ويختار التصنيف الأنسب من التصنيفات الظاهرة للقرّاء (بلا iFox ولا `ai-*`) ويضبط `categoryId` (منذ 2026-10-28؛ يبقى تصنيف الكاتب إن لم يطابق slug)، ويحترم `seoMetadata.manualOverride`، ولا يمس `excerpt` إن كتبه الكاتب؛ (3) صورة `gpt-image-2.5-sunburst` بمقاس 1536x864 وجودة medium عبر مسار صور محرر الويب، ووصفها بصيغة نافذة «صور GPT» نفسها (العنوان والموجز + نمط «تعبيري رمزي»، بلا مشهد يكتبه النموذج لأنه كان يغيّر أسلوب سبق كلياً — 2026-10-28)، **فقط إن لم تكن للمقال صورة**، مع `isAiGeneratedImage=true`؛ (4) حفظ واحد مشروط بنسخة المقال (`updatedAt`) وقفل التحرير، ونسخة في سجل المادة، ثم الجدولة بمنطق `POST /schedule` نفسه وإشعاراته. إن تعذرت الصورة يُجدول المقال بلا صورة (`image: failed`) ويذكر `message` السبب. الحالة `job = { articleId, status: running|done|failed, step: proofread|enrich|image|schedule, stepLabel, startedAt, finishedAt, scheduledAt, titleChanged, contentFixes, image: generated|kept|failed|null, categoryName, message }` محفوظة في `system_settings` (`staff_app.opinion_prep:<articleId>`) لتخدم أي نسخة من الخادم؛ عملية جارية لم تتقدم 8 دقائق تُعد منقطعة. عند الانتهاء يصل من ضغط الزر إشعار `desk.opinion_prepared` إلى `sabqdesk://opinion/<id>`.
 - **النشر والإعادة** يكرران منطق `/api/dashboard/opinion/:id/publish` و`request-revision` في `routes.ts` (الذي بقي دون تعديل) بالدوال نفسها: إبطال الكاش، `createNotification`، `sendOpinionAuthorPublishEmail`/`sendOpinionAuthorRevisionEmail`، `notifyArticleStakeholders`.
+
+### 12. مركز التنبيهات (الجرس) `/api/v1/staff/notifications*` (منذ 2026-10-29)
+
+المنطق الخالص في `shared/staffNotifications.ts`، والتخزين والقراءة في `server/services/staffDeskEventsService.ts`، والجدول `staff_desk_events` (`migrations/20261029_staff_desk_events.sql`، `SELECT, INSERT` لـ`sabq_runtime`). الحدث يُسجَّل مرة واحدة للجميع (`dedupe_key` فريد)، وحالة القراءة لكل عضو في `system_settings` (`staff_app.notif_seen:<userId>` = `{ seenAt, readIds[≤200] }`)، فلا صف لكل عضو. التسجيل لا يرمي ولا يُفشل المسار الأصلي؛ إن لم يوجد الجدول بعد يُسجَّل تحذير مرة واحدة.
+
+| النوع (`kind`) | الفئة | متى يُسجَّل | الزر |
+|---|---|---|---|
+| `tweet_draft` | `tweet` | إنشاء مسودة/مقترح تغريدة (`createDraftPost`، مقترح كاتب الرأي) | «مراجعة المسودة» ← `sabqdesk://social/<id>` |
+| `tweet_scheduled` | `tweet` | `schedulePost` (الويب، المكتب، بوت الديسك، الناشر، بوت X)؛ موعد جديد = حدث جديد | «فتح التغريدة» |
+| `tweet_published` | `tweet` | نجاح نشر التغريدة على X (`publishClaimedPost`) | «فتح التغريدة» |
+| `opinion_draft` | `opinion` | إرسال مقال رأي للمراجعة (`notifyOpinionArticleSubmittedForReview`) | «مراجعة المقال» ← `sabqdesk://opinion/<id>` |
+| `opinion_scheduled` | `opinion` | جدولة مقال رأي (`notifyOpinionAuthorArticleScheduled`) | «معاينة المقال» |
+| `news_published` | `news` | نشر خبر عبر «نشر سبق» (`publishBotDraft`)، باسم الناشر | «فتح الخبر» ← رابط sabq.org |
+
+| المسار | الوصف |
+|---|---|
+| `GET /notifications?category=all\|tweet\|opinion\|news&cursor=&limit=1..50` | `{ items, nextCursor, categories, counts:{all,tweet,opinion,news}, unreadCount, seenAt }`، آخر 30 يوماً، الأحدث أولاً. العنصر `{ id, kind, category, label, actionLabel, title, detail, actorName, targetId, linkUrl, deeplink, scheduledAt, createdAt, isUnread }`. فئة لا يملك العضو صلاحيتها ← `403 forbidden`؛ مؤشر غير صالح ← `400 validation_error` |
+| `GET /notifications/unread` | `{ unreadCount (≤99), latest }` للجرس وسطر «آخر تنبيه» |
+| `POST /notifications/seen` | «تعليم الكل كمقروء»: `seenAt = now` |
+| `POST /notifications/:id/read` | فتح تنبيه واحد يعلّمه مقروءاً |
+
+- **الظهور:** `tweet` لمن يملك `canSocial.view`، `opinion` لـ`canOpinion.view`، `news` لـ`canPublisherNews`. عضو بلا أي منها ← `403`.
+- **غير المقروء:** بعد `seenAt` (أو آخر 24 ساعة لمن لم يفتح المركز قط) وليس في `readIds`.
+- **الدفع:** أخبار «نشر سبق» فقط (`notifyStaffDeskOfPublisherNews`): `type: "desk.publisher_news"`، `deeplink: sabqdesk://notifications`، العنوان «خبر جديد من <الناشر>» والنص عنوان الخبر، لكل من يملك `articles.publish` عدا الناشر نفسه، التفضيل `publisherNews` + الساعات الهادئة. بقية الأحداث في القائمة فقط (مسودات الرأي ومقترحات X لها دفعها السابق).
+- **حدود:** الخبر الذي يجدوله البوت ثم ينشره المجدول لاحقاً لا يُسجَّل حدثاً (المسجَّل النشر المباشر من «نشر سبق»).
 
 ## 3) صيغة الأخطاء الموحدة (Error Format)
 
@@ -457,6 +484,7 @@ Content-Type: application/json
 - أسباب الرفض الجاهزة: لا يناسب سياسة الحساب، معلومة غير دقيقة، مكرر، يحتاج إعادة صياغة؛ مع ملاحظة تُضم في `reason` (`<السبب> — <الملاحظة>`)؛ يكفي السبب الجاهز أو الملاحظة، وزر التأكيد معطّل حتى يتوفر أحدهما.
 - «أرصدة النماذج» (للمشرفين، `canSystemHealth`): صف «أرصدة النماذج» مع عدّاد ما يحتاج انتباهاً في «حالة النظام»، وشريط تنبيه داخل التطبيق لأخطر رصيد مع «افتح الأرصدة» و«ذكّرني بعد ساعة» (إخفاء محلي يعود عند تغيّر المستوى). الشاشات: `ModelBalancesView` (القائمة)، `ProviderBalanceDetailView` (مخطط صرف 30 يوماً بـ Swift Charts وسجل الشحنات)، `UpdateBalanceSheet` (تحديث الرصيد/الميزانية وحدود التنبيه). أدوات التعديل تظهر فقط حين `canManage` في الاستجابة (أو `capabilities.canManageBalances` إن غاب)، ومن يملك العرض فقط يرى الأرصدة للقراءة. الروابط العميقة `sabqdesk://balances` و`sabqdesk://balances/<provider>` (قائمة بيضاء للمزوّدين) تفتح تبويب النظام.
 - «الرأي» (`canOpinion.view`، التبويب الثاني بأيقونة `square.and.pencil` وشارة `pendingCount`): `OpinionView` — شريط أيام الأسبوع بنقاط الحالة، ثم خط زمني بالساعة كـ«مجدول» في المكتب، وقسم «بلا موعد ثابت» في الآخر، وحالة «لا مسودات بانتظارك هذا الأسبوع». «جهّز وجدول»/«أكمل التجهيز» معطّل حتى `OpinionFeatureFlags.autoPrepEnabled`؛ «جدول في موعده» يجدول في الموعد الثابت؛ «انشر الآن» بتأكيد ثم Face ID (`AppLockController.confirmSensitiveAction`)؛ الجدولة تفحص `slot-check` أولاً وتنبّه «جدول رغم ذلك». الرابط `sabqdesk://opinion/<articleId>` وإشعار `type: "desk.opinion_draft"` (`articleId`) يفتحان التبويب ويبرزان المقال. مفتاح «مقالات الرأي» في التنبيهات لمن يملك `canOpinion.view`.
+- «التنبيهات» (منذ 2026-10-29، build 2026102807): جرس بشارة العدد بجانب الصورة في رأس «المكتب» (وفي رأس «الرأي» لمن لا يرى «المكتب»)، وسطر «آخر تنبيه» تحت التحية. يفتح `NotificationsView` (ورقة): تبويبات الكل/تغريدات/مقالات رأي/أخبار حسب الصلاحية، مجموعات أيام بتوقيت الرياض على خط زمني، زر لكل تنبيه (التغريدة والمقال داخل التطبيق، الخبر في Safari على sabq.org)، «تعليم الكل كمقروء». الرابط `sabqdesk://notifications` وإشعار `desk.publisher_news` يفتحانها. مفتاح «أخبار «نشر سبق»» في إعدادات التنبيهات لمن يملك `canPublisherNews`.
 - **التصميم الفاتح (1.2.0، معتمد 2026-10-28):** خلفية `#F4F7FB`، الصفوف بطاقات بيضاء مستديرة بظل خفيف بلا خط سكة، المحدد يُملأ بأزرق سبق `#1E9BE6` (لا تعبئات كحلية أو داكنة)، الأزرار حبوب. «المكتب» يبدأ بتحية («صباح الخير/مساء الخير» بتوقيت الرياض) وبطاقة «بانتظارك الآن» (التغريدات + رسائل المساهمين لمن يملكها، وأقرب منشور مجدول)، ثم شريط أسبوع (`DeskWeekStrip`) بنقاط المجدول لكل يوم: الضغط على يوم يفتح «مجدول» مصفّى بذلك اليوم، والضغط مجدداً يلغي التصفية. المكوّنات في `Components/DeskHome.swift`.
 - **«استعراض المقال» في «الرأي»** (`Components/ArticlePreview.swift`): زر «استعراض المقال» (أو «استعراض المنشور») والضغط على العنوان يفتحان ورقة تقرأ `GET /opinion/:id/content` وتعرض التصنيف والعنوان والعنوان الفرعي والصورة (مع وسم الصورة المولّدة) والنص كتلاً أصلية (`StaffArticleBlock.parse`: فقرات وعناوين واقتباسات وقوائم، تُحذف السكربتات، بلا WebView). بعد النشر يظهر «افتح الصفحة المنشورة على سبق» فيفتح `publicUrl` داخل التطبيق (`SFSafariViewController`). الخبر المرتبط في تفاصيل مقترح X يفتح كذلك داخل التطبيق.
 - المعرّفات القادمة من رابط أو إشعار تُقبل فقط إن كانت `[A-Za-z0-9_-]{1,128}`؛ يقرأ التطبيق `deeplink` أولاً ثم `ticketId`/`postId`.

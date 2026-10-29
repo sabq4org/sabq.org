@@ -448,7 +448,9 @@ router.post(
   async (req, res) => {
     try {
       const { scheduledAt } = scheduleSchema.parse(req.body);
-      const post = await schedulePost(req.params.id, new Date(scheduledAt));
+      const post = await schedulePost(req.params.id, new Date(scheduledAt), {
+        actorUserId: requestUserId(req),
+      });
       res.json(post);
     } catch (error) {
       if (error instanceof z.ZodError) {

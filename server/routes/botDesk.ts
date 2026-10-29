@@ -599,6 +599,7 @@ router.post(
       }
       const post = await schedulePost(req.params.id, new Date(parsed.data.scheduledAt), {
         resetAttempts: true,
+        actorUserId: req.botPrincipal!.userId,
       });
       await auditBotDeskWrite(req, {
         action: "social_post_schedule",

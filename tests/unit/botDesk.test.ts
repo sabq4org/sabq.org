@@ -654,7 +654,7 @@ describe("Bot Desk API — Social Proposals (created by other users)", () => {
     expect(mocks.schedulePost).toHaveBeenCalledWith(
       "social-post-99",
       new Date("2026-10-25T19:30:00+03:00"),
-      { resetAttempts: true },
+      { resetAttempts: true, actorUserId: "desk-admin-user-1" },
     );
 
     // Missing timezone offset -> 400 validation_error

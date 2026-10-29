@@ -15838,3 +15838,31 @@ export const infathChanges = pgTable("infath_changes", {
 ]);
 
 export type InfathWeekRow = typeof infathWeeks.$inferSelect;
+
+// ── مركز تنبيهات «مكتب سبق» (2026-10-29) ────────────────────────────
+// خط زمني مشترك لأحداث التغريدات ومقالات الرأي وأخبار «نشر سبق». الرؤية
+// بالصلاحيات الحية عند القراءة، وحالة «مقروء» لكل عضو في system_settings
+// (staff_app.notif_seen:<userId>). الترحيل: migrations/20261029_staff_desk_events.sql
+export const staffDeskEvents = pgTable("staff_desk_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** StaffDeskEventKind في shared/staffNotifications.ts */
+  kind: varchar("kind", { length: 32 }).notNull(),
+  /** tweet | opinion | news */
+  category: varchar("category", { length: 16 }).notNull(),
+  title: text("title").notNull(),
+  actorName: text("actor_name"),
+  actorUserId: varchar("actor_user_id"),
+  /** معرّف التغريدة (social_posts) أو المقال (articles) */
+  targetId: varchar("target_id").notNull(),
+  /** رابط الخبر المنشور على سبق (news_published) */
+  linkUrl: text("link_url"),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  dedupeKey: varchar("dedupe_key", { length: 200 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("staff_desk_events_dedupe_uidx").on(table.dedupeKey),
+  index("staff_desk_events_created_idx").on(table.createdAt),
+  index("staff_desk_events_category_created_idx").on(table.category, table.createdAt),
+]);
+
+export type StaffDeskEventRow = typeof staffDeskEvents.$inferSelect;

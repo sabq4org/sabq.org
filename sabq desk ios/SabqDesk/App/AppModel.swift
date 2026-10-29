@@ -31,6 +31,11 @@ final class AppModel {
     private(set) var urgentAlerts = 0
     /// Opinion drafts waiting for the desk (new + in prep), the badge on «الرأي».
     private(set) var opinionPending = 0
+    /// «التنبيهات»: the bell's number and the latest notification (home line).
+    private(set) var notificationsUnread = 0
+    private(set) var latestNotification: StaffNotification?
+    /// The notifications center is open (the bell, or `sabqdesk://notifications`).
+    var showsNotifications = false
 
     let client: StaffAPIClient
     private var push = PushRegistrationState()
@@ -93,6 +98,9 @@ final class AppModel {
         alertPrefsError = nil
         urgentAlerts = 0
         opinionPending = 0
+        notificationsUnread = 0
+        latestNotification = nil
+        showsNotifications = false
         phase = .signedOut
         try? await UNUserNotificationCenter.current().setBadgeCount(0)
     }
@@ -131,6 +139,33 @@ final class AppModel {
         if me.capabilities.canOpinion.view {
             await refreshOpinionPending()
         }
+        await refreshNotifications()
+    }
+
+    // MARK: - Notifications (the bell)
+
+    /// Any tab of the notifications center is open to this member.
+    var canOpenNotifications: Bool {
+        let caps = capabilities
+        return caps.canSocial.view || caps.canOpinion.view || caps.canPublisherNews
+    }
+
+    func refreshNotifications() async {
+        guard canOpenNotifications else { return }
+        do {
+            let unread = try await client.notificationsUnread()
+            notificationsUnread = max(unread.unreadCount, 0)
+            latestNotification = unread.latest
+        } catch {
+            // Older servers have no /notifications: keep the bell quiet.
+            if case .notFound? = error as? StaffAPIError { return }
+            handle(error)
+        }
+    }
+
+    /// Called by the notifications screen after its own load or a «mark read».
+    func setNotificationsUnread(_ count: Int) {
+        notificationsUnread = max(count, 0)
     }
 
     // MARK: - Opinion

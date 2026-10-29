@@ -313,7 +313,10 @@ describe("schedule and preview", () => {
     });
 
     expect(result.post.status).toBe("scheduled");
-    expect(state.schedule).toHaveBeenCalledWith("post-1", new Date("2026-09-28T21:00:00+03:00"), { resetAttempts: true });
+    expect(state.schedule).toHaveBeenCalledWith("post-1", new Date("2026-09-28T21:00:00+03:00"), {
+      resetAttempts: true,
+      actorUserId: "user-1",
+    });
     expect(state.publishClaimed).not.toHaveBeenCalled();
   });
 
