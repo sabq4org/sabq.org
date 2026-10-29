@@ -1264,6 +1264,8 @@
         "server/routes/infath.ts",
         "client/src/pages/InfathPage.tsx",
         "client/src/styles/infath-page.css",
+        "client/src/styles/infath-home-card.css",
+        "client/src/pages/HomeV2.tsx",
         "client/src/components/infath/**",
         "client/src/pages/dashboard/InfathManagement.tsx",
         "migrations/20261028_infath_auctions.sql",
@@ -1276,7 +1278,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-28"
+      "lastReviewed": "2026-10-29"
     },
     {
       "id": "systems-catalog",

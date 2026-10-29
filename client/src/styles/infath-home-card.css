@@ -1,0 +1,82 @@
+/* بطاقة مزادات إنفاذ في واجهة سبق — منقولة من النموذج (artifact 6nQ89XRCrpZVqxFXsKhQZS).
+   فاتحة فقط، والصنف الجذر .ixh يحصر كل القواعد حتى لا تتصادم مع Tailwind. */
+.ixh{
+  --ink:#0F2233; --muted:#5B6B7C; --btn:#1E9BE6; --sky:#4CBCFD; --chip:#F1F5F9;
+  --navy:#01355A; --green:#0E7A4B; --green-bg:#E7F6EE; --line:#D3E1EE;
+  position:relative;display:block;border-radius:26px;overflow:hidden;isolation:isolate;
+  background:linear-gradient(160deg,#F2F9FF 0%,#FFFFFF 55%);border:1.5px solid #B9D3EA;border-top:4px solid var(--sky);
+  box-shadow:0 1px 3px rgba(15,34,51,.06),0 10px 28px rgba(15,34,51,.09);
+  container-type:inline-size;container-name:ixh;
+  font-family:"IBM Plex Sans Arabic",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  color:var(--ink);font-size:15px;line-height:1.7;color-scheme:light;
+}
+.ixh .num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.ixh .ixh-sky{position:absolute;inset:auto 0 0 0;width:100%;height:120px;z-index:-1;opacity:.9}
+.ixh .ixh-h{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:18px 24px 0;flex-wrap:wrap}
+.ixh .ixh-brand{display:flex;align-items:center;gap:14px}
+.ixh .ixh-brand svg{height:44px;width:auto;display:block}
+.ixh .ixh-sep{width:1px;height:34px;background:var(--line)}
+.ixh .ixh-brand h2{font-size:18px;font-weight:700;margin:0;line-height:1.3}
+.ixh .ixh-brand p{margin:0;font-size:12.5px;color:var(--muted)}
+.ixh .ixh-live{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--green);font-weight:600;background:var(--green-bg);border-radius:999px;padding:4px 12px}
+.ixh .ixh-live i{width:7px;height:7px;border-radius:50%;background:var(--green);animation:ixh-pulse 1.8s infinite}
+@keyframes ixh-pulse{0%{box-shadow:0 0 0 0 rgba(14,122,75,.45)}70%{box-shadow:0 0 0 7px rgba(14,122,75,0)}100%{box-shadow:0 0 0 0 rgba(14,122,75,0)}}
+.ixh .ixh-b{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.15fr) minmax(0,.95fr);padding:14px 24px 20px}
+.ixh .ixh-b>div{min-width:0;padding-inline:22px}
+.ixh .ixh-b>div:first-child{padding-inline-start:0}
+.ixh .ixh-b>div:last-child{padding-inline-end:0}
+.ixh .ixh-b>div+div{border-inline-start:1px solid var(--line)}
+.ixh .ixh-k{font-size:13px;color:var(--muted)}
+.ixh .ixh-big{font-size:60px;font-weight:700;line-height:1;margin:10px 0 4px;color:var(--navy);letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.ixh .ixh-big small{font-size:18px;font-weight:600;color:var(--muted);letter-spacing:0;margin-inline-start:6px}
+.ixh .ixh-stats{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.ixh .ixh-stats b{color:var(--ink);font-size:15px}
+.ixh .ixh-wk{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;align-items:end;height:132px;margin-top:8px}
+.ixh .ixh-wc{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
+.ixh .ixh-wc .v{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ixh .ixh-wc .b{width:100%;max-width:34px;border-radius:9px 9px 5px 5px;background:var(--btn);transform-origin:bottom;animation:ixh-grow .9s cubic-bezier(.2,.8,.2,1) both}
+.ixh .ixh-wc.now .b{background:repeating-linear-gradient(135deg,#1E9BE6 0 5px,#6CC0F0 5px 10px)}
+.ixh .ixh-wc.fut .b{background:rgba(255,255,255,.7);border:1.5px dashed #BFD2E3;animation:none}
+.ixh .ixh-wc.off .b{background:var(--chip);animation:none}
+.ixh .ixh-wc.fut .v{color:var(--muted);font-weight:500}
+.ixh .ixh-wc .d{font-size:11px;color:var(--muted)}
+.ixh .ixh-wc.now .d{color:var(--btn);font-weight:700}
+@keyframes ixh-grow{from{transform:scaleY(.05)}to{transform:scaleY(1)}}
+.ixh .ixh-nx{font-size:15px;font-weight:600;margin-top:4px}
+.ixh .ixh-cd{display:flex;gap:8px;margin:8px 0 2px}
+.ixh .ixh-cd div{text-align:center;min-width:52px}
+.ixh .ixh-cd b{display:block;font-size:38px;font-weight:700;color:var(--btn);line-height:1.05;font-variant-numeric:tabular-nums}
+.ixh .ixh-cd small{font-size:11.5px;color:var(--muted)}
+.ixh .ixh-meta{font-size:12.5px;color:var(--muted)}
+.ixh .ixh-f{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 24px;border-top:1px solid var(--line);background:rgba(255,255,255,.75);flex-wrap:wrap}
+.ixh .ixh-f .s{font-size:13px;color:var(--muted)}
+.ixh .ixh-f .s b{color:var(--ink)}
+.ixh .ixh-cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn);color:#fff;border-radius:999px;padding:9px 20px;font-size:14px;font-weight:600;text-decoration:none;min-height:44px}
+.ixh .ixh-cta:hover{background:#178AD0}
+.ixh .ixh-cta:focus-visible{outline:2px solid var(--btn);outline-offset:3px}
+
+@container ixh (max-width:900px){
+  .ixh .ixh-b{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .ixh .ixh-b>div:nth-child(2){order:3;grid-column:1/-1;border-inline-start:0;border-top:1px solid var(--line);margin-top:14px;padding:14px 0 0}
+}
+@container ixh (max-width:560px){
+  .ixh{border-radius:22px}
+  .ixh .ixh-h{padding:14px 16px 0}
+  .ixh .ixh-brand svg{height:34px}
+  .ixh .ixh-brand h2{font-size:15px}
+  .ixh .ixh-b{grid-template-columns:minmax(0,1fr);padding:12px 16px 16px}
+  .ixh .ixh-b>div{padding-inline:0}
+  .ixh .ixh-b>div+div{border-inline-start:0;border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+  .ixh .ixh-b>div:nth-child(2){order:2;grid-column:auto;margin-top:12px;padding:12px 0 0}
+  .ixh .ixh-b>div:nth-child(3){order:3;margin-top:14px;padding-top:14px}
+  .ixh .ixh-big{font-size:48px}
+  .ixh .ixh-wk{height:128px;gap:4px}
+  .ixh .ixh-wc .v{font-size:10px}
+  .ixh .ixh-cd b{font-size:32px}
+  .ixh .ixh-f{padding:10px 16px}
+  .ixh .ixh-f .s{font-size:12px}
+  .ixh .ixh-cta{width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  .ixh .ixh-live i,.ixh .ixh-wc .b{animation:none}
+}

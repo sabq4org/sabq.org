@@ -7,7 +7,7 @@
 
 ## الحدود (In / Out of scope)
 - داخل النطاق: المزادات العقارية فقط، الصفحة العامة، لوحة `/dashboard/infath`، دورة الإرسال والاعتماد، سجل التغييرات.
-- خارج النطاق الآن: مزادات التركات والمنقولات والمركبات (لا تُدخل أبدًا)، بطاقة الواجهة الرئيسية، التطبيقات، أخبار إنفاذ في سبق داخل الصفحة، تنبيه المحررين عند الإرسال، صورة مشاركة، تغذية آلية من إنفاذ. موقع infath.gov.sa يمنع الزواحف؛ لا جلب آلي منه.
+- خارج النطاق الآن: مزادات التركات والمنقولات والمركبات (لا تُدخل أبدًا)، بطاقة الواجهة الرئيسية `/` (موجودة في النسخة التجريبية `/v2` فقط حتى الآن)، التطبيقات، أخبار إنفاذ في سبق داخل الصفحة، تنبيه المحررين عند الإرسال، صورة مشاركة، تغذية آلية من إنفاذ. موقع infath.gov.sa يمنع الزواحف؛ لا جلب آلي منه.
 
 ## نقاط الدخول
 | الطبقة | المسار |
@@ -15,6 +15,7 @@
 | Shared | `shared/infath.ts` — الثوابت (13 منطقة، الفئات، الصيغ)، تحقق zod، `summarizeWeek`، `auctionPhase`، `buildPublicView`، `pickCurrentWeek`، محلل اللصق من Excel |
 | Backend | `server/services/infathService.ts`, `server/routes/infath.ts` (مسجّل في `splitRoutesIndex.ts`) |
 | Web | `client/src/pages/InfathPage.tsx` + `client/src/styles/infath-page.css` + `client/src/components/infath/InfathLogo.tsx`; اللوحة `client/src/pages/dashboard/InfathManagement.tsx` |
+| Web (بطاقة الواجهة) | `client/src/components/infath/InfathHomeCard.tsx` + `client/src/styles/infath-home-card.css`؛ تظهر في `/v2` فقط (`client/src/pages/HomeV2.tsx` يمرّر `showInfathCard` إلى `Home.tsx`)، و`/v2` noindex في `server/utils/noindexPaths.ts` و`functions/_middleware.js`. تقرأ `/api/infath` العام وتختفي بلا أسبوع منشور |
 | Edge | كاش `/api/infath` 60 ثانية في `functions/_middleware.js`؛ عنوان ووصف `/infath` في `LOCALIZED_STATIC_PAGES` بـ `server/routes/edgeMeta.ts` |
 | Schema | `infath_weeks`, `infath_changes` في `shared/schema.ts` و`migrations/20261028_infath_auctions.sql` |
 | RBAC | `infath.submit` (حساب إنفاذ)، `infath.approve` (محرر سبق)، الدور `infath_partner` |
