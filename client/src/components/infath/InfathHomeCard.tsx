@@ -87,6 +87,7 @@ function InfathHomeCardBody({ view }: { view: InfathPublicView }) {
   const decimals = parts.value.includes(".") ? parts.value.split(".")[1].length : 0;
   const counted = useCountUp(Number(parts.value), decimals);
   const next = auctions.find((a) => auctionPhase(a, nowMs) === "upcoming") ?? null;
+  const live = next ? null : auctions.find((a) => auctionPhase(a, nowMs) === "live") ?? null;
   const maxSold = Math.max(1, ...summary.byDay.map((d) => d.soldValue));
   const maxCount = Math.max(1, ...summary.byDay.map((d) => d.auctions));
 
@@ -164,9 +165,14 @@ function InfathHomeCardBody({ view }: { view: InfathPublicView }) {
               </div>
               <div className="ixh-meta">{INFATH_DAY_NAMES[weekdayOf(next.date)]} {formatTime12(next.time)} بتوقيت الرياض</div>
             </>
+          ) : live ? (
+            <>
+              <div className="ixh-nx">{live.city} · {live.assetType} · {arCount(live.assetsCount, ASSET_FORMS)}</div>
+              <div className="ixh-meta">جارٍ الآن منذ {formatTime12(live.time)} بتوقيت الرياض، وهو آخر مزادات هذا الأسبوع.</div>
+            </>
           ) : (
             <>
-              <div className="ixh-nx">انتهت مزادات هذا الأسبوع</div>
+              <div className="ixh-nx">لا مزادات قادمة هذا الأسبوع</div>
               <div className="ixh-meta">نعرض مزادات الأسبوع القادم فور اعتمادها.</div>
             </>
           )}
