@@ -426,9 +426,34 @@ export async function markStaffDeskNotificationsSeen(userId: string, now: Date =
 }
 
 /** فتح تنبيه واحد يعلّمه مقروءاً دون غيره. */
+// تحديث ذري في قاعدة البيانات: طلبا قراءة متزامنان (أو قراءة مع «تعليم الكل») لا يلغي أحدهما الآخر،
+// لأن هذا المسار يلمس readIds وحدها ويبقي seenAt كما هي في الصف لحظة الكتابة.
 export async function markStaffDeskNotificationRead(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
-  const seen = await getSeenState(userId);
-  if (seen.readIds.includes(eventId)) return;
-  const readIds = [...seen.readIds, eventId].slice(-MAX_READ_IDS);
-  await saveSeenState(userId, { seenAt: seen.seenAt?.toISOString() ?? null, readIds }, now);
+  const key = seenKey(userId);
+  const initial = JSON.stringify({ seenAt: null, readIds: [eventId] });
+  await db.execute(sql`
+    INSERT INTO system_settings (key, value, category, is_public)
+    VALUES (${key}, ${initial}::jsonb, 'staff_app', false)
+    ON CONFLICT (key) DO UPDATE SET
+      value = jsonb_set(
+        system_settings.value,
+        '{readIds}',
+        (
+          SELECT COALESCE(jsonb_agg(t.id ORDER BY t.ord), '[]'::jsonb)
+          FROM (
+            SELECT e.id, e.ord
+            FROM jsonb_array_elements(
+              (CASE WHEN jsonb_typeof(system_settings.value->'readIds') = 'array'
+                    THEN system_settings.value->'readIds' ELSE '[]'::jsonb END)
+              - ${eventId}::text
+              || jsonb_build_array(${eventId}::text)
+            ) WITH ORDINALITY AS e(id, ord)
+            ORDER BY e.ord DESC
+            LIMIT ${MAX_READ_IDS}
+          ) t
+        ),
+        true
+      ),
+      updated_at = ${now}
+  `);
 }
