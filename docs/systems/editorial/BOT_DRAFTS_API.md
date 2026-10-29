@@ -465,7 +465,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 { "fields": ["summary", "seo"] }
 ```
 
-الجسم `{}` يولّد الثلاثة. الحفظ يمر عبر `PATCH /:id` نفسه: قفل المحرر، والحالة، وسجل النسخ، و`editorialModifiedAt`، وإبطال الكاش على المنشور. قيمة فارغة من المولّد لا تمسح القيمة القائمة. لا IndexNow ولا إشعارات.
+الجسم `{}` يولّد الثلاثة. الحفظ يمر عبر `PATCH /:id` نفسه: قفل المحرر، والحالة، وسجل النسخ، و`editorialModifiedAt`، وإبطال الكاش على المنشور. قيمة فارغة من المولّد لا تمسح القيمة القائمة. لا IndexNow ولا إشعارات. الحفظ مشروط ذرياً بنسخة المادة (`updated_at`) المقروءة قبل التوليد: إن عدّل محرر أو البوت العنوان أو المتن أو أي حقل أثناء التوليد لا يُكتب شيء (لا سجل نسخ ولا إبطال كاش) ويرجع `409 draft_changed`. أعد الطلب ليولّد من النسخة الجديدة.
 
 الرد `200`:
 
@@ -489,6 +489,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | متن أقصر من 100 حرف نصي | `422 content_too_short` قبل أي نداء ذكاء |
 | قفل تحرير نشط | `409 locked_by_editor` قبل أي نداء ذكاء |
 | فشل أي مولّد أو لم يرجع قيماً صالحة | `502 generation_failed` بلا كتابة |
+| تغيّرت المادة أثناء التوليد | `409 draft_changed` بلا كتابة. أعد الطلب |
 | `fields` فيه قيمة غير `summary`/`keywords`/`seo` | `400 validation_error` |
 | حقل ممنوع مثل `status` | `422 forbidden_fields` |
 | صف ليس للبوت، أو حالة غير `draft`/`published` | مثل `PATCH /:id` (`404` أو `409 not_a_draft`) |
@@ -509,6 +510,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | 409 | `not_published` | أرشفة أو ظهور والمادة ليست `published`. `details.status` = الحالة الحالية |
 | 409 | `not_scheduled` | تغيير موعد أو إلغاء جدولة والمادة ليست `scheduled`. `details.status` = الحالة الحالية |
 | 409 | `locked_by_editor` | محرر يفتح المادة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
+| 409 | `draft_changed` | `regenerate-extras` والمادة عُدّلت أثناء التوليد (تغيّر `updated_at`). لم يُحفظ شيء؛ أعد الطلب |
 | 422 | `forbidden_fields` | وجود حقل ممنوع. `details.fields` = القائمة |
 | 422 | `category_not_found` | تصنيف غير موجود أو غير قابل للإسناد (`inactive`؛ الإنتاج يستخدم `visible`) |
 | 422 | `content_too_short` | `regenerate-extras` والمتن أقصر من 100 حرف نصي. `details.minChars` |

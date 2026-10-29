@@ -422,6 +422,7 @@ describe("regenerateBotDraftExtras", () => {
     generateSeoMetadata.mockReset();
     invalidateArticleWrite.mockReset();
     recordArticleSave.mockClear();
+    logArticleEvent.mockClear();
     vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org");
   });
 
@@ -503,6 +504,53 @@ describe("regenerateBotDraftExtras", () => {
     });
     expect(dbState.updateCalls).toBe(0);
     expect(invalidateArticleWrite).not.toHaveBeenCalled();
+  });
+
+  it("saves when the article is unchanged during generation", async () => {
+    const existing = publishedArticle({ status: "draft", content: longContent });
+    dbState.limitQueue = [[existing], [], [{ ...existing }], []];
+    dbState.updated = { ...existing, excerpt: "موجز مولد", updatedAt: new Date("2026-09-26T09:00:00.000Z") };
+    summarizeArticle.mockResolvedValue("موجز مولد");
+
+    const result = await regenerateBotDraftExtras({ name: "nashr-sabq" }, "art-pub", { fields: ["summary"] });
+
+    expect(dbState.updateCalls).toBe(1);
+    expect(dbState.setArg).toMatchObject({ excerpt: "موجز مولد" });
+    expect(result.draft).toMatchObject({ id: "art-pub", status: "draft" });
+  });
+
+  it("returns 409 draft_changed and writes nothing when the article is edited during generation", async () => {
+    const existing = publishedArticle({ content: longContent });
+    const edited = { ...existing, title: "عنوان عدّله المحرر أثناء التوليد", updatedAt: new Date("2026-09-26T08:00:00.000Z") };
+    dbState.limitQueue = [[existing], [], [edited], []];
+    dbState.updated = { ...edited };
+    summarizeArticle.mockResolvedValue("موجز قديم");
+    generateSeoMetadata.mockResolvedValue({ provider: "openai", model: "gpt-5.1", content: { metaTitle: "س", metaDescription: "و", keywords: ["ك"] } });
+
+    await expect(regenerateBotDraftExtras({ name: "nashr-sabq" }, "art-pub", {})).rejects.toMatchObject({
+      httpStatus: 409,
+      code: "draft_changed",
+    });
+    expect(dbState.updateCalls).toBe(0);
+    expect(invalidateArticleWrite).not.toHaveBeenCalled();
+    expect(recordArticleSave).not.toHaveBeenCalled();
+    expect(logArticleEvent).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 draft_changed when the conditional write matches no row (edit between re-read and write)", async () => {
+    const existing = publishedArticle({ content: longContent });
+    dbState.limitQueue = [[existing], [], [{ ...existing }], []];
+    dbState.updated = null; // WHERE updated_at = captured → 0 rows
+    summarizeArticle.mockResolvedValue("موجز قديم");
+    generateSeoMetadata.mockResolvedValue({ provider: "openai", model: "gpt-5.1", content: { metaTitle: "س", metaDescription: "و", keywords: ["ك"] } });
+
+    await expect(regenerateBotDraftExtras({ name: "nashr-sabq" }, "art-pub", {})).rejects.toMatchObject({
+      httpStatus: 409,
+      code: "draft_changed",
+    });
+    expect(invalidateArticleWrite).not.toHaveBeenCalled();
+    expect(recordArticleSave).not.toHaveBeenCalled();
+    expect(logArticleEvent).not.toHaveBeenCalled();
   });
 
   it("rejects a non-bot article like PATCH does", async () => {
