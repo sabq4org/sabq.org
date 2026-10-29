@@ -83,6 +83,11 @@ const TITLE_SYSTEM_PROMPT = `أنت مدقق لغوي محترف لعناوين 
 
 إن كان العنوان سليماً تماماً، أعد suggestion مطابقاً للأصل وhasIssues=false وnotes=[].`;
 
+/** تعليمات إضافية لتدقيق عنوان مقال الرأي في «جهّز وجدول»: لا فواصل ولا ترقيم مضاف. */
+const TITLE_NO_PUNCTUATION_RULE = `
+
+⚠️ قاعدة صارمة لهذا العنوان: لا تُضِف أي فاصلة (، أو ,) ولا أي علامة ترقيم جديدة إطلاقاً، حتى بين المتعاطفات. صحّح الإملاء والنحو فقط واترك الترقيم كما هو في الأصل.`;
+
 /** إزالة التشكيل والتطويل وعلامات الاتجاه الخفية وتوحيد المسافات. */
 export function normalizeArabic(t: string): string {
   return t
@@ -207,7 +212,11 @@ export async function proofreadContent(content: string, userId?: string): Promis
   }).slice(0, MAX_ISSUES) };
 }
 
-export async function proofreadTitle(title: string, userId?: string): Promise<ProofreadTitleResult> {
+export async function proofreadTitle(
+  title: string,
+  userId?: string,
+  opts: { noAddedPunctuation?: boolean } = {},
+): Promise<ProofreadTitleResult> {
   const cleanTitle = title.replace(/\s+/g, " ").trim();
   if (cleanTitle.length < 3) {
     return { original: cleanTitle, suggestion: cleanTitle, hasIssues: false, notes: [] };
@@ -219,7 +228,7 @@ export async function proofreadTitle(title: string, userId?: string): Promise<Pr
     userId,
     timeoutMs: PROOFREAD_TIMEOUT_MS,
     messages: [
-      { role: "system", content: TITLE_SYSTEM_PROMPT },
+      { role: "system", content: opts.noAddedPunctuation ? TITLE_SYSTEM_PROMPT + TITLE_NO_PUNCTUATION_RULE : TITLE_SYSTEM_PROMPT },
       { role: "user", content: `دقّق هذا العنوان لغوياً:\n\n${cleanTitle}` },
     ],
     options: { jsonMode: true, maxTokens: 1024 },

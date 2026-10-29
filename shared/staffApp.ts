@@ -488,3 +488,19 @@ export interface StaffAppErrorBody {
   details?: unknown;
   post?: unknown;
 }
+
+const TITLE_PUNCT_RE = /[،,؛;:.!?؟…\-–—"«»'()]/g;
+
+/**
+ * حارس عنوان مقال الرأي في «جهّز وجدول»: التدقيق لا يضيف فواصل.
+ * يحذف كل فاصلة (، أو ,) لم تكن في الأصل، وإن كان الفرق ترقيماً فقط يُعاد الأصل.
+ */
+export function guardOpinionTitleCommas(original: string, corrected: string): string {
+  const orig = original.replace(/\s+/g, " ").trim();
+  const hadComma = /[،,]/.test(orig);
+  let out = hadComma ? corrected : corrected.replace(/\s*[،,]\s*/g, " ");
+  out = out.replace(/\s+/g, " ").trim();
+  const bare = (t: string) => t.replace(TITLE_PUNCT_RE, "").replace(/\s+/g, " ").trim();
+  if (!out || bare(out) === bare(orig)) return original;
+  return out;
+}

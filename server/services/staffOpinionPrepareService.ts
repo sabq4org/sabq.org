@@ -17,6 +17,7 @@ import { articleEditLocks, articles, categories, systemSettings, type Article } 
 import {
   STAFF_APP_BUNDLE_ID,
   STAFF_OPINION_PREP_STEP_LABELS,
+  guardOpinionTitleCommas,
   resolveStaffOpinionArticleStatus,
   type StaffOpinionPrepJob,
   type StaffOpinionPrepStep,
@@ -329,10 +330,10 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
 
     // 1) التدقيق
     const [titleCheck, contentCheck] = await Promise.all([
-      proofreadTitle(before.title, job.actorId),
+      proofreadTitle(before.title, job.actorId, { noAddedPunctuation: true }),
       proofreadContent(before.content || "", job.actorId),
     ]);
-    const newTitle = titleCheck.hasIssues ? titleCheck.suggestion : before.title;
+    const newTitle = titleCheck.hasIssues ? guardOpinionTitleCommas(before.title, titleCheck.suggestion) : before.title;
     const fixed = applyTextFixesToHtml(before.content || "", contentCheck.issues);
     title = newTitle;
     await advance({ step: "enrich", titleChanged: newTitle !== before.title, contentFixes: fixed.applied });
