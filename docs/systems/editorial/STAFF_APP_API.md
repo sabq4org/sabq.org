@@ -364,7 +364,7 @@ Content-Type: application/json
 | `tweet_published` | `tweet` | نجاح نشر التغريدة على X (`publishClaimedPost`) | «فتح التغريدة» |
 | `opinion_draft` | `opinion` | إرسال مقال رأي للمراجعة (`notifyOpinionArticleSubmittedForReview`) | «مراجعة المقال» ← `sabqdesk://opinion/<id>` |
 | `opinion_scheduled` | `opinion` | جدولة مقال رأي (`notifyOpinionAuthorArticleScheduled`) | «معاينة المقال» |
-| `news_published` | `news` | نشر خبر عبر «نشر سبق» (`publishBotDraft`)، باسم الناشر | «فتح الخبر» ← رابط sabq.org |
+| `news_published` | `news` | نشر مسودة بوت (`publishBotDraft`، أو من المحرر، أو بالجدولة)، باسم الناشر | «فتح الخبر» ← رابط sabq.org |
 
 | المسار | الوصف |
 |---|---|
@@ -376,7 +376,7 @@ Content-Type: application/json
 - **الظهور:** `tweet` لمن يملك `canSocial.view`، `opinion` لـ`canOpinion.view`، `news` لـ`canPublisherNews`. عضو بلا أي منها ← `403`.
 - **غير المقروء:** بعد `seenAt` (أو آخر 24 ساعة لمن لم يفتح المركز قط) وليس في `readIds`.
 - **الدفع:** أخبار «نشر سبق» فقط (`notifyStaffDeskOfPublisherNews`): `type: "desk.publisher_news"`، `deeplink: sabqdesk://notifications`، العنوان «خبر جديد من <الناشر>» والنص عنوان الخبر، لكل من يملك `articles.publish` عدا الناشر نفسه، التفضيل `publisherNews` + الساعات الهادئة. بقية الأحداث في القائمة فقط (مسودات الرأي ومقترحات X لها دفعها السابق).
-- **حدود:** الخبر الذي يجدوله البوت ثم ينشره المجدول لاحقاً لا يُسجَّل حدثاً (المسجَّل النشر المباشر من «نشر سبق»).
+- **مسودات البوت المنشورة من مكان آخر (منذ 2026-10-29):** مسودة أنشأها بوت (`source = bot`: «نشر سبق» أو قروك…) ثم نُشرت من محرر لوحة التحكم أو بالجدولة تُسجَّل أيضاً `news_published` عبر `recordBotDraftPublishedElsewhere`، المستدعاة من `notifyArticleStakeholders` عند كل `published`. الناشر: الوكالة ثم صاحب التوكن ثم اسم البوت. منع التكرار يمنع تسجيلها مرتين إن نُشرت عبر API البوت.
 
 ## 3) صيغة الأخطاء الموحدة (Error Format)
 

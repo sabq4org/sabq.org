@@ -429,6 +429,13 @@ export async function notifyArticleStakeholders(
   reviewerNote?: string | null,
   options?: ResolveStakeholdersOptions,
 ): Promise<void> {
+  if (event === "published" && article.id) {
+    // مركز تنبيهات «مكتب سبق»: مسودة بوت نُشرت من المحرر أو بالجدولة تظهر كخبر جديد.
+    void import("./staffDeskEventsService")
+      .then(({ recordBotDraftPublishedElsewhere }) => recordBotDraftPublishedElsewhere(article.id))
+      .catch((err) => console.error("[Editorial Notify] desk timeline event failed:", err));
+  }
+
   const targets = resolveArticleStakeholderIds(article, options);
 
   if (targets.length === 0) {

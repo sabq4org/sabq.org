@@ -5,11 +5,12 @@
 // قبل تشغيل الترحيل) يُسجَّل في السجل فقط.
 import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "../db";
-import { publishers, staffDeskEvents, systemSettings, users } from "@shared/schema";
+import { articles, publishers, staffDeskEvents, systemSettings, users } from "@shared/schema";
 import {
   STAFF_DESK_EVENTS_WINDOW_DAYS,
   STAFF_DESK_EVENT_LABELS,
   STAFF_DESK_UNREAD_CAP,
+  botDraftsPublisherDisplayName,
   buildStaffDeskEventDetail,
   clipStaffDeskTitle,
   decodeStaffDeskEventCursor,
@@ -222,6 +223,51 @@ export async function recordPublisherNewsEvent(input: {
     });
   } catch (err) {
     console.error(`${LOG_PREFIX} إشعار خبر «نشر سبق» فشل:`, err);
+  }
+}
+
+/**
+ * مسودة بوت (نشر سبق، قروك…) نُشرت من مسار آخر غير API البوت: محرر لوحة التحكم
+ * (ومنه «فتح في المحرر» داخل تطبيق «نشر سبق»)، أو النشر المجدول. يُستدعى عند كل
+ * حدث `published` من notifyArticleStakeholders. يتجاهل ما ليس من بوت، ومنع
+ * التكرار يجعل النشر عبر API البوت (المسجَّل أصلاً) لا يتكرر. لا يرمي.
+ */
+export async function recordBotDraftPublishedElsewhere(articleId: string): Promise<void> {
+  try {
+    const [row] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        status: articles.status,
+        source: articles.source,
+        sourceMetadata: articles.sourceMetadata,
+      })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    if (!row || row.status !== "published") return;
+    const meta = row.sourceMetadata;
+    if (row.source !== "bot" && meta?.type !== "bot") return;
+    let publisherId: string | null = null;
+    if (meta?.publisherOwnerUserId) {
+      const [agency] = await db
+        .select({ id: publishers.id })
+        .from(publishers)
+        .where(eq(publishers.userId, meta.publisherOwnerUserId))
+        .limit(1);
+      publisherId = agency?.id ?? null;
+    }
+    const personName = await resolveStaffDeskUserName(meta?.publisherUserId);
+    await recordPublisherNewsEvent({
+      article: row,
+      publisherName: personName ?? (meta?.bot ? botDraftsPublisherDisplayName(meta.bot) : null),
+      publisherUserId: meta?.publisherUserId ?? null,
+      publisherId,
+    });
+  } catch (err) {
+    console.error(`${LOG_PREFIX} تسجيل خبر البوت المنشور من المحرر فشل:`, err);
   }
 }
 
