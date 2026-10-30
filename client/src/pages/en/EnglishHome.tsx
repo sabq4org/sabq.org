@@ -25,6 +25,9 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   return diffInHours <= 3;
 };
 
+const LATEST_NEWS_COUNT = 16;
+const LATEST_FETCH_LIMIT = 60;
+
 export default function EnglishHome() {
   const { user } = useAuth();
   
@@ -32,15 +35,20 @@ export default function EnglishHome() {
   useAnalyticsPageMetadata("Sabq Smart - Intelligent News Platform");
   
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<EnArticleWithDetails[]>({
-    queryKey: ["/api/en/articles"],
+    // Fetch a wider window than the API default (20): featured pieces share the
+    // same feed, so 20 often left only ~7 regular items for "Latest News".
+    queryKey: ["/api/en/articles", { limit: LATEST_FETCH_LIMIT }],
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 
   // Smart blocks: disabled on public homepage (dashboard only).
 
   // Separate featured and regular articles
-  const featuredArticles = articles.filter(article => article.isFeatured && article.status === "published");
-  const regularArticles = articles.filter(article => !article.isFeatured && article.status === "published");
+  // Featured carousel keeps its previous window (first 20 items of the feed).
+  const featuredArticles = articles.slice(0, 20).filter(article => article.isFeatured && article.status === "published");
+  const regularArticles = articles
+    .filter(article => !article.isFeatured && article.status === "published")
+    .slice(0, LATEST_NEWS_COUNT);
 
   if (articlesLoading) {
     return (
