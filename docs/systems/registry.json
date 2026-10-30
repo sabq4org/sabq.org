@@ -456,7 +456,13 @@
         "tests/unit/staffDeskV2.test.ts",
         "shared/staffNotifications.ts",
         "server/services/staffDeskEventsService.ts",
-        "tests/unit/staffNotifications.test.ts"
+        "tests/unit/staffNotifications.test.ts",
+        "shared/enAutoTranslate.ts",
+        "server/services/enAutoTranslateService.ts",
+        "server/services/enArticleTranslationService.ts",
+        "server/jobs/enAutoTranslateJob.ts",
+        "server/routes/enAutoTranslate.ts",
+        "tests/unit/enAutoTranslate.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -508,7 +514,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-29"
+      "lastReviewed": "2026-10-30"
     },
     {
       "id": "ifox",

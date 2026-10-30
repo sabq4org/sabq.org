@@ -1952,6 +1952,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // الترجمة الآلية للنسخة الإنجليزية: كل ساعتين، القائد فقط (enAutoTranslateJob).
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startEnAutoTranslateJob } = await import("./jobs/enAutoTranslateJob");
+            startEnAutoTranslateJob();
+          } catch (error) {
+            console.error("[Server] Error starting EN auto-translate job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات المونديال: نفس نمط أخبار المونديال — تسجيل دائم وفحص
       // القيادة داخل الدورة، يمنح الفائزين نقاطهم فور انتهاء المباراة.
       if (enableBackgroundWorkers) {

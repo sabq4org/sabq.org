@@ -78,6 +78,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // نص «نشرة سَبْق» الصوتية؛ بلا temperature لأن نماذج Claude الأحدث ترفضه.
   { featureKey: "audio-bulletin-script", displayName: "نص النشرة الصوتية", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 6000 },
   { featureKey: "newsletter-editorial", displayName: "تحرير سبق في ٣ دقائق", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 3000, temperature: 0.2 },
+  // ترجمة الخبر العربي للنسخة الإنجليزية (زر الترجمة + الترجمة الآلية كل ساعتين).
+  { featureKey: "en-translate", displayName: "الترجمة للنسخة الإنجليزية", category: "editorial", primary: GPT_4O, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 8000, temperature: 0.3 },
   { featureKey: "content-tools", displayName: "أدوات المحتوى الذكية", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
   // تُضبط في proofreadService (25ث) بدل الافتراضي.
@@ -110,6 +112,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // التصنيف مهمة «اختيار من قائمة» لا تحتاج Sonnet (وسيطه 7.6ث مقابل 2.9ث لـgpt-5.1
   // في ai_usage_logs) — وهو الفرع الأبطأ في «التوليد الشامل» (تشخيص 2026-08-28).
   { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
+  { featureKey: "en-auto-translate-select", displayName: "اختيار أخبار الترجمة الإنجليزية", category: "analysis", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH], maxTokens: 3000 },
   { featureKey: "sentiment-analysis", displayName: "تحليل المشاعر", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "content-analyzer", displayName: "محلل الجودة التحريرية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "smart-categories", displayName: "التصنيفات الذكية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
