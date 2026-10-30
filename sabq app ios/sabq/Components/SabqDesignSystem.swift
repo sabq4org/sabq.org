@@ -41,23 +41,24 @@ nonisolated enum SabqTheme {
 
     static let textPrimary = adaptive(0x1B2B3A, 0xF0F4F8)
     static let textSecondary = adaptive(0x55667A, 0xA6B5C4, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
-    static let textTertiary = adaptive(0x617183, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
+    static let textTertiary = adaptive(0x596A7D, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
 
-    // Surfaces. Light mode uses the Desk grey-blue canvas with cool sky-tinted muted blocks; dark mode steps up from the page.
+    // Neutral canvas and white editorial surfaces. Blue is reserved for accents;
+    // dark mode keeps the same hierarchy with raised charcoal surfaces.
 
-    static let background = adaptive(0xF4F7FB, 0x0B121A)
+    static let background = adaptive(0xF2F3F5, 0x0B121A)
     static let surface = adaptive(0xFFFFFF, 0x141D27)
     /// أشرطة الفصل بين الأقسام والبلوكات الهادئة (الموجز الذكي، الحقول).
-    static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
-    static let surfaceStrong = adaptive(0xDFECF7, 0x1F3145)
-    /// خلفية البطاقات التحريرية المميزة بهوية سبق السماوية الهادئة (الموجز اليومي، الموجز الذكي، بطاقة الآراء).
+    static let surfaceMuted = adaptive(0xF0F2F5, 0x152230)
+    static let surfaceStrong = adaptive(0xE4E8EE, 0x1F3145)
+    /// خلفية البطاقات المميزة بهوية سبق السماوية الهادئة، مثل الموجز الصوتي.
     static let skyTint = adaptive(0xF3F8FD, 0x13202E)
     /// إطار سماوي ناعم للبطاقات التحريرية المميزة.
     static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
     /// خط رفيع بين الأخبار داخل القائمة.
-    static let separator = adaptive(0xE2E9F0, 0x24313F)
+    static let separator = adaptive(0xDFE4EA, 0x24313F)
     /// حدود عناصر التحكم (حقول، أزرار ثانوية).
-    static let outline = adaptive(0xCFDCE8, 0x334354)
+    static let outline = adaptive(0xCAD2DC, 0x334354)
 
     // Status.
 
@@ -242,6 +243,14 @@ extension SabqTextRole {
 }
 
 extension View {
+    /// One quiet surface per editorial group; rows share it without nested cards.
+    func sabqNewsSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        return background(SabqTheme.surface, in: shape)
+            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                .allowsHitTesting(false))
+    }
+
     func sabqText(_ role: SabqTextRole) -> some View {
         font(role.font).lineSpacing(role.lineSpacing)
     }
