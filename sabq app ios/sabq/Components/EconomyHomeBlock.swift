@@ -23,20 +23,22 @@ struct EconomyNewBadge: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
+    /// شارة «جديد» بنفس شكلها في صفوف الأخبار (كبسولة خضراء هادئة) بدل كبسولة
+    /// زرقاء ممتلئة كانت تنافس أزرار الإجراء على الصفحة نفسها.
     var body: some View {
         HStack(spacing: SabqLayout.space4) {
             Circle()
-                .fill(SabqTheme.onAction)
+                .fill(SabqTheme.success)
                 .frame(width: 6, height: 6)
                 .opacity(pulse ? 0.35 : 1)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 1).repeatForever(autoreverses: true), value: pulse)
             Text(label)
                 .font(SabqType.tag.scaled(compactType).font)
         }
-        .foregroundStyle(SabqTheme.onAction)
+        .foregroundStyle(SabqTheme.success)
         .padding(.horizontal, SabqLayout.space8)
-        .padding(.vertical, 2)
-        .background(Capsule(style: .continuous).fill(SabqTheme.actionFill))
+        .padding(.vertical, 2.5)
+        .background(Capsule(style: .continuous).fill(SabqTheme.success.opacity(0.08)))
         .onAppear { pulse = true }
     }
 }

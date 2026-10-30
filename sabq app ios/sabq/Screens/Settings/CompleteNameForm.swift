@@ -17,9 +17,7 @@ struct CompleteNameForm: View {
 
     var body: some View {
         VStack(spacing: SabqLayout.space16) {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(SabqFonts.app(size: 36, weight: .light))
-                .foregroundStyle(SabqTheme.primary)
+            SquareIconBadge(systemImage: "person.crop.circle.badge.plus", tint: SabqTheme.primary)
                 .padding(.top, SabqLayout.space8)
                 .accessibilityHidden(true)
 
@@ -97,7 +95,7 @@ struct CompleteNameForm: View {
             HStack(spacing: SabqLayout.space4) {
                 Text(label)
                     .sabqText(SabqType.metaEmphasis)
-                    .foregroundStyle(SabqTheme.textSecondary)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 if required {
                     Text("*")
                         .sabqText(SabqType.metaEmphasis)
@@ -105,7 +103,7 @@ struct CompleteNameForm: View {
                 }
             }
             TextField("", text: text, prompt: Text(placeholder).foregroundStyle(SabqTheme.textTertiary))
-                .sabqText(SabqType.excerpt)
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.textPrimary)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()

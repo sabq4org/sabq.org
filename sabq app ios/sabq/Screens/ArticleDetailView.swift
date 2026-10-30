@@ -251,32 +251,32 @@ struct ArticleDetailView: View {
                         // section settles into its own breathing room
                         // (effective gap = 18 base + N below).
                         actionBar
-                            .padding(.top, 16)
+                            .padding(.top, SabqLayout.space16)
 
                         if !isFocusMode, !displayTags.isEmpty {
                             tagsSection
-                                .padding(.top, 20)
+                                .padding(.top, SabqLayout.space24)
                         }
 
                         if !isFocusMode, !relatedOpinions.isEmpty {
                             relatedOpinionsSection
-                                .padding(.top, 24)
+                                .padding(.top, SabqLayout.space24)
                         }
 
                         if !isFocusMode, !relatedArticles.isEmpty {
                             relatedSection
-                                .padding(.top, 16)
+                                .padding(.top, SabqLayout.space24)
                         }
 
                         if !isFocusMode, let store = commentsStore {
                             ArticleCommentsSection(store: store)
-                                .padding(.top, 24)
+                                .padding(.top, SabqLayout.space24)
                         }
                     }
                     .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
                     .padding(.horizontal, SabqLayout.pageMargin)
                     .padding(.top, SabqLayout.space16)
-                    .padding(.bottom, 40)
+                    .padding(.bottom, SabqLayout.tabBarClearance)
                     .frame(maxWidth: .infinity)
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
@@ -683,22 +683,9 @@ struct ArticleDetailView: View {
                 DetailLabelPill(title: "قراءة", tint: SabqTheme.emerald, icon: "book")
             }
 
-            // Breaking pill (only when applicable)
+            // شارة «عاجل» بنفس كبسولة بقية الشارات (التصنيف، قراءة).
             if displayArticle.isBreaking {
-                HStack(spacing: 4) {
-                    PulsingDot(color: SabqTheme.breaking)
-                        .scaleEffect(0.55)
-                        .frame(width: 10, height: 10)
-                    Text("عاجل")
-                        .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.breaking)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(SabqTheme.breaking.opacity(0.12))
-                )
+                DetailLabelPill(title: "عاجل", tint: SabqTheme.breaking, icon: "bolt.fill")
             }
 
             // Passport "موثوق" pill — opens the same sheet as the action bar.
@@ -867,12 +854,12 @@ struct ArticleDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: SabqLayout.space4) {
                         Text(displayArticle.author)
-                            .font(SabqType.label)
+                            .font(SabqType.metaEmphasis.font)
                             .foregroundStyle(SabqTheme.textPrimary)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         if displayArticle.isAuthorVerified {
                             Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqType.tag.font)
                                 .foregroundStyle(SabqTheme.primary)
                                 .accessibilityHidden(true)
                         }
@@ -973,17 +960,17 @@ struct ArticleDetailView: View {
     /// `glyph`: نص بدل رمز النظام — `textformat.size` يتعرّب في الواجهة العربية
     /// فيظهر «ﻉﻉ» حروفًا مفككة.
     private func actionButton(icon: String? = nil, glyph: String? = nil, label: String, isActive: Bool = false) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SabqLayout.space8) {
             if let glyph {
                 Text(glyph)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqType.metaEmphasis.font)
                     .environment(\.layoutDirection, .leftToRight)
             } else if let icon {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .font(SabqType.rowTitle.font.weight(.semibold))
             }
             Text(label)
-                .font(SabqType.label)
+                .font(SabqType.metaEmphasis.font)
         }
         .foregroundStyle(isActive ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
         .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
@@ -1255,7 +1242,7 @@ struct ArticleDetailView: View {
         }
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sabqBlockSurface()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     private var articleBody: some View {
@@ -1297,7 +1284,7 @@ struct ArticleDetailView: View {
                     useReaderFont: useReaderFont,
                     onImageTap: { url in inlineLightboxURL = url }
                 )
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 0)
             } else {
                 // Legacy plain-text fallback for articles still stored as
                 // newline-separated paragraphs (or list-payload previews).
@@ -1322,7 +1309,7 @@ struct ArticleDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 0)
             }
         }
     }
@@ -1350,8 +1337,7 @@ struct ArticleDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 6)
-            .padding(.top, 8)
+            .padding(.top, SabqLayout.space8)
         }
     }
 
@@ -1392,24 +1378,15 @@ struct ArticleDetailView: View {
 
     // MARK: - Tags
 
+    /// الوسوم بالرأس الموحّد وشريحة الاستكشاف نفسها (كبسولة 36 نقطة).
     private var tagsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("الوسوم")
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.textPrimary)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HomeSectionHeader(title: "الوسوم")
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(displayTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
-                        Text(tag)
-                            .font(SabqType.metaEmphasis.font)
-                            .foregroundStyle(SabqTheme.textPrimary)
-                            .padding(.horizontal, SabqLayout.space12)
-                            .padding(.vertical, SabqLayout.space8)
-                            .background(
-                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
-                            )
+                        DiscoveryChip(title: tag, icon: "number")
                     }
                     .buttonStyle(.plain)
                 }
@@ -1488,8 +1465,6 @@ struct ReadingProgressStyle: ProgressViewStyle {
                 Capsule(style: .continuous)
                     .fill(SabqTheme.brandGradient)
                     .frame(width: max(0, geo.size.width * fraction))
-                    .shadow(color: SabqTheme.primaryEnd.opacity(0.35),
-                            radius: 6, x: 0, y: 0)
             }
         }
         // Hidden anchor reference (avoids removing the param)

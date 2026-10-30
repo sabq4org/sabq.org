@@ -140,9 +140,7 @@ struct LoginSheet: View {
             }
 
             if let error = authStore.errorMessage, authStore.errorSource == .credentials {
-                Text(error)
-                    .sabqText(SabqType.excerpt)
-                    .foregroundStyle(SabqTheme.danger)
+                errorBanner(error)
             }
 
             Button {
@@ -151,7 +149,7 @@ struct LoginSheet: View {
                 HStack(spacing: SabqLayout.space8) {
                     if authStore.isLoading { ProgressView().tint(SabqTheme.onAction) }
                     Text("تحقّق")
-                        .font(SabqType.label)
+                        .sabqText(SabqType.button)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: SabqLayout.controlHeight)
@@ -218,7 +216,6 @@ struct LoginSheet: View {
                 .sabqText(SabqType.excerpt)
                 .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .lineSpacing(5)
 
             Button {
                 authStore.clearMessages()
@@ -264,8 +261,6 @@ struct LoginSheet: View {
             } else {
                 emailFields
             }
-
-            dividerOr
 
             SocialAuthButtons(onSuccess: {
                 if !authStore.needsDisplayName { dismiss() }
@@ -340,7 +335,7 @@ struct LoginSheet: View {
 
     private var emailFields: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 fieldLabel("البريد الإلكتروني أو الجوال")
                 inputField(icon: "envelope", placeholder: "أدخل البريد الإلكتروني أو الجوال", text: $identifier)
                     .textContentType(.username)
@@ -349,7 +344,7 @@ struct LoginSheet: View {
                     .textInputAutocapitalization(.never)
             }
 
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 fieldLabel("كلمة المرور")
                 inputField(icon: "lock", placeholder: "أدخل كلمة المرور", text: $password, isSecure: true)
                     .textContentType(.password)
@@ -387,15 +382,15 @@ struct LoginSheet: View {
                         ProgressView().tint(SabqTheme.onAction)
                     }
                     Text("تسجيل الدخول")
-                        .font(SabqType.label)
+                        .sabqText(SabqType.button)
                 }
-                .foregroundStyle(authStore.isLoading ? SabqTheme.disabledInk : SabqTheme.onAction)
+                .foregroundStyle(emailLoginEnabled ? SabqTheme.onAction : SabqTheme.disabledInk)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: SabqLayout.controlHeight)
-                .background((authStore.isLoading ? SabqTheme.disabledFill : SabqTheme.actionFill), in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .background((emailLoginEnabled ? SabqTheme.actionFill : SabqTheme.disabledFill), in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
             .buttonStyle(.plain)
-            .disabled(authStore.isLoading)
+            .disabled(!emailLoginEnabled)
 
             Button { showForgotPassword = true } label: {
                 Text("نسيت كلمة المرور؟")
@@ -407,17 +402,31 @@ struct LoginSheet: View {
         }
     }
 
+    /// الزر معطّل حتى يُملأ الحقلان؛ يمنع إرسالًا فارغًا ويُظهر الحالة بلون التعطيل.
+    private var emailLoginEnabled: Bool {
+        !authStore.isLoading
+            && !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// صندوق الخطأ الموحّد في الورقة: أيقونة + نص بلون الخطر على تعبئة خفيفة.
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: SabqLayout.space8) {
+            Image(systemName: "exclamationmark.circle")
+                .font(SabqType.meta.font)
+            Text(message)
+                .sabqText(SabqType.meta)
+        }
+        .foregroundStyle(SabqTheme.danger)
+        .padding(SabqLayout.space12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SabqTheme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+    }
+
     @ViewBuilder
     private func credentialsErrorBanner(_ error: String) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            HStack(spacing: SabqLayout.space8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .sabqText(SabqType.excerpt)
-                Text(error)
-                    .sabqText(SabqType.meta)
-            }
-            .foregroundStyle(SabqTheme.danger)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            errorBanner(error)
 
             if authStore.pendingActivationUserId != nil
                 || authStore.pendingActivationEmail != nil {
@@ -448,22 +457,6 @@ struct LoginSheet: View {
                 .disabled(authStore.isResendingActivation)
             }
         }
-        .padding(.horizontal, SabqLayout.space12)
-        .padding(.vertical, SabqLayout.space8)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
-    }
-
-    private var dividerOr: some View {
-        HStack(spacing: SabqLayout.space12) {
-            Rectangle().fill(SabqTheme.separator).frame(height: 1)
-            Text("أو")
-                .sabqText(SabqType.tag)
-                .foregroundStyle(SabqTheme.textTertiary)
-            Rectangle().fill(SabqTheme.separator).frame(height: 1)
-        }
     }
 
     private func inputField(icon: String, placeholder: String, text: Binding<String>, isSecure: Bool = false) -> some View {
@@ -477,12 +470,12 @@ struct LoginSheet: View {
             if isSecure {
                 SecureField(placeholder, text: text, prompt: Text(placeholder).foregroundStyle(SabqTheme.textTertiary))
                     .accessibilityLabel("كلمة المرور")
-                    .font(SabqFonts.app(size: 16, weight: .medium))
+                    .font(SabqType.rowTitle.font)
                     .foregroundStyle(SabqTheme.textPrimary)
             } else {
                 TextField(placeholder, text: text, prompt: Text(placeholder).foregroundStyle(SabqTheme.textTertiary))
                     .accessibilityLabel("البريد الإلكتروني أو الجوال")
-                    .font(SabqFonts.app(size: 16, weight: .medium))
+                    .font(SabqType.rowTitle.font)
                     .foregroundStyle(SabqTheme.textPrimary)
             }
         }
@@ -491,7 +484,7 @@ struct LoginSheet: View {
 
     private func fieldLabel(_ title: String) -> some View {
         Text(title)
-            .font(SabqType.label)
+            .sabqText(SabqType.metaEmphasis)
             .foregroundStyle(SabqTheme.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -530,40 +523,42 @@ private struct PhoneLoginFlow: View {
 
     private var phoneStep: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            fieldLabel("رقم الجوال")
-            HStack(spacing: SabqLayout.space8) {
-                HStack(spacing: SabqLayout.space4) {
-                    Text("🇸🇦").font(.system(size: 16))
-                    Text("+966")
-                        .sabqText(SabqType.rowTitle)
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                fieldLabel("رقم الجوال")
+                HStack(spacing: SabqLayout.space8) {
+                    HStack(spacing: SabqLayout.space4) {
+                        Text("🇸🇦").font(.system(size: 16))
+                        Text("+966")
+                            .sabqText(SabqType.rowTitle)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                    }
+                    .environment(\.layoutDirection, .leftToRight)
+                    Rectangle().fill(SabqTheme.outline).frame(width: 1, height: 22)
+                    // خط النظام للأرقام — الخط العربي المخصّص كان يخفي الأحرف أثناء الكتابة أحيانًا.
+                    TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SabqTheme.textTertiary))
+                        .accessibilityLabel("رقم الجوال")
+                        .keyboardType(.numberPad)
+                        .textContentType(.telephoneNumber)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(SabqType.rowTitle.font.monospacedDigit())
                         .foregroundStyle(SabqTheme.textPrimary)
+                        .tint(SabqTheme.primary)
+                        .multilineTextAlignment(.leading)
+                        .focused($phoneFocused)
+                        // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized —
+                        // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
+                        .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(14)) }
                 }
                 .environment(\.layoutDirection, .leftToRight)
-                Rectangle().fill(SabqTheme.outline).frame(width: 1, height: 22)
-                // خط النظام للأرقام — الخط العربي المخصّص كان يخفي الأحرف أثناء الكتابة أحيانًا.
-                TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SabqTheme.textTertiary))
-                    .accessibilityLabel("رقم الجوال")
-                    .keyboardType(.numberPad)
-                    .textContentType(.telephoneNumber)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .tint(SabqTheme.primary)
-                    .multilineTextAlignment(.leading)
-                    .focused($phoneFocused)
-                    // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized —
-                    // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
-                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(14)) }
+                .modifier(SabqInputSurface())
+                .contentShape(Rectangle())
+                .onTapGesture { phoneFocused = true }
+                .onAppear { phoneFocused = true }
             }
-            .environment(\.layoutDirection, .leftToRight)
-            .modifier(SabqInputSurface())
-            .contentShape(Rectangle())
-            .onTapGesture { phoneFocused = true }
-            .onAppear { phoneFocused = true }
 
             Text("سنرسل رمز تحقّق برسالة نصية إلى جوالك.")
-                .font(SabqType.caption)
+                .sabqText(SabqType.meta)
                 .foregroundStyle(SabqTheme.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -626,7 +621,7 @@ private struct PhoneLoginFlow: View {
 
     private func fieldLabel(_ title: String) -> some View {
         Text(title)
-            .font(SabqType.label)
+            .sabqText(SabqType.metaEmphasis)
             .foregroundStyle(SabqTheme.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -645,7 +640,7 @@ private struct PhoneLoginFlow: View {
         Button(action: action) {
             HStack(spacing: SabqLayout.space8) {
                 if auth.isLoading { ProgressView().tint(enabled ? SabqTheme.onAction : SabqTheme.disabledInk) }
-                Text(title).font(SabqType.label)
+                Text(title).sabqText(SabqType.button)
             }
             .foregroundStyle(enabled && !auth.isLoading ? SabqTheme.onAction : SabqTheme.disabledInk)
             .frame(maxWidth: .infinity)
@@ -661,12 +656,22 @@ private struct PhoneLoginFlow: View {
 
     @ViewBuilder private var errorText: some View {
         if auth.errorSource == .phone, let err = auth.errorMessage {
-            Text(err)
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.danger)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            errorBanner(err)
         }
+    }
+
+    /// نسخة خاصة من صندوق الخطأ الموحّد (البنية private فلا تشارك LoginSheet).
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: SabqLayout.space8) {
+            Image(systemName: "exclamationmark.circle")
+                .font(SabqType.meta.font)
+            Text(message)
+                .sabqText(SabqType.meta)
+        }
+        .foregroundStyle(SabqTheme.danger)
+        .padding(SabqLayout.space12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SabqTheme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
     }
 }
 
@@ -696,13 +701,13 @@ private struct LoginOtpBoxes: View {
                 .textContentType(.oneTimeCode)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
+                .font(SabqType.leadTitle.font.monospacedDigit())
                 .foregroundStyle(Color.primary.opacity(0.01))
                 .multilineTextAlignment(.center)
                 .focused($focused)
                 .opacity(0.02)
                 .frame(maxWidth: .infinity)
-                .frame(height: 54)
+                .frame(height: SabqLayout.controlHeight)
                 .accessibilityLabel("رمز التحقق")
                 .onChange(of: code) { _, v in
                     let d = String(v.filter(\.isNumber).prefix(length))
@@ -738,10 +743,10 @@ private struct LoginOtpBoxes: View {
         let digit: String = i < chars.count ? String(chars[i]) : ""
         let active = i == chars.count
         return Text(digit)
-            .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
+            .font(SabqType.leadTitle.font.monospacedDigit())
             .foregroundStyle(SabqTheme.textPrimary)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
+            .frame(height: SabqLayout.controlHeight)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                     .fill(SabqTheme.surface)

@@ -193,7 +193,6 @@ struct HomeFeedView: View {
                     // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
                     // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
                     SportsPortalStrip()
-                        .padding(.horizontal, opensArticlesInReader ? 0 : -SabqLayout.pageMargin)
 
                     SabqSectionBand()
 
@@ -244,12 +243,12 @@ struct HomeFeedView: View {
                     }
                     } // homeFeedReplacement
                 }
-                .frame(width: max(0, container.size.width - 32), alignment: .leading)
-                .padding(.horizontal, 16)
+                .frame(width: max(0, container.size.width - SabqLayout.pageMargin * 2), alignment: .leading)
+                .padding(.horizontal, SabqLayout.pageMargin)
                 // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
                 // الصفرية؛ CollapsingVStack لا يحجزها فنعوّضها هنا لبقاء الرأس مكانه.
                 .padding(.top, SabqLayout.space16)
-                .padding(.bottom, 40)
+                .padding(.bottom, SabqLayout.space40)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     VStack(spacing: 0) {
@@ -260,22 +259,18 @@ struct HomeFeedView: View {
                         // فشل التحميل الكامل (أوفلاين/عطل خادم): حالة خطأ
                         // بزر إعادة محاولة بدل skeleton يومض للأبد بصمت.
                         if articlesStore.errorMessage != nil {
-                            EmptyStateView(
-                                icon: "wifi.exclamationmark",
-                                tint: SabqTheme.coral,
-                                title: "تعذر تحميل الأخبار",
-                                subtitle: articlesStore.errorMessage ?? "تحقق من اتصالك بالإنترنت ثم أعد المحاولة",
-                                action: { Task { await articlesStore.loadArticles(ignoreCache: true) } },
-                                actionTitle: "إعادة المحاولة"
+                            ErrorStateView(
+                                message: articlesStore.errorMessage ?? "تحقق من اتصالك بالإنترنت ثم أعد المحاولة",
+                                retryAction: { Task { await articlesStore.loadArticles(ignoreCache: true) } }
                             )
-                            .padding(.top, 80)
+                            .padding(.top, SabqLayout.space40)
                         } else {
                             HomeFeedSkeleton()
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 18)
-                    .padding(.bottom, 40)
+                    .padding(.horizontal, SabqLayout.pageMargin)
+                    .padding(.top, SabqLayout.space16)
+                    .padding(.bottom, SabqLayout.space40)
                 }
             }
             .sabqScrollOffsetTracker { y in
@@ -460,23 +455,20 @@ struct HomeFeedView: View {
                     proxy.scrollTo(Self.latestSectionID, anchor: .top)
                 }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     Image(systemName: "arrow.up")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
+                        .font(SabqType.tag.font)
                     Text(newArticlesBannerText)
-                        .font(SabqFonts.app(size: 14, weight: .bold))
+                        .font(SabqType.metaEmphasis.font)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(SabqTheme.actionFill)
-                )
+                .foregroundStyle(SabqTheme.onAction)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space12)
+                .background(Capsule(style: .continuous).fill(SabqTheme.actionFill))
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 14)
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.bottom, SabqLayout.space16)
+            .contentShape(Capsule(style: .continuous))
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -639,7 +631,7 @@ struct HomeFeedView: View {
 
     private func headerIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: 19, weight: .regular))
+            .font(SabqType.sectionHeading.font.weight(.regular))
             .foregroundStyle(SabqTheme.textPrimary)
             .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
             .contentShape(Rectangle())
@@ -931,7 +923,7 @@ struct HomeFeedView: View {
                                 textStyle: SabqType.rowTitle.scaled(compact).uiTextStyle
                             )
                         }
-                        .padding(.vertical, compact ? 10 : 13)
+                        .padding(.vertical, compact ? SabqLayout.space12 : SabqLayout.rowPadding)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -1050,18 +1042,17 @@ struct HomeFeedView: View {
                                 .font(SabqType.button.font)
                                 .foregroundStyle(articlesStore.loadMoreFailed ? SabqTheme.danger : SabqTheme.primary)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                        .overlay(
                             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
+                                .stroke(SabqTheme.outline, lineWidth: 1)
                         )
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(articlesStore.isLoading)
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 8)
+                .padding(.top, SabqLayout.space12)
             }
         }
     }
@@ -1088,7 +1079,7 @@ struct HomeFeedView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(14)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .sabqBlockSurface()
     }
@@ -1105,18 +1096,11 @@ struct HomeFeedView: View {
     private var journeyHeader: some View {
         Button(action: toggleJourney) {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(SabqTheme.surface)
-                        .frame(width: 40, height: 40)
-                    Image(systemName: "sparkles")
-                        .font(SabqType.label)
-                        .foregroundStyle(SabqTheme.primary)
-                }
+                SmallSquareBadge(systemImage: "sparkles", tint: SabqTheme.primary)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(journeyGreeting)
-                        .font(SabqType.label)
+                        .font(SabqType.rowTitle.font)
                         .foregroundStyle(SabqTheme.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -1267,43 +1251,40 @@ struct HomeFeedView: View {
 
     // MARK: - Calendar today card
 
+    /// بطاقة أحداث اليوم بالرأس الموحّد للرئيسية (شريط أزرق + «عرض الكل»)
+    /// بدل رأس ذهبي خاص بها كان يخرج عن لوحة الألوان.
     private var calendarTodayCard: some View {
-        let gold = SabqTheme.gold
         let preview = calendarToday.prefix(3)
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                sectionHeading(
-                    title: "أحداث اليوم القادمة",
-                    icon: "calendar",
-                    tint: gold
-                )
-                ReaderLink(value: CalendarRoute()) {
-                    Text("الكل")
-                        .font(SabqType.tag.font)
-                        .foregroundStyle(gold)
-                }
+        return HomeSectionCard(title: "أحداث اليوم القادمة") {
+            ReaderLink(value: CalendarRoute()) {
+                HomeSectionLinkLabel()
             }
-            VStack(spacing: 10) {
-                ForEach(Array(preview.enumerated()), id: \.offset) { _, event in
-                    HStack(spacing: 10) {
-                        Capsule().fill(gold).frame(width: 3, height: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(event.title)
-                                .font(SabqType.metaEmphasis.font)
-                                .foregroundStyle(SabqTheme.textPrimary)
-                                .lineLimit(1)
-                            if let imp = event.importance, imp >= 4 {
-                                Text("حدث بارز")
-                                    .font(SabqType.tag.font)
-                                    .foregroundStyle(SabqTheme.textTertiary)
-                            }
+            .buttonStyle(.plain)
+        } content: {
+            ForEach(Array(preview.enumerated()), id: \.offset) { index, event in
+                if index > 0 { SidebarRowDivider() }
+                HStack(spacing: SabqLayout.space12) {
+                    Image(systemName: "calendar")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(width: 28, height: 28)
+                        .background(SabqTheme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(event.title)
+                            .font(SabqType.rowTitle.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .lineLimit(2)
+                        if let imp = event.importance, imp >= 4 {
+                            Text("حدث بارز")
+                                .font(SabqType.tag.font)
+                                .foregroundStyle(SabqTheme.textTertiary)
                         }
-                        Spacer(minLength: 0)
                     }
+                    Spacer(minLength: 0)
                 }
+                .padding(.vertical, SabqLayout.space12)
             }
-            .padding(14)
-            .sabqBlockSurface()
         }
     }
 
@@ -1326,21 +1307,21 @@ struct HomeFeedView: View {
                 )
             )
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space12) {
                 ZStack {
                     Circle()
-                        .fill(SabqTheme.primary)
-                        .frame(width: 30, height: 30)
+                        .fill(SabqTheme.actionFill)
+                        .frame(width: 32, height: 32)
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.onAction)
                 }
 
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     Text("نشرة صوتية")
                         .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.primary)
-                        .padding(.horizontal, 7)
+                        .padding(.horizontal, SabqLayout.space8)
                         .padding(.vertical, 2)
                         .background(
                             Capsule(style: .continuous)
@@ -1361,30 +1342,12 @@ struct HomeFeedView: View {
                         .monospacedDigit()
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space8)
             .sabqSkyCardSurface()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-
-    private func sectionHeading(title: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.14))
-                    .frame(width: 26, height: 26)
-                Image(systemName: icon)
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(tint)
-            }
-            Text(title)
-                .font(SabqType.rowTitle.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Spacer(minLength: 0)
-        }
     }
 }
 

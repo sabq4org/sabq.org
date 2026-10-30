@@ -88,6 +88,7 @@ struct OpinionDetailView: View {
                         VStack(alignment: .leading, spacing: 0) {
                             if !isFocusMode {
                                 labelsRow
+                                    .padding(.bottom, SabqLayout.space12)
                             }
 
                             opinionTitle
@@ -118,7 +119,7 @@ struct OpinionDetailView: View {
 
                         if !isFocusMode, !displayTags.isEmpty {
                             tagsSection
-                                .padding(.top, SabqLayout.space16)
+                                .padding(.top, SabqLayout.space24)
                         }
 
                         if !isFocusMode, let store = commentsStore {
@@ -133,8 +134,8 @@ struct OpinionDetailView: View {
                     }
                     .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
                     .padding(.horizontal, SabqLayout.pageMargin)
-                    .padding(.top, SabqLayout.space4)
-                    .padding(.bottom, SabqLayout.space40)
+                    .padding(.top, SabqLayout.space16)
+                    .padding(.bottom, SabqLayout.tabBarClearance)
                     .frame(maxWidth: .infinity)
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
@@ -412,7 +413,7 @@ struct OpinionDetailView: View {
     /// as the article labelsRow so future additions (sentiment, breaking, etc.)
     /// drop in cleanly.
     private var labelsRow: some View {
-        FlowLayout(spacing: 14) {
+        FlowLayout(spacing: SabqLayout.space8) {
             DetailLabelPill(title: "مقال رأي", tint: SabqTheme.primary, icon: "text.quote")
         }
     }
@@ -495,11 +496,11 @@ struct OpinionDetailView: View {
         } else {
             VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 HStack(spacing: SabqLayout.space8) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space4) {
                         Image(systemName: "sparkles")
                             .font(SabqType.tag.font)
                         Text("الموجز الذكي")
-                            .font(SabqType.label)
+                            .font(SabqType.metaEmphasis.font)
                     }
                     .foregroundStyle(SabqTheme.primary)
                     Spacer(minLength: 0)
@@ -525,21 +526,18 @@ struct OpinionDetailView: View {
                         }
                         SabqHaptics.light()
                     } label: {
-                        HStack(spacing: 4) {
-                            Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
-                                .font(SabqType.metaEmphasis.font)
-                            Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
-                                .font(SabqType.tag.font)
-                        }
-                        .foregroundStyle(SabqTheme.primary)
-                        .frame(minHeight: SabqLayout.touchTarget)
+                        Text(isSummaryExpanded ? "إخفاء التفاصيل" : "قراءة الموجز كاملًا")
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(minHeight: SabqLayout.touchTarget)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(SabqLayout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .sabqBlockSurface()
+            // نفس بطاقة الموجز في صفحة الخبر (سماوية بإطار ناعم) لا بلوكًا رماديًا.
+            .sabqSkyCardSurface()
         }
     }
 
@@ -571,7 +569,7 @@ struct OpinionDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 0)
             }
         }
     }
@@ -608,7 +606,9 @@ struct OpinionDetailView: View {
                 SabqHaptics.light()
                 showReaderControls = true
             } label: {
-                actionButton(icon: "textformat.size", label: "تنسيق")
+                // «Aa» نصًا لا رمزًا: `textformat.size` يتعرّب في الواجهة العربية
+                // فيظهر حروفًا مفككة (نفس معالجة صفحة الخبر).
+                actionButton(glyph: "Aa", label: "تنسيق")
             }
             .buttonStyle(.plain)
 
@@ -629,7 +629,7 @@ struct OpinionDetailView: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, SabqLayout.space4)
-        .sabqBlockSurface()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
         .sheet(isPresented: $showReaderControls) {
             ReaderControlsSheet(
                 fontSize: $fontSize,
@@ -639,12 +639,19 @@ struct OpinionDetailView: View {
         }
     }
 
-    private func actionButton(icon: String, label: String, isActive: Bool = false) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 16, weight: .semibold))
+    /// نفس زر شريط الإجراءات في صفحة الخبر: أيقونة 16 ونص 13 شبه عريض.
+    private func actionButton(icon: String? = nil, glyph: String? = nil, label: String, isActive: Bool = false) -> some View {
+        HStack(spacing: SabqLayout.space8) {
+            if let glyph {
+                Text(glyph)
+                    .font(SabqType.metaEmphasis.font)
+                    .environment(\.layoutDirection, .leftToRight)
+            } else if let icon {
+                Image(systemName: icon)
+                    .font(SabqType.rowTitle.font.weight(.semibold))
+            }
             Text(label)
-                .font(SabqType.tag.font)
+                .font(SabqType.metaEmphasis.font)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }
@@ -669,24 +676,12 @@ struct OpinionDetailView: View {
 
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            Text("الوسوم")
-                .sabqText(SabqType.sectionHeading)
-                .foregroundStyle(SabqTheme.textPrimary)
+            HomeSectionHeader(title: "الوسوم")
 
             FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(displayTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
-                        Text(tag)
-                            .font(SabqType.tag.font)
-                            .foregroundStyle(SabqTheme.textPrimary)
-                            .padding(.horizontal, SabqLayout.space12)
-                            .frame(minHeight: 32)
-                            .background(
-                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
-                            )
-                            .frame(minHeight: SabqLayout.touchTarget)
-                            .contentShape(Rectangle())
+                        DiscoveryChip(title: tag, icon: "number")
                     }
                     .buttonStyle(.plain)
                 }

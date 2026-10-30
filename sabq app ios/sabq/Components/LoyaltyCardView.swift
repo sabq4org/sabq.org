@@ -180,8 +180,7 @@ struct LoyaltyCardView: View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(color: tier.color.opacity(0.28), radius: 14, x: 0, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         .sabqRTL()
     }
 }

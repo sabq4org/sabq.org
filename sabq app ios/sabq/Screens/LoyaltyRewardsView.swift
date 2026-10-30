@@ -28,11 +28,7 @@ struct LoyaltyRewardsView: View {
                 if isLoading && rewards.isEmpty {
                     ProgressView().padding(.top, SabqLayout.space40)
                 } else if let loadError {
-                    Text(loadError)
-                        .sabqText(SabqType.excerpt)
-                        .foregroundStyle(SabqTheme.danger)
-                        .multilineTextAlignment(.center)
-                        .padding(SabqLayout.space16)
+                    ErrorStateView(message: loadError, retryAction: { Task { await load() } })
                 } else if rewards.isEmpty {
                     emptyState
                 } else {
@@ -175,24 +171,12 @@ struct LoyaltyRewardsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "gift")
-                .font(SabqFonts.app(size: 26, weight: .regular))
-                .foregroundStyle(SabqTheme.textSecondary)
-                .frame(width: 56, height: 56)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
-                .accessibilityHidden(true)
-            Text("لا توجد مكافآت متاحة الآن")
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Text("نقاطك محفوظة في حسابك، وتظهر المكافآت هنا حين تتوفر. استمر في القراءة والتفاعل لكسب المزيد.")
-                .sabqText(SabqType.excerpt)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, SabqLayout.space24)
-        }
-        .padding(.vertical, SabqLayout.space32)
-        .frame(maxWidth: .infinity)
+        EmptyStateView(
+            icon: "gift",
+            tint: SabqTheme.textSecondary,
+            title: "لا توجد مكافآت متاحة الآن",
+            subtitle: "نقاطك محفوظة في حسابك، وتظهر المكافآت هنا حين تتوفر. استمر في القراءة والتفاعل لكسب المزيد."
+        )
     }
 
     private func successBanner(_ message: String) -> some View {

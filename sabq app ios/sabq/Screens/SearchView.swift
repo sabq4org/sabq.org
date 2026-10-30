@@ -36,10 +36,7 @@ struct SearchView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
-                Text("ابحث في آلاف الأخبار المحلية والعالمية")
-                    .sabqText(SabqType.excerpt)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                SabqPageIntro("ابحث في آلاف الأخبار المحلية والعالمية")
 
                 if searchText.isEmpty {
                     if !suggestions.isEmpty {
@@ -57,7 +54,7 @@ struct SearchView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space32)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -174,6 +171,8 @@ struct SearchView: View {
                 .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     /// صف استعلام على الصفحة: أيقونة هادئة، النص، وسهم «املأ البحث».
@@ -205,39 +204,45 @@ struct SearchView: View {
     private var trendingSection: some View {
         Group {
             if !trendingKeywords.isEmpty {
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     DiscoverySectionHeading(title: "الأكثر بحثاً", subtitle: "المواضيع الرائجة الآن")
 
-                    ForEach(Array(trendingKeywords.prefix(5).enumerated()), id: \.offset) { index, keyword in
-                        if index > 0 { SidebarRowDivider() }
-                        Button {
-                            searchText = keyword
-                            performSearch()
-                        } label: {
-                            HStack(spacing: SabqLayout.space12) {
-                                Text("\(index + 1)")
-                                    .font(SabqType.rowTitle.font)
-                                    .foregroundStyle(index < 3 ? SabqTheme.primary : SabqTheme.textTertiary)
-                                    .monospacedDigit()
-                                    .frame(width: SabqLayout.space24)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(trendingKeywords.prefix(5).enumerated()), id: \.offset) { index, keyword in
+                            if index > 0 { SidebarRowDivider() }
+                            Button {
+                                searchText = keyword
+                                performSearch()
+                            } label: {
+                                HStack(spacing: SabqLayout.space12) {
+                                    Text("\(index + 1)")
+                                        .font(SabqType.metaEmphasis.font)
+                                        .monospacedDigit()
+                                        .foregroundStyle(SabqTheme.primary)
+                                        .frame(width: 28, height: 28)
+                                        .background(SabqTheme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                                        .accessibilityLabel("المرتبة \(index + 1)")
 
-                                Text(keyword)
-                                    .font(SabqType.rowTitle.font)
-                                    .foregroundStyle(SabqTheme.textPrimary)
+                                    Text(keyword)
+                                        .font(SabqType.rowTitle.font)
+                                        .foregroundStyle(SabqTheme.textPrimary)
 
-                                Spacer(minLength: 0)
+                                    Spacer(minLength: 0)
 
-                                Image(systemName: "arrow.up.backward")
-                                    .font(SabqType.meta.font)
-                                    .foregroundStyle(SabqTheme.textTertiary)
-                                    .accessibilityHidden(true)
+                                    Image(systemName: "arrow.up.backward")
+                                        .font(SabqType.meta.font)
+                                        .foregroundStyle(SabqTheme.textTertiary)
+                                        .accessibilityHidden(true)
+                                }
+                                .padding(.vertical, SabqLayout.space12)
+                                .frame(minHeight: SabqLayout.touchTarget)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, SabqLayout.space12)
-                            .frame(minHeight: SabqLayout.touchTarget)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -248,19 +253,23 @@ struct SearchView: View {
     private var recentSearchesSection: some View {
         Group {
             if !recentSearches.isEmpty {
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     DiscoverySectionHeading(title: "عمليات البحث الأخيرة", subtitle: "اضغط للبحث مجدداً")
 
-                    ForEach(Array(recentSearches.enumerated()), id: \.element) { index, search in
-                        if index > 0 { SidebarRowDivider() }
-                        Button {
-                            searchText = search
-                            performSearch()
-                        } label: {
-                            queryRow(leading: Image(systemName: "magnifyingglass"), text: search)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(recentSearches.enumerated()), id: \.element) { index, search in
+                            if index > 0 { SidebarRowDivider() }
+                            Button {
+                                searchText = search
+                                performSearch()
+                            } label: {
+                                queryRow(leading: Image(systemName: "magnifyingglass"), text: search)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -290,13 +299,8 @@ struct SearchView: View {
 
     private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("نتائج البحث")
-                    .font(SabqType.sectionHeading.font)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer(minLength: 0)
+            HStack(alignment: .center, spacing: SabqLayout.space12) {
+                DiscoverySectionHeading(title: "نتائج البحث")
 
                 if isSearching {
                     ProgressView()
@@ -309,8 +313,9 @@ struct SearchView: View {
             }
 
             if isSearching && displayResults.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                DiscoveryListSkeleton(count: 3)
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                     .accessibilityLabel("جارٍ البحث")
             } else if searchFailed && displayResults.isEmpty {
                 ErrorStateView(
@@ -347,6 +352,8 @@ struct SearchView: View {
                         .simultaneousGesture(TapGesture().onEnded { saveRecentSearch(searchText) })
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }

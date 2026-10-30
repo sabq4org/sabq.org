@@ -20,11 +20,7 @@ struct LoyaltyHistoryView: View {
                 if items.isEmpty && isLoading {
                     ProgressView().padding(.top, 64)
                 } else if items.isEmpty, let err = loadError {
-                    Text(err)
-                        .sabqText(SabqType.excerpt)
-                        .foregroundStyle(SabqTheme.danger)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 64)
+                    ErrorStateView(message: err, retryAction: { Task { await load(reset: true) } })
                 } else if items.isEmpty {
                     emptyState
                 } else {

@@ -334,7 +334,7 @@ struct OpinionWriterRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, SabqLayout.rowPadding)
         .contentShape(Rectangle())
     }
 

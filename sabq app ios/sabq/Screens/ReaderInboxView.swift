@@ -29,6 +29,7 @@ struct ReaderInboxView: View {
                         editorialRow
                     }
                     .listRowBackground(SabqTheme.background)
+                    .listRowSeparatorTint(SabqTheme.separator)
                 }
             }
 
@@ -37,6 +38,7 @@ struct ReaderInboxView: View {
                     Button { open(item) } label: { row(item) }
                         .buttonStyle(.plain)
                         .listRowBackground(SabqTheme.background)
+                        .listRowSeparatorTint(SabqTheme.separator)
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) { delete(item) } label: {
                                 Label("حذف", systemImage: "trash")
@@ -127,14 +129,14 @@ struct ReaderInboxView: View {
             Spacer(minLength: 0)
             if notificationsStore.unreadCount > 0 {
                 Text("\(min(notificationsStore.unreadCount, 99))")
-                    .sabqText(SabqType.meta)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
+                    .sabqText(SabqType.tag)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space8)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(SabqTheme.breaking))
             }
         }
-        .padding(.vertical, SabqLayout.space4)
+        .padding(.vertical, SabqLayout.space12)
     }
 
     private func row(_ item: APIInboxItem) -> some View {
@@ -161,7 +163,7 @@ struct ReaderInboxView: View {
                     .foregroundStyle(SabqTheme.textTertiary)
             }
         }
-        .padding(.vertical, SabqLayout.space8)
+        .padding(.vertical, SabqLayout.space12)
         .contentShape(Rectangle())
     }
 

@@ -19,7 +19,7 @@ struct LoyaltyAccountView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SabqLayout.space24) {
                 heroCard
                 statsTriplet
                 quickActions
@@ -27,7 +27,7 @@ struct LoyaltyAccountView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space12)
-            .padding(.bottom, 108)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .sabqNavigationEdge()
         .sabqAutoHideTabBar()
@@ -80,8 +80,8 @@ struct LoyaltyAccountView: View {
                     .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .accessibilityHidden(true)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
-                    .font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.forward")
+                    .font(SabqType.meta.font)
                     .foregroundStyle(SabqTheme.textTertiary)
                     .accessibilityHidden(true)
             }
@@ -294,7 +294,7 @@ struct LoyaltyAccountView: View {
                     .frame(width: isCurrent ? 20 : 14, height: isCurrent ? 20 : 14)
                 if !isCurrent {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .heavy))
+                        .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.onAction)
                 }
             } else {

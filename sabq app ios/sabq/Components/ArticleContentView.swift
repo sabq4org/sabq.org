@@ -106,7 +106,7 @@ struct ArticleContentView: View {
             }
             .padding(.horizontal, SabqLayout.cardInset)
             .padding(.vertical, SabqLayout.space12)
-            .sabqBlockSurface()
+            .sabqBlockSurface(SabqTheme.surfaceMuted)
         }
         .buttonStyle(.plain)
     }
@@ -335,7 +335,7 @@ struct ArticleContentView: View {
         }
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sabqBlockSurface()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     // MARK: - Images

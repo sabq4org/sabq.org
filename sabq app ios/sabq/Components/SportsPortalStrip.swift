@@ -55,13 +55,13 @@ struct SportsPortalStrip: View {
                 }
                 Spacer(minLength: SabqLayout.space4)
                 Image(systemName: "chevron.left")
-                    .font(SabqType.tag.scaled(compactType).font)
-                    .foregroundStyle(SabqTheme.primary)
+                    .font(SabqType.metaEmphasis.scaled(compactType).font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
-            .frame(height: 48)
-            .padding(.horizontal, inColumn ? 12 : SabqLayout.pageMargin)
+            .frame(minHeight: SabqLayout.controlHeight)
+            .padding(.horizontal, SabqLayout.space16)
             .modifier(StripSurface(card: inColumn || inSpread))
-            .contentShape(Rectangle())
+            .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityText)
@@ -96,9 +96,9 @@ private struct StripSurface: ViewModifier {
         if card {
             content.sabqSkyCardSurface()
         } else {
-            // لون صلب يتمدد افتراضيًا في حواف الأمان: في عمود Duo مفتوحًا امتد إلى
-            // شريط الحسّاس تحت الساعة (بلاغ المالك 2026-10-18). الحافة حافة المحتوى.
-            content.background(SabqTheme.surfaceMuted, ignoresSafeAreaEdges: [])
+            // بطاقة بيضاء بهوامش الصفحة كبقية بلوكات الرئيسية؛ الشريط الممتد من
+            // حافة إلى حافة كان يختفي على الخلفية الرمادية ويترك فراغًا حوله.
+            content.sabqBlockSurface()
         }
     }
 }

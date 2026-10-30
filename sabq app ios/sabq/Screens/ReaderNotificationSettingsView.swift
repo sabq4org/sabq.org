@@ -21,7 +21,7 @@ struct ReaderNotificationSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: SabqLayout.space24) {
+            VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
                 deviceSection
                 if loaded {
                     group(title: "الملخص اليومي", footer: "إشعار واحد مساءً في صندوق إشعاراتك بأهم ما نُشر في اهتماماتك.") {
@@ -29,14 +29,14 @@ struct ReaderNotificationSettingsView: View {
                     }
                     group(title: "توصيات لك", footer: "تصل إلى صندوق إشعاراتك، بحد أقصى ثلاث في اليوم.") {
                         toggle("محتوى مخصص", subtitle: "مقالات مشابهة لما قرأته سابقًا", icon: "sparkles", isOn: $prefs.becauseYouLiked)
-                        WCRowSeparator()
+                        SidebarRowDivider()
                         toggle("الأكثر رواجًا", subtitle: "المقالات الشائعة في مجالات اهتمامك", icon: "flame", isOn: $prefs.trendingForYou)
-                        WCRowSeparator()
+                        SidebarRowDivider()
                         toggle("اكتشاف محتوى جديد", subtitle: "مقالات من أقسام أخرى قد تثير اهتمامك", icon: "safari", isOn: $prefs.similarToSaved)
                     }
                     group(title: "أوقات الهدوء", footer: "لا تصلك التوصيات بين هذين الوقتين.") {
                         timeRow("من", value: $prefs.quietHoursStart)
-                        WCRowSeparator()
+                        SidebarRowDivider()
                         timeRow("إلى", value: $prefs.quietHoursEnd)
                     }
                 } else if loadError {
@@ -46,8 +46,8 @@ struct ReaderNotificationSettingsView: View {
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.vertical, SabqLayout.space24)
-            .padding(.bottom, 96)
+            .padding(.top, SabqLayout.space24)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -119,7 +119,7 @@ struct ReaderNotificationSettingsView: View {
                 }
             }
             Spacer(minLength: 0)
-            Toggle(title, isOn: isOn).labelsHidden().tint(SabqTheme.primary)
+            Toggle(title, isOn: isOn).labelsHidden().tint(SabqTheme.actionFill)
         }
         .padding(.vertical, SabqLayout.space12)
     }
@@ -141,7 +141,7 @@ struct ReaderNotificationSettingsView: View {
     private func rowIcon(_ name: String) -> some View {
         Image(systemName: name)
             .font(SabqFonts.app(size: 15, weight: .semibold))
-            .foregroundStyle(SabqTheme.textSecondary)
+            .foregroundStyle(SabqTheme.primary)
             .frame(width: 36, height: 36)
             .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
             .accessibilityHidden(true)

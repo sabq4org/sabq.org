@@ -136,6 +136,8 @@ nonisolated enum SabqLayout {
     static let controlHeight: CGFloat = 48
     static let touchTarget: CGFloat = 44
     static let readingWidth: CGFloat = 680
+    /// حشوة أسفل كل صفحة تمرير حتى لا يغطي شريط التبويبات العائم آخر صف.
+    static let tabBarClearance: CGFloat = 96
 }
 
 // MARK: - Type

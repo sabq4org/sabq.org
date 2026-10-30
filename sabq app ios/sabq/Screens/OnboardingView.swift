@@ -97,7 +97,6 @@ struct OnboardingView: View {
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, SabqLayout.space32)
             }
@@ -130,7 +129,7 @@ struct OnboardingView: View {
                 Color.clear.frame(height: SabqLayout.touchTarget)
             }
         }
-        .padding(.horizontal, SabqLayout.space24)
+        .padding(.horizontal, SabqLayout.pageMargin)
         .padding(.bottom, SabqLayout.space32)
         .padding(.top, SabqLayout.space16)
     }
@@ -163,26 +162,20 @@ struct OnboardingView: View {
     }
 
     private var primaryButton: some View {
-        Button {
+        let isLast = page >= slides.count - 1
+        // arrow.forward يتبع اتجاه الواجهة فيشير يسارًا تحت RTL.
+        return PrimaryCTAButton(
+            title: isLast ? "ابدأ الآن" : "التالي",
+            systemImage: isLast ? "checkmark" : "arrow.forward"
+        ) {
             SabqHaptics.medium()
-            if page < slides.count - 1 {
+            if isLast {
+                finishOnboarding()
+            } else {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
                     page += 1
                 }
-            } else {
-                finishOnboarding()
             }
-        } label: {
-            Text(page < slides.count - 1 ? "التالي" : "ابدأ الآن")
-                .sabqText(SabqType.button)
-                .foregroundStyle(SabqTheme.onAction)
-                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.actionFill)
-                )
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
     }
 }

@@ -44,7 +44,7 @@ struct OpinionsView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .refreshable {
@@ -64,12 +64,7 @@ struct OpinionsView: View {
 
     private var mostViewedSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            SectionHeader(
-                title: "ترند المقالات",
-                subtitle: "الأكثر تفاعلاً خلال آخر 48 ساعة",
-                icon: "flame.fill",
-                tint: SabqTheme.primary
-            )
+            DiscoverySectionHeading(title: "ترند المقالات", subtitle: "الأكثر تفاعلاً خلال آخر 48 ساعة")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: SabqLayout.space16) {
@@ -102,17 +97,20 @@ struct OpinionsView: View {
                 .frame(width: 240, height: 135)
                 .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
 
-                // Rank badge
+                // رقم الترتيب بنمط الرئيسية (28 نقطة، نص أساسي). فوق الصورة يحتاج
+                // سطحًا أبيض بدل التعبئة الشفافة كي يبقى مقروءًا.
                 Text("\(rank)")
-                    .font(SabqType.button.font)
+                    .font(SabqType.metaEmphasis.font)
                     .monospacedDigit()
-                    .foregroundStyle(SabqTheme.onAction)
-                    .frame(minWidth: 32, minHeight: 32)
-                    .background(
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(width: 28, height: 28)
+                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .overlay(
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .fill(SabqTheme.actionFill)
+                            .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
                     )
                     .padding(SabqLayout.space8)
+                    .accessibilityLabel("المرتبة \(rank)")
             }
 
             Text(opinion.title)
@@ -125,8 +123,8 @@ struct OpinionsView: View {
             HStack(spacing: SabqLayout.space8) {
                 OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 24)
                 Text(opinion.authorName)
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
                     .lineLimit(1)
             }
             .frame(width: 240, alignment: .leading)
@@ -137,15 +135,10 @@ struct OpinionsView: View {
     // MARK: - Latest (bottom)
 
     private var latestSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            SectionHeader(
-                title: "أحدث المقالات",
-                subtitle: "كل ما نُشر مرتباً زمنياً",
-                icon: "text.quote",
-                tint: SabqTheme.primary
-            )
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            DiscoverySectionHeading(title: "أحدث المقالات", subtitle: "كل ما نُشر مرتباً زمنياً")
 
-            // صفوف بفواصل رفيعة على الصفحة مباشرة، بلا صندوق.
+            // صفوف بفواصل رفيعة على سطح أبيض واحد، كما في الرئيسية.
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(latest.enumerated()), id: \.element.id) { index, opinion in
                     if index > 0 {
@@ -158,6 +151,8 @@ struct OpinionsView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -199,7 +194,11 @@ struct OpinionsView: View {
                 }
             }
             .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
-            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+            )
         }
         .padding(.vertical, SabqLayout.rowPadding)
         .contentShape(Rectangle())
@@ -210,8 +209,8 @@ struct OpinionsView: View {
             OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 24)
 
             Text(opinion.authorName)
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.primary)
                 .lineLimit(1)
 
             Spacer(minLength: 0)
@@ -234,14 +233,14 @@ struct OpinionsView: View {
     @ViewBuilder
     private var loadingSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space16) {
-            SkeletonBox(width: 140, height: 18, radius: 4)
+            SkeletonBox(width: 140, height: 18, radius: SabqRadius.small)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: SabqLayout.space16) {
                     ForEach(0..<3, id: \.self) { _ in
                         VStack(alignment: .leading, spacing: SabqLayout.space8) {
                             SkeletonBox(width: 240, height: 135, radius: SabqRadius.medium)
-                            SkeletonBox(width: 220, height: 14, radius: 4)
-                            SkeletonBox(width: 140, height: 12, radius: 4)
+                            SkeletonBox(width: 220, height: 14, radius: SabqRadius.small)
+                            SkeletonBox(width: 140, height: 12, radius: SabqRadius.small)
                         }
                     }
                 }
@@ -262,6 +261,8 @@ struct OpinionsView: View {
                     .padding(.vertical, SabqLayout.rowPadding)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 

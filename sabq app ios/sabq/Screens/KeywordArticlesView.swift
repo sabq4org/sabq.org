@@ -18,6 +18,8 @@ struct KeywordArticlesView: View {
 
                 if isLoading && items.isEmpty {
                     DiscoveryListSkeleton()
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                 } else if items.isEmpty, let loadError {
                     // كان الفشل يُبتلع إلى «لا توجد مواد» حتى بلا إنترنت (نقل أندرويد #1573).
                     ErrorStateView(message: loadError) {
@@ -56,11 +58,13 @@ struct KeywordArticlesView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -246,7 +250,8 @@ private struct CompactOpinionKeywordRow: View {
                 .foregroundStyle(SabqTheme.primary)
             Text("·").foregroundStyle(SabqTheme.textTertiary)
             Text(opinion.authorName)
-                .foregroundStyle(SabqTheme.textSecondary)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.primary)
         }
     }
 
@@ -254,7 +259,7 @@ private struct CompactOpinionKeywordRow: View {
         HStack(spacing: SabqLayout.space8) {
             Text(opinion.readingTime)
                 .monospacedDigit()
-            Text(opinion.dateFormatted)
+            Text(opinion.relativeDate)
         }
         .font(SabqType.timestamp.font)
         .foregroundStyle(SabqTheme.textTertiary)
@@ -272,6 +277,10 @@ private struct CompactOpinionKeywordRow: View {
             }
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
-        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+        )
     }
 }

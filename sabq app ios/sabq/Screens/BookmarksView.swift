@@ -18,30 +18,26 @@ struct BookmarksView: View {
             VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 SabqPageIntro("الأخبار التي حفظتها للقراءة لاحقاً")
 
-                if isSyncing {
-                    HStack { Spacer(); ProgressView().tint(SabqTheme.primary); Spacer() }
-                        .padding(.vertical, SabqLayout.space40)
-                } else if bookmarkedArticles.isEmpty && bookmarksStore.bookmarkedIDs.isEmpty {
-                    emptyState
+                if isSyncing || (bookmarkedArticles.isEmpty && !bookmarksStore.bookmarkedIDs.isEmpty) {
+                    // المزامنة أو معرّفات بلا بيانات بعد: هيكل بمقاس الصفوف الحقيقية
+                    // بدل مؤشر دوّار وحيد، كبقية شاشات القوائم.
+                    DiscoveryListSkeleton(count: 4)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("يتم تحميل المحفوظات")
                 } else if bookmarkedArticles.isEmpty {
-                    // IDs exist (from server sync) but no cached metadata.
-                    // Show a hint that data is loading.
-                    VStack(spacing: SabqLayout.space12) {
-                        ProgressView().tint(SabqTheme.primary)
-                        Text("يتم تحميل المحفوظات…")
-                            .font(SabqType.meta.font)
-                            .foregroundStyle(SabqTheme.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SabqLayout.space40)
+                    emptyState
                 } else {
                     statsSection
                     articlesListSection
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space32)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("محفوظاتي")

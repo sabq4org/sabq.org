@@ -191,7 +191,7 @@ struct ArticleCommentsSection: View {
                 commentEmptyState
             }
         } else {
-            LazyVStack(alignment: .leading, spacing: 6) {
+            LazyVStack(alignment: .leading, spacing: SabqLayout.space8) {
                 let ordered = safety.visible(store.sortedComments)
                 ForEach(ordered) { comment in
                     if comment.id != ordered.first?.id {
@@ -261,18 +261,18 @@ struct ArticleCommentsSection: View {
             ForEach(0..<3, id: \.self) { _ in
                 HStack(alignment: .top, spacing: 10) {
                     Circle()
-                        .fill(SabqTheme.surfaceMuted)
+                        .fill(SabqTheme.surfaceStrong)
                         .frame(width: 32, height: 32)
                     VStack(alignment: .leading, spacing: 6) {
                         RoundedRectangle(cornerRadius: SabqRadius.small)
-                            .fill(SabqTheme.surfaceMuted)
+                            .fill(SabqTheme.surfaceStrong)
                             .frame(width: 110, height: 12)
                         RoundedRectangle(cornerRadius: SabqRadius.small)
-                            .fill(SabqTheme.surfaceMuted)
+                            .fill(SabqTheme.surfaceStrong)
                             .frame(maxWidth: .infinity)
                             .frame(height: 10)
                         RoundedRectangle(cornerRadius: SabqRadius.small)
-                            .fill(SabqTheme.surfaceMuted)
+                            .fill(SabqTheme.surfaceStrong)
                             .frame(width: 220, height: 10)
                     }
                 }
@@ -282,30 +282,7 @@ struct ArticleCommentsSection: View {
     }
 
     private func commentErrorState(message: String, store: CommentsStore) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.textTertiary)
-            Text(message)
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-            Button {
-                Task { await store.load() }
-            } label: {
-                Text("إعادة المحاولة")
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(SabqTheme.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule().fill(SabqTheme.surfaceMuted)
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
+        ErrorStateView(message: message, retryAction: { Task { await store.load() } })
     }
 
     private func commentFeedbackBanner(_ feedback: CommentFeedback) -> some View {
@@ -380,7 +357,7 @@ struct CommentFeedback: Equatable {
             self.init(
                 message: "لم يستوفِ التعليق سياسة النشر",
                 icon: "xmark.octagon.fill",
-                tint: .red,
+                tint: SabqTheme.danger,
                 isError: true
             )
         }
