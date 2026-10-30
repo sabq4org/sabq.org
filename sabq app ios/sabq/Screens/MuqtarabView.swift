@@ -27,7 +27,7 @@ struct MuqtarabWriterRoute: Hashable {
 struct MuqTheme {
     let ui: UIColor
     init(_ hex: String?) {
-        ui = UIColor(muqHex: hex ?? "") ?? UIColor(red: 0.39, green: 0.40, blue: 0.95, alpha: 1)
+        ui = UIColor(muqHex: hex ?? "") ?? UIColor(SabqTheme.primary)
     }
     var color: Color { Color(ui) }
     var soft: Color { Color(ui).opacity(0.12) }
@@ -152,11 +152,9 @@ struct MuqtarabLandingView: View {
                         SkeletonBox(height: 120, radius: SabqRadius.medium)
                     }
                 } else if let errorMessage, topics.isEmpty {
-                    EmptyStateView(
-                        icon: "exclamationmark.shield", tint: SabqTheme.textSecondary,
-                        title: "تعذّر التحميل", subtitle: errorMessage,
-                        action: { Task { await load() } }, actionTitle: "إعادة المحاولة"
-                    )
+                    ErrorStateView(message: errorMessage) {
+                        Task { await load() }
+                    }
                 } else if topics.isEmpty && angles.isEmpty {
                     EmptyStateView(
                         icon: "square.stack.3d.up", tint: SabqTheme.textSecondary,
@@ -796,7 +794,7 @@ struct MuqtarabTopicView: View {
     private func signatureCard(_ sig: String) -> some View {
         HStack(alignment: .top, spacing: SabqLayout.space12) {
             Image(systemName: "person")
-                .font(SabqFonts.app(size: 16, weight: .regular))
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.textSecondary)
                 .frame(width: 36, height: 36)
                 .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))

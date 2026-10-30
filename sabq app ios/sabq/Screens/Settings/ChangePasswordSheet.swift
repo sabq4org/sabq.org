@@ -24,9 +24,7 @@ struct ChangePasswordSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: SabqLayout.space24) {
                     VStack(spacing: SabqLayout.space12) {
-                        Image(systemName: "lock.rotation")
-                            .font(SabqFonts.app(size: 40, weight: .light))
-                            .foregroundStyle(SabqTheme.primary)
+                        SquareIconBadge(systemImage: "lock.rotation", tint: SabqTheme.primary)
                             .accessibilityHidden(true)
 
                         Text("تغيير كلمة المرور")
@@ -81,7 +79,7 @@ struct ChangePasswordSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
+                                    .fill(SabqTheme.danger.opacity(0.08))
                             )
                         }
 
@@ -136,7 +134,7 @@ struct ChangePasswordSheet: View {
                 .foregroundStyle(SabqTheme.textPrimary)
 
             SecureField(placeholder, text: text)
-                .sabqText(SabqType.excerpt)
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.textPrimary)
                 .textContentType(.password)
                 .modifier(SabqInputSurface())

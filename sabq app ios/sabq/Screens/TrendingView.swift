@@ -38,7 +38,7 @@ struct TrendingView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -69,6 +69,8 @@ struct TrendingView: View {
 
     private var loadingSection: some View {
         DiscoveryListSkeleton()
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
     }
 
     private var articlesSection: some View {
@@ -84,16 +86,20 @@ struct TrendingView: View {
                 .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     /// صف خبر بمقاس `CompactArticleRow` يسبقه رقم الترتيب.
     private func rankedRow(_ article: Article, index: Int) -> some View {
         HStack(alignment: .top, spacing: SabqLayout.space12) {
             Text("\(index + 1)")
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(index < 3 ? SabqTheme.primary : SabqTheme.textTertiary)
+                .font(SabqType.metaEmphasis.font)
                 .monospacedDigit()
-                .frame(minWidth: SabqLayout.space24)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(width: 28, height: 28)
+                .background(SabqTheme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                .accessibilityLabel("المرتبة \(index + 1)")
 
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
@@ -105,16 +111,20 @@ struct TrendingView: View {
                     textStyle: SabqType.rowTitle.uiTextStyle
                 )
 
-                HStack(spacing: SabqLayout.space4) {
+                HStack(alignment: .center, spacing: 6) {
                     Text(article.categoryTitle)
+                        .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.primary)
-                    Text("·")
-                        .foregroundStyle(SabqTheme.textTertiary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                        .fixedSize(horizontal: true, vertical: false)
                     Text(article.relativeDate)
                         .font(SabqType.timestamp.font)
                         .foregroundStyle(SabqTheme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(SabqType.meta.font)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -129,7 +139,11 @@ struct TrendingView: View {
                 }
             }
             .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
-            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+            )
             .aiImageBadgeOverlay(
                 isVisible: article.isAiGeneratedImage,
                 model: article.aiImageModel,

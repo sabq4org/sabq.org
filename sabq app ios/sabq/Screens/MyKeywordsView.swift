@@ -18,6 +18,8 @@ struct MyKeywordsView: View {
                         row(keyword)
                     }
                     .listRowBackground(SabqTheme.background)
+                    .listRowSeparatorTint(SabqTheme.separator)
+                    .listRowInsets(EdgeInsets(top: 0, leading: SabqLayout.pageMargin, bottom: 0, trailing: SabqLayout.pageMargin))
                 }
                 .onDelete { offsets in
                     for keyword in offsets.map({ followedKeywords.followed[$0] }) {
@@ -51,20 +53,11 @@ struct MyKeywordsView: View {
         }
         .safeAreaInset(edge: .bottom) {
             if !authStore.isLoggedIn && !followedKeywords.followed.isEmpty {
-                Button { showLogin = true } label: {
-                    Text("سجّل الدخول لحفظ كلماتك")
-                        .sabqText(SabqType.rowTitle)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, SabqLayout.space12)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.primary)
-                        )
+                PrimaryCTAButton(title: "سجّل الدخول لحفظ كلماتك", systemImage: "person.crop.circle") {
+                    showLogin = true
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, SabqLayout.pageMargin)
-                .padding(.bottom, 96)
+                .padding(.bottom, SabqLayout.tabBarClearance)
             }
         }
         .sabqRTL()
@@ -81,7 +74,7 @@ struct MyKeywordsView: View {
     private func row(_ keyword: String) -> some View {
         HStack(spacing: SabqLayout.space12) {
             Image(systemName: "number")
-                .font(SabqFonts.app(size: 15, weight: .semibold))
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.primary)
                 .frame(width: 36, height: 36)
                 .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
@@ -98,6 +91,6 @@ struct MyKeywordsView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, SabqLayout.space4)
+        .padding(.vertical, SabqLayout.space12)
     }
 }

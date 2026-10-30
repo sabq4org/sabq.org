@@ -45,21 +45,21 @@ struct AudioBulletinBar: View {
             )
         } label: {
             VStack(spacing: isCurrent ? 6 : 0) {
-                HStack(spacing: 10) {
+                HStack(spacing: SabqLayout.space12) {
                     ZStack {
                         Circle()
                             .fill(SabqTheme.primary)
                             .frame(width: 30, height: 30)
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(SabqType.tag.font)
                             .foregroundStyle(SabqTheme.onAction)
                     }
 
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         Text("نشرة سَبْق")
                             .font(SabqType.tag.font)
                             .foregroundStyle(SabqTheme.primary)
-                            .padding(.horizontal, 7)
+                            .padding(.horizontal, SabqLayout.space8)
                             .padding(.vertical, 2)
                             .background(
                                 Capsule(style: .continuous)

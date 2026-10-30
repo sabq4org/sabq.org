@@ -91,6 +91,8 @@ struct CategoryArticlesView: View {
 
                 if isLoading && categoryArticles.isEmpty {
                     DiscoveryListSkeleton()
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                 } else if categoryArticles.isEmpty {
                     EmptyStateView(
                         icon: category.icon,
@@ -115,36 +117,37 @@ struct CategoryArticlesView: View {
                             }
                             .buttonStyle(.plain)
                         }
+                    }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
 
-                        if hasMore {
-                            Button {
-                                Task { await loadMore() }
-                            } label: {
-                                HStack(spacing: SabqLayout.space8) {
-                                    if isLoading {
-                                        ProgressView().tint(SabqTheme.primary)
-                                    }
-                                    Text("تحميل المزيد")
-                                        .font(SabqType.button.font)
-                                        .foregroundStyle(SabqTheme.primary)
+                    if hasMore {
+                        Button {
+                            Task { await loadMore() }
+                        } label: {
+                            HStack(spacing: SabqLayout.space8) {
+                                if isLoading {
+                                    ProgressView().tint(SabqTheme.primary)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                        .stroke(SabqTheme.outline, lineWidth: 1)
-                                )
-                                .contentShape(Rectangle())
+                                Text("تحميل المزيد")
+                                    .font(SabqType.button.font)
+                                    .foregroundStyle(SabqTheme.primary)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(isLoading)
-                            .padding(.top, SabqLayout.space16)
+                            .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                    .stroke(SabqTheme.outline, lineWidth: 1)
+                            )
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .disabled(isLoading)
                     }
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space32)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -210,7 +213,7 @@ struct CategoryArticlesView: View {
             .font(SabqType.rowTitle.font)
             .foregroundStyle(SabqTheme.primary)
             .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.primary.opacity(0.1)))
             .accessibilityHidden(true)
     }
 

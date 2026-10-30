@@ -29,6 +29,8 @@ enum SabqHaptics {
 struct ShimmerModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: CGFloat = 0
+    /// نصف قطر القصّ يتبع شكل الهيكل نفسه (8 للصفوف، 16 للبطاقات).
+    var radius: CGFloat = SabqRadius.small
 
     func body(content: Content) -> some View {
         if reduceMotion {
@@ -40,7 +42,7 @@ struct ShimmerModifier: ViewModifier {
                         LinearGradient(
                             colors: [
                                 .clear,
-                                Color.white.opacity(0.25),
+                                SabqTheme.surface.opacity(0.55),
                                 .clear
                             ],
                             startPoint: .leading,
@@ -51,7 +53,7 @@ struct ShimmerModifier: ViewModifier {
                         .blendMode(.softLight)
                     }
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                 .onAppear {
                     withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                         phase = 1
@@ -62,8 +64,8 @@ struct ShimmerModifier: ViewModifier {
 }
 
 extension View {
-    func shimmer() -> some View {
-        modifier(ShimmerModifier())
+    func shimmer(radius: CGFloat = SabqRadius.small) -> some View {
+        modifier(ShimmerModifier(radius: radius))
     }
 }
 
@@ -78,7 +80,7 @@ struct SkeletonBox: View {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(SabqTheme.outline.opacity(0.5))
             .frame(width: width, height: height)
-            .shimmer()
+            .shimmer(radius: radius)
     }
 }
 
@@ -99,83 +101,53 @@ struct ArticleRowSkeleton: View {
     }
 }
 
+/// هيكل الهيرو بمقاس بطاقة الرئيسية الحقيقية: صورة 16:9 ثم تصنيف وعنوان وموجز.
 struct FeaturedCardSkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SkeletonBox(height: 200, radius: 0)
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: SabqTheme.cardRadius,
-                        bottomLeadingRadius: 0,
-                        bottomTrailingRadius: 0,
-                        topTrailingRadius: SabqTheme.cardRadius,
-                        style: .continuous
-                    )
-                )
-
-            VStack(alignment: .leading, spacing: 12) {
-                SkeletonBox(height: 20)
-                SkeletonBox(width: 240, height: 16)
-                SkeletonBox(width: 180, height: 14)
-            }
-            .padding(20)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.outline.opacity(0.5))
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .shimmer(radius: SabqRadius.medium)
+                .padding(.bottom, SabqLayout.space4)
+            SkeletonBox(width: 72, height: 18, radius: SabqRadius.small)
+            SkeletonBox(height: 22)
+            SkeletonBox(width: 240, height: 22)
+            SkeletonBox(width: 200, height: 14)
         }
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
-        )
     }
 }
 
+/// هيكل الرئيسية على شكلها الحقيقي: رأس الشعار، ثم سطح أبيض يحمل الهيرو
+/// وصفوف الأخبار بفواصل رفيعة. مسطّح بلا ظلال كي لا تقفز الصفحة عند التحميل.
 struct HomeFeedSkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             HStack {
-                SkeletonBox(width: 120, height: 48, radius: 12)
+                SkeletonBox(width: 96, height: 40, radius: SabqRadius.small)
                 Spacer()
-                HStack(spacing: 12) {
-                    SkeletonBox(width: 48, height: 48, radius: 24)
-                    SkeletonBox(width: 48, height: 48, radius: 24)
-                }
-            }
-
-            SkeletonBox(height: 50, radius: SabqTheme.tileRadius)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(0..<5, id: \.self) { _ in
-                        VStack(spacing: 8) {
-                            SkeletonBox(width: 68, height: 68, radius: 34)
-                            SkeletonBox(width: 50, height: 10)
-                        }
+                HStack(spacing: SabqLayout.space8) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        SkeletonBox(width: 28, height: 28, radius: SabqRadius.small)
                     }
                 }
             }
 
-            FeaturedCardSkeleton()
-                .padding(.horizontal, 4)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(0..<6, id: \.self) { _ in
-                        SkeletonBox(width: 80, height: 36, radius: SabqTheme.chipRadius)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(0..<4, id: \.self) { _ in
+            VStack(alignment: .leading, spacing: 0) {
+                FeaturedCardSkeleton()
+                    .padding(.bottom, SabqLayout.space12)
+                ForEach(0..<3, id: \.self) { index in
+                    SidebarRowDivider()
                     ArticleRowSkeleton()
-                    if true { Divider().foregroundStyle(SabqTheme.outline.opacity(0.3)) }
+                        .padding(.vertical, SabqLayout.space12)
+                        .id(index)
                 }
             }
-            .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .fill(SabqTheme.surface)
-                    .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
-            )
+            .padding(SabqLayout.space12)
+            .sabqNewsSurface()
+
+            SkeletonBox(height: 56, radius: SabqRadius.medium)
+            SkeletonBox(height: 120, radius: SabqRadius.medium)
         }
     }
 }
@@ -1157,10 +1129,14 @@ struct SurfaceCard<Content: View>: View {
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
-        // بلوك هادئ بلا حد (النموذج المعتمد #1913).
+        // سطح أبيض بحدّ رفيع على خلفية التطبيق الرمادية — نفس لغة بقية البطاقات.
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
         )
         .sabqRTL()
     }
@@ -1394,7 +1370,7 @@ struct DetailLabelPill: View {
         HStack(spacing: 4) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(SabqType.timestamp.font.weight(.semibold))
                     .frame(width: 12, height: 12)
                     .accessibilityHidden(true)
             }
@@ -1796,7 +1772,7 @@ struct EmptyStateView: View {
             Image(systemName: icon)
                 .font(SabqFonts.app(size: 26, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(SabqTheme.textSecondary)
+                .foregroundStyle(tint)
                 .frame(width: 56, height: 56)
                 .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
                 .accessibilityHidden(true)
@@ -2072,11 +2048,13 @@ struct SabqAdaptivePickerStyle: ViewModifier {
 // MARK: - سطح بطاقات الرئيسية
 
 extension View {
-    /// البلوكات الخاصة على الصفحة البيضاء: تعبئة هادئة بزوايا 12 وحدود سماوية ناعمة.
-    func sabqBlockSurface(_ fill: Color = SabqTheme.surfaceMuted) -> some View {
+    /// البلوك القياسي على خلفية التطبيق الرمادية: سطح أبيض بزوايا 16 وحدّ رفيع،
+    /// بنفس لغة `sabqNewsSurface`. داخل صفحة بيضاء (الخبر، المقال) مرّر
+    /// `SabqTheme.surfaceMuted` كي يتمايز البلوك عن الصفحة.
+    func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
         return background(shape.fill(fill))
-            .overlay(shape.strokeBorder(SabqTheme.skyOutline.opacity(0.65), lineWidth: 0.75))
+            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
             .clipShape(shape)
     }
 

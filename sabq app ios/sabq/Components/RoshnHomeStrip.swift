@@ -200,7 +200,7 @@ struct RoshnHomeStrip: View {
             if md.liveCount > 0 {
                 chip(background: RoshnTheme.liveFill) {
                     HStack(spacing: SabqLayout.space4) {
-                        Circle().fill(.white).frame(width: 5, height: 5)
+                        Circle().fill(SabqTheme.onAction).frame(width: 5, height: 5)
                         Text(md.liveCount == 1 ? "مباشر" : "\(md.liveCount) مباشر")
                     }
                 }
@@ -287,25 +287,15 @@ struct RoshnHomeStrip: View {
         }
         .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
         .frame(minHeight: 64)
+        // بلا شريط جانبي أخضر: البطاقة بيضاء كبقية بلوكات الرئيسية، والهوية
+        // الخضراء تبقى في شعار الدوري وشارة «مباشر» فقط.
         .sabqBlockSurface()
-        .overlay(alignment: .leading) {
-            UnevenRoundedRectangle(
-                topLeadingRadius: SabqRadius.medium,
-                bottomLeadingRadius: SabqRadius.medium,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 0,
-                style: .continuous
-            )
-            .fill(RoshnTheme.accentFill)
-            .frame(width: 4)
-            .accessibilityHidden(true)
-        }
         .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     /// شارة حالة: تعبئة مسطّحة، أو شريحة هادئة بحدّ فوق البطاقة.
     private func chip(background: Color? = nil, ink: Color? = nil, @ViewBuilder content: () -> some View) -> some View {
-        let resolvedInk = ink ?? (background != nil ? Color.white : SabqTheme.textPrimary)
+        let resolvedInk = ink ?? (background != nil ? SabqTheme.onAction : SabqTheme.textPrimary)
         return content()
             .sabqText(SabqType.tag.scaled(compactType))
             .foregroundStyle(resolvedInk)
@@ -347,7 +337,7 @@ struct RoshnHomeStrip: View {
     private func liveScoreChip(_ f: RsFixture) -> some View {
         chip(background: RoshnTheme.liveFill) {
             HStack(spacing: SabqLayout.space4) {
-                Circle().fill(.white).frame(width: 5, height: 5)
+                Circle().fill(SabqTheme.onAction).frame(width: 5, height: 5)
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
                     .sabqText(SabqType.metaEmphasis.scaled(compactType))
                     .monospacedDigit()

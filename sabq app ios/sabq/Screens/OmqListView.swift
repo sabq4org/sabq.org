@@ -31,16 +31,13 @@ struct OmqListView: View {
                             .padding(.vertical, SabqLayout.rowPadding)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                     .accessibilityHidden(true)
                 } else if let errorMessage {
-                    EmptyStateView(
-                        icon: "exclamationmark.shield",
-                        tint: SabqTheme.danger,
-                        title: "تعذّر التحميل",
-                        subtitle: errorMessage,
-                        action: { Task { await load() } },
-                        actionTitle: "إعادة المحاولة"
-                    )
+                    ErrorStateView(message: errorMessage) {
+                        Task { await load() }
+                    }
                 } else if analyses.isEmpty {
                     EmptyStateView(
                         icon: "sparkles.rectangle.stack",
@@ -58,11 +55,13 @@ struct OmqListView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -80,7 +79,14 @@ struct OmqListView: View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             HStack(spacing: SabqLayout.space8) {
                 if let cat = a.categoryName ?? a.category, !cat.isEmpty {
-                    StatusChip(title: cat, tint: SabqTheme.primary)
+                    Text(cat)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 Spacer(minLength: 0)
                 if let views = a.viewsCount, views > 0 {
@@ -158,21 +164,16 @@ struct OmqDetailView: View {
                         SkeletonBox(height: 200, radius: SabqRadius.medium)
                     }
                 } else if let errorMessage, analysis == nil {
-                    EmptyStateView(
-                        icon: "exclamationmark.shield",
-                        tint: SabqTheme.danger,
-                        title: "تعذّر التحميل",
-                        subtitle: errorMessage,
-                        action: { Task { await load() } },
-                        actionTitle: "إعادة المحاولة"
-                    )
+                    ErrorStateView(message: errorMessage) {
+                        Task { await load() }
+                    }
                 } else if let a = analysis {
                     detailContent(a)
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -233,10 +234,7 @@ struct OmqDetailView: View {
             SabqSectionBand()
 
             VStack(alignment: .leading, spacing: SabqLayout.space12) {
-                Text(title)
-                    .font(SabqType.sectionHeading.font)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
+                DiscoverySectionHeading(title: title)
 
                 Text(body)
                     .sabqText(SabqType.articleBody)

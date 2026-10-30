@@ -145,7 +145,7 @@ struct ContactSheet: View {
                             // Trailing spacer so the message editor's bottom
                             // edge can clear the keyboard when focused near
                             // the bottom of the sheet.
-                            Color.clear.frame(height: 80)
+                            Color.clear.frame(height: SabqLayout.space40)
                         }
                     }
                     .padding(.horizontal, SabqLayout.pageMargin)
@@ -281,7 +281,7 @@ struct ContactSheet: View {
             fieldLabel(label)
 
             TextField(placeholder, text: text)
-                .sabqText(SabqType.excerpt)
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.textPrimary)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(disableAutocap ? .never : .sentences)
@@ -304,7 +304,7 @@ struct ContactSheet: View {
             } label: {
                 HStack(spacing: SabqLayout.space8) {
                     Text(subject.isEmpty ? "اختر موضوع الرسالة" : subject)
-                        .sabqText(SabqType.excerpt)
+                        .font(SabqType.rowTitle.font)
                         .foregroundStyle(subject.isEmpty ? SabqTheme.textTertiary : SabqTheme.textPrimary)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
@@ -421,7 +421,7 @@ struct ContactSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(SabqTheme.danger.opacity(0.08))
         )
     }
 }

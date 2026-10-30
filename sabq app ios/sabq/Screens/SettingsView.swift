@@ -47,35 +47,29 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
+            // كل مجموعة على سطح أبيض مستقل فوق الخلفية الرمادية (نفس لغة الرئيسية)،
+            // والمسافة بين المجموعات ثابتة بلا خطوط فاصلة.
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 profileSection
                 if authStore.isLoggedIn, let user = authStore.currentUser {
                     editorialAndAdminSection(for: user)
                 }
-                SabqSectionBand()
                 displaySection
-                SabqSectionBand()
                 browsingExperienceSection
-                SabqSectionBand()
                 analyticsPrivacySection
                 if authStore.isLoggedIn {
-                    SabqSectionBand()
                     matchAlertsSection
                 }
-                SabqSectionBand()
                 subscriptionSection
-                SabqSectionBand()
                 aboutSection
                 if authStore.isLoggedIn {
-                    SabqSectionBand()
                     accountDangerSection
                 }
-                SabqSectionBand()
                 appInfoSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.top, SabqLayout.space12)
-            .padding(.bottom, 108)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: SabqLayout.readingWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
@@ -215,13 +209,10 @@ struct SettingsView: View {
                     .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 34, height: 34)
-                    .background(SabqTheme.skyTint, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .accessibilityHidden(true)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(SabqTheme.textTertiary)
-                    .accessibilityHidden(true)
+                SettingsChevron()
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -337,40 +328,40 @@ struct SettingsView: View {
                     .padding(SabqLayout.space12)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.surface)
+                            .fill(SabqTheme.surfaceMuted)
                     )
                 }
 
                 HStack(spacing: SabqLayout.space8) {
                     Button { showEditProfile = true } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqType.meta.font)
                             Text("تعديل الملف الشخصي")
                                 .sabqText(SabqType.metaEmphasis)
                         }
                         .foregroundStyle(SabqTheme.primary)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
                         .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.skyTint)
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.primary.opacity(0.1))
                         )
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 
                     Button { showChangePassword = true } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "lock.rotation")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqType.meta.font)
                             Text("كلمة المرور")
                                 .sabqText(SabqType.metaEmphasis)
                         }
                         .foregroundStyle(SabqTheme.textSecondary)
                         .padding(.horizontal, SabqLayout.space12)
-                        .frame(minHeight: 38)
+                        .frame(minHeight: SabqLayout.touchTarget)
                         .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                                 .fill(SabqTheme.surfaceMuted)
                         )
                         .contentShape(Rectangle())
@@ -447,7 +438,7 @@ struct SettingsView: View {
 
     private var guestAvatar: some View {
         Circle()
-            .fill(SabqTheme.surface)
+            .fill(SabqTheme.surfaceMuted)
             .frame(width: 56, height: 56)
             .overlay {
                 Image(systemName: "person.fill")
@@ -517,16 +508,16 @@ struct SettingsView: View {
             VStack(alignment: .center, spacing: 3) {
                 HStack(spacing: 4) {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(SabqType.timestamp.font.weight(.semibold))
                     Text(user.localizedRole)
                         .sabqText(SabqType.tag)
                 }
                 .foregroundStyle(SabqTheme.primary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.horizontal, SabqLayout.space8)
+                .padding(.vertical, 2.5)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(SabqTheme.surface)
+                        .fill(SabqTheme.primary.opacity(0.1))
                 )
                 .contentShape(Rectangle())
                 #if DEBUG
@@ -580,7 +571,6 @@ struct SettingsView: View {
         let hasEditorialOrAdmin = writerVisible || reporterVisible || user.isPlatformAdmin
 
         if hasEditorialOrAdmin {
-            SabqSectionBand()
             SettingsSection(title: "الأدوات التحريرية والإدارة", subtitle: "إدارة المحتوى والمراسلات التحريرية") {
                 if user.isPlatformAdmin {
                     NavigationLink(value: AdminDashboardRoute()) {
@@ -814,7 +804,7 @@ struct SettingsView: View {
 
     /// تنبيهات المباريات تصل من فارا وحده؛ الصف يوجّه إليه.
     private var matchAlertsSection: some View {
-        SettingsSection {
+        SettingsSection(title: "التنبيهات", subtitle: "الإشعارات وتنبيهات المباريات") {
             NavigationLink(value: ReaderNotificationSettingsRoute()) {
                 settingsRow(
                     title: "إعدادات الإشعارات",
@@ -929,14 +919,14 @@ struct SettingsView: View {
                         .sabqText(SabqType.tag)
                         .monospacedDigit()
                         .foregroundStyle(SabqTheme.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule(style: .continuous).fill(SabqTheme.skyTint))
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, 2)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.1)))
                 }
 
                 HStack(spacing: SabqLayout.space12) {
                     Text("أ")
-                        .font(SabqFonts.app(size: 13, weight: .medium))
+                        .font(SabqType.meta.font)
                         .foregroundStyle(SabqTheme.textTertiary)
 
                     Slider(value: $textSize, in: 14...24, step: 1)
@@ -945,7 +935,7 @@ struct SettingsView: View {
                         .tint(SabqTheme.primary)
 
                     Text("أ")
-                        .font(SabqFonts.app(size: 22, weight: .bold))
+                        .font(SabqType.leadTitle.font)
                         .foregroundStyle(SabqTheme.textPrimary)
                 }
 
@@ -955,7 +945,7 @@ struct SettingsView: View {
                     .lineSpacing(5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(SabqLayout.space12)
-                    .sabqBlockSurface()
+                    .sabqBlockSurface(SabqTheme.surfaceMuted)
             }
             .padding(.vertical, SabqLayout.space12)
         }
@@ -1175,11 +1165,14 @@ private struct SettingsSection<Content: View>: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, SabqLayout.space4)
+                .padding(.bottom, SabqLayout.space8)
             }
-            content
+            VStack(alignment: .leading, spacing: 0) {
+                content
+            }
+            .padding(.horizontal, SabqLayout.space16)
+            .sabqNewsSurface()
         }
-        .padding(.vertical, SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -1206,7 +1199,7 @@ private struct SettingsRowIcon: View {
             .frame(width: 34, height: 34)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(tint == SabqTheme.primary ? SabqTheme.skyTint : tint.opacity(0.12))
+                    .fill(tint.opacity(0.12))
             )
             .accessibilityHidden(true)
     }

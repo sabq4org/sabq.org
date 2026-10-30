@@ -33,30 +33,22 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             heading
-                .padding(.bottom, SabqLayout.space4)
+                .padding(.bottom, SabqLayout.space8)
+            // الصفوف على سطح أبيض مستقل كبقية مجموعات الأخبار.
             VStack(alignment: .leading, spacing: 0) {
                 content()
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
 
+    /// الرأس الموحّد نفسه في كل التطبيق (شريط أزرق + عنوان 20 + سياق قصير).
     private var heading: some View {
-        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space12) {
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                Text(title)
-                    .font(SabqType.sectionHeading.font)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Text(description)
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        HomeSectionHeader(title: title, context: description.isEmpty ? nil : description) {
             action()
                 .font(SabqType.tag.font)
                 .foregroundStyle(SabqTheme.primary)
@@ -110,7 +102,7 @@ struct SidebarArticleRow: View {
                     title,
                     uiFont: SabqType.rowTitle.uiFont,
                     color: SabqTheme.textPrimary,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
                     lineSpacing: NewsRowStyle.titleLineSpacing,
                     textStyle: SabqType.rowTitle.uiTextStyle
                 )

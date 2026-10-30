@@ -63,7 +63,7 @@ struct ExploreView: View {
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)
                 .padding(.top, SabqLayout.space16)
-                .padding(.bottom, SabqLayout.space32)
+                .padding(.bottom, SabqLayout.tabBarClearance)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .id(resultsAnchor)
             }
@@ -157,6 +157,8 @@ struct ExploreView: View {
     private var searchContent: some View {
         if isSearching && displayResults.isEmpty {
             DiscoveryListSkeleton(count: 3)
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("جارٍ البحث")
 
@@ -187,21 +189,25 @@ struct ExploreView: View {
                         .foregroundStyle(SabqTheme.textTertiary)
                 }
 
-                ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
-                    if index > 0 { SidebarRowDivider() }
-                    NavigationLink(value: article) {
-                        CompactArticleRow(
-                            article: article,
-                            onBookmark: {
-                                SabqHaptics.medium()
-                                bookmarksStore.toggle(article.id, article: article)
-                            },
-                            isBookmarked: bookmarksStore.isBookmarked(article.id)
-                        )
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
+                        if index > 0 { SidebarRowDivider() }
+                        NavigationLink(value: article) {
+                            CompactArticleRow(
+                                article: article,
+                                onBookmark: {
+                                    SabqHaptics.medium()
+                                    bookmarksStore.toggle(article.id, article: article)
+                                },
+                                isBookmarked: bookmarksStore.isBookmarked(article.id)
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
+                .padding(.top, SabqLayout.space8)
             }
         }
     }
@@ -302,19 +308,7 @@ struct DiscoveryCategoryTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            Image(systemName: category.icon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(SabqTheme.primary)
-                .frame(width: 38, height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .strokeBorder(SabqTheme.skyOutline, lineWidth: 0.75)
-                )
-                .accessibilityHidden(true)
+            SmallSquareBadge(systemImage: category.icon, tint: SabqTheme.primary)
 
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(category.title)
@@ -325,6 +319,7 @@ struct DiscoveryCategoryTile: View {
                     if dynamicTypeSize.isAccessibilitySize {
                         Text(category.subtitle)
                     } else {
+                        // سطران محجوزان دائمًا كي تتساوى بلاطات الصف الواحد.
                         Text(category.subtitle).lineLimit(2, reservesSpace: true)
                     }
                 }
@@ -379,7 +374,7 @@ struct DiscoveryRowSkeleton: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            SkeletonBox(width: 112, height: 63, radius: SabqRadius.small)
+            SkeletonBox(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight, radius: NewsRowStyle.thumbnailRadius)
         }
         .padding(.vertical, SabqLayout.rowPadding)
         .accessibilityHidden(true)

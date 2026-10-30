@@ -68,7 +68,7 @@ struct TwitterEmbedView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space32)
-        .sabqBlockSurface()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 }
 

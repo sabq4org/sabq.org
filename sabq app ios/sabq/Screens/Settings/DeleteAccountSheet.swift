@@ -80,9 +80,7 @@ struct DeleteAccountSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: SabqLayout.space24) {
                     VStack(spacing: SabqLayout.space12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(SabqFonts.app(size: 40, weight: .light))
-                            .foregroundStyle(SabqTheme.danger)
+                        SquareIconBadge(systemImage: "exclamationmark.triangle", tint: SabqTheme.danger)
                             .accessibilityHidden(true)
 
                         Text("حذف الحساب")
@@ -91,20 +89,30 @@ struct DeleteAccountSheet: View {
                     }
                     .frame(maxWidth: .infinity)
 
-                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                        Text("تحذير: هذا الإجراء لا يمكن التراجع عنه")
-                            .sabqText(SabqType.rowTitle)
+                    HStack(alignment: .top, spacing: SabqLayout.space12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(SabqType.rowTitle.font)
                             .foregroundStyle(SabqTheme.danger)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                            Text("تحذير: هذا الإجراء لا يمكن التراجع عنه")
+                                .sabqText(SabqType.rowTitle)
+                                .foregroundStyle(SabqTheme.danger)
 
-                        Text("سيتم حذف حسابك وجميع بياناتك بشكل نهائي. لن تتمكن من استعادة الحساب بعد الحذف.")
-                            .sabqText(SabqType.excerpt)
-                            .foregroundStyle(SabqTheme.textSecondary)
+                            Text("سيتم حذف حسابك وجميع بياناتك بشكل نهائي. لن تتمكن من استعادة الحساب بعد الحذف.")
+                                .sabqText(SabqType.excerpt)
+                                .foregroundStyle(SabqTheme.textSecondary)
+                        }
                     }
                     .padding(SabqLayout.space16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                             .fill(SabqTheme.surfaceMuted)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .strokeBorder(SabqTheme.danger.opacity(0.35), lineWidth: 1)
                     )
 
                     if passwordStep {
@@ -119,7 +127,7 @@ struct DeleteAccountSheet: View {
                                 .foregroundStyle(SabqTheme.textPrimary)
 
                             SecureField("أدخل كلمة المرور للتأكيد", text: $password)
-                                .sabqText(SabqType.excerpt)
+                                .font(SabqType.rowTitle.font)
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .textContentType(.password)
                                 .modifier(SabqInputSurface())
@@ -146,7 +154,7 @@ struct DeleteAccountSheet: View {
                             TextField(confirmWord, text: $confirmText)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                                .sabqText(SabqType.excerpt)
+                                .font(SabqType.rowTitle.font)
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .modifier(SabqInputSurface())
                         }
@@ -164,7 +172,7 @@ struct DeleteAccountSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
+                                    .fill(SabqTheme.danger.opacity(0.08))
                             )
                         }
 

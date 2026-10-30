@@ -55,7 +55,7 @@ struct CommentRow: View {
                 repliesStack
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .coordinateSpace(name: rowSpaceName)
         .overlayPreferenceValue(ReplyFrameKey.self) { frames in
@@ -69,7 +69,7 @@ struct CommentRow: View {
     private var rowSpaceName: String { "commentRowSpace-\(comment.id)" }
 
     private var repliesStack: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             ForEach(comment.replies) { reply in
                 CommentRow(
                     comment: reply,
@@ -103,7 +103,7 @@ struct CommentRow: View {
                     .foregroundStyle(SabqTheme.textPrimary)
 
                 Text(Self.relativeTime(comment.createdAt))
-                    .font(SabqType.meta.font)
+                    .font(SabqType.timestamp.font)
                     .foregroundStyle(SabqTheme.textTertiary)
             }
             Spacer(minLength: 0)
@@ -168,14 +168,16 @@ struct CommentRow: View {
         }
     }
 
+    /// دائرة الحرف الأول: تعبئة أقوى من سطح بلوك التعليقات الرمادي، وإلا اختفت
+    /// وبقي الحرف وحيدًا بجوار الاسم.
     private var initialsCircle: some View {
         Circle()
-            .fill(SabqTheme.surfaceMuted)
+            .fill(SabqTheme.primary.opacity(0.1))
             .frame(width: 32, height: 32)
             .overlay {
                 Text(String((comment.userName ?? "م").prefix(1)))
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
             }
     }
 

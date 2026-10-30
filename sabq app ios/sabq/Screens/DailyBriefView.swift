@@ -32,7 +32,7 @@ struct DailyBriefView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -157,8 +157,13 @@ struct DailyBriefView: View {
                 sizeScale: 0.75
             )
             Text(article.categoryTitle)
-                .font(SabqType.metaEmphasis.font)
+                .font(SabqType.tag.font)
                 .foregroundStyle(SabqTheme.primary)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2.5)
+                .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                .fixedSize(horizontal: true, vertical: false)
             SabqRTLText(
                 article.title,
                 uiFont: SabqType.rowTitle.uiFont,
@@ -182,7 +187,7 @@ struct DailyBriefView: View {
         let (icon, label, subtitle, _) = Self.inferMood(from: interestSlugs)
         return HStack(alignment: .center, spacing: SabqLayout.space12) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 20, weight: .regular))
+                .font(SabqType.sectionHeading.font)
                 .foregroundStyle(SabqTheme.primary)
                 .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
                 .background(
@@ -211,13 +216,9 @@ struct DailyBriefView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// عنوان قسم موحّد: 20 عريض بلا مربع أيقونة.
+    /// عنوان قسم موحّد: رأس الاستكشاف بشريط سبق وعنوان 20.
     private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(SabqType.sectionHeading.font)
-            .foregroundStyle(SabqTheme.textPrimary)
-            .accessibilityAddTraits(.isHeader)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        DiscoverySectionHeading(title: title)
     }
 
     private static func inferMood(from slugs: Set<String>) -> (icon: String, label: String, subtitle: String, tint: Color) {
@@ -377,7 +378,7 @@ struct DailyBriefView: View {
     private func featureTile(title: String, subtitle: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.primary)
                 .frame(width: 36, height: 36)
                 .background(
@@ -414,7 +415,7 @@ struct DailyBriefView: View {
     private var guestHero: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space16) {
             Image(systemName: "sparkles.rectangle.stack.fill")
-                .font(SabqFonts.app(size: 26, weight: .regular))
+                .font(SabqType.articleTitle.font)
                 .foregroundStyle(SabqTheme.primary)
                 .symbolRenderingMode(.hierarchical)
                 .frame(width: 56, height: 56)
@@ -705,7 +706,7 @@ struct InterestsPickerSheet: View {
         } label: {
             HStack(spacing: SabqLayout.space8) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(SabqFonts.app(size: 18, weight: .regular))
+                    .font(SabqType.articleBody.font)
                     .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textTertiary)
                     .accessibilityHidden(true)
                 Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
@@ -745,38 +746,16 @@ struct InterestsPickerSheet: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "square.grid.2x2.fill")
-                .font(SabqFonts.app(size: 26))
-                .foregroundStyle(SabqTheme.textSecondary)
-                .frame(width: 56, height: 56)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
-                .accessibilityHidden(true)
-            Text("لم نستطع تحميل التصنيفات")
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Button {
-                Task {
-                    isLoading = true
-                    await InterestsCategoryCache.shared.loadIfStale(maxAge: 0)
-                    categories = InterestsCategoryCache.shared.get()
-                    isLoading = false
-                }
-            } label: {
-                Text("إعادة المحاولة")
-                    .font(SabqType.button.font)
-                    .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, SabqLayout.space24)
-                    .frame(minHeight: SabqLayout.controlHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.actionFill)
-                    )
+        ErrorStateView(message: "لم نستطع تحميل التصنيفات. تحقّق من الاتصال ثم أعد المحاولة.") {
+            Task {
+                isLoading = true
+                await InterestsCategoryCache.shared.loadIfStale(maxAge: 0)
+                categories = InterestsCategoryCache.shared.get()
+                isLoading = false
             }
-            .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, SabqLayout.space40)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space24)
     }
 
     // MARK: - Bottom save bar

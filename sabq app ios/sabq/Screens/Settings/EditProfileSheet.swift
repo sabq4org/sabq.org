@@ -36,7 +36,7 @@ struct EditProfileSheet: View {
                     if saved {
                         HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(SabqFonts.app(size: 16))
+                                .font(SabqType.rowTitle.font)
                             Text("تم حفظ التغييرات بنجاح")
                                 .sabqText(SabqType.metaEmphasis)
                         }
@@ -148,17 +148,17 @@ struct EditProfileSheet: View {
                     } label: {
                         HStack(spacing: SabqLayout.space8) {
                             if authStore.isLoading {
-                                ProgressView().tint(SabqTheme.onAction)
+                                ProgressView().tint(SabqTheme.disabledInk)
                             }
                             Text("حفظ التغييرات")
                                 .sabqText(SabqType.button)
                         }
-                        .foregroundStyle(SabqTheme.onAction)
+                        .foregroundStyle(saveEnabled ? SabqTheme.onAction : SabqTheme.disabledInk)
                         .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
-                        .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                        .background(saveEnabled ? SabqTheme.actionFill : SabqTheme.disabledFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .disabled(firstName.isEmpty || authStore.isLoading)
+                    .disabled(!saveEnabled)
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)
                 .padding(.vertical, SabqLayout.space24)
@@ -294,6 +294,11 @@ struct EditProfileSheet: View {
         .padding(.top, SabqLayout.space8)
     }
 
+    /// الزر يُظهر حالة التعطيل بلونها بدل أن يبدو فعّالًا وهو معطّل.
+    private var saveEnabled: Bool {
+        !firstName.isEmpty && !authStore.isLoading
+    }
+
     private var avatarPlaceholder: some View {
         Circle()
             .fill(SabqTheme.surfaceMuted)
@@ -312,18 +317,9 @@ struct EditProfileSheet: View {
                 .foregroundStyle(SabqTheme.textPrimary)
 
             TextField(placeholder, text: text)
-                .sabqText(SabqType.excerpt)
+                .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.textPrimary)
-                .padding(.horizontal, SabqLayout.space16)
-                .padding(.vertical, SabqLayout.space12)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .stroke(SabqTheme.outline, lineWidth: 1)
-                )
+                .modifier(SabqInputSurface())
         }
     }
 
@@ -338,7 +334,7 @@ struct EditProfileSheet: View {
                 Text("ذكر").tag("male")
                 Text("أنثى").tag("female")
             }
-            .pickerStyle(.segmented)
+            .modifier(SabqAdaptivePickerStyle())
         }
     }
 

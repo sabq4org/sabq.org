@@ -132,7 +132,7 @@ struct SocialAuthButtons: View {
         // in SabqTheme.
         let isDark = colorScheme == .dark
         return Button(action: startGoogleSignIn) {
-            HStack(spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Text("المتابعة باستخدام Google")
                     .sabqText(SabqType.button)
                     .foregroundStyle(isDark ? GoogleBrand.darkText : GoogleBrand.lightText)

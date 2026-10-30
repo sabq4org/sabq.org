@@ -287,7 +287,7 @@ struct NewsletterSheet: View {
                             ProgressView().tint(SabqTheme.onAction)
                         } else {
                             Image(systemName: "sparkles")
-                                .font(SabqFonts.app(size: 14, weight: .heavy))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                         }
                         Text(screenState == .subscribing ? "جاري الاشتراك..." : "اشترك في النشرة")
                             .sabqText(SabqType.button)
@@ -351,10 +351,10 @@ struct NewsletterSheet: View {
                             ProgressView().tint(SabqTheme.danger)
                         } else {
                             Image(systemName: "xmark.circle.fill")
-                                .font(SabqFonts.app(size: 14, weight: .heavy))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                         }
                         Text("إلغاء الاشتراك")
-                            .sabqText(SabqType.rowTitle)
+                            .sabqText(SabqType.button)
                     }
                     .foregroundStyle(SabqTheme.danger)
                     .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
@@ -458,7 +458,7 @@ struct NewsletterSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(SabqTheme.danger.opacity(0.08))
         )
     }
 }

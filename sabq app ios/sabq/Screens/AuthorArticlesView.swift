@@ -52,7 +52,7 @@ struct AuthorArticlesView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -224,13 +224,9 @@ struct AuthorArticlesView: View {
     // MARK: - Articles
 
     private var articlesSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
-                Text("أحدث المنشورات")
-                    .font(SabqType.sectionHeading.font)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(alignment: .center, spacing: SabqLayout.space8) {
+                DiscoverySectionHeading(title: "أحدث المنشورات")
                 if !articles.isEmpty {
                     Text("\(articles.count)")
                         .font(SabqType.meta.font)
@@ -241,6 +237,8 @@ struct AuthorArticlesView: View {
 
             if isLoading && articles.isEmpty {
                 DiscoveryListSkeleton(count: 3)
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
             } else if articles.isEmpty {
                 EmptyStateView(
                     icon: "person.crop.circle.badge.questionmark",
@@ -262,6 +260,8 @@ struct AuthorArticlesView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }

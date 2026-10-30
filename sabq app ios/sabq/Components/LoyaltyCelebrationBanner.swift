@@ -36,17 +36,14 @@ struct LoyaltyCelebrationBanner: View {
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .top, spacing: SabqLayout.space12) {
-                Image(systemName: iconName(for: mode))
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(tier.color)
-                    .frame(width: 40, height: 40)
-                    .background(tier.color.opacity(0.14), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
-                    .accessibilityHidden(true)
+                // لون سبق الأساسي لا لون المستوى: ألوان المستويات (بنفسجي، ذهبي…)
+                // تبقى داخل شاشة الولاء، والرئيسية تحافظ على لوحتها الهادئة.
+                SmallSquareBadge(systemImage: iconName(for: mode), tint: SabqTheme.primary)
 
                 VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text(copy.eyebrow)
                         .font(SabqType.tag.font)
-                        .foregroundStyle(tier.color)
+                        .foregroundStyle(SabqTheme.primary)
                     Text(copy.title)
                         .sabqText(SabqType.rowTitle)
                         .foregroundStyle(SabqTheme.textPrimary)
@@ -71,10 +68,7 @@ struct LoyaltyCelebrationBanner: View {
                 .padding(.trailing, -SabqLayout.space12)
             }
             .padding(SabqLayout.space16)
-            .background(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
-            )
+            .sabqBlockSurface()
         }
         .buttonStyle(.plain)
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -95,25 +89,25 @@ private func tierUpCopy(for tier: LoyaltyTier) -> (eyebrow: String, title: Strin
     case 2:
         return (
             "ترقية جديدة",
-            "أهلاً بك في المتفاعل 🎉",
+            "أهلاً بك في المتفاعل",
             "تجاوزت أوّل ١٠٠ نقطة! كل قراءة وكل لايك يقرّبك من العضو الذهبي."
         )
     case 3:
         return (
             "ذهبي",
-            "وصلت إلى العضو الذهبي ✨",
+            "وصلت إلى العضو الذهبي",
             "أنت من القرّاء المخلصين لسبق. شارة ذهبية تليق بأسلوبك."
         )
     case 4:
         return (
             "موثوق",
-            "ترقّيت إلى القارئ الموثوق 🏆",
+            "ترقّيت إلى القارئ الموثوق",
             "أداؤك ملحوظ ومميّز. الطريق إلى سفير سبق صار أقرب."
         )
     case 5:
         return (
             "سفير سبق",
-            "أصبحت سفيراً لسبق 👑",
+            "أصبحت سفيراً لسبق",
             "أعلى مستوى في برنامج الولاء. شكراً لكونك جزءاً مميزاً من مجتمعنا."
         )
     default:
@@ -138,7 +132,7 @@ private func nudgeCopy(for tier: LoyaltyTier) -> (eyebrow: String, title: String
     case 1:
         return variantA ? (
             "ابدأ رحلتك",
-            "اقرأ خبراً اليوم 📰",
+            "اقرأ خبراً اليوم",
             "كل قراءة كاملة = ٥ نقاط. ١٠٠ نقطة وأنت من المتفاعلين."
         ) : (
             "خطوة واحدة",
@@ -148,7 +142,7 @@ private func nudgeCopy(for tier: LoyaltyTier) -> (eyebrow: String, title: String
     case 2:
         return variantA ? (
             "أنت متفاعل",
-            "اقترب من الذهبي 🌟",
+            "اقترب من الذهبي",
             "بضع قراءات إضافية تكفي. تابع أحدث الأخبار الآن."
         ) : (
             "تابع التفاعل",
@@ -158,7 +152,7 @@ private func nudgeCopy(for tier: LoyaltyTier) -> (eyebrow: String, title: String
     case 3:
         return variantA ? (
             "ذهبي ولامع",
-            "حافظ على ذهبيتك ⭐",
+            "حافظ على ذهبيتك",
             "اقرأ ٣ مقالات اليوم — تبقى في القمة وتقترب من الموثوق."
         ) : (
             "نشاط متواصل",
@@ -168,7 +162,7 @@ private func nudgeCopy(for tier: LoyaltyTier) -> (eyebrow: String, title: String
     case 4:
         return variantA ? (
             "قارئ موثوق",
-            "السفارة قريبة 👑",
+            "السفارة قريبة",
             "أداؤك يثير الإعجاب. استمر بنفس الإيقاع للوصول إلى سفير سبق."
         ) : (
             "موثوق ومميّز",
@@ -178,11 +172,11 @@ private func nudgeCopy(for tier: LoyaltyTier) -> (eyebrow: String, title: String
     case 5:
         return variantA ? (
             "سفير سبق",
-            "إلهامك يصنع الفرق 💎",
+            "إلهامك يصنع الفرق",
             "شكراً لك على نشاطك المستمر. أنت جزء من نخبة سبق."
         ) : (
             "أعلى مستوى",
-            "أنت قدوة 👑",
+            "أنت قدوة",
             "نشاطك يحفّز قرّاء آخرين. واصل التميّز."
         )
     default:
