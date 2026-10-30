@@ -31,8 +31,7 @@ nonisolated struct JustifiedTextStyle: Equatable {
     }
 
     /// الحجم النهائي بعد تطبيق مقياس النظام على حجم القارئ. نستخدم مقياس
-    /// `.body` تحديدًا لأن `Font.custom(_:size:)` في بقية الشاشة يتدرّج
-    /// نسبةً إلى body، فيبقى جسم المقال والعناوين على المقياس نفسه (F02).
+    /// `.body` حتى يبقى جسم المقال والعناوين على المقياس نفسه (F02).
     var scaledFontSize: CGFloat {
         JustifiedTextStyle.scaled(fontSize, for: sizeCategory)
     }
@@ -115,15 +114,7 @@ private func readerFont(size: CGFloat, weight: UIFont.Weight, serif: Bool) -> UI
         let descriptor = base.withDesign(.serif) ?? base
         return UIFont(descriptor: descriptor, size: size)
     }
-    let fontName: String
-    if weight.rawValue >= UIFont.Weight.bold.rawValue {
-        fontName = SabqFonts.bold
-    } else if weight.rawValue >= UIFont.Weight.medium.rawValue {
-        fontName = SabqFonts.semibold
-    } else {
-        fontName = SabqFonts.regular
-    }
-    return UIFont(name: fontName, size: size) ?? UIFont.systemFont(ofSize: size, weight: weight)
+    return SabqFonts.uiSystem(size: size, weight: weight)
 }
 
 // MARK: - فقرة نصية بسيطة

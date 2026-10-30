@@ -78,7 +78,7 @@ struct HomeSectionLinkLabel: View {
 }
 
 /// حاوية الأقسام المنتقاة (مُقترب، الأكثر تداولًا، الرأي، آخر الأخبار): الرأس
-/// الموحّد ثم الصفوف بفواصل رفيعة مباشرة على الصفحة، بلا صندوق.
+/// الموحّد على خلفية الصفحة، ثم الصفوف على سطح تحريري مستقل بفواصل رفيعة.
 struct HomeSectionCard<Link: View, Content: View>: View {
     let title: String
     var context: String? = nil
@@ -89,19 +89,25 @@ struct HomeSectionCard<Link: View, Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HomeSectionHeader(title: title, context: context, link: link)
-                .padding(.bottom, SabqLayout.space4)
-            if lazy {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    content()
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    content()
-                }
-            }
+                .padding(.bottom, SabqLayout.space8)
+            rows
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private var rows: some View {
+        if lazy {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+        }
     }
 }
 
@@ -345,11 +351,11 @@ struct OpinionWriterRow: View {
     }
 }
 
-/// فاصل صفوف الرأي على البطاقة السماوية.
+/// فاصل صفوف الرأي على السطح التحريري.
 struct OpinionRowDivider: View {
     var body: some View {
         Rectangle()
-            .fill(SabqTheme.skyOutline.opacity(0.65))
+            .fill(SabqTheme.separator)
             .frame(height: 1)
     }
 }

@@ -34,30 +34,31 @@ nonisolated enum SabqTheme {
         NationalDayTheme.isActive ? NationalDayTheme.canvas : baseActionFill
     }
     static let onAction = Color.white
-    private static let basePrimary = adaptive(0x096EBD, 0x5CC4FF)
-    private static let baseActionFill = adaptive(0x096EBD, 0x1A6FA8)
+    private static let basePrimary = adaptive(0x0B6FA8, 0x5CC4FF)
+    private static let baseActionFill = adaptive(0x0B6FA8, 0x1A6FA8)
 
     // Text.
 
-    static let textPrimary = adaptive(0x0C1A2A, 0xF0F4F8)
-    static let textSecondary = adaptive(0x3E5063, 0xA6B5C4, highContrastLight: 0x0C1A2A, highContrastDark: 0xF0F4F8)
-    static let textTertiary = adaptive(0x556677, 0x8E9EAE, highContrastLight: 0x0C1A2A, highContrastDark: 0xF0F4F8)
+    static let textPrimary = adaptive(0x1B2B3A, 0xF0F4F8)
+    static let textSecondary = adaptive(0x55667A, 0xA6B5C4, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
+    static let textTertiary = adaptive(0x596A7D, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
 
-    // Surfaces. Light mode is a white page with cool sky-tinted muted blocks; dark mode steps up from the page.
+    // Neutral canvas and white editorial surfaces. Blue is reserved for accents;
+    // dark mode keeps the same hierarchy with raised charcoal surfaces.
 
-    static let background = adaptive(0xFFFFFF, 0x0B121A)
+    static let background = adaptive(0xF2F3F5, 0x0B121A)
     static let surface = adaptive(0xFFFFFF, 0x141D27)
     /// أشرطة الفصل بين الأقسام والبلوكات الهادئة (الموجز الذكي، الحقول).
-    static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
-    static let surfaceStrong = adaptive(0xDFECF7, 0x1F3145)
-    /// خلفية البطاقات التحريرية المميزة بهوية سبق السماوية الهادئة (الموجز اليومي، الموجز الذكي، بطاقة الآراء).
+    static let surfaceMuted = adaptive(0xF0F2F5, 0x152230)
+    static let surfaceStrong = adaptive(0xE4E8EE, 0x1F3145)
+    /// خلفية البطاقات المميزة بهوية سبق السماوية الهادئة، مثل الموجز الصوتي.
     static let skyTint = adaptive(0xF3F8FD, 0x13202E)
     /// إطار سماوي ناعم للبطاقات التحريرية المميزة.
     static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
     /// خط رفيع بين الأخبار داخل القائمة.
-    static let separator = adaptive(0xE2E9F0, 0x24313F)
+    static let separator = adaptive(0xDFE4EA, 0x24313F)
     /// حدود عناصر التحكم (حقول، أزرار ثانوية).
-    static let outline = adaptive(0xCFDCE8, 0x334354)
+    static let outline = adaptive(0xCAD2DC, 0x334354)
 
     // Status.
 
@@ -70,7 +71,7 @@ nonisolated enum SabqTheme {
     static let disabledFill = adaptive(0xE6EAEE, 0x2A3644)
     static let disabledInk = adaptive(0x55626F, 0xA3B1BF)
 
-    static let shadow = Color.black.opacity(0.03)
+    static let shadow = Color(red: 27 / 255.0, green: 43 / 255.0, blue: 58 / 255.0).opacity(0.06)
     static let deepShadow = Color.black.opacity(0.05)
 
     // Legacy names kept so existing screens resolve to the system above;
@@ -109,7 +110,7 @@ nonisolated enum SabqRadius {
     /// صور مصغّرة، وسوم، شارات.
     static let small: CGFloat = 8
     /// بطاقات، صور داخل البطاقات، أزرار.
-    static let medium: CGFloat = 12
+    static let medium: CGFloat = 16
     // الكبسولة: `Capsule()` مباشرة.
 }
 
@@ -139,22 +140,21 @@ nonisolated enum SabqLayout {
 
 // MARK: - Type
 
-/// One step of the type scale. `lineSpacing` is added on top of IBM Plex Sans
-/// Arabic's natural line height (1.5 × size), which already leaves room for
-/// Arabic diacritics.
+/// Native system typography (SF Arabic for Arabic), matching Sabq Desk.
+/// Semantic roles keep Dynamic Type and reader size controls independent.
 nonisolated struct SabqTextRole: Sendable {
     let size: CGFloat
     let weight: Weight
     let style: Font.TextStyle
     let lineSpacing: CGFloat
 
-    enum Weight: Sendable { case regular, semibold, bold }
+    enum Weight: Sendable { case regular, medium, semibold, bold }
 
-    var font: Font { .custom(postScriptName(boldText: false), size: size, relativeTo: style) }
+    var font: Font { font(boldText: false) }
 
     /// يحترم «النص العريض» في إعدادات الإتاحة بدرجة وزن إضافية.
     func font(boldText: Bool) -> Font {
-        .custom(postScriptName(boldText: boldText), size: size, relativeTo: style)
+        SabqFonts.editorial(style, size: size, weight: swiftUIWeight, boldText: boldText)
     }
 
     /// Base size for `SabqRTLText`, which scales it with `uiTextStyle`.
@@ -163,7 +163,7 @@ nonisolated struct SabqTextRole: Sendable {
     /// يتبع إعداد «حجم الخط» في صفحة الخبر: يزيد أو ينقص بقدر ما غيّره القارئ.
     func uiFont(adding delta: CGFloat) -> UIFont {
         let pointSize = max(12, size + delta)
-        return UIFont(name: postScriptName(boldText: false), size: pointSize) ?? .systemFont(ofSize: pointSize, weight: uiWeight)
+        return .systemFont(ofSize: pointSize, weight: uiWeight)
     }
 
     var uiTextStyle: UIFont.TextStyle {
@@ -182,36 +182,32 @@ nonisolated struct SabqTextRole: Sendable {
         }
     }
 
-    private func postScriptName(boldText: Bool) -> String {
+    private var swiftUIWeight: Font.Weight {
         switch weight {
-        case .regular:
-            return boldText ? SabqFonts.semibold : SabqFonts.regular
-        case .semibold:
-            if boldText { return SabqFonts.bold }
-            // استخدام الوزن المتوسط (Medium) لعناوين صفوف الأخبار (16pt) ليبقى الفارق
-            // واضحاً بينها وبين العنوان الرئيسي (22pt Bold).
-            return style == .headline ? SabqFonts.medium : SabqFonts.semibold
-        case .bold:
-            return SabqFonts.bold
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
         }
     }
 
     private var uiWeight: UIFont.Weight {
         switch weight {
         case .regular: .regular
+        case .medium: .medium
         case .semibold: .semibold
         case .bold: .bold
         }
     }
 }
 
-/// IBM Plex Sans Arabic. Bold only for titles of 20pt and above, SemiBold for
-/// list headlines, labels and buttons, Regular for everything else; 12pt floor.
+/// Desk type scale: medium list headlines, bold display titles, regular body.
+/// Article body remains 18pt for long-form reading; timestamp remains 11pt.
 nonisolated enum SabqType {
     static let articleTitle = SabqTextRole(size: 23, weight: .bold, style: .title, lineSpacing: 3)
     static let leadTitle = SabqTextRole(size: 21, weight: .bold, style: .title2, lineSpacing: 2)
     static let sectionHeading = SabqTextRole(size: 20, weight: .bold, style: .title3, lineSpacing: 0)
-    static let rowTitle = SabqTextRole(size: 16, weight: .semibold, style: .headline, lineSpacing: 2)
+    static let rowTitle = SabqTextRole(size: 16, weight: .medium, style: .headline, lineSpacing: 2)
     static let articleBody = SabqTextRole(size: 18, weight: .regular, style: .body, lineSpacing: 5)
     static let excerpt = SabqTextRole(size: 15, weight: .regular, style: .subheadline, lineSpacing: 1)
     static let meta = SabqTextRole(size: 13, weight: .regular, style: .footnote, lineSpacing: 0)
@@ -247,6 +243,14 @@ extension SabqTextRole {
 }
 
 extension View {
+    /// One quiet surface per editorial group; rows share it without nested cards.
+    func sabqNewsSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        return background(SabqTheme.surface, in: shape)
+            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                .allowsHitTesting(false))
+    }
+
     func sabqText(_ role: SabqTextRole) -> some View {
         font(role.font).lineSpacing(role.lineSpacing)
     }

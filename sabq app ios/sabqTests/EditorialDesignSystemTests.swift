@@ -153,14 +153,44 @@ struct EditorialDesignSystemTests {
         _ = SabqType.caption
     }
 
-    @Test func bundledIBMPlexSansArabicTrueTypeWeightsLoadReliably() {
+    @Test func bundledLegacyFontsRemainAvailableWhileReaderUsesSystemTypography() {
         SabqFonts.registerAll()
         #expect(UIFont(name: SabqFonts.regular, size: 17) != nil)
         #expect(UIFont(name: SabqFonts.medium, size: 16) != nil)
         #expect(UIFont(name: SabqFonts.semibold, size: 16) != nil)
         #expect(UIFont(name: SabqFonts.bold, size: 22) != nil)
-        #expect(SabqType.leadTitle.uiFont.fontName == SabqFonts.bold)
-        #expect(SabqType.rowTitle.uiFont.fontName == SabqFonts.medium)
+        #expect(SabqType.leadTitle.uiFont == UIFont.systemFont(ofSize: SabqType.leadTitle.size, weight: .bold))
+        #expect(SabqType.rowTitle.uiFont == UIFont.systemFont(ofSize: SabqType.rowTitle.size, weight: .medium))
+    }
+
+    @Test func nativeTypographyPreservesReaderSizeAndWeightHierarchy() {
+        let regular = SabqFonts.uiApp(size: 18, weight: .regular)
+        let medium = SabqFonts.uiApp(size: 18, weight: .medium)
+        let bold = SabqFonts.uiApp(size: 18, weight: .bold)
+        #expect(regular == UIFont.systemFont(ofSize: 18, weight: .regular))
+        #expect(medium == UIFont.systemFont(ofSize: 18, weight: .medium))
+        #expect(bold == UIFont.systemFont(ofSize: 18, weight: .bold))
+        #expect(regular.fontDescriptor != medium.fontDescriptor)
+        #expect(medium.fontDescriptor != bold.fontDescriptor)
+        #expect(SabqType.articleBody.uiFont(adding: 6).pointSize == 24)
+        let enlarged = UIFontMetrics(forTextStyle: .body).scaledFont(
+            for: regular,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: .accessibilityExtraLarge)
+        )
+        #expect(enlarged.pointSize > regular.pointSize)
+    }
+
+    @Test @MainActor func nativeFontsRespondToSwiftUIAccessibilitySize() {
+        func height(_ size: DynamicTypeSize, font: Font) -> CGFloat {
+            let host = UIHostingController(rootView:
+                Text("سبق: الخبر كما هو").font(font).fixedSize()
+                    .environment(\.dynamicTypeSize, size)
+            )
+            return host.sizeThatFits(in: CGSize(width: 2000, height: 2000)).height
+        }
+        for font in [SabqFonts.app(size: 18), SabqType.articleTitle.font, SabqType.rowTitle.font] {
+            #expect(height(.accessibility3, font: font) > height(.large, font: font))
+        }
     }
 
     private func withSeason<T>(_ seasonal: Bool, _ body: () throws -> T) rethrows -> T {

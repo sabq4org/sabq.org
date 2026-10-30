@@ -751,6 +751,8 @@ struct HomeFeedView: View {
                 }
             }
         }
+        .padding(SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     // MARK: - Duo Spread (open, landscape)
@@ -855,6 +857,8 @@ struct HomeFeedView: View {
                 .buttonStyle(.plain)
             }
         }
+        .padding(SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     // MARK: - Category Chips
@@ -963,10 +967,6 @@ struct HomeFeedView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, SabqLayout.space16)
-                .padding(.vertical, SabqLayout.space4)
-                .sabqSkyCardSurface()
-                .padding(.top, SabqLayout.space8)
             }
         }
     }

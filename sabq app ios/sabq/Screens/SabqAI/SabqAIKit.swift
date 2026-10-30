@@ -25,19 +25,19 @@ nonisolated enum SAI {
     static let soft = rgb(0xA3B2C4)
     static let faint = Color.white.opacity(0.08)
 
-    /// IBM Plex Sans Arabic بأحجام العرض السينمائية؛ تتبع حجم الخط في الإتاحة.
+    /// خط النظام بأحجام العرض السينمائية؛ يتبع حجم الخط في الإتاحة.
     static func font(_ size: CGFloat, _ weight: Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
-        .custom(weight.postScript, size: size, relativeTo: style)
+        SabqFonts.editorial(style, size: size, weight: weight.uiWeight)
     }
 
     enum Weight {
         case regular, medium, semibold, bold
-        var postScript: String {
+        var uiWeight: Font.Weight {
             switch self {
-            case .regular: SabqFonts.regular
-            case .medium: SabqFonts.medium
-            case .semibold: SabqFonts.semibold
-            case .bold: SabqFonts.bold
+            case .regular: .regular
+            case .medium: .medium
+            case .semibold: .semibold
+            case .bold: .bold
             }
         }
     }
@@ -267,7 +267,7 @@ struct SAIOutlinedText: UIViewRepresentable {
     }
 
     func updateUIView(_ label: UILabel, context: Context) {
-        let font = UIFont(name: SabqFonts.bold, size: size) ?? .boldSystemFont(ofSize: size)
+        let font = SabqFonts.uiSystem(size: size, weight: .bold)
         label.attributedText = NSAttributedString(string: text, attributes: [
             .font: font,
             .strokeColor: color,
