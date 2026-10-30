@@ -12,7 +12,7 @@ import { createServer, type Server } from "http";
 import * as Sentry from "@sentry/node";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
-import { clearOtherBreakingArticles, clearOtherEnBreakingArticles, installStorageBreakingExclusivity, invalidateClearedBreakingArticles, isBreakingNewsType, runWithExclusiveBreaking, runWithExclusiveEnBreaking, runWithExclusiveUrBreaking, toggleArticleBreakingExclusive, toggleEnArticleBreakingExclusive, toggleUrArticleBreakingExclusive } from "./services/breakingNewsService";
+import { clearOtherBreakingArticles, installStorageBreakingExclusivity, invalidateClearedBreakingArticles, isBreakingNewsType, runWithExclusiveBreaking, runWithExclusiveEnBreaking, runWithExclusiveUrBreaking, toggleArticleBreakingExclusive, toggleEnArticleBreakingExclusive, toggleUrArticleBreakingExclusive } from "./services/breakingNewsService";
 installStorageBreakingExclusivity(storage as unknown as Record<string, unknown>);
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
@@ -166,14 +166,13 @@ import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import { bestEffortWithin } from "./utils/bestEffortDeadline";
 import { getOrBuildSitemapXml, invalidateSitemapXmlCache } from "./services/sitemapCacheService";
 import {
-  clearNewsSitemapMemoryCache,
   readNewsSitemapMemoryCache,
   writeNewsSitemapMemoryCache,
 } from "./services/newsSitemapMemoryCache";
 import {
-  pickEnArticleSlug,
-  resolveEnCategoryId,
+  EnTranslationError,
   syncBreakingToArabicSource,
+  translateArticleToEnglish,
 } from "./services/enArticleTranslationService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
@@ -9327,218 +9326,28 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Translate Arabic article to English and publish to EN dashboard
+  // (pipeline shared with the auto-translate job: translateArticleToEnglish).
   app.post("/api/admin/articles/:id/translate-to-english", requireAuth, requirePermission("articles.publish"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-
-      const articleId = req.params.id;
-
-      // 1. Check if already translated (seoMetadata stores sourceArticleId)
-      const [existingTranslation] = await db
-        .select({ id: enArticles.id, title: enArticles.title })
-        .from(enArticles)
-        .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`)
-        .limit(1);
-
-      if (existingTranslation) {
-        return res.status(409).json({
-          message: `هذا المقال مترجم بالفعل في النسخة الإنجليزية: "${existingTranslation.title}"`,
-          enArticleId: existingTranslation.id,
-        });
-      }
-
-      // 2. Fetch the Arabic article
-      const [article] = await db
-        .select({
-          id: articles.id,
-          title: articles.title,
-          subtitle: articles.subtitle,
-          content: articles.content,
-          excerpt: articles.excerpt,
-          imageUrl: articles.imageUrl,
-          thumbnailUrl: articles.thumbnailUrl,
-          imageFocalPoint: articles.imageFocalPoint,
-          categoryId: articles.categoryId,
-          reporterId: articles.reporterId,
-          articleType: articles.articleType,
-          newsType: articles.newsType,
-          isFeatured: articles.isFeatured,
-          englishSlug: articles.englishSlug,
-          seo: articles.seo,
-          status: articles.status,
-        })
-        .from(articles)
-        .where(eq(articles.id, articleId))
-        .limit(1);
-
-      if (!article) {
-        return res.status(404).json({ message: "المقال غير موجود" });
-      }
-
-      if (article.status !== "published") {
-        return res.status(400).json({ message: "يجب أن يكون المقال منشوراً قبل الترجمة" });
-      }
-
-      // 3. Map AR category → en_categories (slug / englishSlug / nameEn)
-      const { enCategoryId, categoryNameAr } = await resolveEnCategoryId(article.categoryId);
-
-      // 4. Translate using OpenAI with retry
-      const { withRetry } = await import("./openai");
-
-      const translated = await withRetry(async () => {
-        const OpenAI = (await import("openai")).default;
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-        const prompt = `You are a professional news translator for "Sabq" (سبق), a leading Saudi Arabian news platform. Translate the following Arabic news article into fluent, natural English suitable for an international English-speaking audience.
-
-IMPORTANT RULES:
-- Translate the title, subtitle, excerpt, and full content into English
-- Keep the journalistic tone and style
-- Preserve all factual information, names, dates, and quotes
-- For proper nouns (people, places, organizations), use standard English transliterations
-- Maintain the article structure and paragraphs
-- Content is in HTML format - preserve all HTML tags and structure
-- Generate 3-5 SEO keywords in English related to the article
-
-Arabic Article Title: ${article.title}
-${article.subtitle ? `Arabic Subtitle: ${article.subtitle}` : ''}
-${article.excerpt ? `Arabic Excerpt: ${article.excerpt}` : ''}
-${categoryNameAr ? `Category: ${categoryNameAr}` : ''}
-
-Arabic Content:
-${article.content}
-
-Respond in valid JSON format only:
-{
-  "title": "English title",
-  "subtitle": "English subtitle or null",
-  "content": "Full English HTML content",
-  "excerpt": "English excerpt (max 200 chars)",
-  "seoKeywords": ["keyword1", "keyword2", "keyword3"]
-}`;
-
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          temperature: 0.3,
-          max_tokens: 8000,
-        });
-
-        const text = completion.choices[0]?.message?.content;
-        if (!text) throw new Error("فشل الحصول على الترجمة من الذكاء الاصطناعي");
-        return JSON.parse(text);
-      }, 3, "Translate");
-
-      // 5. Prefer Arabic englishSlug so AR/EN share the same short code (hreflang-safe).
-      const { generateEnglishSlug: genSlug } = await import("./utils/slugTransliterator");
-      let englishSlug = await pickEnArticleSlug({
-        preferredFromAr: article.englishSlug,
-        fromTitle: genSlug(translated.title),
-      });
-
-      // Handle slug collision when falling back to title-derived slug
-      const [slugExists] = await db
-        .select({ id: enArticles.id })
-        .from(enArticles)
-        .where(or(eq(enArticles.slug, englishSlug), eq(enArticles.englishSlug, englishSlug)))
-        .limit(1);
-      if (slugExists) {
-        const { nanoid } = await import("nanoid");
-        englishSlug = `${genSlug(translated.title)}-${nanoid(5)}`;
-      }
-
-      // 6. Create the English article as published (always under "Sabq Newspaper" account)
-      const [sabqNewspaperUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.email, "admin@sabq.org"))
-        .limit(1);
-      const sabqAuthorId = sabqNewspaperUser?.id || userId;
-      // Pin new translations at the top of the EN dashboard (displayOrder leads sort).
-      const [maxOrderRow] = await db
-        .select({ maxOrder: sql<number>`COALESCE(MAX(${enArticles.displayOrder}), 0)::int` })
-        .from(enArticles);
-      const nextDisplayOrder = (maxOrderRow?.maxOrder || 0) + 1;
-
-      if (!enCategoryId && article.categoryId) {
-        console.warn(`[Translate] EN category missing for AR article ${articleId} — publishing without category`);
-      }
-
-      const [newEnArticle] = await db
-        .insert(enArticles)
-        .values([{
-          title: translated.title,
-          subtitle: translated.subtitle || null,
-          slug: englishSlug,
-          englishSlug: englishSlug,
-          content: translated.content,
-          excerpt: translated.excerpt || null,
-          imageUrl: article.imageUrl,
-          imageFocalPoint: article.imageFocalPoint || null,
-          categoryId: enCategoryId,
-          authorId: sabqAuthorId,
-          reporterId: article.reporterId || null,
-          articleType: article.articleType,
-          newsType: article.newsType,
-          isFeatured: article.isFeatured ?? false,
-          status: "published",
-          publishedAt: new Date(),
-          displayOrder: nextDisplayOrder,
-          hideFromHomepage: false,
-          aiGenerated: true,
-          aiSummary: translated.excerpt || null,
-          seo: {
-            metaTitle: translated.title,
-            metaDescription: translated.excerpt || "",
-            keywords: translated.seoKeywords || [],
-          },
-          seoMetadata: {
-            sourceArticleId: articleId,
-            provider: "openai" as const,
-            model: "gpt-4o",
-            generatedAt: new Date().toISOString(),
-            generatedBy: userId,
-            status: "generated" as const,
-          },
-        } as any])
-        .returning();
-
-      if (isBreakingNewsType(newEnArticle.newsType)) {
-        await clearOtherEnBreakingArticles(newEnArticle.id).catch((err) =>
-          console.warn("[Translate] Failed to clear other EN breaking articles:", err),
-        );
-      }
-      console.log(`[Translate] Article ${articleId} translated to English as ${newEnArticle.id} by user ${userId}`);
-
-      // Notify search engines for the EN URL + refresh AR hreflang cluster.
-      const enSlug = newEnArticle.englishSlug || newEnArticle.slug;
-      if (enSlug) {
-        notifySearchEngines(enSlug, "en").catch(() => {});
-      }
-      const arSlug = article.englishSlug || null;
-      if (arSlug) notifySearchEngines(arSlug, "ar").catch(() => {});
-      invalidatePublishedContent({ reason: "en-translate" });
-      invalidateSitemapXmlCache(["__sitemapEnArticles", "index"]).catch(() => {});
-      try {
-        clearNewsSitemapMemoryCache();
-      } catch {
-        /* best-effort */
-      }
-
+      const result = await translateArticleToEnglish({ articleId: req.params.id, actorUserId: userId });
       res.json({
         message: "تمت ترجمة المقال ونشره في النسخة الإنجليزية بنجاح",
-        enArticleId: newEnArticle.id,
-        enArticleTitle: newEnArticle.title,
-        enCategoryId,
-        warning: !enCategoryId && article.categoryId
+        enArticleId: result.enArticle.id,
+        enArticleTitle: result.enArticle.title,
+        enCategoryId: result.enCategoryId,
+        warning: !result.enCategoryId && result.hadArCategory
           ? "Published without EN category — map categories or run backfill"
           : undefined,
       });
     } catch (error: any) {
+      if (error instanceof EnTranslationError && error.code !== "AI_FAILED") {
+        const statusCode = error.code === "ALREADY_TRANSLATED" ? 409 : error.code === "NOT_FOUND" ? 404 : 400;
+        return res.status(statusCode).json({ message: error.message, enArticleId: error.existing?.id });
+      }
       res.status(500).json(safeErrorPayload(error, "فشلت عملية الترجمة", "translate-article"));
     }
   });

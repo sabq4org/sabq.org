@@ -6,6 +6,7 @@ import systemSettingsRouter from "./systemSettings";
 import unpublishedArticleGuardRouter from "./unpublishedArticleGuard";
 import articleSummaryAudioRouter from "./articleSummaryAudio";
 import audioBulletinRouter from "./audioBulletin";
+import enAutoTranslateRouter from "./enAutoTranslate";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -135,6 +136,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(articleSummaryAudioRouter);
   app.use(systemSettingsRouter);
   app.use(audioBulletinRouter);
+  app.use(enAutoTranslateRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
   app.use(editAndGenerateStreamRouter);
