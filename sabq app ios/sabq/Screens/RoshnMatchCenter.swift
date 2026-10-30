@@ -152,13 +152,13 @@ struct RoshnMatchCenter: View {
                 VStack(spacing: SabqLayout.space8) {
                     if d.fixture.started {
                         Text("\(d.fixture.goals.away ?? 0) - \(d.fixture.goals.home ?? 0)")
-                            .font(.custom(SabqFonts.bold, size: 30 * scale, relativeTo: .largeTitle))
+                            .font(SabqFonts.editorial(.largeTitle, size: 30 * scale, weight: .bold))
                             .foregroundStyle(RoshnTheme.heroOn)
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
                         Text(RsFormat.time(d.fixture))
-                            .font(.custom(SabqFonts.bold, size: 22 * scale, relativeTo: .title2))
+                            .font(SabqFonts.editorial(.title2, size: 22 * scale, weight: .bold))
                             .foregroundStyle(RoshnTheme.heroOn)
                             .monospacedDigit()
                     }
@@ -189,7 +189,7 @@ struct RoshnMatchCenter: View {
         Button { selectedTeam = team } label: { VStack(spacing: SabqLayout.space8) {
             RoshnTeamLogo(url: team.logo, size: 56 * scale)
             Text(team.name)
-                .font(.custom(SabqFonts.semibold, size: 16 * min(scale, 1.15), relativeTo: .headline))
+                .font(SabqFonts.editorial(.headline, size: 16 * min(scale, 1.15), weight: .semibold))
                 .foregroundStyle(RoshnTheme.heroOn)
                 .lineLimit(2).minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)

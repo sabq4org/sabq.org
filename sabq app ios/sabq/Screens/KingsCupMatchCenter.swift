@@ -165,13 +165,13 @@ struct KingsCupMatchCenter: View {
                 VStack(spacing: SabqLayout.space4) {
                     if f.started {
                         Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                            .font(.custom(SabqFonts.bold, size: 26 * scale, relativeTo: .title))
+                            .font(SabqFonts.editorial(.title, size: 26 * scale, weight: .bold))
                             .foregroundStyle(SabqTheme.textPrimary)
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
                         Text(KcFormat.time(f))
-                            .font(.custom(SabqFonts.bold, size: 22 * scale, relativeTo: .title2))
+                            .font(SabqFonts.editorial(.title2, size: 22 * scale, weight: .bold))
                             .foregroundStyle(SabqTheme.textPrimary)
                     }
                     KcStatusPill(fixture: f)
@@ -411,7 +411,7 @@ struct KcPitch: View {
             Text(p.number.map { "\($0)" } ?? "•")
                 .font(SabqType.tag.font.monospacedDigit()).foregroundStyle(KcTheme.pitch)
                 .frame(width: 28, height: 28).background(Circle().fill(.white))
-            Text(p.name).font(.custom(SabqFonts.regular, size: 12, relativeTo: .caption)).foregroundStyle(.white)
+            Text(p.name).font(SabqFonts.editorial(.caption, size: 12)).foregroundStyle(.white)
                 .lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth: 64)
         }
     }
