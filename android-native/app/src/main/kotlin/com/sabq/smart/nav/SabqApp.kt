@@ -116,6 +116,8 @@ object SabqRoutes {
     const val Notifications = "notifications"
     const val NotificationDetail = "notifications/{id}"
     const val NotificationPreferences = "notifications/preferences"
+    const val ReaderInbox = "inbox"
+    const val ReaderNotificationSettings = "inbox/settings"
     const val Survey = "survey/{token}"
     const val EditProfile = "account/edit"
     const val ChangePassword = "account/change-password"
@@ -390,7 +392,7 @@ fun SabqApp(
                             navController.navigate(SabqRoutes.MomentByMoment)
                         },
                         onNotificationsClick = {
-                            navController.navigate(SabqRoutes.Notifications)
+                            navController.navigate(SabqRoutes.ReaderInbox)
                         },
                         onOpinionsAllClick = {
                             navController.navigate(SabqRoutes.Opinions)
@@ -529,7 +531,7 @@ fun SabqApp(
                         onChangePasswordClick = { navController.navigate(SabqRoutes.ChangePassword) },
                         onDeleteAccountClick = { navController.navigate(SabqRoutes.DeleteAccount) },
                         onForgotPasswordClick = { navController.navigate(SabqRoutes.ForgotPassword) },
-                        onNotificationsClick = { navController.navigate(SabqRoutes.Notifications) },
+                        onNotificationsClick = { navController.navigate(SabqRoutes.ReaderInbox) },
                         onContactClick = { navController.navigate(SabqRoutes.Contact) },
                         onNewsletterClick = { navController.navigate(SabqRoutes.Newsletter) },
                         onPrivacyClick = { navController.navigate(SabqRoutes.PrivacyPolicy) },
@@ -1012,6 +1014,26 @@ fun SabqApp(
                         onTopicClick = { angleSlug, topicSlug ->
                             navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
                         },
+                    )
+                }
+                composable(SabqRoutes.ReaderInbox) {
+                    com.sabq.smart.feature.inbox.ReaderInboxScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenEditorial = { navController.navigate(SabqRoutes.Notifications) },
+                        onOpenSettings = { navController.navigate(SabqRoutes.ReaderNotificationSettings) },
+                        onOpenTarget = { target ->
+                            when (target) {
+                                is com.sabq.smart.feature.inbox.ReaderInboxText.Target.Article ->
+                                    navController.navigate(SabqRoutes.articleDetail(target.slug))
+                                is com.sabq.smart.feature.inbox.ReaderInboxText.Target.Keyword ->
+                                    navController.navigate(SabqRoutes.keywordArticles(target.keyword))
+                            }
+                        },
+                    )
+                }
+                composable(SabqRoutes.ReaderNotificationSettings) {
+                    com.sabq.smart.feature.inbox.ReaderNotificationSettingsScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.Notifications) {

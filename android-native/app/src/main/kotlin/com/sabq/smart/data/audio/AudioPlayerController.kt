@@ -161,6 +161,12 @@ class AudioPlayerController @Inject constructor(
         _state.value = State(playingSlug = id, isPlaying = false, isLoading = true)
     }
 
+    /** موضع التشغيل الحالي بالمللي ثانية (0 إن لم يكن هناك مشغّل). */
+    fun positionMs(): Long = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
+
+    /** مدة المقطع الحالي بالمللي ثانية، أو 0 قبل معرفتها. */
+    fun durationMs(): Long = player?.duration?.takeIf { it > 0 } ?: 0L
+
     /** Stop and release. Called when the app is fully backgrounded or
      *  the user navigates away from the article. Defensive — the
      *  player will recreate next play. */
