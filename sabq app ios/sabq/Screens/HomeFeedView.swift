@@ -715,7 +715,8 @@ struct HomeFeedView: View {
                     FeaturedArticleCard(
                         article: lead,
                         onBookmark: { bookmarksStore.toggle(lead.id, article: lead) },
-                        isBookmarked: bookmarksStore.isBookmarked(lead.id)
+                        isBookmarked: bookmarksStore.isBookmarked(lead.id),
+                        bleed: SabqLayout.space12
                     )
                 }
                 .buttonStyle(.plain)

@@ -1396,6 +1396,26 @@ struct FeaturedArticleCard: View {
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
+    /// حشوة السطح الحاوي: تمتد الصورة بقدرها يمينًا ويسارًا وأعلى فتملأ رأس
+    /// البطاقة حتى حوافها بلا إطار داخلي (طلب المالك 2026-10-31).
+    var bleed: CGFloat = 0
+
+    /// بلا نقطة تركيز من المحرر يُقصّ على الثلث العلوي: الصور الطولية غالبًا
+    /// وجوه، والقص من المنتصف يقطع الرأس. الأفقية لا يتأثر قصّها تقريبًا.
+    private var heroFocalPoint: ImageFocalPoint {
+        article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30)
+    }
+
+    private var imageShape: UnevenRoundedRectangle {
+        let r = SabqRadius.medium
+        return UnevenRoundedRectangle(
+            topLeadingRadius: r,
+            bottomLeadingRadius: bleed > 0 ? 0 : r,
+            bottomTrailingRadius: bleed > 0 ? 0 : r,
+            topTrailingRadius: r,
+            style: .continuous
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1408,7 +1428,7 @@ struct FeaturedArticleCard: View {
                 .overlay {
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, fitsMismatchedAspect: true) {
+                            FocalCachedAsyncImage(url: url, focalPoint: heroFocalPoint) {
                                 SabqImagePlaceholder()
                             }
                         } else {
@@ -1418,17 +1438,15 @@ struct FeaturedArticleCard: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-                )
+                .clipShape(imageShape)
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
                     inset: 10
                 )
-                .padding(.bottom, SabqLayout.space12)
+                .padding(.horizontal, -bleed)
+                .padding(.top, -bleed)
+                .padding(.bottom, SabqLayout.space16)
 
             HStack(alignment: .center, spacing: 8) {
                 Text(article.categoryTitle)
