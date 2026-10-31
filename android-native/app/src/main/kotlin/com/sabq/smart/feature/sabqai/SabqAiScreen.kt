@@ -73,7 +73,10 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
@@ -87,6 +90,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -109,13 +113,17 @@ class SabqAiViewModel @Inject constructor(private val api: SabqAiApi) : ViewMode
             val team = try { api.team() } catch (e: CancellationException) { throw e } catch (_: Throwable) { null }
             if (team != null && team.team.isNotEmpty()) _state.update { it.copy(team = team) }
         }
-        // الويب يعيد الجلب كل دقيقة؛ تتوقف المهمة بمغادرة الشاشة.
-        viewModelScope.launch {
-            while (isActive) {
-                val s = try { api.stats() } catch (e: CancellationException) { throw e } catch (_: Throwable) { null }
-                if (s != null && s.ai.totalOps > 0) _state.update { it.copy(stats = s) }
-                delay(60_000)
-            }
+    }
+
+    /**
+     * الويب يعيد الجلب كل دقيقة. تُشغَّل من الشاشة ضمن `repeatOnLifecycle(STARTED)`:
+     * تتوقف حين تُغطّى الشاشة بوجهة أخرى أو يذهب التطبيق إلى الخلفية.
+     */
+    suspend fun refreshStatsWhileVisible() {
+        while (currentCoroutineContext().isActive) {
+            val s = try { api.stats() } catch (e: CancellationException) { throw e } catch (_: Throwable) { null }
+            if (s != null && s.ai.totalOps > 0) _state.update { it.copy(stats = s) }
+            delay(60_000)
         }
     }
 }
@@ -144,6 +152,10 @@ fun SabqAiScreen(
     viewModel: SabqAiViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(viewModel, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.refreshStatsWhileVisible() }
+    }
     val context = LocalContext.current
     val reduce = rememberReduceMotion()
     val openWeb: (String) -> Unit = { path -> openWeb(context, path) }
