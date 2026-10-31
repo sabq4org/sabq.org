@@ -1145,6 +1145,8 @@ nonisolated struct APIErrorResponse: Sendable {
     /// input. May be nil if the caller went straight to a public
     /// password-reset endpoint that doesn't disclose the id.
     let userId: String?
+    /// Machine-readable error code (e.g. `ARTICLE_VERSION_CONFLICT`).
+    let code: String?
 }
 
 nonisolated extension APIErrorResponse: Decodable {
@@ -1153,11 +1155,13 @@ nonisolated extension APIErrorResponse: Decodable {
         message = try? c.decode(String.self, forKey: .message)
         requiresActivation = try? c.decode(Bool.self, forKey: .requiresActivation)
         userId = try? c.decode(String.self, forKey: .userId)
+        code = try? c.decode(String.self, forKey: .code)
     }
     private enum CodingKeys: String, CodingKey {
         case message
         case requiresActivation
         case userId
+        case code
     }
 }
 
