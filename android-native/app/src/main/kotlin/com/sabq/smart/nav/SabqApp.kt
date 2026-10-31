@@ -99,6 +99,13 @@ object SabqRoutes {
     // لوحة المراسل والمشرف (نقل iOS 2026-10-31) — /api/v1/editorial/*
     const val MyNews = "editorial/my-news"
     const val SupervisorNews = "editorial/news?filter={filter}"
+    const val AdminDashboard = "admin"
+    const val AdminContactMessages = "admin/contact-messages"
+    const val AdminContactMessage = "admin/contact-messages/{id}"
+    const val AdminTickets = "admin/opinion-tickets"
+    const val AdminTicket = "admin/opinion-tickets/{id}"
+    fun adminContactMessage(id: String): String = "admin/contact-messages/${android.net.Uri.encode(id)}"
+    fun adminTicket(id: String): String = "admin/opinion-tickets/${android.net.Uri.encode(id)}"
     const val SupervisorNewsPreview = "editorial/news/{id}"
     const val EditRequestCompose = "editorial/edit-request/{id}?title={title}&state={state}"
     const val EditRequestReview = "editorial/edit-requests/{id}"
@@ -562,6 +569,7 @@ fun SabqApp(
                         onDashboardClick = { navController.navigate(SabqRoutes.ContributorDashboard) },
                         onMyNewsClick = { navController.navigate(SabqRoutes.MyNews) },
                         onSupervisorClick = { navController.navigate(SabqRoutes.supervisorNews()) },
+                        onAdminDashboardClick = { navController.navigate(SabqRoutes.AdminDashboard) },
                         onSabqPlusClick = { navController.navigate(SabqRoutes.SabqPlus) },
                         onPressCardClick = { navController.navigate(SabqRoutes.PressCard) },
                         onBlockedUsersClick = { navController.navigate(SabqRoutes.BlockedUsers) },
@@ -595,6 +603,39 @@ fun SabqApp(
                         onNewNews = { navController.navigate(SabqRoutes.SubmitNews) },
                         onNewOpinion = { navController.navigate(SabqRoutes.SubmitOpinion) },
                     )
+                }
+                composable(SabqRoutes.AdminDashboard) {
+                    com.sabq.smart.feature.admin.AdminDashboardScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenQueue = { filter -> navController.navigate(SabqRoutes.supervisorNews(filter)) },
+                        onOpenContactMessages = { navController.navigate(SabqRoutes.AdminContactMessages) },
+                        onOpenTickets = { navController.navigate(SabqRoutes.AdminTickets) },
+                        onNewNews = { navController.navigate(SabqRoutes.SubmitNews) },
+                    )
+                }
+                composable(SabqRoutes.AdminContactMessages) {
+                    com.sabq.smart.feature.admin.AdminContactMessagesScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpen = { id -> navController.navigate(SabqRoutes.adminContactMessage(id)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AdminContactMessage,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.admin.AdminContactMessageScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.AdminTickets) {
+                    com.sabq.smart.feature.admin.AdminTicketsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpen = { id -> navController.navigate(SabqRoutes.adminTicket(id)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AdminTicket,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.admin.AdminTicketScreen(onBack = { navController.popBackStack() })
                 }
                 composable(
                     route = SabqRoutes.SupervisorNewsPreview,

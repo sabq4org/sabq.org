@@ -141,6 +141,7 @@ fun SettingsScreen(
     onDashboardClick: () -> Unit = {},
     onMyNewsClick: () -> Unit = {},
     onSupervisorClick: () -> Unit = {},
+    onAdminDashboardClick: () -> Unit = {},
     onSabqPlusClick: () -> Unit = {},
     onPressCardClick: () -> Unit = {},
     onOpenRevisionsClick: () -> Unit = {},
@@ -207,7 +208,15 @@ fun SettingsScreen(
         // 3) «عملي في سبق» — مدخل لكل دور كما في iOS (2026-10-31): لوحة التحكم
         // للمحرر والإدارة، و«أخباري» للمراسل، و«لوحة الكاتب» لكاتب الرأي.
         currentUser?.let { u ->
-            if (u.isAdminLike) {
+            if (u.isPlatformAdmin) {
+                // مسؤول المنصة: اللوحة الكاملة كما في iOS (الأخبار، والمؤشرات، وصندوق الإدارة).
+                DashboardEntryRow(
+                    title = "لوحة التحكم",
+                    subtitle = "ما ينتظر قرارك، والأخبار، والمؤشرات",
+                    icon = Icons.Filled.Inbox,
+                    onClick = onAdminDashboardClick,
+                )
+            } else if (u.isAdminLike) {
                 DashboardEntryRow(
                     title = "لوحة التحكم",
                     subtitle = "أخبار المراسلين وطلبات التعديل بانتظار قرارك",
