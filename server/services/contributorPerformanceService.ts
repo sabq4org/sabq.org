@@ -116,16 +116,15 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
   const baseDay = isoDay(addDays(now, -(days ? days * 2 : seriesDays)));
   const cut = isoDay(addDays(now, -(seriesDays - 1)));
   const createdSince = (col: AnyColumn) => (periodStart ? gte(col, periodStart) : undefined);
-  const recentIds = published
-    .filter((a) => !a.publishedAt || isoDay(a.publishedAt) > isoDay(addDays(now, -400)))
-    .map((a) => a.id);
+  // كل الأخبار المنشورة: القديمة تُلتقط لها لقطات أيضًا متى تفاعل معها القراء.
+  const publishedIds = published.map((a) => a.id);
 
   const [snapshotRows, likesRows, commentRows, bookmarkRows, followerRows, featuredRows] = await Promise.all([
-    recentIds.length
+    publishedIds.length
       ? db
         .select({ articleId: articleDailyStats.articleId, date: articleDailyStats.date, views: articleDailyStats.views })
         .from(articleDailyStats)
-        .where(and(inArray(articleDailyStats.articleId, recentIds), gte(articleDailyStats.date, baseDay)))
+        .where(and(inArray(articleDailyStats.articleId, publishedIds), gte(articleDailyStats.date, baseDay)))
       : Promise.resolve([] as Array<{ articleId: string; date: string; views: number }>),
     db
       .select({ articleId: reactions.articleId, c: sql<number>`count(*)::int` })
