@@ -5,7 +5,7 @@
 ## المصادقة
 
 - جلسة العضو في التطبيق: `Authorization: Bearer <token>` (`verifyMemberBearer`). رموز `botpub_*` تُرفض بـ 401.
-- **المصادقة الثنائية اختيارية** (منذ 2026-10-31، لكل الأدوار مثل الويب). `/me` يعيد `twoFactorEnabled` الفعلي. التطبيقات القديمة ما زالت تفهم `403 two_factor_required` لكن السيرفر لم يعد يرسلها. «مكتب سبق» (`/api/v1/staff`) ما زال يشترطها.
+- **المصادقة الثنائية اختيارية** (منذ 2026-10-31، لكل الأدوار مثل الويب). `/me` يعيد `twoFactorEnabled` الفعلي. التطبيقات القديمة ما زالت تفهم `403 two_factor_required` لكن السيرفر لم يعد يرسلها. وكذلك «مكتب سبق» (`/api/v1/staff`).
 - RBAC حي لكل طلب (`resolveStaffCapabilitiesAndRoles`): `canReport` للمراسل، `canNews` (= `articles.publish`) للمشرف.
 - كل الاستجابات `Cache-Control: private, no-store`. CSRF لا ينطبق على `/api/v1/`.
 - الكتابة: 30 طلبًا/10 دقائق لكل عضو (`MOBILE_EDITORIAL_WRITE_LIMIT`).

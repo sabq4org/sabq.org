@@ -53,7 +53,7 @@ async function requireEditorialAuth(req: EditorialRequest, res: Response, next: 
     const user = session?.userId ? await getStaffUserAccount(session.userId) : null;
     if (!user) return sendError(res, 401, { code: "unauthorized", message: "جلسة غير صالحة أو منتهية" });
     // المصادقة الثنائية اختيارية في تطبيق «سبق» لكل الأدوار (قرار المالك 2026-10-31)،
-    // مثل لوحة الويب. تطبيق «مكتب سبق» (/api/v1/staff) ما زال يشترطها.
+    // مثل لوحة الويب و«مكتب سبق».
     const { roles, capabilities } = await resolveStaffCapabilitiesAndRoles(user.id, user.role);
     req.staffAuth = { user, roles, capabilities };
     return next();

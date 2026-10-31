@@ -327,52 +327,21 @@ describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
     expect(mocks.verifyMemberBearer).not.toHaveBeenCalled();
   });
 
-  it("enforces mandatory 2FA gate: returns 403 { code: 'two_factor_required' } when 2FA is disabled", async () => {
+  it("opens the Desk without 2FA (optional since 2026-10-31) and reports the real flag", async () => {
     activeMockUser = {
       ...DEFAULT_STAFF_USER,
       twoFactorEnabled: false,
     };
 
-    for (const [method, path, body] of [
-      ["GET", "/api/v1/staff/me", undefined],
-      ["GET", "/api/v1/staff/inbox", undefined],
-      ["GET", "/api/v1/staff/unread-counts", undefined],
-      ["GET", "/api/v1/staff/tickets/t-1", undefined],
-      ["POST", "/api/v1/staff/tickets/t-1/reply", { message: "رد" }],
-      ["GET", "/api/v1/staff/social/s-1", undefined],
-      ["POST", "/api/v1/staff/social/s-1/publish", {}],
-    ] as const) {
-      const res = await call(method, path, body);
-      expect(res.status).toBe(403);
-      const payload = await res.json();
-      expect(payload).toEqual({
-        code: "two_factor_required",
-        message: expect.any(String),
-      });
+    for (const path of ["/api/v1/staff/me", "/api/v1/staff/inbox", "/api/v1/staff/unread-counts"]) {
+      const res = await call("GET", path);
+      expect(res.status).not.toBe(403);
     }
-  });
+    const me = await call("GET", "/api/v1/staff/me");
+    expect(me.status).toBe(200);
+    expect((await me.json()).twoFactorEnabled).toBe(false);
 
-  it("still returns 403 two_factor_required when a TOTP secret exists from an unconfirmed setup but twoFactorEnabled is false", async () => {
-    const unconfirmedSecret = "JBSWY3DP" + "EHPK3PXP";
-    activeMockUser = {
-      ...DEFAULT_STAFF_USER,
-      twoFactorEnabled: false,
-      twoFactorSecret: unconfirmedSecret,
-    };
-
-    const resUnconfirmed = await call("GET", "/api/v1/staff/me");
-    expect(resUnconfirmed.status).toBe(403);
-    expect(await resUnconfirmed.json()).toEqual({
-      code: "two_factor_required",
-      message: expect.any(String),
-    });
-
-    // Once the user completes verification (twoFactorEnabled = true), /me succeeds
-    activeMockUser = {
-      ...DEFAULT_STAFF_USER,
-      twoFactorEnabled: true,
-      twoFactorSecret: unconfirmedSecret,
-    };
+    activeMockUser = { ...DEFAULT_STAFF_USER, twoFactorEnabled: true };
     const resEnabled = await call("GET", "/api/v1/staff/me");
     expect(resEnabled.status).toBe(200);
     expect((await resEnabled.json()).twoFactorEnabled).toBe(true);

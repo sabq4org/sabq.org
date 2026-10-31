@@ -3,7 +3,7 @@
 //
 // طبقة API مخصصة لتطبيق الديسك المستقل على iOS (com.sabq.desk)، تعتمد على
 // جلسات العضو الشخصية (verifyMemberBearer)، وترفض توكنات البوت (botpub_*)،
-// وتشترط تفعيل المصادقة الثنائية (2FA)، وتطبق صلاحيات RBAC الحية لكل طلب،
+// والمصادقة الثنائية (2FA) اختيارية منذ 2026-10-31، وتطبق صلاحيات RBAC الحية لكل طلب،
 // وتسجل كل عملية كتابة في activity_logs بالقناة 'staff-app' ومعرّف الجهاز.
 //
 // التوثيق: docs/systems/editorial/STAFF_APP_API.md
@@ -161,12 +161,8 @@ async function requireStaffAuth(req: StaffRequest, res: Response, next: NextFunc
       });
     }
 
-    if (!user.twoFactorEnabled) {
-      return sendError(res, 403, {
-        code: "two_factor_required",
-        message: "يلزم تفعيل المصادقة الثنائية (2FA) للوصول إلى تطبيق الديسك",
-      });
-    }
+    // المصادقة الثنائية اختيارية منذ 2026-10-31 (قرار المالك)، مثل لوحة الويب
+    // وتطبيق «سبق». التطبيق ما زال يفهم 403 two_factor_required من النسخ القديمة.
 
     const { roles, capabilities } = await resolveStaffCapabilitiesAndRoles(
       user.id,
