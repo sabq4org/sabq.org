@@ -26,11 +26,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.EventSeat
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbCloudy
@@ -228,6 +231,7 @@ private fun MatchContent(state: WorldCupMatchViewModel.UiState, onOpenPlayer: (I
         state.tv?.takeIf { it.available && it.channels.isNotEmpty() }?.let { tv ->
             item { TvStrip(tv.channels) }
         }
+        item { LiveFollowButton(f) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 tabs.forEach { (key, label) ->
@@ -250,6 +254,91 @@ private fun MatchContent(state: WorldCupMatchViewModel.UiState, onOpenPlayer: (I
                 else -> PredictionTab(detail, state.forecast)
             }
         }
+    }
+}
+
+/**
+ * زر المتابعة المباشرة — نظير زر النشاط المباشر في iOS. يظهر للمباراة الجارية
+ * أو القادمة خلال ساعة، ويشغّل إشعارًا جاريًا بالنتيجة ([LiveMatchService]).
+ */
+@Composable
+private fun LiveFollowButton(f: WcFixture) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activeId by LiveMatchFollow.activeFixtureId.collectAsStateWithLifecycle()
+    // ساعة خفيفة تعيد تقييم الأهلية (المباراة القادمة تدخل نافذة الساعة لاحقًا).
+    val nowSec by androidx.compose.runtime.produceState(System.currentTimeMillis() / 1000) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            value = System.currentTimeMillis() / 1000
+        }
+    }
+    val running = activeId == f.id
+    if (!running && !LiveMatchFollow.isEligible(f, nowSec)) return
+    var showDenied by remember { mutableStateOf(false) }
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        LiveMatchService.ensureChannel(context)
+        if (granted && LiveMatchService.notificationsVisible(context)) LiveMatchService.start(context, f)
+        else showDenied = true
+    }
+
+    val title = LiveMatchFollow.buttonTitle(running, f)
+    val icon = when {
+        running -> Icons.Filled.StopCircle
+        LiveMatchFollow.isUpcoming(f) -> Icons.Filled.Alarm
+        else -> Icons.Filled.Bolt
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (running) Color.Transparent else WcColors.royal)
+            .border(1.dp, if (running) WcColors.onDarkDim else Color.Transparent, RoundedCornerShape(12.dp))
+            .clickable {
+                if (running) {
+                    LiveMatchService.stop(context)
+                    return@clickable
+                }
+                LiveMatchService.ensureChannel(context)
+                val needsPermission = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.POST_NOTIFICATIONS,
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                when {
+                    needsPermission -> permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    LiveMatchService.notificationsVisible(context) -> LiveMatchService.start(context, f)
+                    else -> showDenied = true
+                }
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = if (running) WcColors.onDark else Color.White, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(title, color = if (running) WcColors.onDark else Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    }
+
+    if (showDenied) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDenied = false },
+            title = { Text("الإشعارات معطّلة") },
+            text = { Text("لمتابعة المباراة على شاشة القفل، فعّل إشعارات «متابعة المباريات المباشرة» لتطبيق سبق من الإعدادات.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    showDenied = false
+                    val i = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { context.startActivity(i) }
+                }) { Text("الإعدادات") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDenied = false }) { Text("إلغاء") }
+            },
+        )
     }
 }
 

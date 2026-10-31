@@ -325,6 +325,11 @@ fun SabqApp(
                     target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
                         navController.navigate(SabqRoutes.asianCupTeam(it))
                     }
+                // إشعار «المباراة الجارية» وروابط مباريات كأس العالم.
+                target.deepLinkPath?.startsWith("/world-cup/match/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.worldCupMatch(it))
+                    }
                 // مواعيدك ومباريات اليوم — روابط الويب العامة /mawaeed و/sports/matches.
                 target.deepLinkPath == "/mawaeed" ->
                     navController.navigate(SabqRoutes.Mawaeed)
