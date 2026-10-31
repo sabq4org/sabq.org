@@ -152,3 +152,126 @@ export function buildOpinionImagePrompt(input: { title: string; summary: string 
   const base = `صورة توضيحية للخبر: ${input.title}${summary ? `\n${summary}` : ""}`;
   return `${base}\nتكوين فني تعبيري رمزي هادئ وعميق يناسب المقالات والتحليلات الصحفية، ألوان متناسقة، بدون أي نصوص أو حروف داخل الصورة.`.slice(0, 4000);
 }
+
+// ── تنظيف رأس النص ─────────────────────────────────────────────────────────
+// يزيل من بداية نص مقال الرأي الأسطر الزائدة قبل أول فقرة حقيقية فقط:
+// «جاهز للنشر:»، وتكرار العنوان، واسم الكاتب، وعنوان فرعي قصير (أو فقرة كلها
+// h1-h4/strong)، ثم الفقرات الفارغة. محافظ: لا يحذف فقرة طويلة أبداً، ولا يحذف
+// شيئاً إن لم تبقَ بعده فقرة حقيقية.
+
+const HEADER_MAX_CHARS = 120;
+const HEADER_MAX_WORDS = 14;
+const HEADER_MAX_LINES = 6;
+const READY_PREFIX = "جاهز للنشر";
+
+const ENTITY_MAP: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", laquo: "«", raquo: "»" };
+
+function decodeEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code: string) => {
+    if (code[0] === "#") {
+      const n = code[1] === "x" || code[1] === "X" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+    }
+    return ENTITY_MAP[code.toLowerCase()] ?? m;
+  });
+}
+
+function blockText(html: string): string {
+  return decodeEntities(html.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]*>/g, ""))
+    .replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2066-\u2069]+/g, " ")
+    .trim();
+}
+
+/** تطبيع للمقارنة: الهمزات، ة/ه، ى/ي، التشكيل والتطويل، الترقيم والمسافات. */
+export function normalizeArabicForCompare(value: string): string {
+  return blockText(value)
+    .replace(/[\u064b-\u065f\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ء/g, "")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function stripWriterPrefix(norm: string): string {
+  return norm.replace(/^(بقلم|الكاتب|الكاتبه|كتب|كتبه|كتبت|د|الدكتور|الدكتوره|ا|الاستاذ|الاستاذه|م|المهندس)\s+/, "");
+}
+
+interface HeaderBlock { raw: string; inner: string; tag: string }
+
+function splitLeadingBlocks(html: string): { blocks: HeaderBlock[]; rest: string } | null {
+  const blocks: HeaderBlock[] = [];
+  const re = /^\s*(?:<(p|h[1-6]|div)\b[^>]*>([\s\S]*?)<\/\1>|(<br\s*\/?>))/i;
+  let rest = html;
+  while (blocks.length < HEADER_MAX_LINES + 4) {
+    const m = re.exec(rest);
+    if (!m) break;
+    blocks.push({ raw: m[0], inner: m[2] ?? "", tag: (m[1] ?? "br").toLowerCase() });
+    rest = rest.slice(m[0].length);
+  }
+  return blocks.length ? { blocks, rest } : null;
+}
+
+function isEmptyBlock(b: HeaderBlock): boolean {
+  return b.tag === "br" || (!/<img|<iframe|<video|<figure/i.test(b.inner) && blockText(b.inner) === "");
+}
+
+function isEmphasisOnly(b: HeaderBlock): boolean {
+  if (/^h[1-4]$/.test(b.tag)) return true;
+  const inner = b.inner.trim();
+  return /^<(strong|b)\b[^>]*>[\s\S]*<\/(strong|b)>$/i.test(inner) && blockText(inner.replace(/<(strong|b)\b[^>]*>[\s\S]*?<\/(strong|b)>/gi, "")) === "";
+}
+
+function isShortLine(text: string): boolean {
+  return text.length <= HEADER_MAX_CHARS && text.split(" ").length <= HEADER_MAX_WORDS;
+}
+
+function looksLikeTitle(norm: string, titleNorm: string): boolean {
+  if (!norm || !titleNorm) return false;
+  if (norm === titleNorm) return true;
+  const shorter = norm.length < titleNorm.length ? norm : titleNorm;
+  const longer = shorter === norm ? titleNorm : norm;
+  return shorter.length >= 8 && longer.startsWith(shorter) && shorter.length / longer.length >= 0.6;
+}
+
+export function stripOpinionHeaderLines(
+  html: string,
+  ctx: { title: string; writerName?: string | null },
+): { html: string; headerLinesRemoved: number } {
+  const split = splitLeadingBlocks(html || "");
+  if (!split) return { html, headerLinesRemoved: 0 };
+  const titleNorm = normalizeArabicForCompare(ctx.title || "");
+  const writerNorm = stripWriterPrefix(normalizeArabicForCompare(ctx.writerName || ""));
+  const { blocks } = split;
+  let i = 0;
+  let removed = 0;
+  let headerRemoved = 0;
+  while (i < blocks.length && headerRemoved < HEADER_MAX_LINES) {
+    const b = blocks[i];
+    if (isEmptyBlock(b)) { i++; continue; }
+    const text = blockText(b.inner);
+    if (!isShortLine(text)) break; // أول فقرة حقيقية: لا نتجاوزها أبداً
+    const norm = normalizeArabicForCompare(text);
+    const ready = text.replace(/^[\s:«"]+/, "").startsWith(READY_PREFIX);
+    const isTitle = looksLikeTitle(norm, titleNorm);
+    const isWriter = !!writerNorm && writerNorm.length >= 4 && stripWriterPrefix(norm) === writerNorm;
+    const noTerminal = !/[.!?؟…:؛»"”)]$/.test(text);
+    const isSubtitle = isEmphasisOnly(b) || (noTerminal && text.split(" ").length <= 10);
+    if (!(ready || isTitle || isWriter || isSubtitle)) break;
+    i++;
+    headerRemoved++;
+    removed = i;
+  }
+  if (!headerRemoved) return { html, headerLinesRemoved: 0 };
+  // الفقرات الفارغة بعد الرأس
+  while (removed < blocks.length && isEmptyBlock(blocks[removed])) removed++;
+  const remaining = blocks.slice(removed).map((b) => b.raw).join("") + split.rest;
+  // محافظ: يجب أن تبقى فقرة حقيقية بعد الحذف
+  if (blockText(remaining).length < 40) return { html, headerLinesRemoved: 0 };
+  return { html: remaining.replace(/^\s+/, ""), headerLinesRemoved: headerRemoved };
+}

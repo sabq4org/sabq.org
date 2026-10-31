@@ -183,8 +183,11 @@ export default tseslint.config(
     // (ADR-001). File is now 9913 lines.
     // RATCHETED DOWN 2026-10-31 (staff iOS phase 0): submitter roles + upload
     // helpers moved to services/mobileSubmissionService.ts. File is now 9883 lines.
+    // RATCHETED DOWN 2026-10-31 (iPhone dashboards save safety): resubmit +
+    // admin PATCH logic moved to services/mobileArticleWriteService.ts. File is
+    // now 9742 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 9883 }] },
+    rules: { "max-lines": ["error", { max: 9742 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

@@ -1395,13 +1395,16 @@ actor APIClient {
         title: String,
         content: String,
         heroImageData: Data?,
-        albumImageData: [Data]?
+        albumImageData: [Data]?,
+        expectedUpdatedAt: String? = nil
     ) async throws -> ArticleSubmissionResponse {
         struct Body: Encodable {
             let title: String
             let content: String
             let heroImage: String?
             let albumImages: [String]?
+            /// النسخة التي فُتح عليها النموذج؛ يرفض الخادم الإرسال إن تغيّرت.
+            let expectedUpdatedAt: String?
         }
 
         let heroURI: String? = heroImageData.flatMap { data in
@@ -1421,7 +1424,8 @@ actor APIClient {
             title: title,
             content: content,
             heroImage: heroURI,
-            albumImages: albumURIs
+            albumImages: albumURIs,
+            expectedUpdatedAt: expectedUpdatedAt
         )
 
         return try await put(
@@ -1862,6 +1866,10 @@ actor APIClient {
                     let msg = apiErr.message ?? "الحساب غير مفعل. يرجى تفعيل الحساب أولاً"
                     throw APIError.accountPendingActivation(message: msg, userId: apiErr.userId)
                 }
+                if http.statusCode == 409, let code = apiErr.code,
+                   ArticleWriteConflictError.codes.contains(code) {
+                    throw ArticleWriteConflictError(code: code, message: apiErr.message ?? ArticleWriteConflictError.fallbackMessage)
+                }
                 if let msg = apiErr.message {
                     throw APIError.apiMessage(msg)
                 }
@@ -1948,11 +1956,13 @@ nonisolated struct ArticleDraftPayload: Decodable {
     /// second time and accidentally edit the same article twice.
     let reviewStatus: String?
     let status: String?
+    /// نسخة المادة (ISO بدقة المللي ثانية) تُعاد كما هي مع إعادة الإرسال.
+    let updatedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, body, excerpt
         case imageURL = "imageUrl"
-        case albumImages, kind, reviewNotes, requestedAt, reviewStatus, status
+        case albumImages, kind, reviewNotes, requestedAt, reviewStatus, status, updatedAt
     }
 
     var isOpinion: Bool { kind == "opinion" }
@@ -2045,6 +2055,18 @@ extension APIUser {
 }
 
 // MARK: - Error
+
+/// 409 من حفظ مشروط بنسخة المادة أو قفلها: حفظها غيرك بعد فتحها، أو هي
+/// مفتوحة للتحرير عند محرر آخر. الشاشة تُبقي تعديل المستخدم وتعرض مسار
+/// إعادة التحميل بدل رسالة فشل عامة.
+nonisolated struct ArticleWriteConflictError: LocalizedError, Equatable {
+    static let codes: Set<String> = ["ARTICLE_VERSION_CONFLICT", "ARTICLE_LOCKED", "ARTICLE_CHANGED"]
+    static let fallbackMessage = "تغيّرت المادة بعد فتحها. تعديلك باقٍ على الشاشة؛ أعد تحميل النسخة الحالية."
+    let code: String
+    let message: String
+    var isLocked: Bool { code == "ARTICLE_LOCKED" }
+    var errorDescription: String? { message }
+}
 
 nonisolated enum APIError: LocalizedError {
     case invalidURL
