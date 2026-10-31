@@ -105,3 +105,31 @@ final class VersionedAdminService: AdminServicing, @unchecked Sendable {
 }
 
 enum VersionedServiceError: Error { case unimplemented }
+
+/// بعد «اعرض النسخة الحالية» لا تُرسل صور اختيرت قبل التعارض فوق النسخة الأحدث.
+struct RevisionImageSelectionTests {
+    @Test func resetDropsPickedImagesSoServerImagesAreKept() {
+        var images = RevisionImageSelection()
+        images.heroData = Data([1, 2, 3])
+        images.replacedHero = true
+        images.albumData = [Data([4]), Data([5])]
+        images.replacedAlbum = true
+        #expect(images.heroToSend == Data([1, 2, 3]))
+        #expect(images.albumToSend?.count == 2)
+
+        images.reset()
+
+        #expect(images.heroToSend == nil)
+        #expect(images.albumToSend == nil)
+        #expect(images.heroPreview == nil)
+        #expect(images.albumPreviews.isEmpty)
+    }
+
+    @Test func unreplacedImagesAreNeverSent() {
+        var images = RevisionImageSelection()
+        images.heroData = Data([1])
+        images.albumData = [Data([2])]
+        #expect(images.heroToSend == nil)
+        #expect(images.albumToSend == nil)
+    }
+}

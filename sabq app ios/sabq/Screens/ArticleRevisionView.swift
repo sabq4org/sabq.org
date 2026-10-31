@@ -30,13 +30,9 @@ struct ArticleRevisionView: View {
     @State private var bodyText = ""
     @State private var existingHeroURL: String?
     @State private var existingAlbumURLs: [String] = []
-    @State private var newHeroData: Data?
-    @State private var newHeroPreview: UIImage?
     @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var newAlbumPreviews: [UIImage] = []
-    @State private var newAlbumData: [Data] = []
-    @State private var replacedHero = false
-    @State private var replacedAlbum = false
+    /// الصور التي اختارها الكاتب في هذه الجلسة؛ تُفرّغ عند تحميل نسخة الخادم.
+    @State private var images = RevisionImageSelection()
 
     @State private var screenState: Stage = .loading
     @State private var errorMessage: String?
@@ -290,7 +286,7 @@ struct ArticleRevisionView: View {
             fieldLabel(isOpinion ? "صورة المقال (اختياري)" : "الصور")
 
             // Existing image (only shown until replaced)
-            if !replacedHero, let urlStr = existingHeroURL, let url = URL(string: urlStr) {
+            if !images.replacedHero, let urlStr = existingHeroURL, let url = URL(string: urlStr) {
                 ZStack(alignment: .topTrailing) {
                     CachedAsyncImage(url: url, contentMode: .fill) {
                         SabqImagePlaceholder()
@@ -318,7 +314,7 @@ struct ArticleRevisionView: View {
                     }
                     .padding(SabqLayout.space8)
                 }
-            } else if let preview = newHeroPreview {
+            } else if let preview = images.heroPreview {
                 ZStack(alignment: .topTrailing) {
                     Color.clear
                         .frame(maxWidth: .infinity)
@@ -331,7 +327,7 @@ struct ArticleRevisionView: View {
                         .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
 
                     Button {
-                        withAnimation { newHeroPreview = nil; newHeroData = nil; replacedHero = false }
+                        withAnimation { images.heroPreview = nil; images.heroData = nil; images.replacedHero = false }
                     } label: {
                         Image(systemName: "xmark")
                             .font(SabqFonts.app(size: 13, weight: .semibold))
@@ -508,6 +504,9 @@ struct ArticleRevisionView: View {
             bodyText = payload.body
             existingHeroURL = payload.imageURL
             existingAlbumURLs = payload.albumImages ?? []
+            // صور اختيرت قبل التعارض لا تُرسل فوق النسخة الأحدث.
+            images.reset()
+            pickerItems = []
             withAnimation { screenState = .form }
         } catch let apiError as APIError {
             loadingError = apiError.errorDescription
@@ -528,9 +527,9 @@ struct ArticleRevisionView: View {
                 if let data = try? await first.loadTransferable(type: Data.self),
                    let img = UIImage(data: data) {
                     let prepared = SabqImageUpload.prepare(img)
-                    newHeroData = prepared.data
-                    newHeroPreview = prepared.image
-                    replacedHero = true
+                    images.heroData = prepared.data
+                    images.heroPreview = prepared.image
+                    images.replacedHero = true
                 }
             }
         } else {
@@ -556,12 +555,12 @@ struct ArticleRevisionView: View {
                 return
             }
             if let firstData = datas.first, let firstPreview = previews.first {
-                newHeroData = firstData
-                newHeroPreview = firstPreview
-                replacedHero = true
-                newAlbumData = Array(datas.dropFirst())
-                newAlbumPreviews = Array(previews.dropFirst())
-                replacedAlbum = !newAlbumData.isEmpty
+                images.heroData = firstData
+                images.heroPreview = firstPreview
+                images.replacedHero = true
+                images.albumData = Array(datas.dropFirst())
+                images.albumPreviews = Array(previews.dropFirst())
+                images.replacedAlbum = !images.albumData.isEmpty
             }
         }
         pickerItems = []
@@ -578,8 +577,8 @@ struct ArticleRevisionView: View {
                 id: articleId,
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 content: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
-                heroImageData: replacedHero ? newHeroData : nil,
-                albumImageData: replacedAlbum ? newAlbumData : nil,
+                heroImageData: images.heroToSend,
+                albumImageData: images.albumToSend,
                 expectedUpdatedAt: draft?.updatedAt
             )
             store.removeOptimistically(id: articleId)
@@ -598,4 +597,19 @@ struct ArticleRevisionView: View {
             screenState = .form
         }
     }
+}
+
+/// صور اختارها الكاتب لإعادة الإرسال. `nil` في الإرسال يعني «أبقِ صور الخادم».
+struct RevisionImageSelection {
+    var heroData: Data?
+    var heroPreview: UIImage?
+    var albumData: [Data] = []
+    var albumPreviews: [UIImage] = []
+    var replacedHero = false
+    var replacedAlbum = false
+
+    var heroToSend: Data? { replacedHero ? heroData : nil }
+    var albumToSend: [Data]? { replacedAlbum ? albumData : nil }
+
+    mutating func reset() { self = RevisionImageSelection() }
 }
