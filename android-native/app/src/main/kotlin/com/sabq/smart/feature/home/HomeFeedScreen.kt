@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -120,6 +121,7 @@ fun HomeFeedScreen(
     onArticleClick: (Article) -> Unit = {},
     onSearchClick: () -> Unit = {},
     onMomentByMomentClick: () -> Unit = {},
+    onMawaeedClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onOpinionsAllClick: () -> Unit = {},
     onTrendingAllClick: () -> Unit = {},
@@ -128,6 +130,7 @@ fun HomeFeedScreen(
     onAsianCupClick: () -> Unit = {},
     onKingsCupClick: () -> Unit = {},
     onRoshnClick: () -> Unit = {},
+    onSportsTodayClick: () -> Unit = {},
     onEconomyClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
@@ -157,8 +160,10 @@ fun HomeFeedScreen(
 
     // Trigger the badge count fetch on first appearance for signed-in
     // users. Failures are silent (count stays 0).
-    LaunchedEffect(isLoggedIn) {
+    // وعند كل عودة للرئيسية (iOS يحدّثه عند صيرورة التطبيق نشطًا).
+    androidx.lifecycle.compose.LifecycleResumeEffect(isLoggedIn) {
         if (isLoggedIn) bellViewModel.refresh()
+        onPauseOrDispose { }
     }
 
     Box(
@@ -189,6 +194,7 @@ fun HomeFeedScreen(
                 onArticleClick = onArticleClick,
                 onSearchClick = onSearchClick,
                 onMomentByMomentClick = onMomentByMomentClick,
+                onMawaeedClick = onMawaeedClick,
                 onNotificationsClick = onNotificationsClick,
                 onOpinionsAllClick = onOpinionsAllClick,
                 onTrendingAllClick = onTrendingAllClick,
@@ -197,6 +203,7 @@ fun HomeFeedScreen(
                 onAsianCupClick = onAsianCupClick,
                 onKingsCupClick = onKingsCupClick,
                 onRoshnClick = onRoshnClick,
+                onSportsTodayClick = onSportsTodayClick,
                 onEconomyClick = onEconomyClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
@@ -241,6 +248,7 @@ private fun LoadedFeed(
     onArticleClick: (Article) -> Unit,
     onSearchClick: () -> Unit,
     onMomentByMomentClick: () -> Unit,
+    onMawaeedClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onOpinionsAllClick: () -> Unit,
     onTrendingAllClick: () -> Unit,
@@ -249,6 +257,7 @@ private fun LoadedFeed(
     onAsianCupClick: () -> Unit,
     onKingsCupClick: () -> Unit,
     onRoshnClick: () -> Unit,
+    onSportsTodayClick: () -> Unit,
     onEconomyClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
@@ -324,6 +333,7 @@ private fun LoadedFeed(
                 notificationsUnreadCount = notificationsUnreadCount,
                 onSearchClick = onSearchClick,
                 onMomentByMomentClick = onMomentByMomentClick,
+                onMawaeedClick = onMawaeedClick,
                 onNotificationsClick = onNotificationsClick,
                 onToggleDarkMode = onToggleDarkMode,
             )
@@ -332,6 +342,10 @@ private fun LoadedFeed(
         // Time-aware Arabic greeting block — ports iOS
         // `HomeFeedView.greetingBlock` (lines 878-1001).
         sectionItem { GreetingBlock(onClick = onGreetingClick) }
+
+        // «نشرة سَبْق» الصوتية — شريط مدمج أعلى الرئيسية يظهر فقط عند توفر
+        // نشرة معتمدة (iOS HomeFeedView.swift:171 AudioBulletinBar).
+        sectionItem(key = "audio-bulletin") { com.sabq.smart.feature.audio.AudioBulletinSection() }
 
         // عاجل — الشريط الوحيد المسموح فوق الهيرو (iOS HomeFeedView.swift:
         // 157-164): شريط لوحة التحكم الدوّار أولًا، وعند غيابه نسقط
@@ -386,6 +400,12 @@ private fun LoadedFeed(
                     onClick = onArticleClick,
                 )
             }
+        }
+
+        // شريط البوابة الرياضية تحت الهيرو — أهم مباراة جارية أو قادمة اليوم،
+        // وإلا عدّاد أقرب بطولة (iOS HomeFeedView.swift:196 SportsPortalStrip).
+        sectionItem(key = "sports-portal") {
+            com.sabq.smart.feature.sports.SportsPortalStrip(onClick = onSportsTodayClick)
         }
 
         // الاقتصاد الحي: بطاقة برقم واحد بعد الهيرو وقبل أشرطة البطولات (قرار
@@ -832,6 +852,7 @@ private fun HomeHeaderBar(
     notificationsUnreadCount: Int,
     onSearchClick: () -> Unit,
     onMomentByMomentClick: () -> Unit,
+    onMawaeedClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onToggleDarkMode: () -> Unit,
     compact: Boolean = false,
@@ -868,6 +889,12 @@ private fun HomeHeaderBar(
                     badge = notificationsUnreadCount > 0,
                 )
             }
+            // «مواعيدك» — الرواتب والدعم والإجازات (iOS headerIcon("calendar")).
+            HeaderIcon(
+                icon = Icons.Outlined.CalendarMonth,
+                contentDescription = "مواعيدك — الرواتب والدعم والإجازات",
+                onClick = onMawaeedClick,
+            )
             HeaderIcon(
                 icon = Icons.Outlined.Podcasts,
                 contentDescription = "لحظة بلحظة",
