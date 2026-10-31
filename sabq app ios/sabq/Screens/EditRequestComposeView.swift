@@ -22,7 +22,10 @@ struct EditRequestComposeView: View {
     @State private var albumItems: [PhotosPickerItem] = []
     /// خانة لكل صورة مختارة بترتيب الاختيار؛ حالتها (رفع/مرفوعة/فشل) تُعرض
     /// على مصغّرتها، ولا تسقط صورة بصمت.
-    @State private var album = AlbumUploadQueue()
+    /// كل رفع للألبوم (الدفعة وإعادة المحاولة) يمرّ بهذا المجدول وحده،
+    /// فيبقى الحد 3 رفعات متزامنة في كل الأحوال.
+    @State private var uploader = AlbumUploader(limit: EditRequestComposeView.albumUploadWidth)
+    private var album: AlbumUploadQueue { uploader.queue }
     @State private var albumPreviews: [UUID: UIImage] = [:]
     /// ما يلزم لإعادة المحاولة: البيانات إن قُرئت، وإلا عنصر المكتبة نفسه.
     @State private var albumData: [UUID: Data] = [:]
@@ -271,7 +274,7 @@ struct EditRequestComposeView: View {
                 SabqTheme.surfaceMuted
             }
             switch slot.phase {
-            case .uploading:
+            case .waiting, .uploading:
                 Color.black.opacity(0.35)
                 ProgressView().tint(.white)
             case .uploaded:
@@ -287,7 +290,7 @@ struct EditRequestComposeView: View {
         .clipShape(shape)
         .overlay(shape.stroke(slot.isFailed ? SabqTheme.danger : .clear, lineWidth: 2))
         .overlay(alignment: .topLeading) {
-            if slot.phase != .uploading {
+            if !slot.isPending {
                 Button {
                     removeAlbumSlot(slot.id)
                 } label: {
@@ -303,7 +306,7 @@ struct EditRequestComposeView: View {
         }
         .contentShape(shape)
         .onTapGesture {
-            if slot.isFailed { Task { await uploadAlbumSlots([slot.id]) } }
+            if slot.isFailed { retryAlbumSlot(slot.id) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(slot.accessibilityText)
@@ -376,59 +379,41 @@ struct EditRequestComposeView: View {
         guard !items.isEmpty else { return }
         albumItems = []
         sendError = nil
-        let ids = album.enqueue(count: items.count, limit: Self.albumLimit)
+        let ids = uploader.add(count: items.count, cap: Self.albumLimit)
         for (id, item) in zip(ids, items) { albumPickerItems[id] = item }
-        await uploadAlbumSlots(ids)
+        uploader.perform = { id in await performAlbumUpload(id) }
+        uploader.start()
     }
 
-    /// يرفع الخانات المحددة بتوازٍ محدود (3)، ويحدّث كل خانة فور انتهائها.
-    /// الترتيب في الطلب هو ترتيب الخانات، لا ترتيب اكتمال الرفع.
-    private func uploadAlbumSlots(_ ids: [UUID]) async {
-        let inputs = ids.compactMap { id -> AlbumUploadInput? in
-            guard album.markUploading(id) else { return nil }
-            return AlbumUploadInput(id: id, data: albumData[id], item: albumPickerItems[id])
-        }
-        guard !inputs.isEmpty else { return }
-        _ = await BoundedConcurrency.map(inputs, limit: Self.albumUploadWidth, onResult: { index, result in
-            await applyAlbumResult(inputs[index].id, result)
-        }) { input in
-            let data: Data
-            if let cached = input.data {
-                data = cached
-            } else {
-                guard let loaded = try? await input.item?.loadTransferable(type: Data.self) else {
-                    throw AlbumUploadError.unreadable
-                }
-                data = loaded
-            }
-            do {
-                let url = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-album")
-                return AlbumUploadOutput(url: url, data: data)
-            } catch {
-                throw AlbumUploadError.uploadFailed(data)
-            }
-        }
+    private func retryAlbumSlot(_ id: UUID) {
+        uploader.perform = { id in await performAlbumUpload(id) }
+        uploader.retry(id)
     }
 
-    private func applyAlbumResult(_ id: UUID, _ result: Result<AlbumUploadOutput, Error>) {
-        switch result {
-        case .success(let output):
-            albumData[id] = output.data
-            if albumPreviews[id] == nil { albumPreviews[id] = UIImage(data: output.data) }
-            album.apply(id, .uploaded(url: output.url))
-        case .failure(let error):
-            if case AlbumUploadError.uploadFailed(let data) = error {
-                albumData[id] = data
-                if albumPreviews[id] == nil { albumPreviews[id] = UIImage(data: data) }
-                album.apply(id, .failed("تعذر رفع الصورة"))
-            } else {
-                album.apply(id, .failed("تعذر قراءة الصورة من المكتبة"))
+    /// رفع خانة واحدة: قراءة الصورة من المكتبة (أو بياناتها المحفوظة من محاولة
+    /// سابقة) ثم الرفع. يعيد الحالة النهائية؛ المجدول يحدّث الخانة ويبدأ التالية.
+    private func performAlbumUpload(_ id: UUID) async -> AlbumUploadSlot.Phase {
+        let data: Data
+        if let cached = albumData[id] {
+            data = cached
+        } else {
+            guard let loaded = try? await albumPickerItems[id]?.loadTransferable(type: Data.self) else {
+                return .failed("تعذر قراءة الصورة من المكتبة")
             }
+            data = loaded
+            albumData[id] = loaded
+            if albumPreviews[id] == nil { albumPreviews[id] = UIImage(data: loaded) }
+        }
+        do {
+            let url = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-album")
+            return .uploaded(url: url)
+        } catch {
+            return .failed("تعذر رفع الصورة")
         }
     }
 
     private func removeAlbumSlot(_ id: UUID) {
-        album.remove(id)
+        uploader.remove(id)
         albumPreviews[id] = nil
         albumData[id] = nil
         albumPickerItems[id] = nil
@@ -504,6 +489,8 @@ private extension String {
 
 nonisolated struct AlbumUploadSlot: Identifiable, Equatable, Sendable {
     enum Phase: Equatable, Sendable {
+        /// بانتظار مكان ضمن حد الرفع المتزامن.
+        case waiting
         case uploading
         case uploaded(url: String)
         case failed(String)
@@ -513,10 +500,11 @@ nonisolated struct AlbumUploadSlot: Identifiable, Equatable, Sendable {
     var phase: Phase
 
     var isFailed: Bool { if case .failed = phase { return true } else { return false } }
+    var isPending: Bool { phase == .waiting || phase == .uploading }
 
     var accessibilityText: String {
         switch phase {
-        case .uploading: return "صورة قيد الرفع"
+        case .waiting, .uploading: return "صورة قيد الرفع"
         case .uploaded: return "صورة مرفوعة"
         case .failed(let reason): return "\(reason). المس لإعادة المحاولة"
         }
@@ -528,20 +516,32 @@ nonisolated struct AlbumUploadSlot: Identifiable, Equatable, Sendable {
 nonisolated struct AlbumUploadQueue: Equatable, Sendable {
     private(set) var slots: [AlbumUploadSlot] = []
 
-    /// يضيف خانات جديدة في حالة «رفع» ضمن السقف، ويعيد معرّفاتها بالترتيب.
+    /// يضيف خانات جديدة «بانتظار الرفع» ضمن سقف الألبوم، ويعيد معرّفاتها بالترتيب.
     mutating func enqueue(count: Int, limit: Int) -> [UUID] {
         let room = max(0, min(count, limit - slots.count))
-        let added = (0..<room).map { _ in AlbumUploadSlot(id: UUID(), phase: .uploading) }
+        let added = (0..<room).map { _ in AlbumUploadSlot(id: UUID(), phase: .waiting) }
         slots.append(contentsOf: added)
         return added.map(\.id)
     }
 
-    /// يعيد الخانة الفاشلة (أو الجديدة) إلى «رفع». false إن كانت مرفوعة أو غير موجودة.
-    mutating func markUploading(_ id: UUID) -> Bool {
-        guard let index = slots.firstIndex(where: { $0.id == id }) else { return false }
-        if case .uploaded = slots[index].phase { return false }
-        slots[index].phase = .uploading
+    /// يعيد خانة فاشلة إلى الانتظار. false إن لم تكن فاشلة (مرفوعة أو جارية أو محذوفة).
+    mutating func requestUpload(_ id: UUID) -> Bool {
+        guard let index = slots.firstIndex(where: { $0.id == id }), slots[index].isFailed else { return false }
+        slots[index].phase = .waiting
         return true
+    }
+
+    /// ينقل خانات الانتظار (بترتيب الخانات) إلى «رفع» ما دام عدد الجاري أقل من الحد،
+    /// ويعيد ما يجب بدؤه الآن. هذا هو الموضع الوحيد الذي يقرر بدء رفع.
+    mutating func nextToStart(limit: Int) -> [UUID] {
+        var room = max(1, limit) - activeCount
+        var started: [UUID] = []
+        for index in slots.indices where room > 0 && slots[index].phase == .waiting {
+            slots[index].phase = .uploading
+            started.append(slots[index].id)
+            room -= 1
+        }
+        return started
     }
 
     mutating func apply(_ id: UUID, _ phase: AlbumUploadSlot.Phase) {
@@ -557,60 +557,47 @@ nonisolated struct AlbumUploadQueue: Equatable, Sendable {
         slots.compactMap { if case .uploaded(let url) = $0.phase { return url } else { return nil } }
     }
 
-    var uploadingCount: Int { slots.filter { $0.phase == .uploading }.count }
+    /// المتبقي (جارٍ + بانتظار) — لما يُعرض على زر الإرسال.
+    var uploadingCount: Int { slots.filter(\.isPending).count }
+    /// الجاري فعلًا الآن؛ لا يتجاوز حد المجدول.
+    var activeCount: Int { slots.filter { $0.phase == .uploading }.count }
     var failedCount: Int { slots.filter(\.isFailed).count }
 }
 
-nonisolated struct AlbumUploadInput: Sendable {
-    let id: UUID
-    let data: Data?
-    let item: PhotosPickerItem?
-}
+/// مجدول رفع الألبوم: حد واحد مشترك بين الدفعة وإعادة المحاولة.
+@MainActor
+@Observable
+final class AlbumUploader {
+    private(set) var queue = AlbumUploadQueue()
+    let limit: Int
+    /// يرفع خانة واحدة ويعيد حالتها النهائية (`.uploaded` أو `.failed`).
+    @ObservationIgnored var perform: (UUID) async -> AlbumUploadSlot.Phase = { _ in .failed("") }
 
-nonisolated struct AlbumUploadOutput: Sendable {
-    let url: String
-    let data: Data
-}
+    init(limit: Int) {
+        self.limit = max(1, limit)
+    }
 
-nonisolated enum AlbumUploadError: Error {
-    case unreadable
-    case uploadFailed(Data)
-}
+    func add(count: Int, cap: Int) -> [UUID] {
+        queue.enqueue(count: count, limit: cap)
+    }
 
-nonisolated enum BoundedConcurrency {
-    /// ينفّذ `operation` على المدخلات بحد أقصى `limit` مهام متزامنة، ويبلّغ
-    /// `onResult` بكل نتيجة وفهرسها فور اكتمالها، ثم يعيد النتائج بترتيب المدخلات.
-    static func map<Input: Sendable, Output: Sendable>(
-        _ inputs: [Input],
-        limit: Int,
-        onResult: @escaping @Sendable (Int, Result<Output, Error>) async -> Void = { _, _ in },
-        operation: @escaping @Sendable (Input) async throws -> Output
-    ) async -> [Result<Output, Error>] {
-        guard !inputs.isEmpty else { return [] }
-        let width = max(1, limit)
-        var results = [Result<Output, Error>?](repeating: nil, count: inputs.count)
-        await withTaskGroup(of: (Int, Result<Output, Error>).self) { group in
-            var next = 0
-            let enqueue: (inout TaskGroup<(Int, Result<Output, Error>)>, Int) -> Void = { group, index in
-                let input = inputs[index]
-                group.addTask {
-                    do { return (index, .success(try await operation(input))) }
-                    catch { return (index, .failure(error)) }
-                }
-            }
-            while next < min(width, inputs.count) {
-                enqueue(&group, next)
-                next += 1
-            }
-            while let (index, result) = await group.next() {
-                results[index] = result
-                await onResult(index, result)
-                if next < inputs.count {
-                    enqueue(&group, next)
-                    next += 1
-                }
+    /// يبدأ ما يسمح به الحد؛ كل رفع ينتهي يستدعيه من جديد ليأخذ التالي.
+    func start() {
+        for id in queue.nextToStart(limit: limit) {
+            Task {
+                let phase = await perform(id)
+                queue.apply(id, phase)
+                start()
             }
         }
-        return results.map { $0 ?? .failure(CancellationError()) }
+    }
+
+    func retry(_ id: UUID) {
+        guard queue.requestUpload(id) else { return }
+        start()
+    }
+
+    func remove(_ id: UUID) {
+        queue.remove(id)
     }
 }
