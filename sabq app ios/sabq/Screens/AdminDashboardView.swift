@@ -149,6 +149,14 @@ final class AdminDashboardViewModel: ObservableObject {
     /// بقي هذا الطلب هو الأحدث (فيحق للمستدعي إطفاء مؤشر التحميل).
     @discardableResult
     private func reloadFirstPage(failure: String) async -> Bool {
+        let accepted = await performReloadFirstPage(failure: failure)
+        // أحدث طلب مقبول يطفئ مؤشر التحميل دائمًا، أيًّا كان مستدعيه: تحديث بعد
+        // نشر أثناء تبديل التبويب يُبطل تذكرة طلب التبويب، فلا يطفئه هو.
+        if accepted { isLoading = false }
+        return accepted
+    }
+
+    private func performReloadFirstPage(failure: String) async -> Bool {
         let ticket = cursor.reset(to: selectedStatus)
         // «المزيد» الجاري لحقبة سابقة لم يعد يخص هذه القائمة.
         isLoadingMore = false
