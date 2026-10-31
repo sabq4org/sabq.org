@@ -5,7 +5,11 @@ enum AuthErrorSource { case none, credentials, phone, social }
 
 @Observable
 final class AuthStore {
-    private(set) var currentUser: APIUser?
+    private(set) var currentUser: APIUser? {
+        // خطاف عزل الحسابات: الخروج/الحذف/401/تبديل الحساب يمسح كاش «أدائي»
+        // ويُبطل أي رد لوحة تحريرية بدأ تحت الحساب السابق.
+        didSet { EditorialAccountScope.accountDidChange(from: oldValue?.id, to: currentUser?.id) }
+    }
     private(set) var isLoggedIn = false
     private(set) var isLoading = false
     private(set) var errorMessage: String?
@@ -580,6 +584,8 @@ final class AuthStore {
         NotificationsStore.shared.unreadCount = 0
         NotificationsStore.shared.readerUnread = 0
         CommentSafetyStore.shared.clear()
+        // صريحًا أيضًا: لو كان currentUser فارغًا أصلًا لا يعمل didSet.
+        PerformanceSnapshotCache.clearAll()
         successMessage = nil
         errorMessage = nil
     }
