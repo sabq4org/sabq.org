@@ -69,7 +69,7 @@ struct EditRequestComposeView: View {
                     } else if context == nil {
                         EditorialStatusView(error: nil, loading: true) {}
                     } else if context?.pendingRequestId != nil {
-                        Text("لديك طلب قيد المراجعة على هذا الخبر. ألغِه من «أخباري» أولًا لإرسال طلب جديد.")
+                        Text("لديك طلب قيد المراجعة على هذه المادة. انتظر قرار المحرر، أو ألغِه أولًا لإرسال طلب جديد.")
                             .sabqText(SabqType.excerpt)
                             .foregroundStyle(SabqTheme.textSecondary)
                             .editorialGroup()
@@ -154,7 +154,7 @@ struct EditRequestComposeView: View {
             }
 
             VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                label("فقرة جديدة في آخر الخبر (اختياري)")
+                label("فقرة جديدة في آخر النص (اختياري)")
                 TextField("أضف معلومة جديدة", text: $appendParagraph, axis: .vertical)
                     .lineLimit(2...6)
                     .sabqText(SabqType.excerpt)

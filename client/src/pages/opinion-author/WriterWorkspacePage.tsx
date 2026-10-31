@@ -63,6 +63,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { OpinionAuthorSocialProposalDialog } from "./OpinionAuthorSocialProposalDialog";
+import { EditRequestLabel, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests, type EditRequestListItem } from "@/components/articles/ArticleEditRequests";
 
 type ArticleRow = {
   id: string;
@@ -177,6 +178,10 @@ export default function WriterWorkspacePage() {
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewTitle, setReviewTitle] = useState("");
   const [socialProposalArticle, setSocialProposalArticle] = useState<TrackingArticle | null>(null);
+  // «طلب تعديل» على المقال المنشور، بنفس نموذج المراسل وقرار المحرر (2026-10-31).
+  const editRequests = useArticleEditRequests(true);
+  const [requestEditArticleId, setRequestEditArticleId] = useState<string | null>(null);
+  const [reviewRequestId, setReviewRequestId] = useState<string | null>(null);
   /** Ideas are AI-generated and slow — only fetch after explicit user action. */
   const [ideasRequested, setIdeasRequested] = useState(false);
 
@@ -785,6 +790,9 @@ export default function WriterWorkspacePage() {
                         onView={() => navigate(`/article/${article.id}`)}
                         onReview={() => reviewMutation.mutate(article)}
                         onSocialProposal={setSocialProposalArticle}
+                        editRequests={editRequests.byArticle.get(article.id)}
+                        onRequestEdit={() => setRequestEditArticleId(article.id)}
+                        onOpenEditRequest={setReviewRequestId}
                         reviewPending={reviewMutation.isPending}
                         submitPending={submitReviewMutation.isPending}
                         onSubmit={(id) => submitReviewMutation.mutate(id)}
@@ -830,6 +838,8 @@ export default function WriterWorkspacePage() {
         </DialogContent>
       </Dialog>
 
+      <ReviewEditRequestDialog requestId={reviewRequestId} open={!!reviewRequestId} onOpenChange={(open) => !open && setReviewRequestId(null)} />
+      <RequestEditDialog articleId={requestEditArticleId} open={!!requestEditArticleId} onOpenChange={(open) => !open && setRequestEditArticleId(null)} />
       {socialProposalArticle && (
         <OpinionAuthorSocialProposalDialog
           articleId={socialProposalArticle.id}
@@ -961,6 +971,9 @@ function WriterTrackingCard({
   onView,
   onReview,
   onSocialProposal,
+  editRequests,
+  onRequestEdit,
+  onOpenEditRequest,
   reviewPending,
   submitPending,
   onSubmit,
@@ -970,6 +983,9 @@ function WriterTrackingCard({
   onView: () => void;
   onReview: () => void;
   onSocialProposal?: (article: TrackingArticle) => void;
+  editRequests?: EditRequestListItem[];
+  onRequestEdit?: () => void;
+  onOpenEditRequest?: (id: string) => void;
   reviewPending: boolean;
   submitPending: boolean;
   onSubmit: (id: string) => void;
@@ -1016,6 +1032,7 @@ function WriterTrackingCard({
                 <StateIcon className="h-3.5 w-3.5" />
                 {state.label}
               </Badge>
+              {onOpenEditRequest && <EditRequestLabel items={editRequests} onOpen={onOpenEditRequest} />}
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{state.description}</p>
             {state.date && (
@@ -1060,6 +1077,9 @@ function WriterTrackingCard({
                   >
                     <Share2 className="h-4 w-4" /> اقتراح منشور X
                   </Button>
+                )}
+                {onRequestEdit && !editRequests?.some((item) => item.status === "pending") && (
+                  <RequestEditButton onClick={onRequestEdit} />
                 )}
                 <Button variant="outline" size="sm" onClick={onView}>
                   عرض المقال

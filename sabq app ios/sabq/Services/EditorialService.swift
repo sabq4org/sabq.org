@@ -672,6 +672,11 @@ nonisolated enum EditorialAPI {
     }
 
     // Reporter
+    /// «أداء أخباري» / «أدائي» في طلب واحد (2026-10-31).
+    static func performance(period: String) async throws -> ContributorPerformance {
+        try await send(ContributorPerformance.self, path: "/performance", query: ["period": period])
+    }
+
     static func myNews(filter: MyNewsFilter) async throws -> MyNewsBoard {
         try await send(MyNewsBoard.self, path: "/my-news", query: ["filter": filter.rawValue])
     }

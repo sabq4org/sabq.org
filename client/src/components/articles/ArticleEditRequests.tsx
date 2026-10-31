@@ -219,7 +219,7 @@ export function RequestEditButton({ onClick, className }: { onClick: () => void;
 
 interface ContextResponse {
   ok: true;
-  article: { id: string; title: string; subtitle: string | null; status: string; imageUrl: string | null; albumImages: string[] };
+  article: { id: string; title: string; subtitle: string | null; status: string; articleType?: string | null; imageUrl: string | null; albumImages: string[] };
   paragraphs: string[];
   acceptsRequests: boolean;
   pendingRequestId: string | null;
@@ -254,6 +254,8 @@ export function RequestEditDialog({
     enabled: open && !!articleId,
     staleTime: 0,
   });
+  // كاتب الرأي يرى «المقال» بدل «الخبر» في النموذج نفسه.
+  const noun = data?.article?.articleType === "opinion" ? "المقال" : "الخبر";
   const [note, setNote] = useState("");
   const [urgent, setUrgent] = useState(false);
   const [title, setTitle] = useState("");
@@ -343,7 +345,7 @@ export function RequestEditDialog({
       <DialogContent dir="rtl" className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-3xl">
         <DialogHeader className="text-right">
           <DialogTitle className="text-xl">طلب تعديل</DialogTitle>
-          <DialogDescription>يصل الطلب للمحرر على الخبر نفسه، ولا يتغير شيء قبل اعتماده.</DialogDescription>
+          <DialogDescription>يصل الطلب للمحرر على {noun} نفسه، ولا يتغير شيء قبل اعتماده.</DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
@@ -352,7 +354,7 @@ export function RequestEditDialog({
           <p className="py-6 text-center text-sm text-red-600">{errorMessage(error, "تعذر تحميل الخبر")}</p>
         ) : data.pendingRequestId ? (
           <div className="space-y-4 py-2">
-            <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">لديك طلب قيد المراجعة على هذا الخبر. انتظر قرار المحرر، أو ألغِ الطلب لإرسال طلب جديد.</p>
+            <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">لديك طلب قيد المراجعة على هذا {noun}. انتظر قرار المحرر، أو ألغِ الطلب لإرسال طلب جديد.</p>
             <Button variant="outline" className="rounded-full" disabled={cancel.isPending} onClick={() => cancel.mutate(data.pendingRequestId!)}>
               {cancel.isPending && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}إلغاء طلبي
             </Button>
@@ -392,7 +394,7 @@ export function RequestEditDialog({
                       className={cn("min-h-[64px] rounded-2xl text-[15px] leading-7", normalizeParagraph(paragraphs[i] ?? "") !== p && "border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20")}
                     />
                   ))}
-                  <Textarea aria-label="فقرة جديدة في النهاية" value={append} onChange={(e) => setAppend(e.target.value)} placeholder="فقرة جديدة تُضاف في آخر الخبر (اختياري)" className="min-h-[56px] rounded-2xl" />
+                  <Textarea aria-label="فقرة جديدة في النهاية" value={append} onChange={(e) => setAppend(e.target.value)} placeholder={`فقرة جديدة تُضاف في آخر ${noun} (اختياري)`} className="min-h-[56px] rounded-2xl" />
                   <p className="text-xs text-muted-foreground">امسح نص فقرة كاملة لتقترح حذفها.</p>
                 </div>
               )}
