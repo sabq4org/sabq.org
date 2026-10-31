@@ -192,6 +192,7 @@ import {
 } from "@/components/article-editor/mediaAssetHelpers";
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
+import { ArticleEditRequestsBanner } from "@/components/articles/ArticleEditRequests";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
 import { uploadNewsImage, newsImageUploadLabel, NEWS_IMAGE_MAX_BYTES, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 
@@ -2906,6 +2907,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             <Lock className="h-3 w-3 text-green-500" />
             <span>لديك حق التحرير الحصري لهذا المقال</span>
           </div>
+        )}
+
+        {/* طلب تعديل مفتوح على هذا الخبر (للمحرر فقط؛ الشريط يتحقق من الصلاحية بنفسه). */}
+        {!isNewArticle && id && (
+          <ArticleEditRequestsBanner articleId={id} enabled={!!user && hasAnyPermission(user, "articles.edit_any", "articles.publish")} />
         )}
 
         {/* Page Header with Actions - Newsroom Command Bar */}

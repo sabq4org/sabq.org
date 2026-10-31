@@ -51,6 +51,8 @@ import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReview
 import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
 import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { cn } from "@/lib/utils";
+import { EditRequestLabel, EditRequestsFilter, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests } from "@/components/articles/ArticleEditRequests";
+import { articleAcceptsEditRequests, isEditRequestOwner } from "@shared/articleEditRequests";
 import {
   DndContext,
   closestCenter,
@@ -1123,6 +1125,29 @@ export default function ArticlesManagement() {
     return false;
   };
 
+  // «طلب تعديل»: ليبل على صف الخبر للمحرر ولصاحب الطلب، وزر الطلب لصاحب الخبر.
+  const editRequests = useArticleEditRequests(!!canViewArticles);
+  const [reviewRequestId, setReviewRequestId] = useState<string | null>(null);
+  const [requestEditArticleId, setRequestEditArticleId] = useState<string | null>(null);
+  useEffect(() => {
+    const fromLink = new URLSearchParams(window.location.search).get("editRequest");
+    if (fromLink) setReviewRequestId(fromLink);
+  }, []);
+  const renderEditRequestRow = (article: Article) => {
+    const items = editRequests.byArticle.get(article.id);
+    const canRequest = !!user?.id && !canEditAny && articleAcceptsEditRequests(article.status)
+      && [article.authorId, article.author?.id, article.enteredBy?.id].some((id) => isEditRequestOwner({ authorId: id }, user.id));
+    if (!items?.length && !canRequest) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <EditRequestLabel items={items} onOpen={setReviewRequestId} />
+        {canRequest && !items?.some((i) => i.status === "pending") && (
+          <RequestEditButton onClick={() => setRequestEditArticleId(article.id)} />
+        )}
+      </div>
+    );
+  };
+
   // Redirect to dashboard if user doesn't have permission
   const hasRedirected = useRef(false);
   useEffect(() => {
@@ -1909,6 +1934,8 @@ export default function ArticlesManagement() {
           ) : undefined}
         />
 
+        <EditRequestsFilter pending={editRequests.reviewer ? editRequests.pending : []} onOpen={setReviewRequestId} />
+
         {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
@@ -2367,6 +2394,7 @@ export default function ArticlesManagement() {
                                 layout="banner"
                                 testId={`banner-review-desktop-${article.id}`}
                               />
+                              {renderEditRequestRow(article)}
                               {article.status === "draft" && (
                                 <EditorialDraftReviewCue
                                   article={article}
@@ -2467,6 +2495,7 @@ export default function ArticlesManagement() {
                         layout="banner"
                         testId={`banner-review-mobile-${article.id}`}
                       />
+                      {renderEditRequestRow(article)}
 
                       {article.status === "archived" && (article as any).reviewNotes && (
                         <div
@@ -3134,6 +3163,10 @@ export default function ArticlesManagement() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* طلب تعديل: المراجعة عند المحرر، والنموذج عند صاحب الخبر */}
+      <ReviewEditRequestDialog requestId={reviewRequestId} open={!!reviewRequestId} onOpenChange={(open) => !open && setReviewRequestId(null)} />
+      <RequestEditDialog articleId={requestEditArticleId} open={!!requestEditArticleId} onOpenChange={(open) => !open && setRequestEditArticleId(null)} />
 
       {/* النشر على X */}
       {socialPublishArticle && (

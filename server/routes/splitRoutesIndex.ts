@@ -47,6 +47,7 @@ import botPublisherTokensRouter from "./botPublisherTokens";
 import botSocialRouter from "./botSocial";
 import publishFirstRouter from "./publishFirst";
 import articleHistoryRouter from "./articleHistory";
+import articleEditRequestsRouter from "./articleEditRequests";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
@@ -184,6 +185,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(botSocialRouter);
   app.use(publishFirstRouter);
   app.use(articleHistoryRouter);
+  app.use(articleEditRequestsRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);
