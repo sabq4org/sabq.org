@@ -242,7 +242,6 @@ struct EditRequestComposeView: View {
                 if heroFailed {
                     Button("تجاهل الصورة البارزة") {
                         heroFailed = false
-                        heroItem = nil
                     }
                     .sabqText(SabqType.metaEmphasis)
                     .foregroundStyle(SabqTheme.primary)
@@ -442,15 +441,24 @@ struct EditRequestComposeView: View {
         heroUploading = true
         defer { heroUploading = false }
         guard let data = try? await item.loadTransferable(type: Data.self) else {
-            heroFailed = true
+            markHeroFailed()
             return
         }
         do {
             heroURL = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-hero")
             heroPreview = UIImage(data: data)
         } catch {
-            heroFailed = true
+            markHeroFailed()
         }
+    }
+
+    /// فشل اختيار جديد لا يُبقي صورة بارزة سابقة تُرسل دون علم المستخدم، ويفرّغ
+    /// المنتقي كي يطلق اختيار الصورة نفسها مرة أخرى `onChange`.
+    private func markHeroFailed() {
+        heroFailed = true
+        heroURL = nil
+        heroPreview = nil
+        heroItem = nil
     }
 
     private func send() async {
