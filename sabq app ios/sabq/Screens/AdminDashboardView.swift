@@ -23,7 +23,9 @@ final class AdminDashboardViewModel: ObservableObject {
 
     /// Total items behind the current tab (for the "load more" affordance).
     @Published private(set) var total = 0
-    private var page = 1
+    /// الترقيم مربوط بالحالة وحقبتها: صفحة «المزيد» من حالة سابقة أو من
+    /// تحميل أول قديم لا تُلحق بالقائمة الحالية.
+    private var cursor = EditorialPageCursor<AdminArticleStatus>(filter: .draft)
 
     /// True when there are more pages to fetch for the current tab.
     var canLoadMore: Bool { items.count < total }
@@ -39,49 +41,53 @@ final class AdminDashboardViewModel: ObservableObject {
     func load() async {
         isLoading = true
         error = nil
-        page = 1
         Task { await refreshStats() }
-        do {
-            let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
-            items = pageResult.items
-            total = pageResult.total
-        } catch {
-            self.error = "تعذّر تحميل البيانات"
+        // القائمة الحالية تبقى ظاهرة أثناء السحب للتحديث.
+        if await reloadFirstPage(failure: "تعذّر تحميل البيانات") {
+            isLoading = false
         }
-        isLoading = false
     }
 
     /// Fetch the lightweight counts (independent of the list).
     private func refreshStats() async {
+        let generation = EditorialAccountScope.generation
         isStatsLoading = true
         defer { isStatsLoading = false }
-        counts = (try? await service.fetchCounts()) ?? counts
+        let fresh = try? await service.fetchCounts()
+        // عدّادات حساب سابق لا تظهر للحالي.
+        guard generation == EditorialAccountScope.generation else { return }
+        counts = fresh ?? counts
     }
 
     /// Switch the active section and reload its first page.
     func select(_ status: AdminArticleStatus) async {
         guard status != selectedStatus else { return }
         selectedStatus = status
+        // صفوف الحالة السابقة (بأزرار نشرها) لا تبقى تحت تبويب آخر.
+        items = []
+        total = 0
         isLoading = true
-        page = 1
-        await reloadFirstPage()
-        isLoading = false
+        if await reloadFirstPage(failure: "تعذّر تحميل البيانات") {
+            isLoading = false
+        }
     }
 
     /// Append the next page of the current tab.
     func loadMore() async {
         guard !isLoadingMore, canLoadMore else { return }
+        let ticket = cursor.nextPageTicket()
+        let generation = EditorialAccountScope.generation
         isLoadingMore = true
-        defer { isLoadingMore = false }
+        defer { if cursor.accepts(ticket) { isLoadingMore = false } }
         do {
-            let next = page + 1
-            let pageResult = try await service.fetchNews(status: selectedStatus, page: next)
+            let pageResult = try await service.fetchNews(status: ticket.filter, page: ticket.page)
+            guard generation == EditorialAccountScope.generation, cursor.commit(ticket) else { return }
             // De-dupe defensively in case rows shifted between pages.
             let existing = Set(items.map(\.id))
             items.append(contentsOf: pageResult.items.filter { !existing.contains($0.id) })
             total = pageResult.total
-            page = next
         } catch {
+            guard cursor.accepts(ticket), !Task.isCancelled else { return }
             self.error = "تعذّر جلب المزيد"
         }
     }
@@ -139,28 +145,46 @@ final class AdminDashboardViewModel: ObservableObject {
         }
     }
 
-    private func reloadFirstPage() async {
+    /// يعيد تحميل الصفحة الأولى للحالة الحالية في حقبة جديدة. يعيد true إن
+    /// بقي هذا الطلب هو الأحدث (فيحق للمستدعي إطفاء مؤشر التحميل).
+    @discardableResult
+    private func reloadFirstPage(failure: String) async -> Bool {
+        let accepted = await performReloadFirstPage(failure: failure)
+        // أحدث طلب مقبول يطفئ مؤشر التحميل دائمًا، أيًّا كان مستدعيه: تحديث بعد
+        // نشر أثناء تبديل التبويب يُبطل تذكرة طلب التبويب، فلا يطفئه هو.
+        if accepted { isLoading = false }
+        return accepted
+    }
+
+    private func performReloadFirstPage(failure: String) async -> Bool {
+        let ticket = cursor.reset(to: selectedStatus)
+        // «المزيد» الجاري لحقبة سابقة لم يعد يخص هذه القائمة.
+        isLoadingMore = false
+        let generation = EditorialAccountScope.generation
         do {
-            let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
+            let pageResult = try await service.fetchNews(status: ticket.filter, page: 1)
+            guard generation == EditorialAccountScope.generation else {
+                // تبدّل الحساب أثناء الطلب: لا يبقى شيء من قائمة السابق.
+                guard cursor.accepts(ticket) else { return false }
+                items = []
+                total = 0
+                return true
+            }
+            guard cursor.commit(ticket) else { return false }
             items = pageResult.items
             total = pageResult.total
-            page = 1
             error = nil
+            return true
         } catch {
-            self.error = "تعذّر تحميل البيانات"
+            guard cursor.accepts(ticket) else { return false }
+            if !Task.isCancelled { self.error = failure }
+            return true
         }
     }
 
     private func refreshFirstPageAndMetrics() async {
         Task { await refreshStats() }
-        do {
-            let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
-            items = pageResult.items
-            total = pageResult.total
-            page = 1
-        } catch {
-            self.error = "تعذّر تحديث البيانات"
-        }
+        await reloadFirstPage(failure: "تعذّر تحديث البيانات")
     }
 }
 
@@ -288,7 +312,11 @@ struct AdminDashboardView: View {
 
     private func loadQueue() async {
         // بلا مصادقة ثنائية أو صلاحية: تبقى اللوحة كما كانت دون الملخّص.
-        queue = try? await EditorialAPI.newsBoard(filter: .all)
+        let generation = EditorialAccountScope.generation
+        let fresh = try? await EditorialAPI.newsBoard(filter: .all)
+        // ملخّص حساب سابق لا يظهر للحالي.
+        guard generation == EditorialAccountScope.generation else { return }
+        queue = fresh
     }
 
     private func decisionSummary(_ board: EditorialNewsBoard) -> some View {

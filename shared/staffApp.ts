@@ -320,6 +320,8 @@ export interface StaffOpinionPrepJob {
   scheduledAt: string | null;
   titleChanged: boolean;
   contentFixes: number;
+  /** أسطر رأس النص المحذوفة («جاهز للنشر:»، العنوان، الكاتب، العنوان الفرعي)؛ محسوبة ضمن contentFixes. */
+  headerLinesRemoved?: number;
   /** generated = صورة جديدة؛ kept = للمقال صورة فأُبقيت؛ failed = تعذرت فجُدول بلا صورة. */
   image: "generated" | "kept" | "failed" | null;
   /** التصنيف الذي اختاره التجهيز (اسمه العربي)، أو null إن بقي تصنيف الكاتب. */

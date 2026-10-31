@@ -87,34 +87,58 @@ final class PerformanceViewModel: ObservableObject {
     @Published var refreshing = false
     @Published var error: EditorialError?
 
-    private static let cachePrefix = "perf-snapshot-v1-"
+    /// «الأحدث يفوز»: رد فترة قديمة أو حساب سابق لا يكتب فوق الحالي.
+    private let gate = EditorialRequestGate<PerformancePeriod>()
+    private var loadTask: Task<Void, Never>?
+    /// الحساب الذي تخصه `data` المعروضة.
+    private var dataAccountId: String?
+
+    /// تبديل الفترة: يلغي طلب الفترة السابقة ويبدأ طلبًا جديدًا.
+    func select(_ newPeriod: PerformancePeriod) {
+        guard newPeriod != period else { return }
+        period = newPeriod
+        loadTask?.cancel()
+        loadTask = Task { await load() }
+    }
+
+    /// تغيّر الحساب (خروج/دخول بحساب آخر): لا يبقى شيء من أرقام السابق.
+    func accountChanged() {
+        loadTask?.cancel()
+        data = nil
+        error = nil
+        dataAccountId = nil
+        loadTask = Task { await load() }
+    }
 
     func load() async {
-        if data == nil || data?.period != period.rawValue {
-            data = Self.cached(period)
+        // هوية الطلب تُثبَّت قبل await: الحساب والفترة والتسلسل.
+        let accountId = EditorialAccountScope.currentId
+        let requested = period
+        let ticket = gate.begin(requested)
+        defer { if gate.latestSequence == ticket.sequence { refreshing = false } }
+
+        if dataAccountId != accountId {
+            data = nil
+            error = nil
+        }
+        if data == nil || data?.period != requested.rawValue {
+            data = accountId.flatMap { PerformanceSnapshotCache.read(accountId: $0, period: requested.rawValue) }
+            dataAccountId = accountId
         }
         refreshing = true
         error = nil
         do {
-            let fresh = try await EditorialAPI.performance(period: period.rawValue)
+            let fresh = try await EditorialAPI.performance(period: requested.rawValue)
+            guard gate.accepts(ticket, currentKey: period) else { return }
             data = fresh
-            Self.store(fresh, period: period)
-        } catch let failure as EditorialError {
-            error = failure
+            dataAccountId = accountId
+            // يُحفظ تحت الفترة المطلوبة والحساب الذي بدأ الطلب، لا الحاليين بعد await.
+            if let accountId {
+                PerformanceSnapshotCache.write(fresh, accountId: accountId, period: requested.rawValue)
+            }
         } catch {
-            self.error = .message("تعذر تحميل الأداء")
-        }
-        refreshing = false
-    }
-
-    private static func cached(_ period: PerformancePeriod) -> ContributorPerformance? {
-        guard let raw = UserDefaults.standard.data(forKey: cachePrefix + period.rawValue) else { return nil }
-        return try? JSONDecoder().decode(ContributorPerformance.self, from: raw)
-    }
-
-    private static func store(_ value: ContributorPerformance, period: PerformancePeriod) {
-        if let raw = try? JSONEncoder().encode(value) {
-            UserDefaults.standard.set(raw, forKey: cachePrefix + period.rawValue)
+            guard gate.accepts(ticket, currentKey: period), !Task.isCancelled else { return }
+            self.error = (error as? EditorialError) ?? .message("تعذر تحميل الأداء")
         }
     }
 }
@@ -126,6 +150,7 @@ struct PerformanceView: View {
     var embedded = false
 
     @StateObject private var vm = PerformanceViewModel()
+    @Environment(AuthStore.self) private var authStore
 
     private let heroStart = Color(red: 0xE2 / 255, green: 0xF2 / 255, blue: 0xFD / 255)
     private let heroEnd = Color(red: 0xEE / 255, green: 0xF1 / 255, blue: 0xFE / 255)
@@ -171,6 +196,7 @@ struct PerformanceView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
         .refreshable { await vm.load() }
+        .onChange(of: authStore.currentUser?.id) { _, _ in vm.accountChanged() }
     }
 
     // MARK: Header
@@ -213,8 +239,7 @@ struct PerformanceView: View {
                 let selected = vm.period == period
                 Button {
                     guard !selected else { return }
-                    vm.period = period
-                    Task { await vm.load() }
+                    vm.select(period)
                 } label: {
                     Text(period.title)
                         .sabqText(selected ? SabqType.metaEmphasis : SabqType.meta)

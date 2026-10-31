@@ -6,10 +6,15 @@ import SwiftUI
 /// والأداء مطوي في الأسفل. الكلمات من `EditorialStates` (قاموس الويب).
 /// المصدر: GET /api/v1/editorial/my-news.
 struct ReporterNewsView: View {
+    @Environment(AuthStore.self) private var authStore
     @State private var board = MyNewsBoard()
     @State private var filter: MyNewsFilter = .all
-    @State private var loading = true
     @State private var error: EditorialError?
+    /// الفلتر الذي تخصه `board` المعروضة (nil قبل أول تحميل ناجح).
+    @State private var boardFilter: MyNewsFilter?
+    /// «الأحدث يفوز»: رد فلتر سابق أو حساب سابق لا يبدّل القائمة الحالية.
+    @State private var gate = EditorialRequestGate<MyNewsFilter>()
+    @State private var boardAccountId: String?
     @State private var showCompose = false
     @State private var editTarget: MyNewsItem?
     @State private var cancelTarget: MyNewsItem?
@@ -20,8 +25,8 @@ struct ReporterNewsView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: SabqLayout.space16) {
                     header
-                    if error != nil || (loading && board.items.isEmpty) {
-                        EditorialStatusView(error: error, loading: loading) { Task { await load() } }
+                    if boardFilter == nil || error?.keepsVisibleContent == false {
+                        EditorialStatusView(error: error, loading: error == nil) { Task { await load() } }
                     } else {
                         summary
                         chips
@@ -30,18 +35,29 @@ struct ReporterNewsView: View {
                                 .sabqText(SabqType.meta)
                                 .foregroundStyle(SabqTheme.danger)
                         }
-                        if board.items.isEmpty {
-                            emptyState
+                        if boardFilter != filter {
+                            // فلتر جديد قيد التحميل: لا نعرض قائمة فلتر آخر تحته.
+                            EditorialStatusView(error: error, loading: error == nil) { Task { await load() } }
                         } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach(board.items) { item in
-                                    if item.id != board.items.first?.id {
-                                        Divider().overlay(SabqTheme.separator)
-                                    }
-                                    newsRow(item)
-                                }
+                            if let error {
+                                // فشل التحديث: تبقى القائمة الحالية ومعها السبب.
+                                Text(error.localizedDescription)
+                                    .sabqText(SabqType.meta)
+                                    .foregroundStyle(SabqTheme.warning)
                             }
-                            .sabqNewsSurface()
+                            if board.items.isEmpty {
+                                emptyState
+                            } else {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(board.items) { item in
+                                        if item.id != board.items.first?.id {
+                                            Divider().overlay(SabqTheme.separator)
+                                        }
+                                        newsRow(item)
+                                    }
+                                }
+                                .sabqNewsSurface()
+                            }
                         }
                         performanceLink
                     }
@@ -70,7 +86,8 @@ struct ReporterNewsView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        // يُلغى طلب الفلتر (أو الحساب) السابق تلقائيًا عند تبديله.
+        .task(id: "\(filter.rawValue)|\(authStore.currentUser?.id ?? "")") { await load() }
         .sheet(isPresented: $showCompose, onDismiss: { Task { await load() } }) {
             ArticleSubmissionView(kind: .news)
         }
@@ -114,7 +131,6 @@ struct ReporterNewsView: View {
         Button {
             guard filter != .needs_changes else { return }
             filter = .needs_changes
-            Task { await load() }
         } label: {
             HStack(spacing: SabqLayout.space12) {
                 Image(systemName: "pencil.line")
@@ -156,7 +172,6 @@ struct ReporterNewsView: View {
                     EditorialChip(title: option.title, count: board.counts.count(for: option), selected: filter == option) {
                         guard filter != option else { return }
                         filter = option
-                        Task { await load() }
                     }
                 }
             }
@@ -328,16 +343,25 @@ struct ReporterNewsView: View {
     }
 
     private func load() async {
-        if board.items.isEmpty { loading = true }
-        do {
-            board = try await EditorialAPI.myNews(filter: filter)
-            error = nil
-        } catch let e as EditorialError {
-            error = e
-        } catch {
-            self.error = .message(error.localizedDescription)
+        // هوية الطلب قبل await: الحساب والفلتر والتسلسل.
+        let ticket = gate.begin(filter)
+        error = nil
+        if ticket.accountId != boardAccountId {
+            // حساب آخر: لا يبقى شيء من قائمة السابق.
+            board = MyNewsBoard()
+            boardFilter = nil
+            boardAccountId = ticket.accountId
         }
-        loading = false
+        do {
+            let fresh = try await EditorialAPI.myNews(filter: ticket.key)
+            guard gate.accepts(ticket, currentKey: filter) else { return }
+            board = fresh
+            boardFilter = ticket.key
+            error = nil
+        } catch {
+            guard gate.accepts(ticket, currentKey: filter), !Task.isCancelled else { return }
+            self.error = (error as? EditorialError) ?? .message(error.localizedDescription)
+        }
     }
 
     private func cancel(_ item: MyNewsItem) async {
