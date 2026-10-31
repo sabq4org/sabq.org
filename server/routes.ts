@@ -1,7 +1,7 @@
 import { registerShutdownHook } from "./shutdown";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
 import { setArticleDerivedFields, articleWriteConflict, refreshArticleLiteImage } from "./services/articleDerivedWrites";
-import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { adminScheduledOrder, getAdminPublishedPageIds, getArticleMetricsForUser } from "./services/adminArticleList";
 import { getActiveBreakingTicker, getBreakingTickerHeadlines } from "./services/breakingTickerHeadlines";
 import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
@@ -7445,8 +7445,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Get articles metrics
   app.get("/api/admin/articles/metrics", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
-      const metrics = await storage.getArticlesMetrics();
-      res.json(metrics);
+      res.json(await getArticleMetricsForUser(req.user, await getEffectiveUserPermissions(req.user.id), () => storage.getArticlesMetrics()));
     } catch (error) {
       console.error("Error fetching articles metrics:", error);
       res.status(500).json({ message: "Failed to fetch articles metrics" });
