@@ -71,7 +71,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -133,14 +134,22 @@ abstract class MatchCenterViewModel(
         if (repo.supportsMatchAlerts) refreshMatchFollow()
     }
 
+    /**
+     * يتابع حالة الدخول لحظيًا: لو ضغط القارئ «تابع المباراة» وسجّل دخوله ثم عاد
+     * إلى الشاشة نفسها، تتحدّث الحالة دون إعادة إنشاء الشاشة.
+     */
     private fun refreshMatchFollow() {
         viewModelScope.launch {
-            val loggedIn = !tokenStore.token.first().isNullOrBlank()
-            _state.update { it.copy(isLoggedIn = loggedIn, isFollowingMatch = false) }
-            if (!loggedIn) return@launch
-            val follows = runCatching { followRepo.sportsFollows() }.getOrNull() ?: return@launch
-            val following = follows.any { it.kind == "match" && it.refId == fixtureId.toString() }
-            _state.update { it.copy(isFollowingMatch = following) }
+            tokenStore.token
+                .map { !it.isNullOrBlank() }
+                .distinctUntilChanged()
+                .collect { loggedIn ->
+                    _state.update { it.copy(isLoggedIn = loggedIn, isFollowingMatch = false) }
+                    if (!loggedIn) return@collect
+                    val follows = runCatching { followRepo.sportsFollows() }.getOrNull() ?: return@collect
+                    val following = follows.any { it.kind == "match" && it.refId == fixtureId.toString() }
+                    _state.update { it.copy(isFollowingMatch = following) }
+                }
         }
     }
 
