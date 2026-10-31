@@ -83,10 +83,12 @@ export function markArticleSubmittedInAnalyticsCache(
 
   queryClient.setQueryData(["/api/opinion-author/analytics"], patch);
   queryClient.setQueryData(["/api/reporter/analytics"], patch);
+  queryClient.setQueryData(["/api/reporter/my-articles"], patch);
 }
 
 /** Background sync — do not await in mutation onSuccess (race with optimistic cache). */
 export function invalidateContributorAnalytics(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
   void queryClient.invalidateQueries({ queryKey: ["/api/reporter/analytics"] });
+  void queryClient.invalidateQueries({ queryKey: ["/api/reporter/my-articles"] });
 }

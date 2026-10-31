@@ -27,3 +27,15 @@ export function contributorArticleStatusLabel(article: {
   }
   return { label: "مسودة", variant: "secondary" as const };
 }
+
+export type ReporterArticleBucket = "fix" | "rev" | "sch" | "pub" | "draft" | "arch";
+
+/** خانة الخبر في شرائح التصفية. الحالة النهائية أولًا كما في شارة الحالة. */
+export function reporterArticleBucket(a: { status: string; reviewStatus?: string | null }): ReporterArticleBucket {
+  if (a.status === "archived" || a.status === "deleted") return "arch";
+  if (a.status === "published") return "pub";
+  if (a.status === "scheduled") return "sch";
+  if (a.reviewStatus === "needs_changes") return "fix";
+  if (a.reviewStatus === "pending_review" || a.status === "pending") return "rev";
+  return "draft";
+}
