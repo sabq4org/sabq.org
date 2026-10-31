@@ -38,6 +38,7 @@ import {
   sortStaffNewsItems,
   staffEditRequestApproveSchema,
   staffNewsChannel,
+  staffNewsPersonLine,
   staffNewsReturnSchema,
   staffNewsScheduleError,
   type StaffNewsItem,
@@ -76,6 +77,15 @@ const request = (id: string, over: Partial<Extract<StaffNewsItem, { kind: "edit_
   imageUrl: null,
   submittedAt: "2026-10-31T06:00:00.000Z",
   ...over,
+});
+
+describe("staffNewsPersonLine", () => {
+  it("shows the real sender and the byline when they differ", () => {
+    expect(staffNewsPersonLine("علي الحازمي", "صحيفة سبق")).toBe("علي الحازمي · باسم صحيفة سبق");
+    expect(staffNewsPersonLine("مراسل جدة", "مراسل جدة")).toBe("مراسل جدة");
+    expect(staffNewsPersonLine(null, "صحيفة سبق")).toBe("صحيفة سبق");
+    expect(staffNewsPersonLine("مراسل جدة", null)).toBe("مراسل جدة");
+  });
 });
 
 describe("staff news pending rules", () => {
