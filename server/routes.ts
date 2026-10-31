@@ -1,4 +1,5 @@
 import { registerShutdownHook } from "./shutdown";
+import { buildMediaSearch } from "./mediaSearch";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
 import { setArticleDerivedFields, articleWriteConflict, refreshArticleLiteImage } from "./services/articleDerivedWrites";
 import { adminScheduledOrder, getAdminPublishedPageIds, getArticleMetricsForUser } from "./services/adminArticleList";
@@ -1812,14 +1813,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         conditions.push(eq(mediaFiles.url, url as string));
       }
 
-      if (search) {
-        conditions.push(
-          or(
-            ilike(mediaFiles.fileName, `%${search}%`),
-            ilike(mediaFiles.title, `%${search}%`),
-            ilike(mediaFiles.description, `%${search}%`)
-          )
-        );
+      // All text fields, Arabic-normalised, AND across tokens, ranked by relevance.
+      const mediaSearch = typeof search === "string" ? buildMediaSearch(search) : null;
+      if (mediaSearch) {
+        conditions.push(mediaSearch.where);
       }
 
       // Support both folderId and folder parameters
@@ -1877,6 +1874,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           url: mediaFiles.url,
           createdAt: mediaFiles.createdAt,
           usage: orderByMostUsed ? usageExpr : sql<number>`0`,
+          score: mediaSearch ? mediaSearch.score : sql<number>`0`,
         })
         .from(mediaFiles)
         .where(whereClause)
@@ -1887,6 +1885,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .select({ id: dedupSub.id })
         .from(dedupSub)
         .orderBy(
+          ...(mediaSearch && !orderByMostUsed ? [desc(dedupSub.score)] : []),
           orderByMostUsed ? desc(dedupSub.usage) : desc(dedupSub.createdAt),
           desc(dedupSub.id),
         )
