@@ -1081,6 +1081,9 @@ if (!(globalThis as any).__sabqServer) {
     // خطافات حذف الحساب وتعديل الملف تسبق mobileApiRoutes (ملف فوق سقف الأسطر).
     const mobileAccountHooks = (await import("./routes/mobileAccountHooks")).default;
     app.use("/api/v1", mobileAccountHooks);
+    // رفع صورة واحدة قبل إرسال الخبر/المقال من الجوال (POST /articles/images).
+    const mobileSubmissionImages = (await import("./routes/mobileSubmissionImages")).default;
+    app.use("/api/v1", mobileSubmissionImages);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 

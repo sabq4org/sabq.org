@@ -124,6 +124,15 @@ export interface StaffCapabilities {
    * اختياري في فك ترميز iOS (الافتراضي false).
    */
   canPublisherNews: boolean;
+  /**
+   * تبويب «الأخبار» للمشرف (مسودات المراسلين وطلبات التعديل) — articles.publish
+   * (قرار المالك 2026-10-31). اختياري في فك ترميز iOS (الافتراضي false).
+   */
+  canNews: boolean;
+  /** يرسل خبراً من التطبيق: دور مراسل (reporter/correspondent/journalist). */
+  canReport: boolean;
+  /** يرسل مقال رأي من التطبيق: دور كاتب (opinion_author/columnist/…). */
+  canWrite: boolean;
 }
 
 export interface StaffOpinionCapabilities {

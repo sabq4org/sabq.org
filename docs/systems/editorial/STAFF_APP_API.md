@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-29 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
+> آخر مراجعة: 2026-10-31 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
 
 ## الملخص
 
@@ -115,6 +115,7 @@ Content-Type: application/json
 - `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
 - `canOpinion` (منذ 2026-10-28، `computeStaffOpinionCapabilities` في `shared/staffApp.ts`): `view` = `opinion.review` أو `articles.schedule`؛ `schedule` = `articles.schedule` أو `articles.publish`؛ `publish` = `articles.publish`؛ `returnToWriter` = `opinion.review` أو `articles.edit_any`. كل فعل يشترط `view` أيضاً. الخوادم الأقدم لا ترسله، فيعدّه التطبيق كله `false`.
 - `canPublisherNews` (منذ 2026-10-29) = `articles.publish`: يفتح تبويب «أخبار» في مركز التنبيهات وإشعار أخبار «نشر سبق». الخوادم الأقدم لا ترسله فيعدّه التطبيق `false`.
+- `canNews` (منذ 2026-10-31) = `articles.publish`: يمهّد لتبويب «الأخبار» (مسودات المراسلين وطلبات التعديل) في المرحلة 1. `canReport` = دور مراسل (`reporter | correspondent | journalist`) و`canWrite` = دور كاتب رأي (`opinion_author | columnist | article_author | article_writer | writer | author`)، بالقواعد نفسها في `POST /api/v1/articles/submit` (`classifyMobileSubmitter` في `shared/mobileSubmission.ts`). الخوادم الأقدم لا ترسلها فيعدّها التطبيق `false`.
 - `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
