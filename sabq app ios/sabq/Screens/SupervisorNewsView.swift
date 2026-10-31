@@ -9,12 +9,15 @@ struct SupervisorNewsView: View {
 
     @State private var board = EditorialNewsBoard()
     @State private var filter: EditorialNewsFilter
+    @State private var loading = true
+    @State private var error: EditorialError?
+    /// المحرر بلا دور مراسل أو كاتب: هذه لوحته الوحيدة، فالإنشاء هنا.
+    @State private var showNewChoice = false
+    @State private var submissionKind: ArticleSubmissionKind?
 
     init(initialFilter: EditorialNewsFilter = .all) {
         _filter = State(initialValue: initialFilter)
     }
-    @State private var loading = true
-    @State private var error: EditorialError?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
