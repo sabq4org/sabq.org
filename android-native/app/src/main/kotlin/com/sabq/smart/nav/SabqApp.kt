@@ -118,6 +118,9 @@ object SabqRoutes {
     const val NotificationPreferences = "notifications/preferences"
     const val ReaderInbox = "inbox"
     const val ReaderNotificationSettings = "inbox/settings"
+    const val Mawaeed = "mawaeed"
+    const val MawaeedService = "mawaeed/{slug}?title={title}"
+    const val SportsToday = "sports/today"
     const val Survey = "survey/{token}"
     const val EditProfile = "account/edit"
     const val ChangePassword = "account/change-password"
@@ -196,6 +199,9 @@ object SabqRoutes {
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
     fun survey(token: String): String = "survey/${Uri.encode(token)}"
+
+    fun mawaeedService(slug: String, title: String): String =
+        "mawaeed/${Uri.encode(slug)}?title=${Uri.encode(title)}"
 
     val TabRoutes = setOf(Home, Explore, Bookmarks, Profile)
 
@@ -311,6 +317,11 @@ fun SabqApp(
                     target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
                         navController.navigate(SabqRoutes.asianCupTeam(it))
                     }
+                // مواعيدك ومباريات اليوم — روابط الويب العامة /mawaeed و/sports/matches.
+                target.deepLinkPath == "/mawaeed" ->
+                    navController.navigate(SabqRoutes.Mawaeed)
+                target.deepLinkPath == "/sports/matches" || target.deepLinkPath == "/sports/live" ->
+                    navController.navigate(SabqRoutes.SportsToday)
                 // روشن — نفس مسارات iOS العامة: /roshn و/roshn/match/:id
                 // و/sports/team/:id (رابط صفحة النادي على الويب).
                 target.deepLinkPath == "/roshn" ->
@@ -414,6 +425,12 @@ fun SabqApp(
                         },
                         onRoshnClick = {
                             navController.navigate(SabqRoutes.Roshn)
+                        },
+                        onSportsTodayClick = {
+                            navController.navigate(SabqRoutes.SportsToday)
+                        },
+                        onMawaeedClick = {
+                            navController.navigate(SabqRoutes.Mawaeed)
                         },
                         onEconomyClick = {
                             navController.navigate(SabqRoutes.Economy)
@@ -1029,6 +1046,30 @@ fun SabqApp(
                                     navController.navigate(SabqRoutes.keywordArticles(target.keyword))
                             }
                         },
+                    )
+                }
+                composable(SabqRoutes.Mawaeed) {
+                    com.sabq.smart.feature.mawaeed.MawaeedScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenService = { slug, title -> navController.navigate(SabqRoutes.mawaeedService(slug, title)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MawaeedService,
+                    arguments = listOf(
+                        navArgument("slug") { type = NavType.StringType },
+                        navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
+                    com.sabq.smart.feature.mawaeed.MawaeedServiceScreen(
+                        title = entry.arguments?.getString("title").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.SportsToday) {
+                    com.sabq.smart.feature.sports.SportsTodayScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.roshnMatch(id)) },
                     )
                 }
                 composable(SabqRoutes.ReaderNotificationSettings) {
