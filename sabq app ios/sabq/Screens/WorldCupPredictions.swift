@@ -473,14 +473,12 @@ func statusBadge(_ status: String, points: Int) -> some View {
         Text("لم تُصب")
             .sabqText(SabqType.tag).foregroundStyle(SabqTheme.danger)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surface))
-            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .background(Capsule().fill(SabqTheme.chipFill))
     default:
         Text("بانتظار النتيجة")
             .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surface))
-            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .background(Capsule().fill(SabqTheme.chipFill))
     }
 }
 

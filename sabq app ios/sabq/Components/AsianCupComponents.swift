@@ -337,9 +337,7 @@ struct AcRatingBadge: View {
             .font(SabqType.tag.font.monospacedDigit())
             .foregroundStyle(color)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
-            .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
             .environment(\.layoutDirection, .leftToRight)
     }
 
@@ -360,9 +358,7 @@ struct AcTag: View {
             .font(SabqType.tag.font)
             .foregroundStyle(SabqTheme.textSecondary)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
-            .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
     }
 }
 

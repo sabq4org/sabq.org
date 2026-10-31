@@ -792,8 +792,7 @@ struct MuqtarabTopicView: View {
                         .font(SabqType.tag.font)
                         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
                         .foregroundStyle(SabqTheme.textPrimary)
-                        .background(Capsule().fill(SabqTheme.surface))
-                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                        .background(Capsule().fill(SabqTheme.chipFill))
                 }
             }
         }
@@ -984,8 +983,7 @@ struct MuqtarabWriterView: View {
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .padding(.horizontal, SabqLayout.space12)
                                 .frame(minHeight: 36)
-                                .background(Capsule().fill(SabqTheme.surface))
-                                .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                                .background(Capsule().fill(SabqTheme.chipFill))
                                 .contentShape(Capsule())
                             }
                             .buttonStyle(.plain)

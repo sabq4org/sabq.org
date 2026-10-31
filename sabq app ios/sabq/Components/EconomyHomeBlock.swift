@@ -467,8 +467,10 @@ struct EconomyAccentCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
-            .background(SabqTheme.surface, in: shape)
-            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75).allowsHitTesting(false))
+            .background(
+                shape.fill(SabqTheme.surface)
+                    .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+            )
     }
 }
 

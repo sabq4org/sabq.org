@@ -98,8 +98,7 @@ struct WCPlayerSheet: View {
                         }
                         .foregroundStyle(SabqTheme.textPrimary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                        .background(Capsule().fill(SabqTheme.surface))
-                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                        .background(Capsule().fill(SabqTheme.chipFill))
                     }
                     if p.injury != nil {
                         chip("مصاب حاليًا", fill: SabqTheme.surface, fg: SabqTheme.warning)
@@ -222,8 +221,7 @@ struct WCPlayerSheet: View {
                     Text("\(titles) بطولة")
                         .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                        .background(Capsule().fill(SabqTheme.surface))
-                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                        .background(Capsule().fill(SabqTheme.chipFill))
                 }
             }
             .padding(.bottom, SabqLayout.space8)
@@ -315,8 +313,7 @@ struct WCPlayerStatsGrid: View {
                         .font(SabqFonts.app(size: 13, weight: .semibold).monospacedDigit())
                         .foregroundStyle(ratingColor(rating))
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                        .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surface))
-                        .overlay(RoundedRectangle(cornerRadius: SabqRadius.small).strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.chipFill))
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
@@ -410,8 +407,7 @@ struct WCPlayerFormSection: View {
             Text("آخر \(matches.count)")
                 .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                 .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                .background(Capsule().fill(SabqTheme.surface))
-                .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                .background(Capsule().fill(SabqTheme.chipFill))
                 .environment(\.layoutDirection, .leftToRight)
         }
     }
@@ -424,8 +420,7 @@ struct WCPlayerFormSection: View {
                     .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(resultColor(m.result))
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(SabqTheme.surface))
-                    .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                    .background(Circle().fill(SabqTheme.chipFill))
             }
             Spacer(minLength: 0)
         }

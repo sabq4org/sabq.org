@@ -356,8 +356,7 @@ struct DiscoveryChip: View {
         .padding(.horizontal, SabqLayout.space12)
         .padding(.vertical, SabqLayout.space8)
         .frame(minHeight: 36)
-        .background(Capsule(style: .continuous).fill(SabqTheme.surface))
-        .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(Capsule(style: .continuous).fill(SabqTheme.chipFill))
         .frame(minHeight: SabqLayout.touchTarget)
         .contentShape(Rectangle())
     }

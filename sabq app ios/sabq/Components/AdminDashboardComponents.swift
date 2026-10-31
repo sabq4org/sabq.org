@@ -115,8 +115,7 @@ struct AdminSegmentedControl: View {
             }
         }
         .padding(SabqLayout.space4)
-        .background(SabqTheme.surface, in: track)
-        .overlay(track.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(SabqTheme.chipFill, in: track)
         .animation(.snappy(duration: 0.2), value: selected)
     }
 }

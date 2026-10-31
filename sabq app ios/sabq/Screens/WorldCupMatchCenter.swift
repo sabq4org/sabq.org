@@ -518,8 +518,7 @@ struct WCPressureView: View {
                         Text("\(Int(latest.value))")
                             .font(SabqFonts.app(size: 12, weight: .regular).monospacedDigit()).foregroundStyle(SabqTheme.textPrimary)
                             .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.surface))
-                            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                            .background(Capsule().fill(SabqTheme.chipFill))
                             .environment(\.layoutDirection, .leftToRight)
                     }
                 }
@@ -604,8 +603,7 @@ struct WCPitch: View {
                     Text(f).font(SabqFonts.app(size: 12, weight: .medium).monospacedDigit())
                         .foregroundStyle(SabqTheme.textSecondary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                        .background(Capsule().fill(SabqTheme.surface))
-                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                        .background(Capsule().fill(SabqTheme.chipFill))
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
@@ -652,9 +650,7 @@ struct WCPitch: View {
         }
         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space8)
         .frame(minHeight: SabqLayout.touchTarget)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-            .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
     }
 
     private var pitch: some View {
@@ -1224,8 +1220,7 @@ struct WCTvStrip: View {
         }
         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
         .frame(minHeight: SabqLayout.touchTarget)
-        .background(Capsule().fill(SabqTheme.surface))
-        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(Capsule().fill(SabqTheme.chipFill))
 
         if let urlString = ch.url, let url = URL(string: urlString) {
             Button { openURL(url) } label: { content }.buttonStyle(.plain)

@@ -246,11 +246,7 @@ struct EditorialNotificationsView: View {
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                    .fill(SabqTheme.chipFill)
             )
         }
         .buttonStyle(.plain)
@@ -529,11 +525,7 @@ struct EditorialNotificationDetailView: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                    .fill(SabqTheme.chipFill)
             )
             Text(item.title)
                 .sabqText(SabqType.leadTitle)

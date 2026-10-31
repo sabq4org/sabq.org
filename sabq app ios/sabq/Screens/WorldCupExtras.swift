@@ -832,8 +832,7 @@ struct WCTeamSheet: View {
                         Text("\(s.matches) مباراة")
                             .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                             .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.surface))
-                            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                            .background(Capsule().fill(SabqTheme.chipFill))
                     }
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: SabqLayout.space8)], spacing: SabqLayout.space8) {

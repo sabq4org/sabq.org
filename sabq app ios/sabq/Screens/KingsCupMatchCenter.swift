@@ -629,8 +629,7 @@ struct KcTvStrip: View {
         }
         .padding(.horizontal, SabqLayout.space12)
         .frame(minHeight: 36)
-        .background(Capsule().fill(SabqTheme.surface))
-        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(Capsule().fill(SabqTheme.chipFill))
 
         if let urlString = ch.url, let url = URL(string: urlString) {
             Button { openURL(url) } label: { content }.buttonStyle(.plain)

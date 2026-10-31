@@ -229,8 +229,7 @@ struct AuthorArticlesView: View {
         .font(SabqType.tag.font)
         .padding(.horizontal, SabqLayout.space12)
         .frame(minHeight: 36)
-        .background(Capsule(style: .continuous).fill(SabqTheme.surface))
-        .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(Capsule(style: .continuous).fill(SabqTheme.chipFill))
         .accessibilityElement(children: .combine)
     }
 

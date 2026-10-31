@@ -311,13 +311,9 @@ struct LoginSheet: View {
                 }
             }
         }
-        // مسار أبيض بحدّ رفيع على الورقة الرمادية — نفس لغة `SabqSegmentedPicker`.
+        // مسار رمادي مزرق بلا حدّ — نفس لغة `SabqSegmentedPicker` (هوية المكتب).
         .padding(SabqLayout.space4)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-        )
+        .background(SabqTheme.chipFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func modeTab(_ title: String, icon: String, value: LoginMode) -> some View {

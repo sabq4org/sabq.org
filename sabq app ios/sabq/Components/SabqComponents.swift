@@ -1143,14 +1143,11 @@ struct SurfaceCard<Content: View>: View {
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
-        // سطح أبيض بحدّ رفيع على خلفية التطبيق الرمادية — نفس لغة بقية البطاقات.
+        // بطاقة المكتب: بيضاء بظل خفيف بلا حدّ — نفس لغة بقية البطاقات.
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
         )
         .sabqRTL()
     }
@@ -1295,11 +1292,7 @@ struct SmallActionButton: View {
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                    .fill(SabqTheme.chipFill)
             )
         }
         .buttonStyle(.plain)
@@ -1376,11 +1369,7 @@ struct StatusChip: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                    .fill(SabqTheme.chipFill)
             )
     }
 }

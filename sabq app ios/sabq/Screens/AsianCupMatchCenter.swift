@@ -761,9 +761,7 @@ struct AcPitch: View {
         }
         .padding(.horizontal, SabqLayout.space8)
         .frame(minHeight: SabqLayout.touchTarget)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-            .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
         .contentShape(Rectangle())
     }
 

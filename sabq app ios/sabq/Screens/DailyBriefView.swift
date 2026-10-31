@@ -346,11 +346,7 @@ struct DailyBriefView: View {
                             .frame(minHeight: 32)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                                    .fill(SabqTheme.chipFill)
                             )
                     }
                 }
@@ -442,11 +438,7 @@ struct DailyBriefView: View {
                         .frame(maxWidth: .infinity, minHeight: 32)
                         .background(
                             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.surface)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                                .fill(SabqTheme.chipFill)
                         )
                 }
             }
@@ -674,8 +666,7 @@ struct InterestsPickerSheet: View {
             return content
                 .padding(.horizontal, SabqLayout.space12)
                 .frame(minHeight: SabqLayout.touchTarget)
-                .background(SabqTheme.surface, in: shape)
-                .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                .background(SabqTheme.chipFill, in: shape)
                 .contentShape(shape)
         }
     }

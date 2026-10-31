@@ -119,8 +119,7 @@ struct NewsletterSheet: View {
             .foregroundStyle(SabqTheme.primary)
             .padding(.horizontal, SabqLayout.space8)
             .padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surface))
-            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .background(Capsule().fill(SabqTheme.chipFill))
 
             Text("النشرة الذكية")
                 .sabqText(SabqType.leadTitle)

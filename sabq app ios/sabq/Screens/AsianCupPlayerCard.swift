@@ -89,9 +89,7 @@ struct AcPlayerSheet: View {
                         }
                         .foregroundStyle(SabqTheme.textPrimary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
-                        .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
                     }
                     if p.injury != nil {
                         chip("مصاب حاليًا", fg: SabqTheme.warning)
@@ -117,9 +115,7 @@ struct AcPlayerSheet: View {
         Text(text)
             .font(SabqType.tag.font).foregroundStyle(fg)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
-            .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
     }
 
     @ViewBuilder private func factTiles(_ p: AcPlayerCard) -> some View {

@@ -188,11 +188,7 @@ struct ArticleContextView: View {
                             .frame(minHeight: 32)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                                    .fill(SabqTheme.chipFill)
                             )
                             .frame(minHeight: SabqLayout.touchTarget)
                             .contentShape(Rectangle())

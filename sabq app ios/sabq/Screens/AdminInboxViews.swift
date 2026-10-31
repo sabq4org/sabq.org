@@ -84,14 +84,8 @@ private struct AdminInboxFilterChip: View {
         .frame(minHeight: 36)
         .background(
             Capsule(style: .continuous)
-                .fill(isActive ? SabqTheme.skyTint : SabqTheme.surface)
+                .fill(isActive ? SabqTheme.skyTint : SabqTheme.chipFill)
         )
-        .overlay {
-            if !isActive {
-                Capsule(style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-            }
-        }
         // الشكل المرئي 36 ومساحة اللمس 44.
         .frame(minHeight: SabqLayout.touchTarget)
         .contentShape(Rectangle())

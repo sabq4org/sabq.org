@@ -758,8 +758,7 @@ struct RoshnLoadingRows: View {
             ForEach(0..<count, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                     .fill(SabqTheme.surface)
-                    .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                    .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
                     .frame(height: height)
             }
         }

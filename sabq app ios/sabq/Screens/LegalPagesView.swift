@@ -96,11 +96,7 @@ struct LegalPageView: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                    .fill(SabqTheme.chipFill)
             )
 
             Text(content.title)

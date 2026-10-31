@@ -322,11 +322,7 @@ struct SurveyView: View {
                     .foregroundStyle(SabqTheme.textSecondary)
                     .padding(.horizontal, SabqLayout.space8)
                     .padding(.vertical, SabqLayout.space4)
-                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-                    )
+                    .background(SabqTheme.chipFill, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .padding(.bottom, SabqLayout.space12)
 
                 (Text(question.text) + Text(question.isRequired ? " *" : "").foregroundColor(SabqTheme.danger))
