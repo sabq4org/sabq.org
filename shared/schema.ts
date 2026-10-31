@@ -1076,6 +1076,9 @@ export const articles = pgTable("articles", {
   index("idx_articles_status_published").on(table.status, table.publishedAt.desc()),
   index("idx_articles_category_status").on(table.categoryId, table.status),
   index("idx_articles_author_status").on(table.authorId, table.status),
+  // لوحة المراسل على كل الحالات — migrations/20261031_reporter_dashboard_indexes.sql
+  index("idx_articles_reporter_status").on(table.reporterId, table.status),
+  index("idx_articles_submitter_status").on(table.submitterId, table.status),
   // صفحة الكاتب (reporter_id OR author_id) مرتبة بالنشر — migrations/20261031_author_page_indexes.sql
   index("idx_articles_reporter_published")
     .on(table.reporterId, table.publishedAt.desc())
