@@ -362,6 +362,8 @@ export interface StaffAlertPrefs {
   opinionDrafts: boolean;
   /** خبر جديد نشره زميل أو شريك من تطبيق «نشر سبق» (منذ 2026-10-29). */
   publisherNews: boolean;
+  /** خبر من مراسل بانتظار القرار، أو طلب تعديل على خبر (منذ 2026-10-31). */
+  newsDrafts: boolean;
   quietHours: StaffQuietHours;
 }
 
@@ -372,6 +374,7 @@ export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
   socialProposals: true,
   opinionDrafts: true,
   publisherNews: true,
+  newsDrafts: true,
   quietHours: "off",
 };
 
@@ -382,7 +385,8 @@ export type StaffAlertKind =
   | "writerMessages"
   | "socialProposals"
   | "opinionDrafts"
-  | "publisherNews";
+  | "publisherNews"
+  | "newsDrafts";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
@@ -392,6 +396,7 @@ export const staffAlertPrefsUpdateSchema = z
     socialProposals: z.boolean().optional(),
     opinionDrafts: z.boolean().optional(),
     publisherNews: z.boolean().optional(),
+    newsDrafts: z.boolean().optional(),
     quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();

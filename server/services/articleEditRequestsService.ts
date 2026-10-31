@@ -153,7 +153,7 @@ export async function createEditRequest(input: EditRequestInput, userId: string)
         title: input.urgent ? "طلب تعديل عاجل" : "طلب تعديل على خبر",
         body: `${requesterName} (${editRequestShortLabel(input.proposed)}): ${article.title}`,
         deeplink: `/dashboard/articles?editRequest=${row.id}`,
-        metadata: { editRequestId: row.id, urgent: input.urgent },
+        metadata: { editRequestId: row.id, urgent: input.urgent, label: editRequestShortLabel(input.proposed) },
       },
     ).catch((error) => console.error("[edit-requests] notify failed", error));
     return { ok: true as const, request: row };

@@ -9,7 +9,7 @@
 // التوثيق: docs/systems/editorial/STAFF_APP_API.md
 // ----------------------------------------------------------------------------
 
-import { Router, type NextFunction, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { isBotPublisherToken } from "@shared/botPublisherTokens";
 import {
@@ -80,6 +80,7 @@ import {
   markStaffDeskNotificationsSeen,
 } from "../services/staffDeskEventsService";
 import { staffDeskNotificationsQuerySchema } from "@shared/staffNotifications";
+import { registerStaffNewsRoutes } from "./staffNewsDesk";
 import {
   AiBalanceInputError,
   auditSnapshot as auditBalanceSnapshot,
@@ -1317,6 +1318,14 @@ subRouter.get(
     }
   },
 );
+
+// ── 5ب) تبويب «الأخبار» (/news) — 2026-10-31 ─────────────────────────
+// مسودات المراسلين والبريد وطلبات التعديل؛ المسارات في routes/staffNewsDesk.ts.
+registerStaffNewsRoutes(subRouter, {
+  requireStaffAuth: requireStaffAuth as unknown as RequestHandler,
+  sendError,
+  audit: auditStaffAppWrite,
+});
 
 // ── 6) مركز التنبيهات (/notifications) — 2026-10-29 ──────────────────
 // خط زمني لأحداث التغريدات ومقالات الرأي وأخبار «نشر سبق». كل عضو يرى

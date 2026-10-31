@@ -422,6 +422,30 @@ export async function sendDraftSubmittedNotification(
 
     console.log(`📝 [DRAFT-NOTIFY] Sent notifications to ${uniqueEditors.length - 1} editors`);
 
+    // تطبيق «مكتب سبق»: خبر مراسل أو طلب تعديل يصل تبويب «الأخبار» (2026-10-31).
+    // مقالات الرأي لها تنبيهها الخاص (notifyStaffDeskOfOpinionDraft).
+    const meta = override?.metadata ?? {};
+    const deskKind = noticeType === "ArticleEditRequest"
+      ? "edit_request"
+      : noticeType === "DraftSubmitted" && meta.articleType !== "opinion"
+        ? "draft"
+        : null;
+    if (deskKind) {
+      import("./services/staffAppPushService")
+        .then(({ notifyStaffDeskOfNewsItem }) =>
+          notifyStaffDeskOfNewsItem({
+            kind: deskKind,
+            articleId: article.id,
+            requestId: typeof meta.editRequestId === "string" ? meta.editRequestId : null,
+            title: article.title,
+            senderName: reporterName,
+            senderId: reporterId,
+            urgent: meta.urgent === true,
+            label: typeof meta.label === "string" ? meta.label : null,
+          }))
+        .catch((error) => console.error("❌ [DRAFT-NOTIFY] desk push failed:", error));
+    }
+
   } catch (error) {
     console.error("❌ [DRAFT-NOTIFY] Error sending draft notification:", error);
     // Don't throw - notifications are non-critical
