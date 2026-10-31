@@ -1,4 +1,5 @@
 import { and, eq, inArray, or } from "drizzle-orm";
+import { classifyMobileSubmitter } from "@shared/mobileSubmission";
 import { db } from "../db";
 import {
   articles,
@@ -180,6 +181,8 @@ export async function resolveStaffCapabilitiesAndRoles(
         ? [legacyRole]
         : [];
 
+  const submitter = classifyMobileSubmitter([...roleList, legacyRole]);
+
   return {
     roles: roleList,
     capabilities: {
@@ -200,6 +203,9 @@ export async function resolveStaffCapabilitiesAndRoles(
         articlesEditAny: Boolean(canArticlesEditAny),
       }),
       canPublisherNews: Boolean(canArticlesPublish),
+      canNews: Boolean(canArticlesPublish),
+      canReport: submitter.isReporter,
+      canWrite: submitter.isWriter,
     },
   };
 }

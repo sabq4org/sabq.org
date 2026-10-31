@@ -31,6 +31,10 @@ final class AppModel {
     private(set) var urgentAlerts = 0
     /// Opinion drafts waiting for the desk (new + in prep), the badge on «الرأي».
     private(set) var opinionPending = 0
+    /// Reporter news, email news and edit requests waiting, the badge on «الأخبار».
+    private(set) var newsPending = 0
+    /// «حسابي» as a sheet, when it moves out of the tab bar (`accountInHeader`).
+    var showsAccount = false
     /// «التنبيهات»: the bell's number and the latest notification (home line).
     private(set) var notificationsUnread = 0
     private(set) var latestNotification: StaffNotification?
@@ -98,6 +102,8 @@ final class AppModel {
         alertPrefsError = nil
         urgentAlerts = 0
         opinionPending = 0
+        newsPending = 0
+        showsAccount = false
         notificationsUnread = 0
         latestNotification = nil
         showsNotifications = false
@@ -138,6 +144,9 @@ final class AppModel {
         }
         if me.capabilities.canOpinion.view {
             await refreshOpinionPending()
+        }
+        if me.capabilities.canNews {
+            await refreshNewsPending()
         }
         await refreshNotifications()
     }
@@ -182,6 +191,24 @@ final class AppModel {
     /// Called by «الرأي» after its own load, so the badge matches the board.
     func setOpinionPending(_ count: Int) {
         opinionPending = max(count, 0)
+    }
+
+    // MARK: - News
+
+    func refreshNewsPending() async {
+        guard capabilities.canNews else { return }
+        do {
+            newsPending = try await client.newsBoard().counts.all
+        } catch {
+            // Older servers have no /news: keep the badge quiet.
+            if case .notFound? = error as? StaffAPIError { return }
+            handle(error)
+        }
+    }
+
+    /// Called by «الأخبار» after its own load, so the badge matches the list.
+    func setNewsPending(_ count: Int) {
+        newsPending = max(count, 0)
     }
 
     // MARK: - System (admins)

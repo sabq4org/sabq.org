@@ -70,15 +70,17 @@ struct RootView: View {
 }
 
 /// Up to five tabs (approved redesign 2026-10-25, desk v2; «الرأي» concept C
-/// 2026-10-28): المكتب for tweet proposals, الرأي for opinion drafts on the
-/// week's fixed slots, الرسائل for contributors' messages, النظام for admins
-/// (alerts and system health), حسابي for the account. A member sees only the
-/// tabs their permissions open.
+/// 2026-10-28; «الأخبار» 2026-10-31): المكتب for tweet proposals, الأخبار for
+/// reporter news and edit requests, الرأي for opinion drafts on the week's
+/// fixed slots, الرسائل for contributors' messages, النظام for admins (alerts
+/// and system health), حسابي for the account. A member sees only the tabs
+/// their permissions open; with five work tabs «حسابي» moves to the header
+/// avatar and opens as a sheet, so iOS never folds a tab into «المزيد».
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
 
-    enum Tab: Hashable { case desk, opinion, messages, system, account }
+    enum Tab: Hashable { case desk, news, opinion, messages, system, account }
     /// Screenshot scenes open a given tab; nil picks the first allowed one.
     var initialTab: Tab?
     @State private var tab: Tab = .desk
@@ -87,13 +89,19 @@ struct MainTabView: View {
     var body: some View {
         TabView(selection: $tab) {
             if model.capabilities.canSocial.view {
-                DeskView(openAccount: { tab = .account })
+                DeskView(openAccount: openAccount)
                     .tabItem { Label("المكتب", systemImage: "tray.full") }
                     .badge(model.unread.social)
                     .tag(Tab.desk)
             }
+            if model.capabilities.canNews {
+                NewsView(openAccount: openAccount)
+                    .tabItem { Label("الأخبار", systemImage: "doc.text") }
+                    .badge(model.newsPending)
+                    .tag(Tab.news)
+            }
             if model.capabilities.canOpinion.view {
-                OpinionView(openAccount: { tab = .account })
+                OpinionView(openAccount: openAccount)
                     .tabItem { Label("الرأي", systemImage: "square.and.pencil") }
                     .badge(model.opinionPending)
                     .tag(Tab.opinion)
@@ -110,15 +118,21 @@ struct MainTabView: View {
                     .badge(model.urgentAlerts)
                     .tag(Tab.system)
             }
-            SettingsView()
-                .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
-                .tag(Tab.account)
+            if !model.capabilities.accountInHeader {
+                SettingsView()
+                    .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
+                    .tag(Tab.account)
+            }
         }
         .tint(DeskInk.link)
         .sheet(isPresented: Binding(get: { model.showsNotifications },
                                     set: { model.showsNotifications = $0 })) {
             NotificationsView()
                 .onDisappear { Task { await model.refreshNotifications() } }
+        }
+        .sheet(isPresented: Binding(get: { model.showsAccount },
+                                    set: { model.showsAccount = $0 })) {
+            SettingsView()
         }
         .onAppear {
             tab = initialTab ?? firstTab
@@ -131,9 +145,19 @@ struct MainTabView: View {
         }
     }
 
+    /// The header avatar: the tab when it exists, else the account sheet.
+    private func openAccount() {
+        if model.capabilities.accountInHeader {
+            model.showsAccount = true
+        } else {
+            tab = .account
+        }
+    }
+
     private var firstTab: Tab {
         let caps = model.capabilities
         if caps.canSocial.view { return .desk }
+        if caps.canNews { return .news }
         if caps.canOpinion.view { return .opinion }
         if caps.canTickets { return .messages }
         if caps.canSystemTab { return .system }
@@ -170,6 +194,13 @@ struct MainTabView: View {
             if caps.canSystemHealth {
                 systemSection = .health
                 tab = .system
+            } else {
+                model.pendingLink = nil
+            }
+        case .news?, .editRequest?:
+            // NewsView consumes the link and opens the preview or the request.
+            if caps.canNews {
+                tab = .news
             } else {
                 model.pendingLink = nil
             }

@@ -100,6 +100,7 @@ struct NotificationPrefsView: View {
         if caps.canTickets { out.append(.writerMessages) }
         if caps.canSocial.view { out.append(.socialProposals) }
         if caps.canOpinion.view { out.append(.opinionDrafts) }
+        if caps.canNews { out.append(.newsDrafts) }
         if caps.canPublisherNews { out.append(.publisherNews) }
         if caps.canAdminAlerts { out.append(.adminAlerts) }
         if caps.canSystemHealth { out.append(.aiAlerts) }
@@ -157,13 +158,14 @@ private enum PrefsType {
 // MARK: - Kinds
 
 private enum PushKind: Hashable {
-    case writerMessages, socialProposals, opinionDrafts, publisherNews, adminAlerts, aiAlerts
+    case writerMessages, socialProposals, opinionDrafts, newsDrafts, publisherNews, adminAlerts, aiAlerts
 
     var title: String {
         switch self {
         case .writerMessages: return "رسائل الكتّاب"
         case .socialProposals: return "مقترحات النشر على X"
         case .opinionDrafts: return "مقالات الرأي"
+        case .newsDrafts: return "أخبار المراسلين"
         case .publisherNews: return "أخبار «نشر سبق»"
         case .adminAlerts: return "تنبيهات الإدارة"
         case .aiAlerts: return "نماذج الذكاء الاصطناعي"
@@ -175,6 +177,7 @@ private enum PushKind: Hashable {
         case .writerMessages: return "استفسار جديد أو رد من كاتب"
         case .socialProposals: return "مقترح ينتظر موافقتك"
         case .opinionDrafts: return "مسودة رأي جديدة تنتظر المراجعة والجدولة"
+        case .newsDrafts: return "خبر من مراسل بانتظار قرارك، أو طلب تعديل على خبر"
         case .publisherNews: return "خبر جديد نشره زميل أو شريك عبر التطبيق"
         case .adminAlerts: return "فشل نشر تغريدة أو ما يحتاج تدخلك"
         case .aiAlerts: return "تعطل نموذج أو اقتراب الرصيد من نهايته"
@@ -186,6 +189,7 @@ private enum PushKind: Hashable {
         case .writerMessages: return "رسالة جديدة من كاتب رأي تنتظر ردك."
         case .socialProposals: return "مقترح نشر على X ينتظر موافقتك."
         case .opinionDrafts: return "مقال رأي جديد ينتظر مراجعتك وجدولته."
+        case .newsDrafts: return "خبر جديد من مراسل ينتظر النشر أو الجدولة."
         case .publisherNews: return "خبر جديد عبر «نشر سبق»: الناشر والعنوان."
         case .adminAlerts: return "فشل نشر تغريدة، افتح التنبيهات لإعادة المحاولة."
         case .aiAlerts: return "أحد نماذج الذكاء الاصطناعي متوقف الآن."
@@ -198,6 +202,7 @@ private enum PushKind: Hashable {
         case .socialProposals, .aiAlerts: return DeskTheme.chipGrey
         case .adminAlerts: return PrefsInk.amberTint
         case .opinionDrafts: return DeskTone.teal.fill
+        case .newsDrafts: return DeskInk.soft
         case .publisherNews: return PrefsInk.greenTint
         }
     }
@@ -208,6 +213,7 @@ private enum PushKind: Hashable {
         case .socialProposals, .aiAlerts: return DeskTheme.navy
         case .adminAlerts: return PrefsInk.amberInk
         case .opinionDrafts: return DeskTheme.teal
+        case .newsDrafts: return DeskTheme.link
         case .publisherNews: return PrefsInk.greenInk
         }
     }
@@ -217,6 +223,7 @@ private enum PushKind: Hashable {
         case .writerMessages: return prefs.writerMessages
         case .socialProposals: return prefs.socialProposals
         case .opinionDrafts: return prefs.opinionDrafts
+        case .newsDrafts: return prefs.newsDrafts
         case .publisherNews: return prefs.publisherNews
         case .adminAlerts: return prefs.adminAlerts
         case .aiAlerts: return prefs.aiAlerts
@@ -228,6 +235,7 @@ private enum PushKind: Hashable {
         case .writerMessages: return StaffAlertPrefsUpdate(writerMessages: value)
         case .socialProposals: return StaffAlertPrefsUpdate(socialProposals: value)
         case .opinionDrafts: return StaffAlertPrefsUpdate(opinionDrafts: value)
+        case .newsDrafts: return StaffAlertPrefsUpdate(newsDrafts: value)
         case .publisherNews: return StaffAlertPrefsUpdate(publisherNews: value)
         case .adminAlerts: return StaffAlertPrefsUpdate(adminAlerts: value)
         case .aiAlerts: return StaffAlertPrefsUpdate(aiAlerts: value)
@@ -374,6 +382,8 @@ private struct KindRow: View {
             Text(verbatim: "X").font(.system(size: 18, weight: .bold)).foregroundStyle(kind.ink)
         case .opinionDrafts:
             Image(systemName: "square.and.pencil").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
+        case .newsDrafts:
+            Image(systemName: "doc.text").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
         case .publisherNews:
             Image(systemName: "newspaper").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
         case .adminAlerts:

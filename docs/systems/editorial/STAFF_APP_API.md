@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-29 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
+> آخر مراجعة: 2026-10-31 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
 
 ## الملخص
 
@@ -115,6 +115,7 @@ Content-Type: application/json
 - `canManageBalances` = `ai_hub.view` و`ai_hub.manage` معاً (حفظ الشحنات والميزانية وحدود التنبيه في §2-10). الخوادم الأقدم لا ترسله، فيعدّه التطبيق `false`.
 - `canOpinion` (منذ 2026-10-28، `computeStaffOpinionCapabilities` في `shared/staffApp.ts`): `view` = `opinion.review` أو `articles.schedule`؛ `schedule` = `articles.schedule` أو `articles.publish`؛ `publish` = `articles.publish`؛ `returnToWriter` = `opinion.review` أو `articles.edit_any`. كل فعل يشترط `view` أيضاً. الخوادم الأقدم لا ترسله، فيعدّه التطبيق كله `false`.
 - `canPublisherNews` (منذ 2026-10-29) = `articles.publish`: يفتح تبويب «أخبار» في مركز التنبيهات وإشعار أخبار «نشر سبق». الخوادم الأقدم لا ترسله فيعدّه التطبيق `false`.
+- `canNews` (منذ 2026-10-31) = `articles.publish`: يمهّد لتبويب «الأخبار» (مسودات المراسلين وطلبات التعديل) في المرحلة 1. `canReport` = دور مراسل (`reporter | correspondent | journalist`) و`canWrite` = دور كاتب رأي (`opinion_author | columnist | article_author | article_writer | writer | author`)، بالقواعد نفسها في `POST /api/v1/articles/submit` (`classifyMobileSubmitter` في `shared/mobileSubmission.ts`). الخوادم الأقدم لا ترسلها فيعدّها التطبيق `false`.
 - `alertPrefs` يُعاد لكل عضو (منذ 2026-10-26): `{ aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, quietHours }`. إن تعذّرت قراءته تُعاد القيم الافتراضية (كلها مفعّلة، `quietHours: "off"`) بدل إفشال `/me`.
 
 ### 2. `GET /api/v1/staff/inbox`
@@ -378,6 +379,25 @@ Content-Type: application/json
 - **الدفع:** أخبار «نشر سبق» فقط (`notifyStaffDeskOfPublisherNews`): `type: "desk.publisher_news"`، `deeplink: sabqdesk://notifications`، العنوان «خبر جديد من <الناشر>» والنص عنوان الخبر، لكل من يملك `articles.publish` عدا الناشر نفسه، التفضيل `publisherNews` + الساعات الهادئة. بقية الأحداث في القائمة فقط (مسودات الرأي ومقترحات X لها دفعها السابق).
 - **مسودات البوت المنشورة من مكان آخر (منذ 2026-10-29):** مسودة أنشأها بوت (`source = bot`: «نشر سبق» أو قروك…) ثم نُشرت من محرر لوحة التحكم أو بالجدولة تُسجَّل أيضاً `news_published` عبر `recordBotDraftPublishedElsewhere`، المستدعاة من `notifyArticleStakeholders` عند كل `published`. الناشر: الوكالة ثم صاحب التوكن ثم اسم البوت. منع التكرار يمنع تسجيلها مرتين إن نُشرت عبر API البوت.
 
+### 13. تبويب «الأخبار» `/api/v1/staff/news/*` (منذ 2026-10-31)
+
+لمن يملك `articles.publish` (`capabilities.canNews`، وإلا `403 forbidden`). المنطق الخالص في `shared/staffNews.ts`، والقراءة والكتابة في `server/services/staffNewsDeskService.ts`، والمسارات في `server/routes/staffNewsDesk.ts` (مسجلة داخل `staffAppMobile.ts`). لا جداول جديدة ولا SQL. محدد المعدل للكتابة `STAFF_APP_NEWS_RATE_LIMIT` (الافتراضي 60 كل 5 دقائق لكل عضو). كل كتابة في `activity_logs` (`staff_app.news.publish|schedule|return` و`staff_app.edit_request.approve|reject`).
+
+| المسار | الوصف |
+|---|---|
+| `GET /news?filter=all\|reporters\|edit_requests\|email` | `{ counts:{all,reporters,editRequests,email}, oldestAt, editRequestsReady, items }`. المسودات: أخبار غير رأي بحالة `draft` حُدّثت خلال 30 يوماً، و`reviewStatus = pending_review` أو (`null` ومصدرها `email`/`url`). العاجل أولاً ثم الأقدم، بحد 100. العنصر `kind: "draft"` (`channel: app\|web\|email`، `albumCount`، `isBreaking`، `lockedBy`) أو `kind: "edit_request"` (`fields`، `label`، `urgent`، `articleStatus`) |
+| `GET /news/categories` | التصنيفات النشطة لقائمة «التصنيف» |
+| `GET /news/:id` | المعاينة: النص والصورة والألبوم و`lockedBy` و`pendingEditRequestId` و`webEditUrl` و`updatedAt` |
+| `POST /news/:id/publish` | `{ expectedUpdatedAt?, categoryId? }` ← نشر فوري (`runWithExclusiveBreaking`، `reviewStatus = approved`) ثم آثار النشر نفسها التي يستخدمها البوت (`queueBotDraftPublishEffects` بلا خصم رصيد الناشر) |
+| `POST /news/:id/schedule` | `{ scheduledAt, expectedUpdatedAt?, categoryId? }`؛ الموعد بعد دقيقة على الأقل وخلال 60 يوماً |
+| `POST /news/:id/return` | `{ note (3..2000) }` ← `needs_changes` مع الملاحظة، وإشعار المراسل وبريده |
+| `GET /news/edit-requests/:id` | تفاصيل الطلب كما في الويب (`request`، `article`، `fields`، `contentEdits` مع `found`) |
+| `POST /news/edit-requests/:id/approve` | `{ fields?, updateLine?, regenerate? }`؛ الخدمة نفسها التي يستخدمها الويب (`approveEditRequestWithEffects`) |
+| `POST /news/edit-requests/:id/reject` | `{ reason (3..1000) }` يصل للمراسل |
+
+- **التعارض:** كل كتابة مشروطة بقفل التحرير ونسخة المادة. خبر نُشر أو أُرشف، أو مقفل لمحرر آخر، أو حُفظ بعد فتح المعاينة ← `409` (`already_published` / `ARTICLE_LOCKED` / `ARTICLE_CHANGED`).
+- **قبل SQL طلبات التعديل:** `editRequestsReady: false` وتختفي الطلبات من القائمة، ومساراتها ترد `503 EDIT_REQUESTS_NOT_READY`.
+
 ## 3) صيغة الأخطاء الموحدة (Error Format)
 
 تعيد جميع مسارات `/api/v1/staff/*` الأخطاء بصيغة JSON موحدة `{ code, message }`:
@@ -455,6 +475,14 @@ Content-Type: application/json
 | فشل نشر تغريدة فشلاً نهائياً | `adminAlerts` | `notifyStaffAdminsOfSocialFailure` من `socialPublishingService` | `admin_alert` (`data.postId`) | `sabqdesk://alerts` | `desk-social-failed-<postId>` |
 
 الكود: `server/services/staffAiAlertPush.ts`، `staffAlertPrefsService.ts`، `staffSystemHealthService.ts`، `staffAdminAlertsService.ts`، `staffBreakingExpiryLog.ts`.
+
+### ب-3) أخبار المراسلين وطلبات التعديل (`notifyStaffDeskOfNewsItem`)
+تُستدعى من `sendDraftSubmittedNotification`: عند `DraftSubmitted` لخبر غير رأي، وعند `ArticleEditRequest`. المستلمون كل من يملك `articles.publish` عدا المرسل، التفضيل `newsDrafts` + الساعات الهادئة. مسودات البريد تظهر في القائمة بلا دفع.
+
+| الحدث | `type` | `deeplink` | `data` | `collapseId` |
+|---|---|---|---|---|
+| مراسل أرسل خبراً للمراجعة | `desk.news_draft` | `sabqdesk://news/<articleId>` | `{ articleId }` | `desk-news-draft-<articleId>` |
+| طلب تعديل جديد | `desk.edit_request` | `sabqdesk://news/edit-request/<id>` | `{ articleId, editRequestId }` | `desk-edit-request-<id>` |
 
 ### ج) عزل إشعارات القارئ عن أجهزة الديسك
 تم تحديث `notifyEditorialEvent` في `server/services/editorialNotifications.ts` لفلترة أجهزة iOS حسب حزمة تطبيق القارئ (`bundleId = 'com.sabq.sabqorg'`) وتمرير `topic: 'com.sabq.sabqorg'` إلى APNs، مما يضمن عدم إرسال إشعارات القارئ/الكاتب إلى أجهزة `com.sabq.desk`.

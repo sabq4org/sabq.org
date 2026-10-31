@@ -3,18 +3,16 @@
 
 import { Router, type Response } from "express";
 import { requireAuth, userHasPermission } from "../rbac";
-import { EDIT_REQUEST_LIMITS, parseEditRequestInput, resolveApplyFields, type EditRequestProposal } from "@shared/articleEditRequests";
+import { EDIT_REQUEST_LIMITS, parseEditRequestInput } from "@shared/articleEditRequests";
+import { approveEditRequestWithEffects } from "../services/articleEditRequestApproval";
 import {
-  approveEditRequest,
   cancelEditRequest,
-  regenerateEditRequestDerived,
   createEditRequest,
   getEditRequestContext,
   getEditRequestDetail,
   listEditRequestsForList,
   rejectEditRequest,
 } from "../services/articleEditRequestsService";
-import { invalidateArticleWrite } from "../services/contentInvalidation";
 
 const router = Router();
 
@@ -108,42 +106,17 @@ router.post("/api/article-edit-requests/:id/approve", requireAuth, async (req: a
     ? req.body.updateLine.trim().slice(0, EDIT_REQUEST_LIMITS.updateLine)
     : null;
   try {
-    let fields: ReturnType<typeof resolveApplyFields> = [];
-    if (!manual) {
-      const detail = await getEditRequestDetail(req.params.id, { userId, reviewer: true });
-      if (!detail.ok) return fail(res, detail);
-      fields = resolveApplyFields(req.body?.fields, detail.request.proposed as EditRequestProposal);
-      if (!fields) return res.status(400).json({ message: "الحقول المختارة غير صالحة" });
-    }
-    const result = await approveEditRequest({ id: req.params.id, actorId: userId, fields: fields ?? [], updateLine, manual });
+    const result = await approveEditRequestWithEffects({
+      id: req.params.id,
+      actorId: userId,
+      requestedFields: req.body?.fields,
+      updateLine,
+      manual,
+      regenerate: req.body?.regenerate === true,
+      reason: "article-edit-request-approve",
+    });
     if (!result.ok) return fail(res, result);
-    if (result.changed) {
-      invalidateArticleWrite(result.article, {
-        reason: "article-edit-request-approve",
-        oldSlug: result.before.slug,
-        oldEnglishSlug: result.before.englishSlug,
-        warm: result.article.status === "published",
-      });
-    }
-    // إعادة توليد الموجز والسيو: اختيارية، فقط إن تغيّر العنوان أو النص، وبصلاحية أدوات الذكاء.
-    const textChanged = result.appliedFields.some((f) => f === "title" || f === "subtitle" || f === "content");
-    const regenerate = req.body?.regenerate === true && !manual && textChanged
-      && (await userHasPermission(userId, "articles.ai_generate"));
-    if (regenerate) {
-      const proposed = (result.request?.proposed ?? {}) as EditRequestProposal;
-      regenerateEditRequestDerived({
-        articleId: result.article.id,
-        actorId: userId,
-        keepImageAlt: result.appliedFields.includes("imageUrl") ? proposed.imageAlt ?? null : null,
-      })
-        .then((out) => {
-          if (out?.regenerated.length) {
-            invalidateArticleWrite(out.article, { reason: "article-edit-request-regenerate", warm: out.article.status === "published" });
-          }
-        })
-        .catch((error) => console.error("[edit-requests] regenerate failed", error));
-    }
-    res.json({ ok: true, appliedFields: result.appliedFields, missingParagraphs: result.missingParagraphs, regenerating: regenerate });
+    res.json({ ok: true, appliedFields: result.appliedFields, missingParagraphs: result.missingParagraphs, regenerating: result.regenerating });
   } catch (error) {
     console.error("[edit-requests] approve failed", error);
     res.status(500).json({ message: "تعذر اعتماد الطلب" });

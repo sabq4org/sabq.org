@@ -65,10 +65,26 @@ async function safe(label: string, task: () => Promise<unknown>): Promise<void> 
   }
 }
 
+/**
+ * خيارات مسار غير البوت (تطبيق «مكتب سبق»، 2026-10-31): اسم من نشر يظهر في
+ * بث المحررين وتنبيه رئيس التحرير، واستثناء صاحب القرار من تنبيه أصحاب الخبر،
+ * وبلا خصم رصيد وكالة (المحرر ليس ناشرًا). بلا خيارات = سلوك البوت كما كان.
+ */
+export interface ReleaseEffectsOptions {
+  actorName?: string;
+  excludeUserId?: string | null;
+  chargePublisherCredit?: boolean;
+  reason?: string;
+}
+
 /** إبطال متزامن ثم تنبيهات في الخلفية. يُستدعى بعد نجاح كتابة status=published. */
-export function queueBotDraftPublishEffects(article: BotDraftReleaseRow, botName: string): void {
+export function queueBotDraftPublishEffects(
+  article: BotDraftReleaseRow,
+  botName: string,
+  options: ReleaseEffectsOptions = {},
+): void {
   try {
-    invalidateArticleWrite(article, { reason: `bot-draft-publish:${botName}` });
+    invalidateArticleWrite(article, { reason: options.reason ?? `bot-draft-publish:${botName}` });
     memoryCache.delete("lite-feed");
   } catch (error) {
     console.error("[BotDrafts] publish cache invalidation failed:", error);
@@ -87,31 +103,36 @@ export function queueBotDraftPublishEffects(article: BotDraftReleaseRow, botName
         articleId: article.id,
         articleTitle: article.title,
         articleSlug: article.slug || null,
-        publisherName: `بوت ${botName}`,
+        publisherName: options.actorName ?? `بوت ${botName}`,
         publishedAt: (article.publishedAt instanceof Date ? article.publishedAt : new Date()).toISOString(),
       });
     })
     .catch((error) => console.error("[BotDrafts] publish broadcast failed:", error));
 
   setImmediate(() => {
-    void runPublishFanout(article);
+    void runPublishFanout(article, options);
   });
 }
 
 /** إبطال قوائم اللوحة وتنبيه الجدولة. لا IndexNow: الصفحة ليست عامة بعد. */
-export function queueBotDraftScheduleEffects(article: BotDraftReleaseRow, botName: string): void {
+export function queueBotDraftScheduleEffects(
+  article: BotDraftReleaseRow,
+  botName: string,
+  options: ReleaseEffectsOptions = {},
+): void {
   try {
-    invalidateArticleWrite(article, { reason: `bot-draft-schedule:${botName}`, warm: false });
+    invalidateArticleWrite(article, { reason: options.reason ?? `bot-draft-schedule:${botName}`, warm: false });
   } catch (error) {
     console.error("[BotDrafts] schedule cache invalidation failed:", error);
   }
 
   setImmediate(() => {
-    void runScheduleFanout(article);
+    void runScheduleFanout(article, options);
   });
 }
 
-async function runPublishFanout(article: BotDraftReleaseRow): Promise<void> {
+async function runPublishFanout(article: BotDraftReleaseRow, options: ReleaseEffectsOptions): Promise<void> {
+  const stakeholderOptions = options.excludeUserId ? { excludeUserId: options.excludeUserId } : undefined;
   const notificationType = article.newsType === "breaking" ? "breaking" : article.isFeatured ? "featured" : "published";
 
   await safe("reader notification", async () => {
@@ -143,24 +164,26 @@ async function runPublishFanout(article: BotDraftReleaseRow): Promise<void> {
       title: article.title,
       slug: article.slug,
       englishSlug: article.englishSlug || undefined,
-      authorName: "صحيفة سبق",
+      authorName: options.actorName ?? "صحيفة سبق",
       publishedAt: article.publishedAt ?? undefined,
     });
   });
 
   await safe("stakeholder notification", async () => {
     const { notifyArticleStakeholders } = await import("./editorialNotifications");
-    await notifyArticleStakeholders(stakeholderPayload(article), "published");
+    await notifyArticleStakeholders(stakeholderPayload(article), "published", undefined, stakeholderOptions);
   });
 
-  await safe("publisher credit", async () => {
-    const { deductPublisherCreditSafely } = await import("./publisherCreditService");
-    await deductPublisherCreditSafely({
-      authorUserId: article.sourceMetadata?.publisherOwnerUserId ?? article.authorId,
-      articleId: article.id,
-      actorId: article.sourceMetadata?.publisherUserId ?? article.authorId,
+  if (options.chargePublisherCredit !== false) {
+    await safe("publisher credit", async () => {
+      const { deductPublisherCreditSafely } = await import("./publisherCreditService");
+      await deductPublisherCreditSafely({
+        authorUserId: article.sourceMetadata?.publisherOwnerUserId ?? article.authorId,
+        articleId: article.id,
+        actorId: article.sourceMetadata?.publisherUserId ?? article.authorId,
+      });
     });
-  });
+  }
 
   await safe("lite image", async () => {
     const { refreshArticleLiteImage } = await import("./articleDerivedWrites");
@@ -195,13 +218,18 @@ async function runPublishFanout(article: BotDraftReleaseRow): Promise<void> {
   }
 }
 
-async function runScheduleFanout(article: BotDraftReleaseRow): Promise<void> {
+async function runScheduleFanout(article: BotDraftReleaseRow, options: ReleaseEffectsOptions): Promise<void> {
   const when = article.scheduledAt instanceof Date ? article.scheduledAt : article.scheduledAt ? new Date(article.scheduledAt) : null;
   if (!when || Number.isNaN(when.getTime())) return;
 
   await safe("schedule stakeholder", async () => {
     const { notifyArticleStakeholders } = await import("./editorialNotifications");
-    await notifyArticleStakeholders(stakeholderPayload(article), "scheduled");
+    await notifyArticleStakeholders(
+      stakeholderPayload(article),
+      "scheduled",
+      undefined,
+      options.excludeUserId ? { excludeUserId: options.excludeUserId } : undefined,
+    );
   });
 
   await safe("schedule reporter", async () => {

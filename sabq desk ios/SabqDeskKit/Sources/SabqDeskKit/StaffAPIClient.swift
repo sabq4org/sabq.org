@@ -227,6 +227,66 @@ public struct StaffAPIClient: Sendable {
         return envelope.job
     }
 
+    // MARK: - News («الأخبار», since 2026-10-31)
+
+    public func newsBoard(filter: StaffNewsFilter = .all) async throws -> StaffNewsBoard {
+        try await send("GET", "/api/v1/staff/news", query: [URLQueryItem(name: "filter", value: filter.rawValue)])
+    }
+
+    public func newsPreview(id: String) async throws -> StaffNewsPreview {
+        let envelope: StaffNewsPreviewEnvelope = try await send("GET", "/api/v1/staff/news/\(try pathID(id))")
+        return envelope.article
+    }
+
+    public func newsCategories() async throws -> [StaffNewsCategory] {
+        let envelope: StaffNewsCategoriesEnvelope = try await send("GET", "/api/v1/staff/news/categories")
+        return envelope.categories
+    }
+
+    /// `expectedUpdatedAt` is the preview's `updatedAt`: a colleague's save in
+    /// between answers 409 instead of being overwritten.
+    public func publishNews(id: String, expectedUpdatedAt: String?, categoryID: String? = nil) async throws -> StaffNewsActionResult {
+        try await send("POST", "/api/v1/staff/news/\(try pathID(id))/publish",
+                       body: NewsDecisionBody(expectedUpdatedAt: expectedUpdatedAt, categoryId: categoryID))
+    }
+
+    public func scheduleNews(id: String, at date: Date, expectedUpdatedAt: String?,
+                             categoryID: String? = nil) async throws -> StaffNewsActionResult {
+        try await send("POST", "/api/v1/staff/news/\(try pathID(id))/schedule",
+                       body: NewsDecisionBody(scheduledAt: RiyadhTime.isoString(date),
+                                              expectedUpdatedAt: expectedUpdatedAt, categoryId: categoryID))
+    }
+
+    /// The note is required (3…2000 characters); the server answers 400 otherwise.
+    public func returnNewsToReporter(id: String, note: String) async throws -> StaffNewsActionResult {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3 else { throw StaffAPIError.validation(message: "اكتب ملاحظتك للمراسل") }
+        return try await send("POST", "/api/v1/staff/news/\(try pathID(id))/return",
+                              body: OpinionNoteBody(note: String(trimmed.prefix(2000))))
+    }
+
+    public func editRequest(id: String) async throws -> StaffEditRequestDetail {
+        try await send("GET", "/api/v1/staff/news/edit-requests/\(try pathID(id))")
+    }
+
+    /// Applies the chosen fields; `regenerate` refreshes the summary and SEO
+    /// when the title or text changed (needs `articles.ai_generate`).
+    public func approveEditRequest(id: String, fields: [StaffEditRequestField], updateLine: String? = nil,
+                                   regenerate: Bool = false) async throws -> StaffEditRequestApproveResult {
+        let line = updateLine?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await send("POST", "/api/v1/staff/news/edit-requests/\(try pathID(id))/approve",
+                              body: EditRequestApproveBody(fields: fields.filter { $0 != .unknown }.map(\.rawValue),
+                                                           updateLine: line?.isEmpty == false ? line : nil,
+                                                           regenerate: regenerate))
+    }
+
+    public func rejectEditRequest(id: String, reason: String) async throws {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3 else { throw StaffAPIError.validation(message: "اكتب سبب الرفض ليصل للمراسل") }
+        let _: Ack = try await send("POST", "/api/v1/staff/news/edit-requests/\(try pathID(id))/reject",
+                                    body: EditRequestRejectBody(reason: String(trimmed.prefix(1000))))
+    }
+
     // MARK: - Notifications (the bell)
 
     /// «التنبيهات», newest first. `category` nil = «الكل».
@@ -464,4 +524,20 @@ private struct PushTokenBody: Encodable {
 
 private struct TokenOnlyBody: Encodable {
     var token: String
+}
+
+private struct NewsDecisionBody: Encodable {
+    var scheduledAt: String?
+    var expectedUpdatedAt: String?
+    var categoryId: String?
+}
+
+private struct EditRequestApproveBody: Encodable {
+    var fields: [String]
+    var updateLine: String?
+    var regenerate: Bool
+}
+
+private struct EditRequestRejectBody: Encodable {
+    var reason: String
 }

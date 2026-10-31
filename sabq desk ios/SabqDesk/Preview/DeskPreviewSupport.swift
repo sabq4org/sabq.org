@@ -25,6 +25,10 @@ struct DeskPreviewTransport: HTTPTransport {
         case "/api/v1/staff/opinion/board": body = Self.opinionBoardJSON(empty: emptyOpinion)
         case let path where path.hasPrefix("/api/v1/staff/opinion/"):
             body = Self.opinionActionJSON(path: path)
+        case "/api/v1/staff/news": body = Self.newsBoardJSON
+        case "/api/v1/staff/news/categories": body = #"{"categories":[{"id":"c1","name":"محليات"},{"id":"c2","name":"اقتصاد"}]}"#
+        case let path where path.hasPrefix("/api/v1/staff/news/edit-requests/"): body = Self.editRequestJSON
+        case let path where path.hasPrefix("/api/v1/staff/news/"): body = Self.newsPreviewJSON
         case let path where path.hasPrefix("/api/v1/staff/system/balances/"):
             // GET …/balances/<p>, POST …/<p>/topup and PUT …/<p>/threshold all answer the detail.
             let provider = path.dropFirst("/api/v1/staff/system/balances/".count).split(separator: "/").first
@@ -34,6 +38,57 @@ struct DeskPreviewTransport: HTTPTransport {
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
         return (Data(body.utf8), response)
     }
+
+    nonisolated static let newsBoardJSON = """
+    {
+      "counts": {"all": 3, "reporters": 1, "editRequests": 1, "email": 1},
+      "oldestAt": "2026-10-31T04:20:00.000Z",
+      "editRequestsReady": true,
+      "items": [
+        {"kind": "draft", "id": "preview-news-1", "articleId": "preview-news-1",
+         "title": "أمطار غزيرة على جدة وتعليق الدراسة الحضورية غدًا في عدد من المحافظات",
+         "subtitle": null, "channel": "app", "reporterName": "مراسل جدة", "categoryName": "محليات",
+         "imageUrl": null, "thumbnailUrl": null, "albumCount": 4, "isBreaking": true, "lockedBy": null,
+         "submittedAt": "2026-10-31T07:40:00.000Z"},
+        {"kind": "edit_request", "id": "preview-req-1", "articleId": "preview-news-9",
+         "title": "افتتاح معرض الرياض الدولي للكتاب بمشاركة أكثر من 2000 دار نشر",
+         "articleStatus": "published", "requesterName": "مراسل الرياض", "urgent": false,
+         "note": "الرقم الصحيح 2100 دار", "fields": ["title", "content", "albumImages"],
+         "label": "3 تغييرات", "imageUrl": null, "submittedAt": "2026-10-31T05:40:00.000Z"},
+        {"kind": "draft", "id": "preview-news-2", "articleId": "preview-news-2",
+         "title": "هيئة الأرصاد: رياح نشطة مثيرة للأتربة على المنطقة الشرقية حتى الأحد",
+         "subtitle": null, "channel": "email", "reporterName": "واس", "categoryName": null,
+         "imageUrl": null, "thumbnailUrl": null, "albumCount": 0, "isBreaking": false, "lockedBy": null,
+         "submittedAt": "2026-10-31T04:20:00.000Z"}
+      ]
+    }
+    """
+
+    nonisolated static let newsPreviewJSON = """
+    {"article": {"id": "preview-news-1", "title": "أمطار غزيرة على جدة وتعليق الدراسة الحضورية غدًا",
+     "subtitle": "الإدارة العامة للتعليم تعلن التحول إلى «مدرستي» احترازيًا", "slug": "jeddah-rain",
+     "status": "draft", "reviewStatus": "pending_review",
+     "content": "<p>شهدت محافظة جدة صباح اليوم هطول أمطار غزيرة صاحبتها رياح نشطة.</p>",
+     "excerpt": null, "imageUrl": null, "albumImages": [], "category": {"id": "c1", "name": "محليات"},
+     "isBreaking": true, "channel": "app", "reporterName": "مراسل جدة", "submittedAt": "2026-10-31T07:40:00.000Z",
+     "summaryReady": true, "seoReady": true, "lockedBy": null,
+     "webEditUrl": "https://sabq.org/dashboard/articles/preview-news-1/edit", "pendingEditRequestId": null,
+     "updatedAt": "2026-10-31T07:40:00.000Z"}}
+    """
+
+    nonisolated static let editRequestJSON = """
+    {"request": {"id": "preview-req-1", "articleId": "preview-news-9", "status": "pending", "urgent": false,
+      "note": "حضر وزير الثقافة الافتتاح، والرقم الصحيح 2100 دار.", "requesterName": "مراسل الرياض",
+      "decidedByName": null, "decisionNote": null,
+      "proposed": {"title": "وزير الثقافة يفتتح معرض الرياض الدولي للكتاب بمشاركة 2100 دار نشر",
+                   "contentEdits": [{"before": "افتتح المعرض بمشاركة أكثر من 2000 دار نشر", "after": "افتتح المعرض بحضور وزير الثقافة ومشاركة 2100 دار نشر"}],
+                   "albumAdd": []},
+      "createdAt": "2026-10-31T05:40:00.000Z"},
+     "article": {"id": "preview-news-9", "title": "افتتاح معرض الرياض الدولي للكتاب بمشاركة أكثر من 2000 دار نشر",
+                 "subtitle": null, "status": "published", "imageUrl": null, "albumImages": []},
+     "fields": ["title", "content"],
+     "contentEdits": [{"before": "افتتح المعرض بمشاركة أكثر من 2000 دار نشر", "after": "افتتح المعرض بحضور وزير الثقافة ومشاركة 2100 دار نشر", "found": true}]}
+    """
 
     nonisolated static let emptyInboxJSON = #"{"items":[],"nextCursor":null,"hasMore":false}"#
 
@@ -341,7 +396,8 @@ enum DeskPreviewFixtures {
                                                             canSystemHealth: true, canAdminAlerts: true,
                                                             canManageBalances: true,
                                                             canOpinion: .init(view: true, schedule: true,
-                                                                              publish: true, returnToWriter: true)),
+                                                                              publish: true, returnToWriter: true),
+                                                            canNews: true),
                             alertPrefs: StaffAlertPrefs())
 
     static func client(emptyInbox: Bool, emptyOpinion: Bool = false) -> StaffAPIClient {
@@ -366,6 +422,7 @@ struct DeskPreviewHost<Content: View>: View {
                                      client: DeskPreviewFixtures.client(emptyInbox: emptyInbox,
                                                                         emptyOpinion: emptyOpinion))
         model.setOpinionPending(emptyOpinion ? 0 : 3)
+        model.setNewsPending(3)
         _model = State(initialValue: model)
         let defaults = UserDefaults(suiteName: "com.sabq.desk.preview") ?? .standard
         _appLock = State(initialValue: AppLockController(preference: AppLockPreference(defaults: defaults),
@@ -400,6 +457,8 @@ enum DeskScreenshotScene: String {
     case opinion, opinionmid, opinionempty
     /// Scrolled to the «بلا موعد ثابت» section (guest writer card).
     case opinionnoslot
+    /// «الأخبار» list, the news preview and the edit-request review (2026-10-31).
+    case news, newspreview, editrequest
 
     static let current = ProcessInfo.processInfo.environment["DESK_SHOT"].flatMap(Self.init(rawValue:))
 
@@ -412,12 +471,16 @@ enum DeskScreenshotScene: String {
         // Focusing the scheduled card scrolls past the first two slots.
         case .opinionmid: return .opinion(id: "preview-op-4")
         case .opinionnoslot: return .opinion(id: "preview-op-3")
+        case .news: return nil
+        case .newspreview: return .news(id: "preview-news-1")
+        case .editrequest: return .editRequest(id: "preview-req-1")
         }
     }
 
     var tab: MainTabView.Tab? {
         switch self {
         case .opinion, .opinionmid, .opinionempty, .opinionnoslot: return .opinion
+        case .news, .newspreview, .editrequest: return .news
         default: return nil
         }
     }

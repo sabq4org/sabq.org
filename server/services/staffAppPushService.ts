@@ -421,3 +421,66 @@ export async function notifyStaffDeskOfPublisherNews(input: {
     return 0;
   }
 }
+
+/**
+ * خبر من مراسل بانتظار القرار، أو «طلب تعديل» على خبر (2026-10-31): إشعار لكل
+ * من يملك articles.publish (عدا المرسل نفسه)، يحترم مفتاح «أخبار المراسلين»
+ * (`newsDrafts`) والساعات الهادئة. يفتح تبويب «الأخبار» على الخبر أو الطلب. لا يرمي.
+ */
+export async function notifyStaffDeskOfNewsItem(input: {
+  kind: "draft" | "edit_request";
+  articleId: string;
+  /** معرّف طلب التعديل (edit_request فقط). */
+  requestId?: string | null;
+  title: string;
+  senderName: string;
+  senderId?: string | null;
+  urgent?: boolean;
+  /** «العنوان والنص»، «+3 صور»… لطلب التعديل. */
+  label?: string | null;
+}): Promise<number> {
+  try {
+    const recipientIds = await listStaffPermissionRecipientUserIds(
+      PERMISSION_CODES.ARTICLES_PUBLISH,
+      input.senderId,
+    );
+    if (recipientIds.length === 0) return 0;
+    const prefs = await loadStaffDeskPrefs(recipientIds);
+    const isRequest = input.kind === "edit_request";
+    const title = isRequest
+      ? `${input.urgent ? "طلب تعديل عاجل" : "طلب تعديل"} من ${input.senderName}`
+      : `خبر جديد من ${input.senderName}`;
+    const excerpt = clipDeskAlertExcerpt(input.title, 160);
+    const body = isRequest && input.label ? `${input.label}: ${excerpt}` : excerpt;
+    const deeplink = isRequest && input.requestId
+      ? `sabqdesk://news/edit-request/${input.requestId}`
+      : `sabqdesk://news/${input.articleId}`;
+    const results = await Promise.all(
+      recipientIds.map(async (recipientId) => {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), "newsDrafts", {
+          title,
+          body,
+          type: isRequest ? "desk.edit_request" : "desk.news_draft",
+          deeplink,
+          data: {
+            articleId: input.articleId,
+            ...(isRequest && input.requestId ? { editRequestId: input.requestId } : {}),
+          },
+          collapseId: isRequest ? `desk-edit-request-${input.requestId}` : `desk-news-draft-${input.articleId}`,
+        });
+        if (!message) return 0;
+        try {
+          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
+          return r.sent;
+        } catch (pushErr) {
+          console.error("[StaffAppPush] news item push to recipient failed:", pushErr);
+          return 0;
+        }
+      }),
+    );
+    return results.reduce((a, b) => a + b, 0);
+  } catch (err) {
+    console.error("[StaffAppPush] notifyStaffDeskOfNewsItem failed:", err);
+    return 0;
+  }
+}

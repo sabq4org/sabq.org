@@ -35,6 +35,13 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
     /// «أخبار» in the notifications center: news published from «نشر سبق»
     /// (`articles.publish`). False when an older server omits it.
     public var canPublisherNews: Bool
+    /// «الأخبار» tab: reporter drafts, email drafts and edit requests
+    /// (`articles.publish`, since 2026-10-31). False when an older server omits it.
+    public var canNews: Bool
+    /// Sends news from the app (reporter roles). Phase 2; decoded now.
+    public var canReport: Bool
+    /// Sends opinion articles from the app (writer roles). Phase 3; decoded now.
+    public var canWrite: Bool
 
     /// Opinion desk rights, computed server-side from live RBAC
     /// (`computeStaffOpinionCapabilities` in shared/staffApp.ts).
@@ -64,12 +71,14 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case canTickets, canSocial, canSystemHealth, canAdminAlerts, canManageBalances, canOpinion, canPublisherNews
+        case canNews, canReport, canWrite
     }
 
     public init(canTickets: Bool = false, canSocial: Social = Social(),
                 canSystemHealth: Bool = false, canAdminAlerts: Bool = false,
                 canManageBalances: Bool = false, canOpinion: Opinion = Opinion(),
-                canPublisherNews: Bool = false) {
+                canPublisherNews: Bool = false, canNews: Bool = false,
+                canReport: Bool = false, canWrite: Bool = false) {
         self.canTickets = canTickets
         self.canSocial = canSocial
         self.canSystemHealth = canSystemHealth
@@ -77,6 +86,9 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
         self.canManageBalances = canManageBalances
         self.canOpinion = canOpinion
         self.canPublisherNews = canPublisherNews
+        self.canNews = canNews
+        self.canReport = canReport
+        self.canWrite = canWrite
     }
 
     public init(from decoder: Decoder) throws {
@@ -88,6 +100,9 @@ public struct StaffCapabilities: Codable, Sendable, Equatable {
         canManageBalances = try container.decodeIfPresent(Bool.self, forKey: .canManageBalances) ?? false
         canOpinion = (try? container.decodeIfPresent(Opinion.self, forKey: .canOpinion)) ?? Opinion()
         canPublisherNews = try container.decodeIfPresent(Bool.self, forKey: .canPublisherNews) ?? false
+        canNews = try container.decodeIfPresent(Bool.self, forKey: .canNews) ?? false
+        canReport = try container.decodeIfPresent(Bool.self, forKey: .canReport) ?? false
+        canWrite = try container.decodeIfPresent(Bool.self, forKey: .canWrite) ?? false
     }
 
     public static let none = StaffCapabilities()
