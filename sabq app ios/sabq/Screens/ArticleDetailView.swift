@@ -842,7 +842,7 @@ struct ArticleDetailView: View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
             : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
-        return NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
+        return NavigationLink(value: AuthorRoute(name: displayArticle.author, avatarURL: displayArticle.authorImageURL, role: reporterTitle ?? displayArticle.authorRole)) {
             layout {
                 OpinionAuthorAvatar(
                     name: displayArticle.author,

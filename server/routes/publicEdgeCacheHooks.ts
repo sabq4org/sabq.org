@@ -25,6 +25,7 @@ export const PUBLIC_EDGE_CACHE_ROUTES: readonly PublicEdgeRoute[] = [
   { match: (p) => p === "/api/v1/articles", ttl: 15 },
   { match: (p) => p === "/api/v1/sections", ttl: 300 },
   { match: (p) => p === "/api/v1/trending", ttl: 60 },
+  { match: (p) => p === "/api/v1/authors/by-name", ttl: 120 },
   { match: (p) => p === "/api/homepage", ttl: 60 },
   { match: (p) => p === "/api/categories", ttl: 60 },
   { match: (p) => p === "/api/sports/competitions", ttl: 300 },

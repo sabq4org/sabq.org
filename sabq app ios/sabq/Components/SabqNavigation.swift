@@ -313,7 +313,7 @@ private struct SabqDestinations: ViewModifier {
                     .duoContentInsets()
             }
             .navigationDestination(for: AuthorRoute.self) { route in
-                AuthorArticlesView(authorName: route.name)
+                AuthorArticlesView(authorName: route.name, initialAvatarURL: route.avatarURL, initialRole: route.role)
                     .duoContentInsets()
             }
             .navigationDestination(for: CalendarRoute.self) { _ in

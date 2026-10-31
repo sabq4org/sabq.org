@@ -29,6 +29,7 @@ describe("public edge cache marker", () => {
     expect(publicEdgeCacheTtl(req("/api/v1/articles"))).toBe(15);
     expect(publicEdgeCacheTtl(req("/api/v1/sections"))).toBe(300);
     expect(publicEdgeCacheTtl(req("/api/v1/trending"))).toBe(60);
+    expect(publicEdgeCacheTtl(req("/api/v1/authors/by-name", { query: { name: "صحيفة سبق" } }))).toBe(120);
     expect(publicEdgeCacheTtl(req("/api/homepage"))).toBe(60);
     expect(publicEdgeCacheTtl(req("/api/categories"))).toBe(60);
     expect(publicEdgeCacheTtl(req("/api/sports/competitions"))).toBe(300);

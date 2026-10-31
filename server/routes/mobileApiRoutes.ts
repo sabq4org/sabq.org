@@ -3065,6 +3065,7 @@ import { memoryCache as sharedMemoryCache, withSWR, withCache, CACHE_TTL } from 
 import { readWithFreshWindow } from "../utils/freshWindowCache";
 import { getApprovedCommentTree } from "../services/mobileCommentTreeService";
 import { getLiveArticleViews } from "../services/articleViewCounterService";
+import { getMobileAuthorPage } from "../services/mobileAuthorPageService";
 
 function getCached(key: string) {
   return sharedMemoryCache.get(key);
@@ -3681,23 +3682,8 @@ router.get("/trending", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/v1/authors/by-name?name=<full name>
-//
-// Lightweight author profile for the iOS "writer page". The mobile client
-// only knows the byline string (the reporter row or, as fallback, the
-// staff author row), so we resolve by concatenated first+last name in
-// either the reporter (`reporter_id`) or author (`author_id`) slot.
-//
-// Response shape — designed to power a hero card + stats strip + top-
-// categories chip row + recent-articles list in a single round trip:
-//
-//   {
-//     author: { id, name, role, avatarUrl, bio, jobTitle, department,
-//               joinedAt },
-//     stats:  { articleCount, totalViews, totalLikes, weeksActive },
-//     topCategories: [ { id, nameAr, count, color, icon } ... up to 3 ],
-//     recentArticles: [ ...formatArticleForMobile ... up to 30 ]
-//   }
+// GET /api/v1/authors/by-name?name=<full name> — صفحة الكاتب في التطبيقات.
+// الاستعلامات والكاش في server/services/mobileAuthorPageService.ts.
 router.get("/authors/by-name", async (req: Request, res: Response) => {
   try {
     const rawName = (req.query.name as string | undefined)?.trim();
@@ -3706,135 +3692,21 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
         error: { code: "INVALID_INPUT", message: "اسم الكاتب مطلوب", status: 400 },
       });
     }
-
     const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 30, maxLimit: 100, allowPage: true, defaultPage: 1 }, (m) => log.warn(m));
     if (!pg) return;
-    const { limit, offset, page } = pg;
-
-    const cacheKey = `mobile:author:${rawName.toLowerCase()}:p${page}:l${limit}`;
-    const cached = getCached(cacheKey);
-    if (cached) return res.json(cached);
-
-    // Find the user whose `first_name + ' ' + last_name` matches the
-    // byline. The DB has duplicate user rows for some authors (e.g.
-    // "صحيفة سبق" exists twice — one legacy account with 690K historical
-    // articles that hasn't published since 2026-01, and one active
-    // account that's actually used today). The previous `ORDER BY
-    // published_count DESC` picked the legacy user → author page
-    // showed Jan-2026 articles instead of today's news. We now rank by
-    // `latest_published DESC` so the byline always resolves to the
-    // user who's currently writing under that name. published_count
-    // is the tie-breaker.
-    const userRow = await db.execute(sql`
-      SELECT u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
-             u.job_title, u.department, u.created_at,
-             COUNT(a.id) AS published_count,
-             MAX(a.published_at) AS latest_published
-      FROM users u
-      LEFT JOIN articles a
-        ON a.status = 'published'
-        AND (a.author_id = u.id OR a.reporter_id = u.id)
-      WHERE LOWER(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')))
-            = LOWER(${rawName})
-      GROUP BY u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
-               u.job_title, u.department, u.created_at
-      ORDER BY latest_published DESC NULLS LAST,
-               published_count DESC,
-               u.created_at ASC
-      LIMIT 1
-    `) as any;
-    const author = (userRow?.rows || userRow || [])[0];
-
-    if (!author) {
+    const result = await getMobileAuthorPage({
+      name: rawName,
+      page: pg.page,
+      limit: boundedLimit(pg.limit),
+      offset: pg.offset,
+      baseUrl: BASE_URL,
+      formatArticle: (row) => formatArticleForMobile(row, BASE_URL),
+    });
+    if (!result) {
       return res.status(404).json({
         error: { code: "NOT_FOUND", message: "لم يتم العثور على الكاتب", status: 404 },
       });
     }
-
-    // Run stats, categories, and articles queries in parallel — they
-    // all depend only on author.id and were previously sequential (~3×
-    // round-trip latency savings).
-    const [statsRow, topCatsRows, recent] = await Promise.all([
-      db.execute(sql`
-        SELECT
-          COUNT(DISTINCT a.id) AS article_count,
-          COALESCE(SUM(a.views), 0) AS total_views,
-          MIN(a.published_at) AS earliest_publish
-        FROM articles a
-        WHERE a.status = 'published'
-          AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
-      `) as any,
-
-      db.execute(sql`
-        SELECT c.id, c.name_ar, c.color, c.icon, COUNT(*) AS count
-        FROM articles a
-        INNER JOIN categories c ON a.category_id = c.id
-        WHERE a.status = 'published'
-          AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
-        GROUP BY c.id, c.name_ar, c.color, c.icon
-        ORDER BY count DESC
-        LIMIT 3
-      `) as any,
-
-      db
-        .select({
-          article: articleCardSelect,
-          category: { nameAr: categories.nameAr, id: categories.id },
-          author: { firstName: users.firstName, lastName: users.lastName },
-          reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
-        })
-        .from(articles)
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(users, eq(articles.authorId, users.id))
-        .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-        .where(
-          and(
-            eq(articles.status, "published"),
-            or(eq(articles.reporterId, author.id), eq(articles.authorId, author.id)),
-          )
-        )
-        .orderBy(desc(articles.publishedAt))
-        .limit(boundedLimit(limit))
-        .offset(offset),
-    ]);
-
-    const stats = (statsRow?.rows || statsRow || [])[0] || {};
-    const topCategories = (topCatsRows?.rows || topCatsRows || []).map((r: any) => ({
-      id: r.id,
-      nameAr: r.name_ar,
-      color: r.color,
-      icon: r.icon,
-      count: Number(r.count) || 0,
-    }));
-
-    const role = author.job_title || author.department || "كاتب في سبق";
-    const fullName = [author.first_name, author.last_name].filter(Boolean).join(" ").trim();
-
-    const result = {
-      author: {
-        id: author.id,
-        name: fullName || rawName,
-        role,
-        avatarUrl: author.profile_image_url
-          ? (String(author.profile_image_url).startsWith("http")
-              ? author.profile_image_url
-              : `${BASE_URL}${String(author.profile_image_url).startsWith("/") ? "" : "/"}${author.profile_image_url}`)
-          : null,
-        bio: author.bio || null,
-        jobTitle: author.job_title || null,
-        department: author.department || null,
-        joinedAt: author.created_at?.toISOString?.() || author.created_at || null,
-      },
-      stats: {
-        articleCount: Number(stats.article_count) || 0,
-        totalViews: Number(stats.total_views) || 0,
-        earliestPublish: stats.earliest_publish?.toISOString?.() || stats.earliest_publish || null,
-      },
-      topCategories,
-      recentArticles: recent.map((r) => formatArticleForMobile(r, BASE_URL)),
-    };
-
-    setCache(cacheKey, result, 5 * 60 * 1000);
     res.json(result);
   } catch (error) {
     console.error("[Mobile API] GET /authors/by-name error:", error);

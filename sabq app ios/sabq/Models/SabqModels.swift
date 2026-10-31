@@ -301,6 +301,10 @@ struct TrendingRoute: Hashable {}
 
 struct AuthorRoute: Hashable {
     let name: String
+    /// صورة الكاتب وصفته من سطر الكاتب في الخبر — يظهر بهما رأس صفحة الكاتب
+    /// فورًا بدل حرف في دائرة حتى يصل رد الخادم.
+    var avatarURL: String? = nil
+    var role: String? = nil
 }
 
 struct LiveCoverageRoute: Hashable {}

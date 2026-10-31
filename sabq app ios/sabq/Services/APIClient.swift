@@ -559,6 +559,22 @@ actor APIClient {
         try await get(APIAuthorPage.self, path: "/authors/by-name", query: ["name": name])
     }
 
+    /// صفحة الكاتب مع بايتاتها الخام — تُحفظ على الجهاز فتظهر فورًا في الزيارة
+    /// التالية قبل وصول التحديث (بلاغ بطء صفحة الكاتب 2026-10-31).
+    func fetchAuthorPageWithData(name: String) async throws -> (page: APIAuthorPage, data: Data) {
+        let url = try buildURL(path: "/authors/by-name", query: ["name": name])
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        applyHeaders(&request)
+        let (data, response) = try await session.data(for: request)
+        try ensureSuccess(response)
+        do {
+            return (try decoder.decode(APIAuthorPage.self, from: data), data)
+        } catch {
+            throw APIError.decodingError
+        }
+    }
+
     // MARK: - Breaking News
 
     /// Dashboard-managed breaking-news strip (شريط الأخبار العاجلة). Hits the
