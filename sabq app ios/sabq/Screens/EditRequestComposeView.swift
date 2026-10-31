@@ -25,7 +25,11 @@ struct EditRequestComposeView: View {
     @State private var heroItem: PhotosPickerItem?
     @State private var heroURL: String?
     @State private var heroPreview: UIImage?
-    @State private var uploading: String?
+    /// الألبوم والصورة البارزة قد يُرفعان معًا؛ لكل منهما حالته حتى لا
+    /// يُفعَّل الإرسال قبل اكتمال الاثنين.
+    @State private var albumUploading: String?
+    @State private var heroUploading = false
+    private var uploading: String? { albumUploading ?? (heroUploading ? "رفع الصورة البارزة" : nil) }
     @State private var urgent = false
     @State private var sending = false
     @State private var sendError: String?
@@ -287,7 +291,7 @@ struct EditRequestComposeView: View {
         sendError = nil
         for (index, item) in items.enumerated() {
             guard albumURLs.count < Self.albumLimit else { break }
-            uploading = "رفع الصور \(index + 1) من \(items.count)"
+            albumUploading = "رفع الصور \(index + 1) من \(items.count)"
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
             do {
                 let url = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-album")
@@ -297,15 +301,15 @@ struct EditRequestComposeView: View {
                 sendError = "تعذر رفع إحدى الصور. حاول مجددًا."
             }
         }
-        uploading = nil
+        albumUploading = nil
         albumItems = []
     }
 
     private func uploadHero(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         sendError = nil
-        uploading = "رفع الصورة البارزة"
-        defer { uploading = nil }
+        heroUploading = true
+        defer { heroUploading = false }
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
         do {
             heroURL = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-hero")
@@ -316,7 +320,7 @@ struct EditRequestComposeView: View {
     }
 
     private func send() async {
-        guard let context else { return }
+        guard let context, uploading == nil else { return }
         sending = true
         sendError = nil
         defer { sending = false }

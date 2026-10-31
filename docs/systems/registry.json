@@ -456,6 +456,7 @@
         "server/services/mobileEditorialService.ts",
         "docs/systems/editorial/MOBILE_EDITORIAL_API.md",
         "tests/unit/mobileEditorial.test.ts",
+        "tests/unit/mobileEditorialService.test.ts",
         "sabq desk ios/**",
         ".github/workflows/sabq-desk-ios-build.yml",
         "server/services/staffAlertPrefsService.ts",

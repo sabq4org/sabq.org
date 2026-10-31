@@ -4,8 +4,10 @@
 //
 // ثلاثة استعلامات صغيرة (المؤلف، المراسل، المُرسِل) بدل OR واحد: OR على
 // الأعمدة الثلاثة يمسح الجدول ويتجاوز مهلة الاستعلام (57014، #2044).
+// العدادات والفلتر والترتيب على كل أخبار النافذة، ثم تُجلب الأعمدة الكاملة
+// للمئة المعروضة فقط.
 
-import { and, desc, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, eq, gte, inArray, ne } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditRequests, articles, categories } from "@shared/schema";
 import { articleAcceptsEditRequests, editRequestShortLabel, type EditRequestProposal } from "@shared/articleEditRequests";
@@ -70,26 +72,38 @@ type Row = {
   publishedAt: Date | null;
 };
 
-async function ownedRows(userId: string, since: Date): Promise<Row[]> {
+type Brief = { id: string; status: string | null; reviewStatus: string | null; updatedAt: Date | null };
+
+/**
+ * كل أخبار المستخدم في النافذة بأعمدة خفيفة (بلا حد)، فتُحسب العدادات
+ * ويُطبَّق الفلتر والترتيب على الكل قبل اقتطاع ما يُعرض.
+ */
+async function ownedBriefs(userId: string, since: Date): Promise<Brief[]> {
   const owner = [articles.authorId, articles.reporterId, articles.submitterId] as const;
   const batches = await Promise.all(
     owner.map((column) =>
       db
-        .select(columns)
+        .select({ id: articles.id, status: articles.status, reviewStatus: articles.reviewStatus, updatedAt: articles.updatedAt })
         .from(articles)
-        .leftJoin(categories, eq(categories.id, articles.categoryId))
         .where(and(
           eq(column, userId),
           ne(articles.articleType, "opinion"),
           gte(articles.updatedAt, since),
-        ))
-        .orderBy(desc(articles.updatedAt))
-        .limit(MY_NEWS_LIST_LIMIT),
+        )),
     ),
   );
-  const byId = new Map<string, Row>();
-  for (const row of batches.flat() as Row[]) byId.set(row.id, row);
+  const byId = new Map<string, Brief>();
+  for (const row of batches.flat() as Brief[]) byId.set(row.id, row);
   return Array.from(byId.values());
+}
+
+async function fullRows(ids: string[]): Promise<Row[]> {
+  if (!ids.length) return [];
+  return (await db
+    .select(columns)
+    .from(articles)
+    .leftJoin(categories, eq(categories.id, articles.categoryId))
+    .where(inArray(articles.id, ids))) as Row[];
 }
 
 async function pendingRequests(userId: string, articleIds: string[]) {
@@ -125,14 +139,27 @@ async function pendingRequests(userId: string, articleIds: string[]) {
 
 export async function getMyNewsBoard(input: { userId: string; filter: MyNewsFilter; now?: Date }): Promise<MyNewsBoard> {
   const now = input.now ?? new Date();
-  const rows = await ownedRows(input.userId, new Date(now.getTime() - MY_NEWS_WINDOW_DAYS * DAY_MS));
-  const requests = await pendingRequests(input.userId, rows.map((row) => row.id));
+  const briefs = await ownedBriefs(input.userId, new Date(now.getTime() - MY_NEWS_WINDOW_DAYS * DAY_MS));
+  const classified = briefs.map((row) => ({
+    id: row.id,
+    state: myNewsStatus(row),
+    updatedAt: iso(row.updatedAt) ?? new Date(0).toISOString(),
+  }));
+  const sortedAll = sortMyNews(classified);
+  const shownIds = filterMyNews(sortedAll, input.filter).slice(0, MY_NEWS_LIST_LIMIT).map((row) => row.id);
 
-  const items: MyNewsItem[] = rows.map((row) => {
+  const rows = await fullRows(shownIds);
+  const requests = await pendingRequests(input.userId, shownIds);
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+  const items: MyNewsItem[] = [];
+  for (const id of shownIds) {
+    const row = rowsById.get(id);
+    if (!row) continue;
     const state = myNewsStatus(row);
     const slug = row.englishSlug || row.slug;
     const pending = requests.map.get(row.id) ?? null;
-    return {
+    items.push({
       id: row.id,
       title: row.title,
       state,
@@ -151,13 +178,12 @@ export async function getMyNewsBoard(input: { userId: string; filter: MyNewsFilt
       publishedAt: iso(row.publishedAt),
       pendingEditRequest: pending,
       canRequestEdit: requests.ready && !pending && articleAcceptsEditRequests(row.status),
-    };
-  });
+    });
+  }
 
-  const sorted = sortMyNews(items);
   return {
-    counts: countMyNews(sorted),
+    counts: countMyNews(classified),
     editRequestsReady: requests.ready,
-    items: filterMyNews(sorted, input.filter).slice(0, MY_NEWS_LIST_LIMIT),
+    items,
   };
 }
