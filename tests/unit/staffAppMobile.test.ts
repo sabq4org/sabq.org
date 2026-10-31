@@ -1441,7 +1441,7 @@ describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
         type: "editorial.published",
         deeplink: "sabq://opinion/published-op",
         category: "EDITORIAL_PUBLISHED",
-        data: { article_slug: "published-op" },
+        data: { article_slug: "published-op", notification_id: "ed-notif-1" },
       }),
     );
     expect(mocks.sendPushNotification).not.toHaveBeenCalled();

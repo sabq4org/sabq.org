@@ -341,7 +341,12 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
         ? "time-sensitive"
         : "active",
       category: `EDITORIAL_${args.event.toUpperCase()}`,
-      data: args.event === "published" && args.article.slug ? { article_slug: args.article.slug } : undefined,
+      // notification_id lets Android open the decision detail for events
+      // without an article page (rejected / archived / deleted).
+      data: {
+        notification_id: String(logRow.id),
+        ...(args.event === "published" && args.article.slug ? { article_slug: args.article.slug } : {}),
+      },
     });
 
     await db.update(editorialNotifications)
