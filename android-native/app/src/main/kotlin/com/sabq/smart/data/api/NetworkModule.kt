@@ -41,6 +41,12 @@ import retrofit2.Retrofit
 // يفعله iOS (URLConstants.apiOrigin) ونقاط الرياضة هنا أصلًا.
 private const val BASE_URL = "https://api.sabq.org/"
 
+/** المضيفات التي تستحق رمز الجلسة: HTTPS على نطاق سبق، لا media/cdn. */
+private val SABQ_AUTH_HOSTS = setOf("api.sabq.org", "sabq.org", "www.sabq.org")
+
+internal fun okhttp3.HttpUrl.isSabqApiHost(): Boolean =
+    isHttps && host.lowercase() in SABQ_AUTH_HOSTS
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
@@ -68,7 +74,11 @@ object NetworkModule {
         val request = chain.request().newBuilder().apply {
             header("Accept", "application/json")
             header("User-Agent", "Sabq-Android/${BuildConfig.VERSION_NAME}")
-            token?.let { header("Authorization", "Bearer $it") }
+            // الرمز يذهب لخادم سبق فقط: Coil يشارك هذا العميل لكل الصور، وصورة
+            // من مضيف خارجي (مثلًا رابط في طلب تعديل) كانت ستستلم جلسة المستخدم.
+            if (chain.request().url.isSabqApiHost()) {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
         }.build()
         chain.proceed(request)
     }
