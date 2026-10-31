@@ -11,7 +11,7 @@ final class BookmarksStore {
 
     private let storageKey = "sabq_bookmarks_v1"
     private let articleCacheKey = "sabq_bookmarks_articles_v1"
-    private let orderKey = "sabq_bookmarks_order_v1"
+    private let orderDefaultsName = "sabq_bookmarks_order_v1"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: storageKey),
@@ -24,7 +24,7 @@ final class BookmarksStore {
                 cachedArticles[cached.id] = cached.toArticle()
             }
         }
-        if let data = UserDefaults.standard.data(forKey: orderKey),
+        if let data = UserDefaults.standard.data(forKey: orderDefaultsName),
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             savedOrder = decoded.filter { bookmarkedIDs.contains($0) }
         }
@@ -212,7 +212,7 @@ final class BookmarksStore {
         cachedArticles.removeAll()
         savedOrder.removeAll()
         UserDefaults.standard.removeObject(forKey: storageKey)
-        UserDefaults.standard.removeObject(forKey: orderKey)
+        UserDefaults.standard.removeObject(forKey: orderDefaultsName)
         UserDefaults.standard.removeObject(forKey: articleCacheKey)
     }
 
@@ -221,7 +221,7 @@ final class BookmarksStore {
             UserDefaults.standard.set(data, forKey: storageKey)
         }
         if let data = try? JSONEncoder().encode(savedOrder) {
-            UserDefaults.standard.set(data, forKey: orderKey)
+            UserDefaults.standard.set(data, forKey: orderDefaultsName)
         }
     }
 
