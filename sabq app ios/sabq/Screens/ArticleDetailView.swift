@@ -873,7 +873,7 @@ struct ArticleDetailView: View {
                         Text("آخر تحديث: \(updated)")
                             .monospacedDigit()
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                            .font(SabqType.meta.font)
+                            .font(SabqType.timestamp.font)
                             .foregroundStyle(SabqTheme.textTertiary)
                     }
                 }
@@ -995,11 +995,11 @@ struct ArticleDetailView: View {
 
     /// العنوان الفرعي (`article-detail-subtitle` في الويب): أصغر من العنوان وبلون ثانوي.
     private func articleSubtitle(_ text: String) -> some View {
-        // وزن عادي وحجم أصغر من العنوان (17 عند حجم الخط الافتراضي) حتى لا ينافسه،
-        // ويتبع إعداد «حجم الخط» في صفحة الخبر.
+        // وزن عادي وحجم أصغر بوضوح من النص (14 عند حجم الخط الافتراضي، طلب المالك
+        // 2026-10-31)، ويتبع إعداد «حجم الخط» في صفحة الخبر.
         SabqRTLText(
             text,
-            uiFont: SabqType.articleBody.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 1),
+            uiFont: SabqType.articleBody.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 4),
             color: SabqTheme.textSecondary,
             lineLimit: 0,
             lineSpacing: 3,
