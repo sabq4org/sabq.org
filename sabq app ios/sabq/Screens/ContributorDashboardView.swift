@@ -198,22 +198,6 @@ nonisolated struct ContributorArticle: Decodable, Identifiable {
     }
 }
 
-nonisolated struct ContributorRanking: Decodable {
-    let rank: Int?
-    let totalAuthors: Int
-    let percentile: Int
-    let myViews: Int
-    let isTopTen: Bool
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: FlexKey.self)
-        rank = (try? c.decode(Int.self, forKey: FlexKey("rank")))
-        totalAuthors = (try? c.decode(Int.self, forKey: FlexKey("totalAuthors"))) ?? (try? c.decode(Int.self, forKey: FlexKey("total_authors"))) ?? 0
-        percentile = (try? c.decode(Int.self, forKey: FlexKey("percentile"))) ?? 0
-        myViews = (try? c.decode(Int.self, forKey: FlexKey("myViews"))) ?? (try? c.decode(Int.self, forKey: FlexKey("my_views"))) ?? 0
-        isTopTen = (try? c.decode(Bool.self, forKey: FlexKey("isTopTen"))) ?? (try? c.decode(Bool.self, forKey: FlexKey("is_top_ten"))) ?? false
-    }
-}
 
 // موعد النشر الأسبوعي لكاتب الرأي — بانر بثلاث حالات، أو دعوة لاختيار اليوم
 nonisolated struct WriterScheduleBannerModel: Decodable {
@@ -281,7 +265,6 @@ let writerWeekdaysAr = ["الأحد", "الاثنين", "الثلاثاء", "ا�
 @MainActor
 final class ContributorDashboardViewModel: ObservableObject {
     @Published var analytics: ContributorAnalytics?
-    @Published var ranking: ContributorRanking?
     @Published var schedule: WriterScheduleResponse?
     @Published var savingDay = false
     @Published var scheduleError: String?
@@ -293,10 +276,8 @@ final class ContributorDashboardViewModel: ObservableObject {
         error = nil
         do {
             async let a = APIClient.shared.get(ContributorAnalytics.self, path: "/contributor/analytics", ignoreCache: true)
-            async let r = APIClient.shared.get(ContributorRanking.self, path: "/contributor/ranking", ignoreCache: true)
             async let s = APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
             analytics = try await a
-            ranking = try? await r
             schedule = try? await s
         } catch {
             self.error = "تعذّر تحميل البيانات"
@@ -649,44 +630,6 @@ struct ContributorDashboardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .sabqBlockSurface()
 
-                // Ranking
-                if let ranking = vm.ranking {
-                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                        HStack(spacing: SabqLayout.space4) {
-                            Image(systemName: "medal")
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .foregroundStyle(SabqTheme.warning)
-                                .accessibilityHidden(true)
-                            Text("ترتيبك")
-                                .sabqText(SabqType.metaEmphasis)
-                                .foregroundStyle(SabqTheme.textSecondary)
-                        }
-                        if let rank = ranking.rank {
-                            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space4) {
-                                Text("#\(rank)")
-                                    .sabqText(SabqType.leadTitle)
-                                    .foregroundStyle(SabqTheme.textPrimary)
-                                Text("من \(ranking.totalAuthors)")
-                                    .sabqText(SabqType.meta)
-                                    .foregroundStyle(SabqTheme.textSecondary)
-                            }
-                            if ranking.isTopTen {
-                                StatusChip(title: "الأكثر قراءة", tint: SabqTheme.warning)
-                            } else {
-                                Text("أعلى من \(ranking.percentile)%")
-                                    .sabqText(SabqType.tag)
-                                    .foregroundStyle(SabqTheme.textSecondary)
-                            }
-                        } else {
-                            Text("لم تنشر هذا الشهر")
-                                .sabqText(SabqType.meta)
-                                .foregroundStyle(SabqTheme.textSecondary)
-                        }
-                    }
-                    .padding(SabqLayout.space12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .sabqBlockSurface()
-                }
             }
         }
     }

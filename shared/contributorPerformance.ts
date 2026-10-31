@@ -44,7 +44,6 @@ export interface ContributorPerformance {
   topArticles: PerformanceTopArticle[];
   statusCounts: { published: number; pending: number; needsChanges: number; scheduled: number; draft: number };
   activity: { thisWeekCount: number; lastPublishedAt: string | null };
-  rank: { rank: number; total: number } | null;
   featuredComment: { content: string; articleTitle: string } | null;
 }
 
@@ -84,12 +83,6 @@ export function peakDay(series: PerformanceDay[]): PerformanceDay | null {
   return best;
 }
 
-/** ترتيب المستخدم بين أصحاب الأخبار (مرتبة تنازليًا بالمشاهدات). */
-export function rankOf(rows: Array<{ ownerId: string | null; views: number }>, userId: string): { rank: number; total: number } | null {
-  const sorted = rows.filter((r) => r.ownerId).sort((a, b) => b.views - a.views);
-  const index = sorted.findIndex((r) => r.ownerId === userId);
-  return index >= 0 ? { rank: index + 1, total: sorted.length } : null;
-}
 
 /**
  * `article_daily_stats.views` لقطة تراكمية (إجمالي مشاهدات الخبر نهاية اليوم)

@@ -50,7 +50,6 @@ data class DashboardState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val analytics: ApiContributorAnalytics? = null,
-    val ranking: ApiContributorRanking? = null,
     /** دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة */
     val pendingSurveys: List<ApiMySurveyInvite> = emptyList(),
     val schedule: ApiWriterScheduleResponse? = null,
@@ -74,13 +73,11 @@ class ContributorDashboardViewModel @Inject constructor(
                 // رحلات الشبكة الأربع بالتوازي — التسلسل كان يضاعف زمن فتح اللوحة
                 coroutineScope {
                     val analytics = async { api.getContributorAnalytics() }
-                    val ranking = async { runCatching { api.getContributorRanking() }.getOrNull() }
                     val pendingSurveys = async { runCatching { api.getMySurveys().items }.getOrDefault(emptyList()) }
                     val schedule = async { runCatching { api.getContributorSchedule() }.getOrNull() }
                     _state.value = DashboardState(
                         isLoading = false,
                         analytics = analytics.await(),
-                        ranking = ranking.await(),
                         pendingSurveys = pendingSurveys.await(),
                         schedule = schedule.await(),
                     )
@@ -211,7 +208,7 @@ fun ContributorDashboardScreen(
                     if (data.dailyStats.isNotEmpty()) ChartSection(data.dailyStats)
                     if (data.topArticles.isNotEmpty()) TopArticlesSection(data.topArticles)
                     data.featuredComment?.let { FeaturedCommentCard(it) }
-                    AudienceSection(data, state.ranking)
+                    AudienceSection(data)
                     PublishingSection(data.publishingActivity)
                     if (data.articles.isNotEmpty()) ArticlesSection(data)
                     Spacer(Modifier.height(8.dp))
@@ -451,7 +448,7 @@ private fun ChartSection(dailyStats: List<ApiDailyStat>) {
 // ── Audience ────────────────────────────────────────────────────────
 
 @Composable
-private fun AudienceSection(data: ApiContributorAnalytics, ranking: ApiContributorRanking?) {
+private fun AudienceSection(data: ApiContributorAnalytics) {
     SectionTitle("الجمهور")
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         // Followers
@@ -468,35 +465,6 @@ private fun AudienceSection(data: ApiContributorAnalytics, ranking: ApiContribut
             if (data.followers.dailyGrowth.isNotEmpty()) {
                 val total = data.followers.dailyGrowth.sumOf { it.count }
                 Text("+$total آخر 30 يوم", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = AccentGreen)
-            }
-        }
-        // Ranking
-        ranking?.let { r ->
-            Column(
-                modifier = Modifier.weight(1f).clip(shape).background(SabqTheme.colors.surface, shape).padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Filled.MilitaryTech, null, tint = AccentAmber, modifier = Modifier.size(14.dp))
-                    Text("ترتيبك", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = SabqTheme.colors.secondaryInk)
-                }
-                if (r.rank != null) {
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("#${r.rank}", fontSize = 24.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.ink)
-                        Text("من ${r.totalAuthors}", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = SabqTheme.colors.secondaryInk,
-                            modifier = Modifier.padding(bottom = 4.dp))
-                    }
-                    if (r.isTopTen) {
-                        Text(
-                            "الأكثر قراءة", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AccentAmber,
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(AccentAmber.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    } else {
-                        Text("أعلى من ${r.percentile}%", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = SabqTheme.colors.secondaryInk)
-                    }
-                } else {
-                    Text("لم تنشر هذا الشهر", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = SabqTheme.colors.secondaryInk)
-                }
             }
         }
     }

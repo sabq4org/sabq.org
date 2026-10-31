@@ -13,7 +13,6 @@ import {
   isoDay,
   peakDay,
   periodDays,
-  rankOf,
   snapshotViewDeltas,
   trendPct,
   type ContributorPerformance,
@@ -23,7 +22,6 @@ import {
 import { withCache } from "../memoryCache";
 
 const USER_TTL_MS = 60_000;
-const RANK_TTL_MS = 30 * 60_000;
 const TOP_LIMIT = 5;
 
 interface OwnedRow {
@@ -66,32 +64,6 @@ async function ownedArticles(userId: string, role: "reporter" | "writer"): Promi
   return Array.from(byId.values());
 }
 
-/** مشاهدات هذا الشهر لكل صاحب خبر منشور (المراسل وإلا الكاتب)، مشتركة بين الجميع. */
-function monthlyOwnerViews(): Promise<Array<{ ownerId: string | null; views: number }>> {
-  const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  return withCache(`contributor-performance:rank:${isoDay(monthStart)}`, RANK_TTL_MS, async () => {
-    const owner = sql<string | null>`coalesce(${articles.reporterId}, ${articles.authorId})`;
-    const rows = await db
-      .select({ ownerId: owner, views: sql<number>`coalesce(sum(${articles.views}), 0)::int` })
-      .from(articles)
-      .where(and(eq(articles.status, "published"), gte(articles.publishedAt, monthStart)))
-      .groupBy(owner);
-    return rows.map((r) => ({ ownerId: r.ownerId, views: Number(r.views) || 0 }));
-  });
-}
-
-const RANK_WAIT_MS = 400;
-
-/** الترتيب لا يؤخر الصفحة: إن لم يجهز خلال المهلة يُعرض بدونه ويكمل في الخلفية. */
-function rankWithin(ms: number): Promise<Array<{ ownerId: string | null; views: number }>> {
-  const rank = monthlyOwnerViews().catch(() => [] as Array<{ ownerId: string | null; views: number }>);
-  return Promise.race([
-    rank,
-    new Promise<Array<{ ownerId: string | null; views: number }>>((resolve) => setTimeout(() => resolve([]), ms)),
-  ]);
-}
-
 async function compute(userId: string, role: "reporter" | "writer", period: PerformancePeriod): Promise<ContributorPerformance> {
   const now = new Date();
   const days = periodDays(period);
@@ -130,15 +102,12 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
     : eq(socialFollows.followingId, userId);
 
   if (!ids.length) {
-    const [[followers], rankRows] = await Promise.all([
-      db.select({ c: sql<number>`count(*)::int` }).from(socialFollows).where(followersWhere),
-      rankWithin(RANK_WAIT_MS),
-    ]);
+    const [followers] = await db.select({ c: sql<number>`count(*)::int` }).from(socialFollows).where(followersWhere);
     const series = fillSeries([], seriesDays, now);
     return {
       role, period, generatedAt: now.toISOString(), views: 0, viewsTrendPct: null, publishedInPeriod: 0,
       series, peak: null, likes: 0, comments: 0, bookmarks: 0, newFollowers: Number(followers?.c) || 0,
-      topArticles: [], statusCounts, activity, rank: rankOf(rankRows, userId), featuredComment: null,
+      topArticles: [], statusCounts, activity, featuredComment: null,
     };
   }
 
@@ -151,7 +120,7 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
     .filter((a) => !a.publishedAt || isoDay(a.publishedAt) > isoDay(addDays(now, -400)))
     .map((a) => a.id);
 
-  const [snapshotRows, likesRows, commentRows, bookmarkRows, followerRows, featuredRows, rankRows] = await Promise.all([
+  const [snapshotRows, likesRows, commentRows, bookmarkRows, followerRows, featuredRows] = await Promise.all([
     recentIds.length
       ? db
         .select({ articleId: articleDailyStats.articleId, date: articleDailyStats.date, views: articleDailyStats.views })
@@ -180,7 +149,6 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
       .where(and(inArray(comments.articleId, ids), eq(comments.status, "approved"), gte(comments.createdAt, addDays(now, -7))))
       .orderBy(desc(comments.createdAt))
       .limit(1),
-    rankWithin(RANK_WAIT_MS),
   ]);
 
   const deltas = snapshotViewDeltas({
@@ -236,7 +204,6 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
     topArticles,
     statusCounts,
     activity,
-    rank: rankOf(rankRows, userId),
     featuredComment: featuredRows[0] ? { content: featuredRows[0].content, articleTitle: featuredRows[0].articleTitle } : null,
   };
 }

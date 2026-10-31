@@ -119,4 +119,10 @@ router.post("/members/push-token", (req: Request, res: Response, next: NextFunct
   next();
 });
 
+// «ترتيبك بين المراسلين/الكتّاب» أُلغي من المشروع بطلب المالك (2026-10-31).
+// يسبق المسار القديم في mobileApiRoutes؛ النسخ المثبتة تخفي البطاقة عند الفشل.
+router.get("/contributor/ranking", (_req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: "أُلغيت هذه الميزة" });
+});
+
 export default router;

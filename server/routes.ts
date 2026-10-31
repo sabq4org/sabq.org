@@ -12065,48 +12065,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  app.get("/api/contributor/ranking", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user?.id;
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const roleType = (req.query.role as string) || "opinion_author";
-      const articleType = roleType === "opinion_author" ? "opinion" : undefined;
-
-      const monthStart = new Date();
-      monthStart.setDate(1);
-      monthStart.setHours(0, 0, 0, 0);
-
-      const allAuthors = await db
-        .select({
-          authorId: articles.authorId,
-          totalViews: sql<number>`coalesce(sum(${articles.views}), 0)::int`,
-        })
-        .from(articles)
-        .where(and(
-          eq(articles.status, "published"),
-          gte(articles.publishedAt, monthStart),
-          ...(articleType ? [eq(articles.articleType, articleType)] : []),
-        ))
-        .groupBy(articles.authorId)
-        .orderBy(desc(sql`sum(${articles.views})`));
-
-      const myIndex = allAuthors.findIndex(a => a.authorId === userId);
-      const myViews = myIndex >= 0 ? allAuthors[myIndex].totalViews : 0;
-      const total = allAuthors.length || 1;
-      const rank = myIndex >= 0 ? myIndex + 1 : null;
-
-      res.json({
-        rank,
-        totalAuthors: total,
-        percentile: rank ? Math.round(((total - rank) / total) * 100) : 0,
-        myViews,
-        isTopTen: rank !== null && rank <= 10,
-      });
-    } catch (error) {
-      console.error("Error fetching contributor ranking:", error);
-      res.status(500).json({ message: "فشل في جلب الترتيب" });
-    }
+  // «ترتيبك بين المراسلين/الكتّاب» أُلغي من المشروع بطلب المالك (2026-10-31).
+  app.get("/api/contributor/ranking", requireAuth, (_req, res) => {
+    res.status(404).json({ message: "أُلغيت هذه الميزة" });
   });
 
   // Contributor resubmit after revision — opinion authors & reporters
