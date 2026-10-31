@@ -13,7 +13,7 @@
 import { randomUUID } from "crypto";
 import { and, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articleEditLocks, articles, categories, systemSettings, type Article } from "@shared/schema";
+import { articleEditLocks, articles, categories, systemSettings, users, type Article } from "@shared/schema";
 import {
   STAFF_APP_BUNDLE_ID,
   STAFF_OPINION_PREP_STEP_LABELS,
@@ -33,6 +33,7 @@ import {
   applyTextFixesToHtml,
   buildOpinionImagePrompt,
   parseOpinionEnrichment,
+  stripOpinionHeaderLines,
   type OpinionEnrichment,
 } from "./opinionPrepareText";
 import { proofreadContent, proofreadTitle, stripHtmlToText } from "./proofreadService";
@@ -109,6 +110,17 @@ async function loadArticle(articleId: string): Promise<Article> {
   return row;
 }
 
+async function loadWriterName(authorId: string | null | undefined): Promise<string | null> {
+  if (!authorId) return null;
+  const [row] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, authorId))
+    .limit(1);
+  const name = [row?.firstName, row?.lastName].filter(Boolean).join(" ").trim();
+  return name || null;
+}
+
 async function lockHeldByOther(articleId: string, actorId: string): Promise<string | null> {
   const [lock] = await db
     .select({ userName: articleEditLocks.userName })
@@ -173,6 +185,7 @@ export async function startOpinionPrep(input: {
       scheduledAt: null,
       titleChanged: false,
       contentFixes: 0,
+      headerLinesRemoved: 0,
       image: null,
       message: null,
       runId: randomUUID(),
@@ -329,14 +342,24 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     title = before.title;
 
     // 1) التدقيق
+    // 0) تنظيف رأس النص: «جاهز للنشر:» وتكرار العنوان واسم الكاتب والعنوان الفرعي.
+    const header = stripOpinionHeaderLines(before.content || "", {
+      title: before.title,
+      writerName: await loadWriterName(before.authorId),
+    });
     const [titleCheck, contentCheck] = await Promise.all([
       proofreadTitle(before.title, job.actorId, { noAddedPunctuation: true }),
-      proofreadContent(before.content || "", job.actorId),
+      proofreadContent(header.html, job.actorId),
     ]);
     const newTitle = titleCheck.hasIssues ? guardOpinionTitleCommas(before.title, titleCheck.suggestion) : before.title;
-    const fixed = applyTextFixesToHtml(before.content || "", contentCheck.issues);
+    const fixed = applyTextFixesToHtml(header.html, contentCheck.issues);
     title = newTitle;
-    await advance({ step: "enrich", titleChanged: newTitle !== before.title, contentFixes: fixed.applied });
+    await advance({
+      step: "enrich",
+      titleChanged: newTitle !== before.title,
+      contentFixes: fixed.applied + header.headerLinesRemoved,
+      headerLinesRemoved: header.headerLinesRemoved,
+    });
 
     // 2) الملحقات (على النص بعد التدقيق)
     const cats = await loadVisibleCategories();
@@ -424,7 +447,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
       after: row,
       actorId: job.actorId,
       summary: "جهّز مكتب سبق المقال للجدولة (تدقيق وملحقات وصورة)",
-      metadata: { channel: "staff-app", flow: "opinion-prepare", contentFixes: job.contentFixes },
+      metadata: { channel: "staff-app", flow: "opinion-prepare", contentFixes: job.contentFixes, headerLinesRemoved: job.headerLinesRemoved ?? 0 },
     }).catch((err) => console.error("[opinion-prep] history record failed:", err));
 
     const result = await scheduleOpinionFromDesk({
@@ -473,6 +496,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
       channel: "staff-app",
       titleChanged: job.titleChanged,
       contentFixes: job.contentFixes,
+      headerLinesRemoved: job.headerLinesRemoved ?? 0,
       image: job.image,
       imageModel: job.image === "generated" ? OPINION_PREP_IMAGE_MODEL : undefined,
     },
