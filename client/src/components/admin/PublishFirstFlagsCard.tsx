@@ -18,12 +18,6 @@ const ROWS: Array<{ key: keyof PublishFirstFlags; title: string; settingKey: str
     settingKey: "publish_first_revision_history",
     hint: "حفظ من عدّل وماذا تغيّر. الاسترجاع يبقى للمسؤول",
   },
-  {
-    key: "updateLine",
-    title: "سطر سبب التحديث للقارئ",
-    settingKey: "publish_first_update_line",
-    hint: "إظهار «تحديث: …» تحت المتن بتوقيت الرياض",
-  },
 ];
 
 export function PublishFirstFlagsCard() {

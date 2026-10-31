@@ -28,7 +28,6 @@ import { getRealIp as getTrustedRealIp } from "./utils/trustedProxyIp";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
 import {
-  attachPublishedUpdateLines,
   editorDisplayName,
   prepareDashboardArticleSave,
   prepareNewArticlePublishFirst,
@@ -13455,7 +13454,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         storage.recordArticleRead(userId, finalArticle.id).catch(() => {});
       }
 
-      await attachPublishedUpdateLines(finalArticle);
       res.json(finalArticle);
     } catch (error) {
       console.error("Error fetching article:", error);
