@@ -7,6 +7,7 @@
 // على articleEditRequestsService كما هي. كل كتابة تحترم قفل التحرير ونسخة الخبر.
 
 import { and, asc, eq, gt, gte, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { articleEditLocks, articleEditRequests, articles, categories, users, type Article } from "@shared/schema";
 import type { StaffAppErrorCode } from "@shared/staffApp";
@@ -18,6 +19,7 @@ import {
   filterStaffNewsItems,
   sortStaffNewsItems,
   staffNewsChannel,
+  staffNewsPersonLine,
   staffNewsScheduleError,
   type StaffNewsBoard,
   type StaffNewsCategory,
@@ -54,6 +56,10 @@ function personName(first: string | null | undefined, last: string | null | unde
   const name = [first, last].filter(Boolean).join(" ").trim();
   return name || null;
 }
+
+// المرسل الفعلي (من رفع الخبر) غير اسم الكاتب على الخبر: المراسل يرسل أحيانًا
+// باسم «صحيفة سبق»، والمحرر يحتاج أن يعرف من أرسله.
+const senderUsers = alias(users, "sender_users");
 
 function senderName(meta: unknown): string | null {
   if (!meta || typeof meta !== "object") return null;
@@ -106,11 +112,14 @@ async function listPendingDrafts(userId: string, now: Date): Promise<StaffNewsDr
       categoryName: categories.nameAr,
       reporterFirst: users.firstName,
       reporterLast: users.lastName,
+      senderFirst: senderUsers.firstName,
+      senderLast: senderUsers.lastName,
       lockedBy: articleEditLocks.userName,
     })
     .from(articles)
     .leftJoin(categories, eq(categories.id, articles.categoryId))
     .leftJoin(users, eq(users.id, sql`coalesce(${articles.reporterId}, ${articles.submitterId}, ${articles.authorId})`))
+    .leftJoin(senderUsers, eq(senderUsers.id, sql`coalesce(${articles.submitterId}, ${articles.authorId})`))
     .leftJoin(articleEditLocks, activeLockJoin(userId))
     .where(pendingNewsWhere(new Date(now.getTime() - STAFF_NEWS_WINDOW_DAYS * DAY_MS)))
     .orderBy(asc(articles.updatedAt))
@@ -127,7 +136,7 @@ async function listPendingDrafts(userId: string, now: Date): Promise<StaffNewsDr
       channel,
       reporterName: channel === "email"
         ? senderName(row.sourceMetadata) ?? personName(row.reporterFirst, row.reporterLast)
-        : personName(row.reporterFirst, row.reporterLast),
+        : staffNewsPersonLine(personName(row.senderFirst, row.senderLast), personName(row.reporterFirst, row.reporterLast)),
       categoryName: row.categoryName ?? null,
       imageUrl: row.imageUrl ?? null,
       thumbnailUrl: row.thumbnailUrl ?? null,
@@ -224,7 +233,8 @@ async function activeLockOwner(articleId: string, userId: string): Promise<strin
 export async function getStaffNewsPreview(articleId: string, userId: string): Promise<StaffNewsPreview> {
   const article = await loadNewsArticle(articleId);
   const personId = article.reporterId ?? article.submitterId ?? article.authorId;
-  const [category, person, lockedBy, pendingEditRequestId] = await Promise.all([
+  const senderId = article.submitterId ?? article.authorId;
+  const [category, person, lockedBy, pendingEditRequestId, sender] = await Promise.all([
     article.categoryId
       ? db.select({ id: categories.id, name: categories.nameAr }).from(categories).where(eq(categories.id, article.categoryId)).limit(1)
       : Promise.resolve([]),
@@ -233,6 +243,9 @@ export async function getStaffNewsPreview(articleId: string, userId: string): Pr
       : Promise.resolve([]),
     activeLockOwner(article.id, userId),
     pendingEditRequestFor(article.id),
+    senderId && senderId !== personId
+      ? db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, senderId)).limit(1)
+      : Promise.resolve([]),
   ]);
   const channel = staffNewsChannel(article.source);
   const seo = (article.seo ?? null) as { metaDescription?: string | null } | null;
@@ -252,7 +265,10 @@ export async function getStaffNewsPreview(articleId: string, userId: string): Pr
     channel,
     reporterName: channel === "email"
       ? senderName(article.sourceMetadata) ?? personName(person[0]?.firstName, person[0]?.lastName)
-      : personName(person[0]?.firstName, person[0]?.lastName),
+      : staffNewsPersonLine(
+          sender[0] ? personName(sender[0].firstName, sender[0].lastName) : personName(person[0]?.firstName, person[0]?.lastName),
+          personName(person[0]?.firstName, person[0]?.lastName),
+        ),
     submittedAt: iso(article.updatedAt ?? article.createdAt),
     summaryReady: Boolean((article.aiSummary || article.excerpt || "").trim()),
     seoReady: Boolean(seo?.metaDescription?.trim()),

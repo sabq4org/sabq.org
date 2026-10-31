@@ -260,6 +260,18 @@ struct AdminDashboardView: View {
             HomeSectionHeader(title: "صندوق الإدارة")
 
             VStack(spacing: 0) {
+                NavigationLink(value: SupervisorNewsRoute()) {
+                    adminShortcut(
+                        title: "بانتظار قرارك",
+                        subtitle: "أخبار المراسلين وطلبات التعديل",
+                        icon: "tray.full",
+                        tint: SabqTheme.primary
+                    )
+                }
+                .buttonStyle(.plain)
+
+                SidebarRowDivider()
+
                 NavigationLink(value: AdminContactMessagesRoute()) {
                     adminShortcut(
                         title: "رسائل التواصل",

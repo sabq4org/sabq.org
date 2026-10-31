@@ -611,7 +611,8 @@ struct SettingsView: View {
                     SettingsRowDivider()
                 }
 
-                if writerVisible || reporterVisible {
+                // المراسل يرى «أخباري» أعلاه؛ «لوحة الكاتب» لكتّاب الرأي والإدارة.
+                if writerVisible {
                     NavigationLink(value: ContributorDashboardRoute()) {
                         submissionCardContent(
                             title: "لوحة الكاتب",

@@ -216,3 +216,14 @@ export function countStaffNewsItems(items: StaffNewsItem[]): StaffNewsBoard["cou
     email: filterStaffNewsItems(items, "email").length,
   };
 }
+
+/**
+ * سطر الاسم على بطاقة الخبر: المرسل الفعلي أولًا، ثم الاسم الذي سيظهر على
+ * الخبر إن اختلف («علي الحازمي · باسم صحيفة سبق»).
+ */
+export function staffNewsPersonLine(sender: string | null, byline: string | null): string | null {
+  const who = sender?.trim() || null;
+  const by = byline?.trim() || null;
+  if (who && by && who !== by) return `${who} · باسم ${by}`;
+  return who ?? by;
+}

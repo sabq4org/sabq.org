@@ -811,9 +811,11 @@ struct ContributorDashboardView: View {
     }
 
     private func statusInfo(_ status: String, reviewStatus: String?) -> (String, Color) {
-        if reviewStatus == "needs_changes" { return ("يحتاج تعديل", SabqTheme.warning) }
-        if reviewStatus == "pending_review" { return ("قيد المراجعة", SabqTheme.primary) }
+        // المنشور والمجدول والمؤرشف أولًا: النشر يترك reviewStatus على pending_review (#2044).
+        if status == "draft" && reviewStatus == "needs_changes" { return ("يحتاج تعديل", SabqTheme.warning) }
+        if status == "draft" && reviewStatus == "pending_review" { return ("قيد المراجعة", SabqTheme.primary) }
         switch status {
+        case "scheduled": return ("مجدول", SabqTheme.primary)
         case "published": return ("منشور", SabqTheme.success)
         case "draft": return ("مسودة", SabqTheme.warning)
         case "rejected": return ("مرفوض", SabqTheme.danger)

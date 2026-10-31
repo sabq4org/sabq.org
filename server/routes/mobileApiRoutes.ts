@@ -8855,8 +8855,8 @@ router.get("/contributor/analytics", async (req: Request, res: Response) => {
 
     const publishedCount = myArticles.filter(a => a.status === "published").length;
     const draftCount = myArticles.filter(a => a.status === "draft").length;
-    const pendingCount = myArticles.filter(a => a.reviewStatus === "pending_review" || a.status === "pending").length;
-    const needsChangesCount = myArticles.filter(a => a.reviewStatus === "needs_changes").length;
+    const pendingCount = myArticles.filter(a => (a.status === "draft" && a.reviewStatus === "pending_review") || a.status === "pending").length;
+    const needsChangesCount = myArticles.filter(a => a.status === "draft" && a.reviewStatus === "needs_changes").length;
     const rejectedCount = myArticles.filter(a => a.status === "rejected").length;
     const totalViews = myArticles.reduce((sum, a) => sum + (a.views || 0), 0);
 
@@ -9025,7 +9025,7 @@ router.get("/contributor/analytics", async (req: Request, res: Response) => {
       },
       articles: sortedArticles.map(a => ({
         id: a.id, title: a.title, status: a.status,
-        reviewStatus: a.reviewStatus, reviewNotes: a.reviewNotes,
+        reviewStatus: a.status === "draft" ? a.reviewStatus : null, reviewNotes: a.reviewNotes, // النشر يترك pending_review (#2044)
         views: a.views, likes: likesMap[a.id] || 0, comments: commentsMap[a.id] || 0, bookmarks: bookmarksMap[a.id] || 0,
         publishedAt: a.publishedAt, createdAt: a.createdAt,
       })),
