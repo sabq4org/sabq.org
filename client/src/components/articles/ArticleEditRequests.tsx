@@ -549,6 +549,7 @@ export function ReviewEditRequestDialog({
   const [selected, setSelected] = useState<Set<EditRequestField>>(new Set());
   const [showLine, setShowLine] = useState(true);
   const [line, setLine] = useState("");
+  const [regenerate, setRegenerate] = useState(true);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
 
@@ -574,16 +575,18 @@ export function ReviewEditRequestDialog({
     invalidateEditRequests();
     refetch();
   };
+  const textSelected = selected.has("title") || selected.has("subtitle") || selected.has("content");
   const approve = useMutation({
     mutationFn: (manual: boolean) =>
-      apiRequest<{ appliedFields: string[]; missingParagraphs: string[] }>(`/api/article-edit-requests/${requestId}/approve`, {
+      apiRequest<{ appliedFields: string[]; missingParagraphs: string[]; regenerating?: boolean }>(`/api/article-edit-requests/${requestId}/approve`, {
         method: "POST",
-        body: JSON.stringify(manual ? { manual: true } : { fields: Array.from(selected), updateLine: showLine ? line : null }),
+        body: JSON.stringify(manual ? { manual: true } : { fields: Array.from(selected), updateLine: showLine ? line : null, regenerate: textSelected && regenerate }),
       }),
     onSuccess: (result, manual) => {
       if (manual) return done("اعتُمد الطلب");
       const missing = result?.missingParagraphs?.length ?? 0;
-      done(missing ? `طُبّق الطلب، وتعذّر ${missing} فقرة تغيّرت بعده` : "طُبّق التعديل على الخبر نفسه");
+      const base = missing ? `طُبّق الطلب، وتعذّر ${missing} فقرة تغيّرت بعده` : "طُبّق التعديل على الخبر نفسه";
+      done(result?.regenerating ? `${base}. يُعاد توليد الموجز والسيو خلال دقيقة` : base);
     },
     onError: (e) => toast({ title: "تعذر الاعتماد", description: errorMessage(e, ""), variant: "destructive" }),
   });
@@ -700,6 +703,15 @@ export function ReviewEditRequestDialog({
                       <Switch id="er-line" checked={showLine} onCheckedChange={setShowLine} />
                     </div>
                     {showLine && <Input value={line} onChange={(e) => setLine(e.target.value)} maxLength={EDIT_REQUEST_LIMITS.updateLine} className="rounded-2xl" aria-label="نص سطر التحديث" />}
+                  </div>
+                )}
+                {textSelected && (
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label htmlFor="er-regen" className="text-[15px]">أعد توليد الموجز والسيو</Label>
+                      <p className="text-xs text-muted-foreground">موجز جديد ووصف وكلمات مفتاحية من النص بعد التعديل</p>
+                    </div>
+                    <Switch id="er-regen" checked={regenerate} onCheckedChange={setRegenerate} />
                   </div>
                 )}
                 <div className="flex flex-col gap-2 sm:flex-row">

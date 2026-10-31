@@ -154,3 +154,33 @@ describe("helpers", () => {
     expect(articleAcceptsEditRequests("archived")).toBe(false);
   });
 });
+
+describe("review fixes", () => {
+  it("matches every edit against the original paragraphs (no chained edits)", () => {
+    const html = "<p>مقدمة</p>\n<p>خاتمة</p>";
+    const result = applyContentEdits(html, [
+      { before: "مقدمة", after: "خاتمة" },
+      { before: "خاتمة", after: "جديد" },
+    ]);
+    expect(result.html).toBe("<p>خاتمة</p>\n<p>جديد</p>");
+    expect(result.applied).toBe(2);
+  });
+
+  it("chained edits on legacy content use original positions", () => {
+    const result = applyContentEdits("أ<br>ب", [
+      { before: "أ", after: "ب" },
+      { before: "ب", after: "ج" },
+    ]);
+    expect(result.html).toBe("ب<br>ج");
+  });
+
+  it("clears the stale thumbnail and lite image when the featured image changes", () => {
+    const { patch } = buildEditRequestPatch({
+      article: { content: HTML },
+      proposed: { imageUrl: "https://media.sabq.org/news/new.webp" },
+      fields: ["imageUrl"],
+    });
+    expect(patch.thumbnailUrl).toBeNull();
+    expect(patch.liteOptimizedImageUrl).toBeNull();
+  });
+});

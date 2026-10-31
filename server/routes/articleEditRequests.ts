@@ -7,6 +7,7 @@ import { EDIT_REQUEST_LIMITS, parseEditRequestInput, resolveApplyFields, type Ed
 import {
   approveEditRequest,
   cancelEditRequest,
+  regenerateEditRequestDerived,
   createEditRequest,
   getEditRequestContext,
   getEditRequestDetail,
@@ -124,7 +125,25 @@ router.post("/api/article-edit-requests/:id/approve", requireAuth, async (req: a
         warm: result.article.status === "published",
       });
     }
-    res.json({ ok: true, appliedFields: result.appliedFields, missingParagraphs: result.missingParagraphs });
+    // إعادة توليد الموجز والسيو: اختيارية، فقط إن تغيّر العنوان أو النص، وبصلاحية أدوات الذكاء.
+    const textChanged = result.appliedFields.some((f) => f === "title" || f === "subtitle" || f === "content");
+    const regenerate = req.body?.regenerate === true && !manual && textChanged
+      && (await userHasPermission(userId, "articles.ai_generate"));
+    if (regenerate) {
+      const proposed = (result.request?.proposed ?? {}) as EditRequestProposal;
+      regenerateEditRequestDerived({
+        articleId: result.article.id,
+        actorId: userId,
+        keepImageAlt: result.appliedFields.includes("imageUrl") ? proposed.imageAlt ?? null : null,
+      })
+        .then((out) => {
+          if (out?.regenerated.length) {
+            invalidateArticleWrite(out.article, { reason: "article-edit-request-regenerate", warm: out.article.status === "published" });
+          }
+        })
+        .catch((error) => console.error("[edit-requests] regenerate failed", error));
+    }
+    res.json({ ok: true, appliedFields: result.appliedFields, missingParagraphs: result.missingParagraphs, regenerating: regenerate });
   } catch (error) {
     console.error("[edit-requests] approve failed", error);
     res.status(500).json({ message: "تعذر اعتماد الطلب" });

@@ -229,29 +229,47 @@ export function applyContentEdits(
   edits: readonly EditRequestContentEdit[] | undefined,
   appendParagraph?: string,
 ): ContentApplyResult {
-  let out = html ?? "";
+  const original = html ?? "";
+  let out = original;
   let applied = 0;
   const missing: string[] = [];
+  // كل تعديل يُطابَق على المتن الأصلي مرة واحدة، فلا يقع تعديل على فقرة كتبها تعديل سابق
+  // (مثل «مقدمة→خاتمة» ثم «خاتمة→جديد»).
+  const pending = new Map<string, string>();
+  const order: string[] = [];
   for (const edit of edits ?? []) {
     const target = normalizeParagraph(edit.before);
-    const replacement = edit.after ? `<p>${escapeHtmlText(edit.after)}</p>` : "";
-    let done = false;
-    if (/<p\b/i.test(out)) {
-      out = out.replace(PARAGRAPH, (whole, inner: string) => {
-        if (done || plainOf(inner) !== target) return whole;
-        done = true;
-        return replacement;
-      });
-    } else {
-      // متن بلا <p>: استبدال نصي إن ظهر السطر مرة واحدة بالضبط
+    if (pending.has(target)) continue;
+    pending.set(target, edit.after);
+    order.push(target);
+  }
+  const found = new Set<string>();
+  if (/<p\b/i.test(original)) {
+    out = original.replace(PARAGRAPH, (whole, inner: string) => {
+      const text = plainOf(inner);
+      if (!pending.has(text) || found.has(text)) return whole;
+      found.add(text);
+      const after = pending.get(text) ?? "";
+      return after ? `<p>${escapeHtmlText(after)}</p>` : "";
+    });
+  } else {
+    // متن بلا <p>: استبدال نصي إن ظهر السطر مرة واحدة بالضبط في الأصل، من آخر المتن لأوله
+    const spots: Array<{ at: number; length: number; after: string; target: string }> = [];
+    for (const target of order) {
       const escaped = escapeHtmlText(target);
-      const first = out.indexOf(escaped);
-      if (first !== -1 && out.indexOf(escaped, first + escaped.length) === -1) {
-        out = out.slice(0, first) + (edit.after ? escapeHtmlText(edit.after) : "") + out.slice(first + escaped.length);
-        done = true;
+      const first = original.indexOf(escaped);
+      if (first !== -1 && original.indexOf(escaped, first + escaped.length) === -1) {
+        const overlaps = spots.some((s) => first < s.at + s.length && s.at < first + escaped.length);
+        if (!overlaps) spots.push({ at: first, length: escaped.length, after: pending.get(target) ?? "", target });
       }
     }
-    if (done) applied++;
+    for (const spot of spots.sort((a, b) => b.at - a.at)) {
+      out = out.slice(0, spot.at) + (spot.after ? escapeHtmlText(spot.after) : "") + out.slice(spot.at + spot.length);
+      found.add(spot.target);
+    }
+  }
+  for (const target of order) {
+    if (found.has(target)) applied++;
     else missing.push(target);
   }
   if (appendParagraph) {
@@ -313,6 +331,9 @@ export function buildEditRequestPatch(input: {
     } else if (field === "imageUrl" && proposed.imageUrl) {
       patch.imageUrl = proposed.imageUrl;
       patch.isAiGeneratedImage = false;
+      // المصغرة وصورة Lite تخص الصورة القديمة؛ تُفرَّغ هنا وتُولَّد بعد الحفظ.
+      patch.thumbnailUrl = null;
+      patch.liteOptimizedImageUrl = null;
       if (proposed.imageAlt) patch.seo = { ...(article.seo ?? {}), imageAltText: proposed.imageAlt };
       appliedFields.push(field);
     } else if (field === "albumImages" && proposed.albumAdd?.length) {

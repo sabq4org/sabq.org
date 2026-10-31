@@ -18,7 +18,12 @@ import {
   type EditRequestInput,
   type EditRequestProposal,
 } from "@shared/articleEditRequests";
-import { articleLockAllowsWriter, nextArticleVersion } from "./articleWriteVersion";
+import { articleLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
+import { articleWriteConflict, refreshArticleLiteImage } from "./articleDerivedWrites";
+import { generateArticleThumbnail } from "./thumbnailService";
+import { summarizeArticle } from "../openai";
+import { generateSeoMetadata } from "../seo-generator";
+import { storage } from "../storage";
 import { maybePlanPublishedRevision, recordArticleRevision } from "./publishFirstService";
 import { runWithExclusiveBreaking } from "./breakingNewsService";
 import { recordArticleSave } from "./articleHistoryService";
@@ -328,15 +333,30 @@ export async function approveEditRequest(input: {
   }
   if (!claimed) return { ok: false as const, status: 409, code: "EDIT_REQUEST_CLOSED", message: "الطلب حُسم أو أُلغي" } satisfies Fail;
 
-  const existing = await loadArticle(claimed.articleId);
-  if (!existing) {
-    await releaseClaim(claimed.id);
-    return { ok: false as const, status: 404, message: "الخبر غير موجود" };
+  // أي خطأ قبل كتابة المادة يعيد الطلب مفتوحًا، فلا يبقى «معتمدًا» دون تطبيق.
+  let applied = false;
+  try {
+    const result = await applyClaimedRequest(claimed, input, () => { applied = true; });
+    if (!result.ok && !applied) await releaseClaim(claimed.id);
+    return result;
+  } catch (error) {
+    if (!applied) await releaseClaim(claimed.id).catch((e) => console.error("[edit-requests] release failed", e));
+    throw error;
   }
+}
+
+async function applyClaimedRequest(
+  claimed: typeof articleEditRequests.$inferSelect,
+  input: { actorId: string; fields: EditRequestField[]; updateLine?: string | null; manual?: boolean },
+  markApplied: () => void,
+) {
+  const existing = await loadArticle(claimed.articleId);
+  if (!existing) return { ok: false as const, status: 404, message: "الخبر غير موجود" } satisfies Fail;
   const names = await displayNames([claimed.requesterId, input.actorId]);
   const requesterName = claimed.requesterId ? names.get(claimed.requesterId) ?? "مراسل" : "مراسل";
 
   if (input.manual) {
+    markApplied();
     await db
       .update(articleEditRequests)
       .set({ appliedFields: [], updatedAt: new Date() })
@@ -350,7 +370,7 @@ export async function approveEditRequest(input: {
     }).catch((error) => console.error("[edit-requests] event log failed", error));
     notifyRequester({ requesterId: claimed.requesterId, requestId: claimed.id, articleId: existing.id, articleTitle: existing.title, approved: true })
       .catch((error) => console.error("[edit-requests] notify requester failed", error));
-    return { ok: true as const, article: existing, before: existing, appliedFields: [] as EditRequestField[], missingParagraphs: [] as string[], changed: false };
+    return { ok: true as const, article: existing, before: existing, appliedFields: [] as EditRequestField[], missingParagraphs: [] as string[], changed: false, request: claimed };
   }
 
   const proposed = claimed.proposed as EditRequestProposal;
@@ -360,7 +380,6 @@ export async function approveEditRequest(input: {
     fields: input.fields,
   });
   if (appliedFields.length === 0) {
-    await releaseClaim(claimed.id);
     return {
       ok: false as const,
       status: 409,
@@ -380,26 +399,38 @@ export async function approveEditRequest(input: {
     updateReason: updateLine,
   });
 
-  let updated: Article | undefined;
-  try {
-    ({ article: updated } = await runWithExclusiveBreaking(
-      async (tx) => {
-        const [row] = await tx
-          .update(articles)
-          .set({ ...patch, ...(revisionPlan?.contentChanged ? { correctedAt: new Date() } : {}), updatedAt: nextArticleVersion } as any)
-          .where(and(eq(articles.id, existing.id), articleLockAllowsWriter(input.actorId)))
-          .returning();
-        return row;
-      },
-      { reason: "article-edit-request-breaking-clear" },
-    ));
-  } catch (error) {
-    await releaseClaim(claimed.id);
-    throw error;
-  }
+  // الكتابة مشروطة بنسخة المادة التي بُني عليها التعديل: إن حفظها محرر أو اعتماد
+  // آخر في هذه الأثناء لا يُكتب فوقه، ويعود الطلب مفتوحًا لإعادة المحاولة.
+  const { article: updated } = await runWithExclusiveBreaking(
+    async (tx) => {
+      const [row] = await tx
+        .update(articles)
+        .set({ ...patch, ...(revisionPlan?.contentChanged ? { correctedAt: new Date() } : {}), updatedAt: nextArticleVersion } as any)
+        .where(and(
+          eq(articles.id, existing.id),
+          matchesArticleVersion(existing.updatedAt ?? new Date(0)),
+          articleLockAllowsWriter(input.actorId),
+        ))
+        .returning();
+      return row as Article | undefined;
+    },
+    { reason: "article-edit-request-breaking-clear" },
+  );
   if (!updated) {
-    await releaseClaim(claimed.id);
-    return { ok: false as const, status: 409, code: "ARTICLE_LOCKED", message: "الخبر مفتوح للتحرير عند مستخدم آخر" } satisfies Fail;
+    const conflict = await articleWriteConflict(existing.id, input.actorId);
+    return conflict.code === "ARTICLE_LOCKED"
+      ? { ok: false as const, status: 409, code: "ARTICLE_LOCKED", message: "الخبر مفتوح للتحرير عند مستخدم آخر" } satisfies Fail
+      : { ok: false as const, status: 409, code: "ARTICLE_CHANGED", message: "تغيّر الخبر أثناء الاعتماد. أعد فتح الطلب وحاول مجددًا." } satisfies Fail;
+  }
+  markApplied();
+
+  if (appliedFields.includes("imageUrl") && updated.imageUrl) {
+    const imageUrl = updated.imageUrl;
+    void (async () => {
+      await refreshArticleLiteImage(updated.id, imageUrl);
+      await generateArticleThumbnail(updated.id, imageUrl).catch((error) =>
+        console.error("[edit-requests] thumbnail failed", error));
+    })();
   }
 
   if (revisionPlan) {
@@ -429,7 +460,7 @@ export async function approveEditRequest(input: {
   notifyRequester({ requesterId: claimed.requesterId, requestId: claimed.id, articleId: existing.id, articleTitle: updated.title, approved: true })
     .catch((error) => console.error("[edit-requests] notify requester failed", error));
 
-  return { ok: true as const, article: updated, before: existing, appliedFields, missingParagraphs, changed: true };
+  return { ok: true as const, article: updated, before: existing, appliedFields, missingParagraphs, changed: true, request: claimed };
 }
 
 export async function rejectEditRequest(input: { id: string; actorId: string; reason: string }) {
@@ -463,4 +494,78 @@ export async function rejectEditRequest(input: { id: string; actorId: string; re
     reason: input.reason,
   }).catch((error) => console.error("[edit-requests] notify requester failed", error));
   return { ok: true as const, request: claimed };
+}
+
+/**
+ * اختياري عند الاعتماد: يعيد توليد الموجز ووصف السيو والكلمات المفتاحية من
+ * العنوان والنص الجديدين، كما يفعل زرّا «تلخيص» و«توليد SEO» في المحرر.
+ * يعمل بعد الرد، ولا يرفع updatedAt (نسخة المحرر)، ونصّ الصورة البديل الذي
+ * كتبه المراسل يبقى كما هو.
+ */
+export async function regenerateEditRequestDerived(input: { articleId: string; actorId: string; keepImageAlt?: string | null }) {
+  const article = await loadArticle(input.articleId);
+  if (!article?.content) return null;
+  const done: string[] = [];
+
+  try {
+    const summary = (await summarizeArticle(article.content))?.trim();
+    if (summary) {
+      await db
+        .update(articles)
+        .set({ excerpt: summary, aiSummary: summary, aiBullets: null, aiBulletsGeneratedAt: null } as any)
+        .where(eq(articles.id, article.id));
+      done.push("excerpt");
+    }
+  } catch (error) {
+    console.error("[edit-requests] summary regeneration failed", error);
+  }
+
+  try {
+    const fresh = (await loadArticle(article.id)) ?? article;
+    const result = await generateSeoMetadata(
+      { id: fresh.id, title: fresh.title, subtitle: fresh.subtitle || undefined, content: fresh.content, excerpt: fresh.excerpt || undefined },
+      "ar",
+    );
+    const seo = {
+      metaTitle: result.content.metaTitle,
+      metaDescription: result.content.metaDescription,
+      keywords: result.content.keywords,
+      socialTitle: result.content.socialTitle,
+      socialDescription: result.content.socialDescription,
+      imageAltText: input.keepImageAlt || result.content.imageAltText,
+      ogImageUrl: result.content.ogImageUrl,
+    };
+    const metadata = {
+      status: "generated" as const,
+      generatedAt: new Date().toISOString(),
+      generatedBy: input.actorId,
+      provider: result.provider,
+      model: result.model,
+      manualOverride: false,
+    };
+    await storage.saveSeoMetadata(fresh.id, "ar", seo, metadata);
+    await storage.createSeoHistoryEntry({
+      articleId: fresh.id,
+      language: "ar",
+      seoContent: seo,
+      seoMetadata: metadata,
+      provider: result.provider,
+      model: result.model,
+      generatedBy: input.actorId,
+    });
+    done.push("seo");
+  } catch (error) {
+    console.error("[edit-requests] SEO regeneration failed", error);
+  }
+
+  if (done.length) {
+    logArticleEvent({
+      articleId: article.id,
+      eventType: "updated",
+      actorId: input.actorId,
+      summary: done.length === 2 ? "أُعيد توليد الموجز والسيو بعد طلب تعديل" : done[0] === "excerpt" ? "أُعيد توليد الموجز بعد طلب تعديل" : "أُعيد توليد السيو بعد طلب تعديل",
+      metadata: { regenerated: done },
+    }).catch((error) => console.error("[edit-requests] event log failed", error));
+  }
+  return { article: (await loadArticle(article.id)) ?? article, regenerated: done };
 }
