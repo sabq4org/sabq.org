@@ -1546,21 +1546,15 @@ extension Article {
 // MARK: - Featured Carousel
 
 /// البارزة الثلاثة في بطاقة واحدة (طلب المالك 2026-10-31): شريحة تُقلَّب أفقيًا
-/// بصورة تملأ رأس البطاقة وعنوان كبير، وتحتها شريط الصور الثلاث يعمل
-/// فهرسًا — تحت النشطة خط يمتلئ كالقصص ثم ينتقل العرض للتالي. اللمس أو
-/// السحب يعيد العدّ، و«تقليل الحركة» يوقف التقليب التلقائي.
+/// بالسحب، بصورة تملأ رأس البطاقة وعنوان كبير، وتحتها نقاط ثابتة للموضع.
+/// أزيل شريط الصور المصغرة وخط التقدم والتقليب التلقائي بطلبه في اليوم نفسه.
 struct FeaturedCarousel: View {
     let articles: [Article]
     let isBookmarked: (Article) -> Bool
     let onBookmark: (Article) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: String?
-    @State private var progress: CGFloat = 0
-
-    /// مدة بقاء الشريحة قبل الانتقال التلقائي.
-    private static let dwell: Double = 6
 
     private var activeID: String? { selection ?? articles.first?.id }
 
@@ -1583,9 +1577,8 @@ struct FeaturedCarousel: View {
             .scrollPosition(id: $selection)
 
             if articles.count > 1 {
-                thumbStrip
-                    .padding(.horizontal, SabqLayout.space12)
-                    .padding(.top, SabqLayout.space16)
+                pageDots
+                    .padding(.top, SabqLayout.space12)
                     .padding(.bottom, SabqLayout.space12)
             } else {
                 Color.clear.frame(height: SabqLayout.space12)
@@ -1593,7 +1586,6 @@ struct FeaturedCarousel: View {
         }
         .clipShape(shape)
         .sabqNewsSurface()
-        .task(id: activeID) { await runDwell() }
     }
 
     // MARK: Slide
@@ -1677,96 +1669,21 @@ struct FeaturedCarousel: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: Thumbnail index
+    // MARK: Page dots
 
-    private var thumbStrip: some View {
-        HStack(alignment: .top, spacing: SabqLayout.space8) {
+    /// نقاط ثابتة تدل على موضع الشريحة، بلا حركة ولا تقليب تلقائي
+    /// (طلب المالك 2026-10-31: إزالة الشريط المتحرك تحت البارزة).
+    private var pageDots: some View {
+        HStack(spacing: 6) {
             ForEach(articles) { article in
-                let isActive = article.id == activeID
-                Button {
-                    SabqHaptics.light()
-                    withAnimation(.snappy(duration: 0.35)) { selection = article.id }
-                } label: {
-                    VStack(spacing: SabqLayout.space8) {
-                        thumb(article, isActive: isActive)
-                        progressLine(isActive: isActive, tint: accent(for: article))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(article.isBreaking ? "عاجل: \(article.title)" : article.title)
-                .accessibilityHint("يعرض الخبر في البطاقة")
-                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                Capsule(style: .continuous)
+                    .fill(article.id == activeID ? SabqTheme.primary : SabqTheme.textTertiary.opacity(0.3))
+                    .frame(width: article.id == activeID ? 16 : 6, height: 6)
             }
         }
-    }
-
-    private func thumb(_ article: Article, isActive: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-        return Color.clear
-            .frame(maxWidth: .infinity)
-            .aspectRatio(16.0 / 10.0, contentMode: .fit)
-            .overlay {
-                if let urlString = article.imageURL, let url = URL(string: urlString) {
-                    FocalCachedAsyncImage(
-                        url: url,
-                        focalPoint: article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30),
-                        maxPixelSize: 360
-                    ) {
-                        SabqImagePlaceholder()
-                    }
-                } else {
-                    SabqImagePlaceholder()
-                        .environment(\.sabqImageLoadFailed, true)
-                }
-            }
-            .clipShape(shape)
-            // العاجل بإطار أحمر حتى وهو غير نشط، فيُعرف من الشريط قبل أن يصله العرض.
-            .overlay(
-                shape.strokeBorder(
-                    isActive || article.isBreaking ? accent(for: article) : SabqTheme.separator,
-                    lineWidth: isActive ? 2 : (article.isBreaking ? 1.5 : 0.75)
-                )
-            )
-            .opacity(isActive ? 1 : 0.55)
-            .scaleEffect(isActive ? 1 : 0.96)
-            .animation(.snappy(duration: 0.3), value: isActive)
-    }
-
-    private func accent(for article: Article) -> Color {
-        article.isBreaking ? SabqTheme.breaking : SabqTheme.primary
-    }
-
-    private func progressLine(isActive: Bool, tint: Color) -> some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(SabqTheme.separator)
-                Capsule()
-                    .fill(tint)
-                    .frame(width: isActive ? proxy.size.width * (reduceMotion ? 1 : progress) : 0)
-            }
-        }
-        .frame(height: 3)
+        .frame(maxWidth: .infinity)
+        .animation(.snappy(duration: 0.25), value: activeID)
         .accessibilityHidden(true)
-    }
-
-    // MARK: Auto-advance
-
-    /// يملأ خط النشطة خلال `dwell` ثم ينتقل للتالي. يُلغى ويعاد من الصفر كلما
-    /// تغيّرت الشريحة (سحب أو لمس صورة)، ويتوقف حين تغادر البطاقة الشاشة.
-    private func runDwell() async {
-        progress = 0
-        guard !reduceMotion, articles.count > 1 else { return }
-        // انتظار قصير حتى يستقر التمرير قبل بدء العدّ.
-        try? await Task.sleep(for: .milliseconds(50))
-        guard !Task.isCancelled else { return }
-        withAnimation(.linear(duration: Self.dwell)) { progress = 1 }
-        try? await Task.sleep(for: .seconds(Self.dwell))
-        guard !Task.isCancelled,
-              let current = activeID,
-              let index = articles.firstIndex(where: { $0.id == current }) else { return }
-        let next = articles[(index + 1) % articles.count].id
-        withAnimation(.snappy(duration: 0.5)) { selection = next }
     }
 
     private func bookmarkButton(_ article: Article) -> some View {

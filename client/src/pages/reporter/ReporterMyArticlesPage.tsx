@@ -29,7 +29,6 @@ import {
   FollowerCard,
   FeaturedCommentCard,
   PublishingActivityCard,
-  ContributorRankCard,
   MonthComparisonCard,
   ArticleStatusBreakdown,
 } from "@/components/contributor-dashboard";
@@ -551,7 +550,6 @@ export default function ReporterMyArticlesPage() {
                         dailyGrowth={analytics?.followers?.dailyGrowth ?? []}
                         loading={isLoading}
                       />
-                      <ContributorRankCard roleType="reporter" loading={isLoading} />
                       <PublishingActivityCard
                         lastPublishedAt={analytics?.publishingActivity?.lastPublishedAt ?? null}
                         daysSinceLastPublished={analytics?.publishingActivity?.daysSinceLastPublished ?? null}

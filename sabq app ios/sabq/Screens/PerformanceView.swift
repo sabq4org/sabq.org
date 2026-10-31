@@ -33,10 +33,6 @@ nonisolated struct ContributorPerformance: Codable {
         let thisWeekCount: Int
         let lastPublishedAt: String?
     }
-    struct Rank: Codable {
-        let rank: Int
-        let total: Int
-    }
     struct Comment: Codable {
         let content: String
         let articleTitle: String
@@ -57,7 +53,6 @@ nonisolated struct ContributorPerformance: Codable {
     let topArticles: [TopArticle]
     let statusCounts: StatusCounts
     let activity: Activity
-    let rank: Rank?
     let featuredComment: Comment?
 }
 
@@ -461,13 +456,6 @@ struct PerformanceView: View {
                 Rectangle().fill(hairline).frame(height: 1)
                 activityRow(icon: "clock", tint: SabqTheme.success, title: data.role == "writer" ? "آخر مقال نُشر" : "آخر خبر نُشر",
                             value: lastPublished(data.activity.lastPublishedAt))
-                if let rank = data.rank {
-                    Rectangle().fill(hairline).frame(height: 1)
-                    activityRow(icon: "trophy", tint: SabqTheme.warning,
-                                title: data.role == "writer" ? "ترتيبي بين الكتّاب" : "ترتيبي بين المراسلين",
-                                subtitle: "بالمشاهدات هذا الشهر",
-                                value: "#\(rank.rank) من \(rank.total)")
-                }
             }
             .background(surface)
         }
