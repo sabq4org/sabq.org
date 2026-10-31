@@ -20,28 +20,39 @@ struct EditRequestComposeView: View {
     @State private var openParagraph: Int?
     @State private var appendParagraph = ""
     @State private var albumItems: [PhotosPickerItem] = []
-    @State private var albumURLs: [String] = []
-    @State private var albumPreviews: [UIImage] = []
+    /// خانة لكل صورة مختارة بترتيب الاختيار؛ حالتها (رفع/مرفوعة/فشل) تُعرض
+    /// على مصغّرتها، ولا تسقط صورة بصمت.
+    @State private var album = AlbumUploadQueue()
+    @State private var albumPreviews: [UUID: UIImage] = [:]
+    /// ما يلزم لإعادة المحاولة: البيانات إن قُرئت، وإلا عنصر المكتبة نفسه.
+    @State private var albumData: [UUID: Data] = [:]
+    @State private var albumPickerItems: [UUID: PhotosPickerItem] = [:]
     @State private var heroItem: PhotosPickerItem?
     @State private var heroURL: String?
     @State private var heroPreview: UIImage?
+    @State private var heroFailed = false
     /// الألبوم والصورة البارزة قد يُرفعان معًا؛ لكل منهما حالته حتى لا
     /// يُفعَّل الإرسال قبل اكتمال الاثنين.
-    @State private var albumUploading: String?
     @State private var heroUploading = false
-    private var uploading: String? { albumUploading ?? (heroUploading ? "رفع الصورة البارزة" : nil) }
+    private var uploading: String? {
+        if album.uploadingCount > 0 { return "رفع الصور · بقي \(album.uploadingCount)" }
+        return heroUploading ? "رفع الصورة البارزة" : nil
+    }
+    /// صورة اختيرت ولم تُرفع: لا يُرسل الطلب ناقصًا حتى يعيد المراسل المحاولة أو يحذفها.
+    private var hasFailedImages: Bool { album.failedCount > 0 || heroFailed }
     @State private var urgent = false
     @State private var sending = false
     @State private var sendError: String?
 
     private static let albumLimit = 10
+    private static let albumUploadWidth = 3
 
     private var hasProposal: Bool {
         !note.trimmed.isEmpty
             || (titleChanged)
             || !paragraphEdits.isEmpty
             || !appendParagraph.trimmed.isEmpty
-            || !albumURLs.isEmpty
+            || !album.uploadedURLs.isEmpty
             || heroURL != nil
     }
 
@@ -85,6 +96,12 @@ struct EditRequestComposeView: View {
             .safeAreaInset(edge: .bottom) {
                 if context != nil && context?.pendingRequestId == nil && loadError == nil {
                     VStack(spacing: SabqLayout.space8) {
+                        if hasFailedImages {
+                            Text("صورة لم تُرفع. أعد المحاولة بلمسها أو احذفها قبل الإرسال.")
+                                .sabqText(SabqType.meta)
+                                .foregroundStyle(SabqTheme.danger)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         if let sendError {
                             Text(sendError)
                                 .sabqText(SabqType.meta)
@@ -92,7 +109,7 @@ struct EditRequestComposeView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         EditorialActionButton(title: uploading ?? "أرسل الطلب", busy: sending || uploading != nil,
-                                              enabled: hasProposal) {
+                                              enabled: hasProposal && !hasFailedImages) {
                             Task { await send() }
                         }
                         Text("نفس الطلب الذي يظهر على الويب، وتصلك نتيجته بإشعار")
@@ -162,7 +179,7 @@ struct EditRequestComposeView: View {
             }
 
             VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                label("صور للألبوم · \(albumURLs.count) من \(Self.albumLimit)")
+                label("صور للألبوم · \(album.slots.count) من \(Self.albumLimit)")
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: SabqLayout.space8) {
                         // الصور الموجودة في الخبر الآن (للعلم فقط)، ثم الجديدة.
@@ -175,16 +192,12 @@ struct EditRequestComposeView: View {
                             .opacity(0.75)
                             .accessibilityLabel("صورة موجودة في الخبر")
                         }
-                        ForEach(Array(albumPreviews.enumerated()), id: \.offset) { _, image in
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 64, height: 64)
-                                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                        ForEach(album.slots) { slot in
+                            albumThumbnail(slot)
                         }
-                        if albumURLs.count < Self.albumLimit {
+                        if album.slots.count < Self.albumLimit {
                             PhotosPicker(selection: $albumItems,
-                                         maxSelectionCount: Self.albumLimit - albumURLs.count,
+                                         maxSelectionCount: Self.albumLimit - album.slots.count,
                                          matching: .images) {
                                 Image(systemName: "plus")
                                     .font(SabqFonts.app(size: 20, weight: .semibold))
@@ -193,6 +206,8 @@ struct EditRequestComposeView: View {
                                     .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surfaceMuted))
                             }
                             .accessibilityLabel("أضف صورًا للألبوم")
+                            // دفعة واحدة في كل مرة يبقي التوازي عند حدّه.
+                            .disabled(album.uploadingCount > 0)
                         }
                     }
                 }
@@ -205,7 +220,11 @@ struct EditRequestComposeView: View {
                             .sabqText(SabqType.rowTitle)
                             .foregroundStyle(SabqTheme.textPrimary)
                         Spacer()
-                        if let heroPreview {
+                        if heroFailed {
+                            Text("تعذر الرفع — اختر مجددًا")
+                                .sabqText(SabqType.meta)
+                                .foregroundStyle(SabqTheme.danger)
+                        } else if let heroPreview {
                             Image(uiImage: heroPreview)
                                 .resizable()
                                 .scaledToFill()
@@ -220,6 +239,16 @@ struct EditRequestComposeView: View {
                     .frame(minHeight: 48)
                 }
                 .buttonStyle(.plain)
+                if heroFailed {
+                    Button("تجاهل الصورة البارزة") {
+                        heroFailed = false
+                        heroItem = nil
+                    }
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget, alignment: .leading)
+                    .buttonStyle(.plain)
+                }
                 Divider().overlay(SabqTheme.separator)
                 Toggle(isOn: $urgent) {
                     Text("عاجل")
@@ -232,6 +261,54 @@ struct EditRequestComposeView: View {
             .padding(.horizontal, SabqLayout.cardInset)
             .sabqNewsSurface()
         }
+    }
+
+    private func albumThumbnail(_ slot: AlbumUploadSlot) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+        return ZStack {
+            if let image = albumPreviews[slot.id] {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                SabqTheme.surfaceMuted
+            }
+            switch slot.phase {
+            case .uploading:
+                Color.black.opacity(0.35)
+                ProgressView().tint(.white)
+            case .uploaded:
+                EmptyView()
+            case .failed:
+                Color.black.opacity(0.45)
+                Image(systemName: "arrow.clockwise")
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(shape)
+        .overlay(shape.stroke(slot.isFailed ? SabqTheme.danger : .clear, lineWidth: 2))
+        .overlay(alignment: .topLeading) {
+            if slot.phase != .uploading {
+                Button {
+                    removeAlbumSlot(slot.id)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.black.opacity(0.6))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("احذف الصورة")
+            }
+        }
+        .contentShape(shape)
+        .onTapGesture {
+            if slot.isFailed { Task { await uploadAlbumSlots([slot.id]) } }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(slot.accessibilityText)
+        .accessibilityAddTraits(slot.isFailed ? .isButton : [])
     }
 
     private func paragraphRow(index: Int, text: String) -> some View {
@@ -298,39 +375,87 @@ struct EditRequestComposeView: View {
 
     private func uploadAlbum(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
+        albumItems = []
         sendError = nil
-        for (index, item) in items.enumerated() {
-            guard albumURLs.count < Self.albumLimit else { break }
-            albumUploading = "رفع الصور \(index + 1) من \(items.count)"
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+        let ids = album.enqueue(count: items.count, limit: Self.albumLimit)
+        for (id, item) in zip(ids, items) { albumPickerItems[id] = item }
+        await uploadAlbumSlots(ids)
+    }
+
+    /// يرفع الخانات المحددة بتوازٍ محدود (3)، ويحدّث كل خانة فور انتهائها.
+    /// الترتيب في الطلب هو ترتيب الخانات، لا ترتيب اكتمال الرفع.
+    private func uploadAlbumSlots(_ ids: [UUID]) async {
+        let inputs = ids.compactMap { id -> AlbumUploadInput? in
+            guard album.markUploading(id) else { return nil }
+            return AlbumUploadInput(id: id, data: albumData[id], item: albumPickerItems[id])
+        }
+        guard !inputs.isEmpty else { return }
+        _ = await BoundedConcurrency.map(inputs, limit: Self.albumUploadWidth, onResult: { index, result in
+            await applyAlbumResult(inputs[index].id, result)
+        }) { input in
+            let data: Data
+            if let cached = input.data {
+                data = cached
+            } else {
+                guard let loaded = try? await input.item?.loadTransferable(type: Data.self) else {
+                    throw AlbumUploadError.unreadable
+                }
+                data = loaded
+            }
             do {
                 let url = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-album")
-                albumURLs.append(url)
-                if let image = UIImage(data: data) { albumPreviews.append(image) }
+                return AlbumUploadOutput(url: url, data: data)
             } catch {
-                sendError = "تعذر رفع إحدى الصور. حاول مجددًا."
+                throw AlbumUploadError.uploadFailed(data)
             }
         }
-        albumUploading = nil
-        albumItems = []
+    }
+
+    private func applyAlbumResult(_ id: UUID, _ result: Result<AlbumUploadOutput, Error>) {
+        switch result {
+        case .success(let output):
+            albumData[id] = output.data
+            if albumPreviews[id] == nil { albumPreviews[id] = UIImage(data: output.data) }
+            album.apply(id, .uploaded(url: output.url))
+        case .failure(let error):
+            if case AlbumUploadError.uploadFailed(let data) = error {
+                albumData[id] = data
+                if albumPreviews[id] == nil { albumPreviews[id] = UIImage(data: data) }
+                album.apply(id, .failed("تعذر رفع الصورة"))
+            } else {
+                album.apply(id, .failed("تعذر قراءة الصورة من المكتبة"))
+            }
+        }
+    }
+
+    private func removeAlbumSlot(_ id: UUID) {
+        album.remove(id)
+        albumPreviews[id] = nil
+        albumData[id] = nil
+        albumPickerItems[id] = nil
     }
 
     private func uploadHero(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         sendError = nil
+        heroFailed = false
         heroUploading = true
         defer { heroUploading = false }
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            heroFailed = true
+            return
+        }
         do {
             heroURL = try await APIClient.shared.uploadSubmissionImage(data, slot: "edit-hero")
             heroPreview = UIImage(data: data)
         } catch {
-            sendError = "تعذر رفع الصورة البارزة. حاول مجددًا."
+            heroFailed = true
         }
     }
 
     private func send() async {
-        guard let context, uploading == nil else { return }
+        guard let context, uploading == nil, !hasFailedImages else { return }
+        let albumURLs = album.uploadedURLs
         sending = true
         sendError = nil
         defer { sending = false }
@@ -365,4 +490,119 @@ struct EditRequestComposeView: View {
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
+// MARK: - رفع الألبوم (منطق خالص قابل للاختبار)
+
+nonisolated struct AlbumUploadSlot: Identifiable, Equatable, Sendable {
+    enum Phase: Equatable, Sendable {
+        case uploading
+        case uploaded(url: String)
+        case failed(String)
+    }
+
+    let id: UUID
+    var phase: Phase
+
+    var isFailed: Bool { if case .failed = phase { return true } else { return false } }
+
+    var accessibilityText: String {
+        switch phase {
+        case .uploading: return "صورة قيد الرفع"
+        case .uploaded: return "صورة مرفوعة"
+        case .failed(let reason): return "\(reason). المس لإعادة المحاولة"
+        }
+    }
+}
+
+/// خانات الألبوم بترتيب اختيار المراسل. الترتيب ثابت مهما اختلف ترتيب
+/// اكتمال الرفع، والفشل يبقى ظاهرًا في خانته حتى يُعاد أو يُحذف.
+nonisolated struct AlbumUploadQueue: Equatable, Sendable {
+    private(set) var slots: [AlbumUploadSlot] = []
+
+    /// يضيف خانات جديدة في حالة «رفع» ضمن السقف، ويعيد معرّفاتها بالترتيب.
+    mutating func enqueue(count: Int, limit: Int) -> [UUID] {
+        let room = max(0, min(count, limit - slots.count))
+        let added = (0..<room).map { _ in AlbumUploadSlot(id: UUID(), phase: .uploading) }
+        slots.append(contentsOf: added)
+        return added.map(\.id)
+    }
+
+    /// يعيد الخانة الفاشلة (أو الجديدة) إلى «رفع». false إن كانت مرفوعة أو غير موجودة.
+    mutating func markUploading(_ id: UUID) -> Bool {
+        guard let index = slots.firstIndex(where: { $0.id == id }) else { return false }
+        if case .uploaded = slots[index].phase { return false }
+        slots[index].phase = .uploading
+        return true
+    }
+
+    mutating func apply(_ id: UUID, _ phase: AlbumUploadSlot.Phase) {
+        guard let index = slots.firstIndex(where: { $0.id == id }) else { return }
+        slots[index].phase = phase
+    }
+
+    mutating func remove(_ id: UUID) {
+        slots.removeAll { $0.id == id }
+    }
+
+    var uploadedURLs: [String] {
+        slots.compactMap { if case .uploaded(let url) = $0.phase { return url } else { return nil } }
+    }
+
+    var uploadingCount: Int { slots.filter { $0.phase == .uploading }.count }
+    var failedCount: Int { slots.filter(\.isFailed).count }
+}
+
+nonisolated struct AlbumUploadInput: Sendable {
+    let id: UUID
+    let data: Data?
+    let item: PhotosPickerItem?
+}
+
+nonisolated struct AlbumUploadOutput: Sendable {
+    let url: String
+    let data: Data
+}
+
+nonisolated enum AlbumUploadError: Error {
+    case unreadable
+    case uploadFailed(Data)
+}
+
+nonisolated enum BoundedConcurrency {
+    /// ينفّذ `operation` على المدخلات بحد أقصى `limit` مهام متزامنة، ويبلّغ
+    /// `onResult` بكل نتيجة وفهرسها فور اكتمالها، ثم يعيد النتائج بترتيب المدخلات.
+    static func map<Input: Sendable, Output: Sendable>(
+        _ inputs: [Input],
+        limit: Int,
+        onResult: @escaping @Sendable (Int, Result<Output, Error>) async -> Void = { _, _ in },
+        operation: @escaping @Sendable (Input) async throws -> Output
+    ) async -> [Result<Output, Error>] {
+        guard !inputs.isEmpty else { return [] }
+        let width = max(1, limit)
+        var results = [Result<Output, Error>?](repeating: nil, count: inputs.count)
+        await withTaskGroup(of: (Int, Result<Output, Error>).self) { group in
+            var next = 0
+            let enqueue: (inout TaskGroup<(Int, Result<Output, Error>)>, Int) -> Void = { group, index in
+                let input = inputs[index]
+                group.addTask {
+                    do { return (index, .success(try await operation(input))) }
+                    catch { return (index, .failure(error)) }
+                }
+            }
+            while next < min(width, inputs.count) {
+                enqueue(&group, next)
+                next += 1
+            }
+            while let (index, result) = await group.next() {
+                results[index] = result
+                await onResult(index, result)
+                if next < inputs.count {
+                    enqueue(&group, next)
+                    next += 1
+                }
+            }
+        }
+        return results.map { $0 ?? .failure(CancellationError()) }
+    }
 }
