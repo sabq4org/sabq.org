@@ -15,6 +15,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
+import { EditRequestLabel, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests } from "@/components/articles/ArticleEditRequests";
+import { articleAcceptsEditRequests } from "@shared/articleEditRequests";
 import {
   markArticleSubmittedInAnalyticsCache,
   invalidateContributorAnalytics,
@@ -121,6 +123,10 @@ function isArchived(status: string) {
 export default function ReporterMyArticlesPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  // «طلب تعديل» على خبر المراسل نفسه (منشور أو بانتظار المراجعة): بدل إرسال خبر جديد.
+  const editRequests = useArticleEditRequests(true);
+  const [reviewRequestId, setReviewRequestId] = useState<string | null>(null);
+  const [requestEditArticleId, setRequestEditArticleId] = useState<string | null>(null);
   const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
   const [listFilter, setListFilter] = useState<ListFilter>("active");
 
@@ -415,9 +421,12 @@ export default function ReporterMyArticlesPage() {
                             <span className="line-clamp-1 font-medium">{article.title}</span>
                           </td>
                           <td className="py-3 px-4">
-                            <Badge variant={contributorArticleStatusLabel(article).variant}>
-                              {contributorArticleStatusLabel(article).label}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={contributorArticleStatusLabel(article).variant}>
+                                {contributorArticleStatusLabel(article).label}
+                              </Badge>
+                              <EditRequestLabel items={editRequests.byArticle.get(article.id)} onOpen={setReviewRequestId} />
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {article.reviewStatus === "needs_changes" && article.reviewNotes ? (
@@ -458,6 +467,11 @@ export default function ReporterMyArticlesPage() {
                           </td>
                           <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1">
+                              {articleAcceptsEditRequests(article.status)
+                                && (article.status !== "draft" || article.reviewStatus === "pending_review")
+                                && !editRequests.byArticle.get(article.id)?.some((i) => i.status === "pending") && (
+                                <RequestEditButton onClick={() => setRequestEditArticleId(article.id)} />
+                              )}
                               {(article.status === "draft" || article.reviewStatus === "needs_changes") &&
                                 article.reviewStatus !== "pending_review" && (
                                 <Button
@@ -506,6 +520,8 @@ export default function ReporterMyArticlesPage() {
           </>
         )}
       </DashboardPageShell>
+      <ReviewEditRequestDialog requestId={reviewRequestId} open={!!reviewRequestId} onOpenChange={(open) => !open && setReviewRequestId(null)} />
+      <RequestEditDialog articleId={requestEditArticleId} open={!!requestEditArticleId} onOpenChange={(open) => !open && setRequestEditArticleId(null)} />
     </DashboardLayout>
   );
 }

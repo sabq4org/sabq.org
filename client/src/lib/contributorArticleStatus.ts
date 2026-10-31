@@ -3,6 +3,13 @@ export function contributorArticleStatusLabel(article: {
   status: string;
   reviewStatus?: string | null;
 }) {
+  // الحالة النهائية أولًا: النشر لا يمسح reviewStatus، فكان المنشور يظهر «أُرسل للمراجعة».
+  if (article.status === "published") {
+    return { label: "منشور", variant: "default" as const };
+  }
+  if (article.status === "scheduled") {
+    return { label: "مجدول", variant: "default" as const };
+  }
   if (article.reviewStatus === "needs_changes") {
     return { label: "يحتاج تعديل", variant: "outline" as const };
   }
