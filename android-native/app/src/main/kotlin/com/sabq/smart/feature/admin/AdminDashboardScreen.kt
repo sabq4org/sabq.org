@@ -97,6 +97,7 @@ class AdminDashboardViewModel @Inject constructor(
     private val _state = MutableStateFlow(AdminDashboardUiState())
     val state: StateFlow<AdminDashboardUiState> = _state.asStateFlow()
     private var listJob: Job? = null
+    private var moreJob: Job? = null
 
     fun load() {
         loadList()
@@ -117,8 +118,10 @@ class AdminDashboardViewModel @Inject constructor(
 
     private fun loadList() {
         listJob?.cancel()
+        // طلب «المزيد» القديم يُلغى: لو وصل بعد الصفحة الأولى لألحق صفحة قديمة وقفز رقم الصفحة.
+        moreJob?.cancel()
         val status = _state.value.status
-        _state.update { it.copy(loading = true, error = null) }
+        _state.update { it.copy(loading = true, loadingMore = false, error = null) }
         listJob = viewModelScope.launch {
             editorialCall { api.articles(status.wire, 1) }
                 .onSuccess { page ->
@@ -132,9 +135,9 @@ class AdminDashboardViewModel @Inject constructor(
 
     fun loadMore() {
         val s = _state.value
-        if (s.loadingMore || !AdminText.canLoadMore(s.items.size, s.total)) return
+        if (s.loading || s.loadingMore || !AdminText.canLoadMore(s.items.size, s.total)) return
         _state.update { it.copy(loadingMore = true) }
-        viewModelScope.launch {
+        moreJob = viewModelScope.launch {
             val next = s.page + 1
             editorialCall { api.articles(s.status.wire, next) }
                 .onSuccess { page ->
@@ -193,7 +196,6 @@ fun AdminDashboardScreen(
     onOpenContactMessages: () -> Unit,
     onOpenTickets: () -> Unit,
     onNewNews: () -> Unit,
-    onNewOpinion: () -> Unit,
     viewModel: AdminDashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -217,7 +219,6 @@ fun AdminDashboardScreen(
                 Icon(Icons.Filled.Add, contentDescription = "محتوى جديد", tint = colors.ink)
                 DropdownMenu(expanded = showNewChoice, onDismissRequest = { showNewChoice = false }) {
                     DropdownMenuItem(text = { Text("خبر") }, onClick = { showNewChoice = false; onNewNews() })
-                    DropdownMenuItem(text = { Text("مقال رأي") }, onClick = { showNewChoice = false; onNewOpinion() })
                 }
             }
         },

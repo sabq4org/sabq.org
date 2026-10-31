@@ -611,7 +611,6 @@ fun SabqApp(
                         onOpenContactMessages = { navController.navigate(SabqRoutes.AdminContactMessages) },
                         onOpenTickets = { navController.navigate(SabqRoutes.AdminTickets) },
                         onNewNews = { navController.navigate(SabqRoutes.SubmitNews) },
-                        onNewOpinion = { navController.navigate(SabqRoutes.SubmitOpinion) },
                     )
                 }
                 composable(SabqRoutes.AdminContactMessages) {
