@@ -1112,6 +1112,9 @@ export default function ArticlesManagement() {
   const canFeatureArticle = user && hasAnyPermission(user, "articles.feature");
   const canArchiveArticle = user && hasAnyPermission(user, "articles.archive");
   const canSocialPublish = user && hasAnyPermission(user, "social_publish.view", "social_publish.create");
+  // أدوات غرفة التحرير (الإشعار، الترجمة، إعادة المادة لصاحبها، فلاتر المصدر)
+  // للمحررين فقط. المراسل يرى أخباره و«طلب تعديل» على المنشور منها.
+  const isNewsroomEditor = !!canPublishArticle || !!canEditAny;
 
   // Helper function to check if user can edit a specific article
   // Reporters cannot edit articles after publication
@@ -1360,7 +1363,7 @@ export default function ArticlesManagement() {
       socialPublishedAt={article.signals?.socialPublishedAt ?? null}
       onDelete={() => setDeletingArticle(article)}
       onRequestRevision={
-        activeStatus !== "archived"
+        canEditAny && activeStatus !== "archived"
           ? () => setRevisionArticle(article)
           : undefined
       }
@@ -1369,6 +1372,8 @@ export default function ArticlesManagement() {
       canDelete={!!(canDeleteArticle || canArchiveArticle)}
       canFeature={!!canFeatureArticle}
       canPublish={!!canPublishArticle}
+      canSendNotification={!!canPublishArticle}
+      canTranslate={!!canPublishArticle}
       canSocialPublish={!!canSocialPublish}
     />
   );
@@ -2060,6 +2065,7 @@ export default function ArticlesManagement() {
               data-testid="input-search-articles"
               className="h-10 flex-1 text-sm"
             />
+            {isNewsroomEditor && (
             <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0">
               <Select value={typeFilter} onValueChange={type => changeFilters({ type })}>
                 <SelectTrigger data-testid="select-type-filter" className="h-10 lg:w-[140px]">
@@ -2101,9 +2107,11 @@ export default function ArticlesManagement() {
                 مسح
               </Button>
             </div>
+            )}
           </div>
 
           {/* Quick Source Filter Bar */}
+          {isNewsroomEditor && (
           <div className={cn("flex items-center gap-1.5 pb-0.5 pt-2 border-t border-border/50", isTouchTablet ? "flex-wrap" : "overflow-x-auto no-scrollbar")} data-testid="source-filter-bar">
             <span className="shrink-0 text-[11px] font-semibold text-muted-foreground ml-1">
               المصدر:
@@ -2195,6 +2203,7 @@ export default function ArticlesManagement() {
               );
             })}
           </div>
+          )}
         </div>
 
         {/* Articles List Section */}
@@ -2661,7 +2670,7 @@ export default function ArticlesManagement() {
                           </Button>
                         )}
                         
-                        {article.status === "published" && (
+                        {canPublishArticle && article.status === "published" && (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -2697,7 +2706,7 @@ export default function ArticlesManagement() {
                           </Button>
                         )}
 
-                        {activeStatus !== "archived" && article.status !== "archived" && (
+                        {canEditAny && activeStatus !== "archived" && article.status !== "archived" && (
                           <Button
                             size="icon"
                             variant="ghost"
