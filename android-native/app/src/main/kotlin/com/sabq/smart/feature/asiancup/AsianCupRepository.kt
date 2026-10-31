@@ -89,14 +89,6 @@ class AsianCupViewModel @Inject constructor(private val repo: AsianCupRepository
 }
 
 @HiltViewModel
-class AsianCupMatchViewModel @Inject constructor(private val repo: AsianCupRepository) : ViewModel() {
-    data class State(val loading: Boolean = true, val detail: AcMatchDetail? = null, val error: String? = null)
-    private val _state = MutableStateFlow(State()); val state = _state.asStateFlow()
-    fun load(id: Int) = viewModelScope.launch { _state.value = State(); runCatching { repo.match(id) }
-        .onSuccess { _state.value = State(false, it) }.onFailure { _state.value = State(false, error = it.localizedMessage) } }
-}
-
-@HiltViewModel
 class AsianCupTeamViewModel @Inject constructor(private val repo: AsianCupRepository) : ViewModel() {
     data class State(val loading: Boolean = true, val profile: AcTeamProfile? = null, val error: String? = null)
     private val _state = MutableStateFlow(State()); val state = _state.asStateFlow()

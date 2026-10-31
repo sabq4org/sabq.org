@@ -904,11 +904,10 @@ fun SabqApp(
                 composable(
                     route = SabqRoutes.AsianCupMatch,
                     arguments = listOf(navArgument("id") { type = NavType.StringType }),
-                ) { entry ->
-                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
-                    com.sabq.smart.feature.asiancup.AsianCupMatchScreen(
-                        fixtureId = fixtureId,
+                ) {
+                    com.sabq.smart.feature.asiancup.AsianCupMatchCenterScreen(
                         onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
                     )
                 }
                 composable(

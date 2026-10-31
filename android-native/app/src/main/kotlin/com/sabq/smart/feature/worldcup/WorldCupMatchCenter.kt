@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.EventSeat
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StopCircle
@@ -61,6 +63,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.sabq.smart.data.auth.AuthTokenStore
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -68,15 +71,33 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class WorldCupMatchViewModel @Inject constructor(
-    private val repo: WorldCupRepository,
+    source: WorldCupMatchSource,
+    repo: WorldCupRepository,
+    tokenStore: AuthTokenStore,
+    savedStateHandle: SavedStateHandle,
+) : MatchCenterViewModel(source, repo, tokenStore, savedStateHandle)
+
+/**
+ * منطق مركز المباراة المشترك بين كأس العالم وكأس آسيا — يختلف المصدر فقط
+ * ([MatchCenterSource]). [followRepo] لتنبيهات «تابع المباراة» (المتابعة الرياضية).
+ */
+abstract class MatchCenterViewModel(
+    private val repo: MatchCenterSource,
+    private val followRepo: WorldCupRepository,
+    private val tokenStore: AuthTokenStore,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     private val fixtureId: Int = savedStateHandle.get<String>("id")?.toIntOrNull() ?: 0
+
+    val supportsLiveFollow: Boolean get() = repo.supportsLiveFollow
+    val supportsMatchAlerts: Boolean get() = repo.supportsMatchAlerts
 
     data class UiState(
         val detail: WcMatchDetail? = null,
@@ -93,6 +114,10 @@ class WorldCupMatchViewModel @Inject constructor(
         val selectedPlayerId: Int? = null,
         val playerCard: WcPlayerCard? = null,
         val playerLoading: Boolean = false,
+        // «تابع المباراة» — تنبيهات المتابعة الرياضية (كأس آسيا)
+        val isLoggedIn: Boolean = false,
+        val isFollowingMatch: Boolean = false,
+        val followBusy: Boolean = false,
     ) {
         val isLive: Boolean get() = detail?.fixture?.status?.live == true
     }
@@ -106,6 +131,45 @@ class WorldCupMatchViewModel @Inject constructor(
         load()
         loadExtras()
         loadTv()
+        if (repo.supportsMatchAlerts) refreshMatchFollow()
+    }
+
+    /**
+     * يتابع حالة الدخول لحظيًا: لو ضغط القارئ «تابع المباراة» وسجّل دخوله ثم عاد
+     * إلى الشاشة نفسها، تتحدّث الحالة دون إعادة إنشاء الشاشة.
+     */
+    private fun refreshMatchFollow() {
+        viewModelScope.launch {
+            tokenStore.token
+                .map { !it.isNullOrBlank() }
+                .distinctUntilChanged()
+                .collect { loggedIn ->
+                    _state.update { it.copy(isLoggedIn = loggedIn, isFollowingMatch = false) }
+                    if (!loggedIn) return@collect
+                    val follows = runCatching { followRepo.sportsFollows() }.getOrNull() ?: return@collect
+                    val following = follows.any { it.kind == "match" && it.refId == fixtureId.toString() }
+                    _state.update { it.copy(isFollowingMatch = following) }
+                }
+        }
+    }
+
+    fun toggleMatchFollow() {
+        val s = _state.value
+        val f = s.detail?.fixture ?: return
+        if (!s.isLoggedIn || s.followBusy) return
+        _state.update { it.copy(followBusy = true) }
+        viewModelScope.launch {
+            val ok = runCatching {
+                if (s.isFollowingMatch) {
+                    followRepo.removeFollow("match", f.id.toString())
+                } else {
+                    followRepo.addFollow("match", f.id.toString(), "${f.home.name} × ${f.away.name}", f.home.logo)
+                }
+            }.isSuccess
+            _state.update {
+                it.copy(followBusy = false, isFollowingMatch = if (ok) !s.isFollowingMatch else s.isFollowingMatch)
+            }
+        }
     }
 
     fun load() {
@@ -175,7 +239,11 @@ class WorldCupMatchViewModel @Inject constructor(
 }
 
 @Composable
-fun WorldCupMatchCenterScreen(onBack: () -> Unit, viewModel: WorldCupMatchViewModel = hiltViewModel()) {
+fun WorldCupMatchCenterScreen(
+    onBack: () -> Unit,
+    onRequireLogin: () -> Unit = {},
+    viewModel: MatchCenterViewModel = hiltViewModel<WorldCupMatchViewModel>(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
         Column(modifier = Modifier.fillMaxSize().background(WcColors.sectionBackground)) {
@@ -196,7 +264,13 @@ fun WorldCupMatchCenterScreen(onBack: () -> Unit, viewModel: WorldCupMatchViewMo
             when {
                 state.loading -> WcLoading()
                 detail == null -> WcEmptyText("تعذر جلب تفاصيل المباراة")
-                else -> MatchContent(state, viewModel::openPlayer)
+                else -> MatchContent(
+                    state = state,
+                    onOpenPlayer = viewModel::openPlayer,
+                    showLiveFollow = viewModel.supportsLiveFollow,
+                    showMatchAlerts = viewModel.supportsMatchAlerts,
+                    onToggleMatchAlerts = { if (state.isLoggedIn) viewModel.toggleMatchFollow() else onRequireLogin() },
+                )
             }
         }
 
@@ -208,7 +282,13 @@ fun WorldCupMatchCenterScreen(onBack: () -> Unit, viewModel: WorldCupMatchViewMo
 }
 
 @Composable
-private fun MatchContent(state: WorldCupMatchViewModel.UiState, onOpenPlayer: (Int) -> Unit) {
+private fun MatchContent(
+    state: MatchCenterViewModel.UiState,
+    onOpenPlayer: (Int) -> Unit,
+    showLiveFollow: Boolean = true,
+    showMatchAlerts: Boolean = false,
+    onToggleMatchAlerts: () -> Unit = {},
+) {
     val detail = state.detail ?: return
     val f = detail.fixture
     val started = f.status.live || f.status.finished
@@ -231,7 +311,8 @@ private fun MatchContent(state: WorldCupMatchViewModel.UiState, onOpenPlayer: (I
         state.tv?.takeIf { it.available && it.channels.isNotEmpty() }?.let { tv ->
             item { TvStrip(tv.channels) }
         }
-        item { LiveFollowButton(f) }
+        if (showMatchAlerts) item { MatchAlertsButton(state.isFollowingMatch, state.followBusy, onToggleMatchAlerts) }
+        if (showLiveFollow) item { LiveFollowButton(f) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 tabs.forEach { (key, label) ->
@@ -253,6 +334,41 @@ private fun MatchContent(state: WorldCupMatchViewModel.UiState, onOpenPlayer: (I
                 "ratings" -> RatingsTab(detail, onOpenPlayer)
                 else -> PredictionTab(detail, state.forecast)
             }
+        }
+    }
+}
+
+/** «تابع المباراة» — تنبيهات أهداف وبداية ونهاية المباراة (نظير followMatchBar في iOS). */
+@Composable
+private fun MatchAlertsButton(following: Boolean, busy: Boolean, onToggle: () -> Unit) {
+    Row(Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (following) WcColors.royal else Color.Transparent)
+                .border(1.dp, if (following) Color.Transparent else WcColors.onDarkDim, RoundedCornerShape(12.dp))
+                .clickable(enabled = !busy, onClick = onToggle)
+                .padding(horizontal = 16.dp),
+        ) {
+            if (busy) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = if (following) Color.White else WcColors.emeraldDeep,
+                    strokeWidth = 2.dp, modifier = Modifier.size(16.dp),
+                )
+            } else {
+                Icon(
+                    if (following) Icons.Filled.NotificationsActive else Icons.Filled.Notifications, null,
+                    tint = if (following) Color.White else WcColors.emeraldDeep, modifier = Modifier.size(18.dp),
+                )
+            }
+            Text(
+                if (following) "تتابع المباراة" else "تابع المباراة",
+                color = if (following) Color.White else WcColors.emeraldDeep,
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }
