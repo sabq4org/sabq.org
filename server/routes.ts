@@ -1864,8 +1864,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Dedupe by URL + paginate in SQL (DISTINCT ON keeps the newest row per
-      // URL; the outer query re-orders + LIMIT/OFFSET). Live usage is computed
+      // Dedupe by URL + paginate in SQL (best matching row on search, newest
+      // otherwise; the outer query re-orders + LIMIT/OFFSET). Live usage is computed
       // ONLY for most_used so the default path stays cheap.
       const dedupSub = db
         .selectDistinctOn([mediaFiles.url], {
@@ -1876,7 +1876,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         })
         .from(mediaFiles)
         .where(whereClause)
-        .orderBy(mediaFiles.url, desc(mediaFiles.createdAt), desc(mediaFiles.id))
+        .orderBy(mediaFiles.url, ...(mediaSearch && !orderByMostUsed ? [desc(sql.identifier("score"))] : []), desc(mediaFiles.createdAt), desc(mediaFiles.id))
         .as("dedup");
 
       const pagedRows = await db

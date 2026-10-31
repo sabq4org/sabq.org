@@ -782,6 +782,9 @@
         "docs/R2_NEWS_IMAGES_ROLLOUT.md"
       ],
       "pathGlobs": [
+        "server/mediaSearch.ts",
+        "tests/unit/mediaSearch.test.ts",
+        "tests/unit/mediaSubjectRanking.integration.test.ts",
         "server/services/media*.ts",
         "server/services/newsImageStorageService.ts",
         "server/routes/mediaLibrary.ts",
@@ -800,7 +803,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-10-24"
+      "lastReviewed": "2026-10-31"
     },
     {
       "id": "sports-tournaments",
