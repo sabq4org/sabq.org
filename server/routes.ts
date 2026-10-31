@@ -1,5 +1,5 @@
 import { registerShutdownHook } from "./shutdown";
-import { buildMediaSearch } from "./mediaSearch";
+import { buildMediaSearch, mediaListSortFields } from "./mediaSearch";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
 import { setArticleDerivedFields, articleWriteConflict, refreshArticleLiteImage } from "./services/articleDerivedWrites";
 import { adminScheduledOrder, getAdminPublishedPageIds, getArticleMetricsForUser } from "./services/adminArticleList";
@@ -1867,14 +1867,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Dedupe by URL + paginate in SQL (DISTINCT ON keeps the newest row per
       // URL; the outer query re-orders + LIMIT/OFFSET). Live usage is computed
       // ONLY for most_used so the default path stays cheap.
-      const usageExpr = sql<number>`((SELECT count(*) FROM ${articleMediaAssets} WHERE ${articleMediaAssets.mediaFileId} = ${mediaFiles.id}) + (SELECT count(*) FROM ${mediaUsageLog} WHERE ${mediaUsageLog.mediaId} = ${mediaFiles.id}))`;
       const dedupSub = db
         .selectDistinctOn([mediaFiles.url], {
           id: mediaFiles.id,
           url: mediaFiles.url,
           createdAt: mediaFiles.createdAt,
-          usage: orderByMostUsed ? usageExpr : sql<number>`0`,
-          score: mediaSearch ? mediaSearch.score : sql<number>`0`,
+          ...mediaListSortFields(mediaSearch, orderByMostUsed),
         })
         .from(mediaFiles)
         .where(whereClause)

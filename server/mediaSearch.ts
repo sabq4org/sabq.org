@@ -1,5 +1,5 @@
 import { sql, and, or, type SQL } from "drizzle-orm";
-import { mediaFiles } from "@shared/schema";
+import { mediaFiles, articleMediaAssets, mediaUsageLog } from "@shared/schema";
 
 /** Max search tokens honoured (extra tokens are ignored). */
 export const MAX_SEARCH_TOKENS = 6;
@@ -31,7 +31,7 @@ export function tokenizeSearch(input: string): string[] {
 
 // Constant SQL fragments (no user input) mirroring normalizeSearchText.
 const normalizeSql = (expr: SQL): SQL =>
-  sql`lower(translate(regexp_replace(coalesce(${expr}, ''), '[\u064B-\u0652\u0640]', '', 'g'), 'أإآٱةى', 'اااااهي'))`;
+  sql`lower(translate(regexp_replace(coalesce(${expr}, ''), '[\u064B-\u0652\u0640]', '', 'g'), 'أإآٱةى', 'ااااهي'))`;
 
 export const MEDIA_SEARCH_FIELDS = [
   { name: "title", weight: 4, expr: () => sql`${mediaFiles.title}` },
@@ -48,6 +48,17 @@ export interface MediaSearchSql {
   where: SQL;
   score: SQL<number>;
   tokens: string[];
+}
+
+/** Computed fields must be aliased before the outer media page orders by them. */
+export function mediaListSortFields(search: MediaSearchSql | null, mostUsed: boolean) {
+  const usage = mostUsed
+    ? sql<number>`((SELECT count(*) FROM ${articleMediaAssets} WHERE ${articleMediaAssets.mediaFileId} = ${mediaFiles.id}) + (SELECT count(*) FROM ${mediaUsageLog} WHERE ${mediaUsageLog.mediaId} = ${mediaFiles.id}))`
+    : sql<number>`0`;
+  return {
+    usage: usage.as("usage"),
+    score: (search ? search.score : sql<number>`0`).as("score"),
+  };
 }
 
 /**
