@@ -67,7 +67,7 @@ final class GatedAdminService: AdminServicing, @unchecked Sendable {
     func createArticle(_ body: AdminCreateBody) async throws -> String { "new-id" }
     func publish(id: String) async throws -> AdminNewsItem { throw GatedServiceError.unimplemented }
     func fetchDetail(id: String) async throws -> AdminArticleDetail { throw GatedServiceError.unimplemented }
-    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws {}
+    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws -> String? { nil }
     func generateSummary(text: String) async throws -> String { "" }
     func generateSEO(title: String, content: String, excerpt: String) async throws -> AdminSEO { AdminSEO() }
     func uploadImage(dataURI: String) async throws -> String { "" }
