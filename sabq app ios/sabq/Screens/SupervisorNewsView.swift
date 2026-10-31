@@ -9,8 +9,12 @@ struct SupervisorNewsView: View {
 
     @State private var board = EditorialNewsBoard()
     @State private var filter: EditorialNewsFilter
-    @State private var loading = true
     @State private var error: EditorialError?
+    /// الفلتر والحساب اللذان تخصهما `board` المعروضة (nil قبل أول تحميل ناجح).
+    @State private var boardFilter: EditorialNewsFilter?
+    @State private var boardAccountId: String?
+    /// «الأحدث يفوز»: رد فلتر سابق أو حساب سابق لا يبدّل القائمة الحالية.
+    @State private var gate = EditorialRequestGate<EditorialNewsFilter>()
     /// المحرر بلا دور مراسل أو كاتب: هذه لوحته الوحيدة، فالإنشاء هنا.
     @State private var showNewChoice = false
     @State private var submissionKind: ArticleSubmissionKind?
@@ -32,12 +36,21 @@ struct SupervisorNewsView: View {
                         .foregroundStyle(SabqTheme.textPrimary)
                 }
 
-                if error != nil || (loading && board.items.isEmpty) {
-                    EditorialStatusView(error: error, loading: loading) { Task { await load() } }
+                if boardFilter == nil || error?.keepsVisibleContent == false {
+                    EditorialStatusView(error: error, loading: error == nil) { Task { await load() } }
                 } else {
                     summary
                     chips
-                    if board.items.isEmpty {
+                    if let error, boardFilter == filter {
+                        // فشل التحديث: تبقى القائمة الحالية ومعها السبب.
+                        Text(error.localizedDescription)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.warning)
+                    }
+                    if boardFilter != filter {
+                        // فلتر جديد قيد التحميل: لا نعرض قائمة فلتر آخر تحته.
+                        EditorialStatusView(error: error, loading: error == nil) { Task { await load() } }
+                    } else if board.items.isEmpty {
                         Text("لا شيء ينتظر قرارك الآن.")
                             .sabqText(SabqType.excerpt)
                             .foregroundStyle(SabqTheme.textSecondary)
@@ -85,7 +98,8 @@ struct SupervisorNewsView: View {
         .sheet(item: $submissionKind, onDismiss: { Task { await load() } }) { kind in
             ArticleSubmissionView(kind: kind)
         }
-        .task { await load() }
+        // يُلغى طلب الفلتر (أو الحساب) السابق تلقائيًا عند تبديله.
+        .task(id: "\(filter.rawValue)|\(authStore.currentUser?.id ?? "")") { await load() }
     }
 
     private var summary: some View {
@@ -122,7 +136,6 @@ struct SupervisorNewsView: View {
                     EditorialChip(title: option.title, count: board.counts.count(for: option), selected: filter == option) {
                         guard filter != option else { return }
                         filter = option
-                        Task { await load() }
                     }
                 }
             }
@@ -209,16 +222,25 @@ struct SupervisorNewsView: View {
     }
 
     private func load() async {
-        if board.items.isEmpty { loading = true }
-        do {
-            board = try await EditorialAPI.newsBoard(filter: filter)
-            error = nil
-        } catch let e as EditorialError {
-            error = e
-        } catch {
-            self.error = .message(error.localizedDescription)
+        // هوية الطلب قبل await: الحساب والفلتر والتسلسل.
+        let ticket = gate.begin(filter)
+        error = nil
+        if ticket.accountId != boardAccountId {
+            // حساب آخر: لا يبقى شيء من قائمة السابق.
+            board = EditorialNewsBoard()
+            boardFilter = nil
+            boardAccountId = ticket.accountId
         }
-        loading = false
+        do {
+            let fresh = try await EditorialAPI.newsBoard(filter: ticket.key)
+            guard gate.accepts(ticket, currentKey: filter) else { return }
+            board = fresh
+            boardFilter = ticket.key
+            error = nil
+        } catch {
+            guard gate.accepts(ticket, currentKey: filter), !Task.isCancelled else { return }
+            self.error = (error as? EditorialError) ?? .message(error.localizedDescription)
+        }
     }
 }
 
