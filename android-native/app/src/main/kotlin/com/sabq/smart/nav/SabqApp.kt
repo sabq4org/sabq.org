@@ -96,6 +96,17 @@ object SabqRoutes {
     const val Economy = "economy"
     const val AiTeam = "about/ai-team"
     const val BlockedUsers = "account/blocked-users"
+    // لوحة المراسل والمشرف (نقل iOS 2026-10-31) — /api/v1/editorial/*
+    const val MyNews = "editorial/my-news"
+    const val SupervisorNews = "editorial/news?filter={filter}"
+    const val SupervisorNewsPreview = "editorial/news/{id}"
+    const val EditRequestCompose = "editorial/edit-request/{id}?title={title}&state={state}"
+    const val EditRequestReview = "editorial/edit-requests/{id}"
+    fun supervisorNews(filter: String = "all"): String = "editorial/news?filter=${android.net.Uri.encode(filter)}"
+    fun supervisorNewsPreview(id: String): String = "editorial/news/${android.net.Uri.encode(id)}"
+    fun editRequestCompose(id: String, title: String, state: String): String =
+        "editorial/edit-request/${android.net.Uri.encode(id)}?title=${android.net.Uri.encode(title)}&state=${android.net.Uri.encode(state)}"
+    fun editRequestReview(id: String): String = "editorial/edit-requests/${android.net.Uri.encode(id)}"
     const val Trending = "trending"
     const val DailyBrief = "brief"
     const val InterestsPicker = "interests/picker"
@@ -530,11 +541,63 @@ fun SabqApp(
                         onSubmitNewsClick = { navController.navigate(SabqRoutes.SubmitNews) },
                         onPickInterestsClick = { navController.navigate(SabqRoutes.InterestsPicker) },
                         onDashboardClick = { navController.navigate(SabqRoutes.ContributorDashboard) },
+                        onMyNewsClick = { navController.navigate(SabqRoutes.MyNews) },
+                        onSupervisorClick = { navController.navigate(SabqRoutes.supervisorNews()) },
                         onSabqPlusClick = { navController.navigate(SabqRoutes.SabqPlus) },
                         onPressCardClick = { navController.navigate(SabqRoutes.PressCard) },
                         onBlockedUsersClick = { navController.navigate(SabqRoutes.BlockedUsers) },
                         onLogout = { coroutineScope.launch { authVm.logout() } },
                     )
+                }
+                composable(SabqRoutes.MyNews) {
+                    com.sabq.smart.feature.editorial.ReporterNewsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenNotifications = { navController.navigate(SabqRoutes.Notifications) },
+                        onNewNews = { navController.navigate(SabqRoutes.SubmitNews) },
+                        onRequestEdit = { item ->
+                            navController.navigate(SabqRoutes.editRequestCompose(item.id, item.title, item.stateLabel))
+                        },
+                        onResubmit = { id -> navController.navigate(SabqRoutes.revisionEditor(id)) },
+                        onOpenArticle = { slug -> navController.navigate(SabqRoutes.articleDetail(slug)) },
+                        onOpenPerformance = { navController.navigate(SabqRoutes.ContributorDashboard) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.SupervisorNews,
+                    arguments = listOf(navArgument("filter") { type = NavType.StringType; defaultValue = "all" }),
+                ) {
+                    val authVm: com.sabq.smart.feature.auth.AuthViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+                    val user by authVm.currentUser.collectAsStateWithLifecycle()
+                    com.sabq.smart.feature.editorial.SupervisorNewsScreen(
+                        isPlatformAdmin = user?.isPlatformAdmin == true,
+                        onBack = { navController.popBackStack() },
+                        onOpenDraft = { id -> navController.navigate(SabqRoutes.supervisorNewsPreview(id)) },
+                        onOpenEditRequest = { id -> navController.navigate(SabqRoutes.editRequestReview(id)) },
+                        onNewNews = { navController.navigate(SabqRoutes.SubmitNews) },
+                        onNewOpinion = { navController.navigate(SabqRoutes.SubmitOpinion) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.SupervisorNewsPreview,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.editorial.SupervisorNewsPreviewScreen(onBack = { navController.popBackStack() })
+                }
+                composable(
+                    route = SabqRoutes.EditRequestCompose,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("state") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) {
+                    com.sabq.smart.feature.editorial.EditRequestComposeScreen(onClose = { navController.popBackStack() })
+                }
+                composable(
+                    route = SabqRoutes.EditRequestReview,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.editorial.EditRequestReviewScreen(onBack = { navController.popBackStack() })
                 }
                 composable(SabqRoutes.BlockedUsers) {
                     com.sabq.smart.feature.comments.BlockedUsersScreen(

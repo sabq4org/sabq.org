@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -138,6 +139,8 @@ fun SettingsScreen(
     onSubmitNewsClick: () -> Unit = {},
     onPickInterestsClick: () -> Unit = {},
     onDashboardClick: () -> Unit = {},
+    onMyNewsClick: () -> Unit = {},
+    onSupervisorClick: () -> Unit = {},
     onSabqPlusClick: () -> Unit = {},
     onPressCardClick: () -> Unit = {},
     onOpenRevisionsClick: () -> Unit = {},
@@ -201,9 +204,26 @@ fun SettingsScreen(
             )
         }
 
-        // 3) Contributor dashboard (writers/reporters/admins only)
+        // 3) «عملي في سبق» — مدخل لكل دور كما في iOS (2026-10-31): لوحة التحكم
+        // للمحرر والإدارة، و«أخباري» للمراسل، و«لوحة الكاتب» لكاتب الرأي.
         currentUser?.let { u ->
-            if (u.isWriter || u.isReporter || u.isAdminLike) {
+            if (u.isAdminLike) {
+                DashboardEntryRow(
+                    title = "لوحة التحكم",
+                    subtitle = "أخبار المراسلين وطلبات التعديل بانتظار قرارك",
+                    icon = Icons.Filled.Inbox,
+                    onClick = onSupervisorClick,
+                )
+            }
+            if (u.isReporter) {
+                DashboardEntryRow(
+                    title = "أخباري",
+                    subtitle = "ما يحتاج تعديلك، وحالة أخبارك، وخبر جديد",
+                    icon = Icons.Outlined.Newspaper,
+                    onClick = onMyNewsClick,
+                )
+            }
+            if (u.isWriter) {
                 DashboardEntryRow(onClick = onDashboardClick)
             }
         }
@@ -1060,7 +1080,12 @@ private fun ProfileCompletionCTA(
 // MARK: - Dashboard entry
 
 @Composable
-private fun DashboardEntryRow(onClick: () -> Unit) {
+private fun DashboardEntryRow(
+    title: String = "لوحة الكاتب",
+    subtitle: String = "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
+    icon: ImageVector = Icons.Filled.BarChart,
+    onClick: () -> Unit,
+) {
     val accentGreen = Color(red = 0.30f, green = 0.69f, blue = 0.31f)
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
     Row(
@@ -1082,7 +1107,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Filled.BarChart,
+                imageVector = icon,
                 contentDescription = null,
                 tint = accentGreen,
                 modifier = Modifier.size(19.dp),
@@ -1093,7 +1118,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = "لوحة الكاتب",
+                text = title,
                 style = SabqTheme.typography.compactCardTitle.copy(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
@@ -1101,7 +1126,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
                 ),
             )
             Text(
-                text = "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
+                text = subtitle,
                 style = SabqTheme.typography.metaSmall.copy(
                     fontSize = 12.sp,
                     color = SabqTheme.colors.secondaryInk,

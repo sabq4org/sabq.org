@@ -52,6 +52,8 @@ data class ApiArticleDraft(
     val requestedAt: String? = null,
     val reviewStatus: String? = null,
     val status: String? = null,
+    /** نسخة المادة كما أرسلها الخادم؛ تعود حرفيًا في expectedUpdatedAt. */
+    val updatedAt: String? = null,
 ) {
     val isOpinion: Boolean get() = kind == "opinion"
 
@@ -75,6 +77,8 @@ data class ResubmitRequest(
     val content: String,
     val heroImage: String? = null,
     val albumImages: List<String>? = null,
+    /** النسخة التي فُتح عليها النموذج؛ يرفض الخادم الإرسال إن تغيّرت (#2059). */
+    val expectedUpdatedAt: String? = null,
 )
 
 @Serializable

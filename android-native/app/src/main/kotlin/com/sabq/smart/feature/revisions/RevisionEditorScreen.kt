@@ -218,6 +218,7 @@ class RevisionEditorViewModel @Inject constructor(
                         content = s.body.trim(),
                         heroImage = heroImage,
                         albumImages = albumImages,
+                        expectedUpdatedAt = s.draft?.updatedAt,
                     ),
                 )
             }
