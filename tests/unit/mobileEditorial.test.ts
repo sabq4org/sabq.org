@@ -94,12 +94,13 @@ describe("/api/v1/editorial", () => {
     expect((await get("/me")).status).toBe(401);
   });
 
-  it("requires two-factor like the Desk", async () => {
+  it("opens the dashboard without two-factor (optional in the reader app)", async () => {
     state.user = { ...state.user, twoFactorEnabled: false };
     const res = await get("/my-news");
-    expect(res.status).toBe(403);
-    expect((await res.json()).code).toBe("two_factor_required");
-    expect(state.board).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(state.board).toHaveBeenCalled();
+    const me = await get("/me");
+    expect((await me.json()).twoFactorEnabled).toBe(false);
   });
 
   it("serves my-news to reporters and keeps it private", async () => {

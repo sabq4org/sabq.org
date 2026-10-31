@@ -5,9 +5,8 @@
 // وينشر ويجدول ويعيد ويراجع طلبات التعديل. نفس الخدمات التي يستخدمها الويب
 // و«مكتب سبق»، فكل قرار يظهر في الثلاثة فورًا.
 //
-// المصادقة: جلسة العضو (Bearer) في التطبيق + المصادقة الثنائية إلزامية
-// (403 two_factor_required) كما في «مكتب سبق» (اعتمده المالك للمراسلين
-// 2026-10-31)، وRBAC حي لكل طلب. HTTP فقط؛ الاستعلامات في services/ (ADR-001).
+// المصادقة: جلسة العضو (Bearer) في التطبيق، والمصادقة الثنائية اختيارية
+// لكل الأدوار (قرار المالك 2026-10-31)، وRBAC حي لكل طلب. HTTP فقط؛ الاستعلامات في services/ (ADR-001).
 // التوثيق: docs/systems/editorial/MOBILE_EDITORIAL_API.md
 
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
@@ -53,12 +52,8 @@ async function requireEditorialAuth(req: EditorialRequest, res: Response, next: 
     const session = await verifyMemberBearer(req);
     const user = session?.userId ? await getStaffUserAccount(session.userId) : null;
     if (!user) return sendError(res, 401, { code: "unauthorized", message: "جلسة غير صالحة أو منتهية" });
-    if (!user.twoFactorEnabled) {
-      return sendError(res, 403, {
-        code: "two_factor_required",
-        message: "فعّل المصادقة الثنائية من إعدادات حسابك لفتح لوحة التحكم",
-      });
-    }
+    // المصادقة الثنائية اختيارية في تطبيق «سبق» لكل الأدوار (قرار المالك 2026-10-31)،
+    // مثل لوحة الويب. تطبيق «مكتب سبق» (/api/v1/staff) ما زال يشترطها.
     const { roles, capabilities } = await resolveStaffCapabilitiesAndRoles(user.id, user.role);
     req.staffAuth = { user, roles, capabilities };
     return next();
@@ -138,7 +133,7 @@ router.get("/me", auth, (req: EditorialRequest, res) => {
     name: ctx.user.name,
     canReport: ctx.capabilities.canReport || ctx.capabilities.canNews,
     canNews: ctx.capabilities.canNews,
-    twoFactorEnabled: true,
+    twoFactorEnabled: Boolean(ctx.user.twoFactorEnabled),
   };
   res.json(me);
 });
