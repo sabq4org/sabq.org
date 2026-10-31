@@ -95,6 +95,7 @@ object SabqRoutes {
     /** «الاقتصاد بالأرقام» — نقل الويب /economy (#1493–#1506). */
     const val Economy = "economy"
     const val AiTeam = "about/ai-team"
+    const val SabqAi = "about/sabq-ai"
     const val BlockedUsers = "account/blocked-users"
     // لوحة المراسل والمشرف (نقل iOS 2026-10-31) — /api/v1/editorial/*
     const val MyNews = "editorial/my-news"
@@ -560,7 +561,7 @@ fun SabqApp(
                         onNewsletterClick = { navController.navigate(SabqRoutes.Newsletter) },
                         onPrivacyClick = { navController.navigate(SabqRoutes.PrivacyPolicy) },
                         onTermsClick = { navController.navigate(SabqRoutes.TermsOfUse) },
-                        onAiTeamClick = { navController.navigate(SabqRoutes.AiTeam) },
+                        onAiTeamClick = { navController.navigate(SabqRoutes.SabqAi) },
                         onOpenWebsite = { openUrl("https://sabq.org") },
                         onOpenTwitter = { openUrl("https://x.com/sabqorg") },
                         onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
@@ -740,6 +741,16 @@ fun SabqApp(
                 ) {
                     com.sabq.smart.feature.revisions.RevisionEditorScreen(
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.SabqAi) {
+                    com.sabq.smart.feature.sabqai.SabqAiScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenWorldCup = { navController.navigate(SabqRoutes.WorldCup) },
+                        onOpenAsianCup = { navController.navigate(SabqRoutes.AsianCup) },
+                        onOpenRoshn = { navController.navigate(SabqRoutes.Roshn) },
+                        onOpenKingsCup = { navController.navigate(SabqRoutes.KingsCup) },
+                        onOpenMoments = { navController.navigate(SabqRoutes.MomentByMoment) },
                     )
                 }
                 composable(SabqRoutes.AiTeam) {

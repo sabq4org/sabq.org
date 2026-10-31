@@ -54,7 +54,7 @@ import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
@@ -1739,10 +1739,11 @@ private fun AboutSection(
                 color = SabqTheme.colors.secondaryInk,
             ),
         )
+        // كما في iOS: «عقل سبق» يضم فريق سبق الذكي ضمن أقسامه.
         SettingsRow(
-            title = "فريق سبق الذكي",
-            subtitle = "زملاؤنا الرقميون بأسمائهم وأدوارهم — تحت إشراف بشري",
-            icon = Icons.Filled.Groups,
+            title = "عقل سبق",
+            subtitle = "منظومة الذكاء في سبق وفريقها الرقمي — والقرار للمحرر",
+            icon = Icons.Filled.Psychology,
             tint = SabqTheme.colors.primaryEnd,
             onClick = onAiTeamClick,
         )
