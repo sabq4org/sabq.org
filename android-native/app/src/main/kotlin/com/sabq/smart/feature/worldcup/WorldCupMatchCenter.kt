@@ -52,6 +52,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -301,39 +303,98 @@ private fun MatchContent(
         add("prediction" to "التوقعات")
     }
     var tab by remember(f.id, started) { mutableStateOf(if (f.status.live) "commentary" else "events") }
+    val (mode, fold) = com.sabq.smart.ui.foldable.rememberMatchLayoutMode(hasDetail = true)
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item { MatchHeader(f) }
+    // لا تُطفأ الشاشة على الطاولة أثناء مباراة حية (كما في iOS).
+    val view = androidx.compose.ui.platform.LocalView.current
+    val keepAwake = mode == com.sabq.smart.ui.foldable.MatchLayoutMode.TABLETOP && f.status.live
+    androidx.compose.runtime.DisposableEffect(view, keepAwake) {
+        view.keepScreenOn = keepAwake
+        onDispose { view.keepScreenOn = false }
+    }
+
+    val pad = androidx.compose.foundation.layout.PaddingValues(16.dp)
+    val spacing = Arrangement.spacedBy(16.dp)
+    val tabBar: @Composable (List<Pair<String, String>>, String) -> Unit = { list, selected ->
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            list.forEach { (key, label) ->
+                val isSel = selected == key
+                Text(label, color = if (isSel) Color.White else WcColors.onDarkDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (isSel) WcColors.emeraldDeep else WcColors.chipFill)
+                        .clickable { tab = key }.padding(horizontal = 12.dp, vertical = 7.dp))
+            }
+        }
+    }
+    val tabBody: @Composable (String) -> Unit = { key ->
+        when (key) {
+            "commentary" -> CommentaryTab(state.commentary)
+            "events" -> EventsTab(detail, state.facts, onOpenPlayer)
+            "momentum" -> MomentumTab(state.momentum, f.home.name, f.away.name)
+            "pressure" -> PressureTab(state.pressure, f.home.name, f.away.name)
+            "lineups" -> LineupsTab(detail, onOpenPlayer)
+            "stats" -> StatsTab(detail, state.facts, state.xg)
+            "ratings" -> RatingsTab(detail, onOpenPlayer)
+            else -> PredictionTab(detail, state.forecast)
+        }
+    }
+    val actions: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
         state.tv?.takeIf { it.available && it.channels.isNotEmpty() }?.let { tv ->
             item { TvStrip(tv.channels) }
         }
         if (showMatchAlerts) item { MatchAlertsButton(state.isFollowingMatch, state.followBusy, onToggleMatchAlerts) }
         if (showLiveFollow) item { LiveFollowButton(f) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                tabs.forEach { (key, label) ->
-                    val isSel = tab == key
-                    Text(label, color = if (isSel) Color.White else WcColors.onDarkDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (isSel) WcColors.emeraldDeep else WcColors.chipFill)
-                            .clickable { tab = key }.padding(horizontal = 12.dp, vertical = 7.dp))
+    }
+
+    when (mode) {
+        com.sabq.smart.ui.foldable.MatchLayoutMode.COLUMNS -> {
+            // عمودان: سير المباراة مع النتيجة يمينًا، وبقية التبويبات يسارًا.
+            val sideTabs = tabs.filter { it.first != "events" }
+            val sideTab = if (tab == "events" || sideTabs.none { it.first == tab }) sideTabs.firstOrNull()?.first.orEmpty() else tab
+            Row(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = pad, verticalArrangement = spacing) {
+                    item { MatchHeader(f) }
+                    actions()
+                    item { Text("سير المباراة", color = WcColors.onDark, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+                    item { EventsTab(detail, state.facts, onOpenPlayer) }
+                }
+                Box(Modifier.padding(vertical = 16.dp).width(1.dp).fillMaxHeight().background(WcColors.onDarkDim.copy(alpha = 0.25f)))
+                LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = pad, verticalArrangement = spacing) {
+                    item { tabBar(sideTabs, sideTab) }
+                    item { tabBody(sideTab) }
                 }
             }
         }
-        item {
-            when (tab) {
-                "commentary" -> CommentaryTab(state.commentary)
-                "events" -> EventsTab(detail, state.facts, onOpenPlayer)
-                "momentum" -> MomentumTab(state.momentum, f.home.name, f.away.name)
-                "pressure" -> PressureTab(state.pressure, f.home.name, f.away.name)
-                "lineups" -> LineupsTab(detail, onOpenPlayer)
-                "stats" -> StatsTab(detail, state.facts, state.xg)
-                "ratings" -> RatingsTab(detail, onOpenPlayer)
-                else -> PredictionTab(detail, state.forecast)
+        com.sabq.smart.ui.foldable.MatchLayoutMode.TABLETOP -> {
+            // الطاولة: النتيجة فوق المفصلة لتُقرأ من بعيد، والتبويبات تحتها حيث تصل اليد.
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            var topInWindow by remember { mutableStateOf(0f) }
+            val hingeTop = fold.hingeTopPx ?: 0
+            val hingeBottom = fold.hingeBottomPx ?: hingeTop
+            val upperDp = with(density) { (hingeTop - topInWindow).coerceAtLeast(0f).toDp() }
+            val hingeDp = with(density) { (hingeBottom - hingeTop).coerceAtLeast(0).toDp() }
+            Column(
+                Modifier.fillMaxSize().onGloballyPositioned { topInWindow = it.positionInWindow().y },
+            ) {
+                Box(Modifier.fillMaxWidth().height(upperDp).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                    MatchHeader(f)
+                }
+                Spacer(Modifier.height(hingeDp))
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = pad, verticalArrangement = spacing) {
+                    actions()
+                    item { tabBar(tabs, tab) }
+                    item { tabBody(tab) }
+                }
             }
+        }
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = pad,
+            verticalArrangement = spacing,
+        ) {
+            item { MatchHeader(f) }
+            actions()
+            item { tabBar(tabs, tab) }
+            item { tabBody(tab) }
         }
     }
 }
