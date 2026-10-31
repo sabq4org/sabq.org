@@ -1297,7 +1297,8 @@ actor APIClient {
         title: String,
         content: String,
         kind: ArticleSubmissionKind,
-        imageData: [Data]
+        imageData: [Data],
+        onImageProgress: (@Sendable (_ done: Int, _ total: Int) async -> Void)? = nil
     ) async throws -> ArticleSubmissionResponse {
         struct Body: Encodable {
             let title: String
@@ -1306,17 +1307,26 @@ actor APIClient {
             let images: [String]
         }
 
-        let dataURIs: [String] = imageData.compactMap { data in
-            guard !data.isEmpty else { return nil }
-            let mime = Self.detectImageMimeType(data) ?? "image/jpeg"
-            return "data:\(mime);base64,\(data.base64EncodedString())"
+        // كل صورة تُرفع وحدها أولًا (POST /articles/images) ثم يُرسل الخبر
+        // بروابطها، فلا يسقط الإرسال كله على شبكة ميدانية ضعيفة. إن تعذر رفع
+        // صورة تُرسل تلك الصورة وحدها base64 كما كان (الخادم يقبل النوعين).
+        let pictures = imageData.filter { !$0.isEmpty }
+        var images: [String] = []
+        for (index, data) in pictures.enumerated() {
+            let slot = index == 0 ? "hero" : "album-\(index)"
+            if let url = try? await uploadSubmissionImage(data, slot: slot) {
+                images.append(url)
+            } else {
+                images.append(Self.imageDataURI(data))
+            }
+            await onImageProgress?(index + 1, pictures.count)
         }
 
         let body = Body(
             title: title,
             content: content,
             kind: kind.rawValue,
-            images: dataURIs
+            images: images
         )
 
         // Image upload + sequential CF Images processing on the server can
@@ -1328,6 +1338,32 @@ actor APIClient {
             body: body,
             timeout: 90
         )
+    }
+
+    /// `data:<mime>;base64,...` لصورة من المنتقي بلا إعادة ترميز.
+    nonisolated static func imageDataURI(_ data: Data) -> String {
+        let mime = detectImageMimeType(data) ?? "image/jpeg"
+        return "data:\(mime);base64,\(data.base64EncodedString())"
+    }
+
+    /// رفع صورة واحدة لخبر أو طلب تعديل (POST /api/v1/articles/images)،
+    /// يعيد رابطها على سبق.
+    func uploadSubmissionImage(_ data: Data, slot: String) async throws -> String {
+        struct Body: Encodable {
+            let image: String
+            let slot: String
+        }
+        struct Response: Decodable {
+            let url: String?
+        }
+        let resp = try await post(
+            Response.self,
+            path: "/articles/images",
+            body: Body(image: Self.imageDataURI(data), slot: slot),
+            timeout: 60
+        )
+        guard let url = resp.url, url.lowercased().hasPrefix("https://") else { throw APIError.decodingError }
+        return url
     }
 
     // MARK: - Article Revisions

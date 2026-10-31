@@ -29,6 +29,8 @@ struct ArticleSubmissionView: View {
 
     @State private var screenState: Stage = .form
     @State private var errorMessage: String?
+    /// «رفع الصور 2 من 4» أثناء رفع كل صورة وحدها قبل الإرسال.
+    @State private var uploadProgress: String?
     @State private var celebrationScale: CGFloat = 0
     @State private var sparkleOpacity: Double = 0
     @State private var sparkleScale: CGFloat = 0.4
@@ -626,7 +628,7 @@ struct ArticleSubmissionView: View {
                         .font(SabqFonts.app(size: 15, weight: .semibold))
                 }
                 Text(screenState == .submitting
-                     ? "جاري الإرسال..."
+                     ? (uploadProgress ?? "جاري الإرسال...")
                      : (kind == .opinion ? "إرسال المقالة" : "إرسال الخبر"))
                     .sabqText(SabqType.button)
             }
@@ -775,13 +777,20 @@ struct ArticleSubmissionView: View {
         errorMessage = nil
         sabqDismissKeyboard()
         screenState = .submitting
+        uploadProgress = imageData.isEmpty ? nil : "رفع الصور 1 من \(imageData.count)"
         do {
             let resp = try await APIClient.shared.submitArticleDraft(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 content: articleContent.trimmingCharacters(in: .whitespacesAndNewlines),
                 kind: kind,
-                imageData: imageData
+                imageData: imageData,
+                onImageProgress: { done, total in
+                    await MainActor.run {
+                        uploadProgress = done < total ? "رفع الصور \(done + 1) من \(total)" : "جاري الإرسال..."
+                    }
+                }
             )
+            uploadProgress = nil
             await MainActor.run {
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
                     screenState = .success
@@ -790,9 +799,11 @@ struct ArticleSubmissionView: View {
             _ = resp // server message is also encouraging — we use the locally
                      // crafted success copy for richer visual treatment.
         } catch let apiError as APIError {
+            uploadProgress = nil
             errorMessage = apiError.errorDescription ?? apiError.localizedDescription
             screenState = .form
         } catch {
+            uploadProgress = nil
             errorMessage = error.localizedDescription
             screenState = .form
         }

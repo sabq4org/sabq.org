@@ -585,6 +585,32 @@ struct SettingsView: View {
                     SettingsRowDivider()
                 }
 
+                if user.isAdminLike {
+                    NavigationLink(value: SupervisorNewsRoute()) {
+                        submissionCardContent(
+                            title: "بانتظار قرارك",
+                            subtitle: "أخبار المراسلين وطلبات التعديل — انشر أو جدول أو أعد",
+                            icon: "tray.full",
+                            tint: SabqTheme.primary
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    SettingsRowDivider()
+                }
+
+                if reporterVisible {
+                    NavigationLink(value: MyNewsRoute()) {
+                        submissionCardContent(
+                            title: "أخباري",
+                            subtitle: "حالة أخبارك، ما أُعيد لك، وطلب تعديل على المنشور",
+                            icon: "list.bullet.rectangle.portrait",
+                            tint: SabqTheme.primary
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    SettingsRowDivider()
+                }
+
                 if writerVisible || reporterVisible {
                     NavigationLink(value: ContributorDashboardRoute()) {
                         submissionCardContent(

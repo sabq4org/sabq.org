@@ -496,6 +496,22 @@ private struct SabqDestinations: ViewModifier {
                 ArticleRevisionView(articleId: route.articleId)
                     .duoContentInsets()
             }
+            .navigationDestination(for: MyNewsRoute.self) { _ in
+                ReporterNewsView()
+                    .duoContentInsets()
+            }
+            .navigationDestination(for: SupervisorNewsRoute.self) { _ in
+                SupervisorNewsView()
+                    .duoContentInsets()
+            }
+            .navigationDestination(for: SupervisorNewsPreviewRoute.self) { route in
+                SupervisorNewsPreviewView(id: route.id)
+                    .duoContentInsets()
+            }
+            .navigationDestination(for: EditRequestReviewRoute.self) { route in
+                EditRequestReviewView(id: route.id)
+                    .duoContentInsets()
+            }
             .navigationDestination(for: ArticleRevisionsRoute.self) { _ in
                 ArticleRevisionsListView()
                     .duoContentInsets()
