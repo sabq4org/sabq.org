@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Comment
 import com.sabq.smart.data.CommentsRepository
+import com.sabq.smart.feature.comments.CommentReportReason
+import com.sabq.smart.feature.comments.CommentSafetyApi
+import com.sabq.smart.feature.comments.CommentSafetyStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +28,12 @@ import retrofit2.HttpException
 class CommentsViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val repo: CommentsRepository,
+    private val safetyApi: CommentSafetyApi,
+    private val safetyStore: CommentSafetyStore,
 ) : ViewModel() {
+
+    /** قائمة الحظر وما أبلغ عنه القارئ — تُطبَّق على القائمة في الشاشة. */
+    val safety: StateFlow<CommentSafetyStore.State> = safetyStore.state
 
     private val slug: String = savedState["slug"] ?: ""
 
@@ -45,7 +53,15 @@ class CommentsViewModel @Inject constructor(
         val replyingTo: Comment? = null,
         val lastSubmitOutcome: SubmitOutcome? = null,
         val lastError: String? = null,
+        /** إعجابات القارئ بالتعليقات (مرآة iOS CommentsStore.likedIds). */
+        val likedIds: Set<String> = emptySet(),
+        /** العدد بعد آخر إعجاب/إلغاء، حتى يعود الخادم بالقائمة. */
+        val likeOverrides: Map<String, Int> = emptyMap(),
+        val likesInFlight: Set<String> = emptySet(),
     ) {
+        fun likes(comment: Comment): Int = likeOverrides[comment.id] ?: comment.likesCount ?: 0
+        fun isLiked(comment: Comment): Boolean = comment.id in likedIds
+
         /** Total comment count including replies (matches iOS commentsSubtitle). */
         val totalCount: Int get() = comments.fold(0) { acc, c -> acc + 1 + c.replies.size }
     }
@@ -53,7 +69,65 @@ class CommentsViewModel @Inject constructor(
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    init { load() }
+    init {
+        load()
+        loadMyLikes()
+    }
+
+    /** إعجابات القارئ؛ للمسجّل فقط، وفشلها صامت (401 للزائر). */
+    fun loadMyLikes() {
+        if (slug.isBlank()) return
+        viewModelScope.launch {
+            runCatching { safetyApi.myLikes(slug) }
+                .onSuccess { ids -> _state.update { it.copy(likedIds = ids.toSet()) } }
+        }
+    }
+
+    /** إعجاب متفائل: يتغير الزر والعدد فورًا ثم يُعتمد عدد الخادم، ويُرجع عند الفشل. */
+    fun toggleLike(comment: Comment, onUnauthorized: () -> Unit = {}) {
+        val current = _state.value
+        if (comment.id in current.likesInFlight) return
+        val wasLiked = comment.id in current.likedIds
+        val previous = current.likes(comment)
+        _state.update {
+            it.copy(
+                likesInFlight = it.likesInFlight + comment.id,
+                likedIds = if (wasLiked) it.likedIds - comment.id else it.likedIds + comment.id,
+                likeOverrides = it.likeOverrides + (comment.id to maxOf(0, previous + if (wasLiked) -1 else 1)),
+            )
+        }
+        viewModelScope.launch {
+            runCatching { if (wasLiked) safetyApi.unlike(comment.id) else safetyApi.like(comment.id) }
+                .onSuccess { result ->
+                    _state.update {
+                        it.copy(
+                            likesInFlight = it.likesInFlight - comment.id,
+                            likedIds = if (result.liked) it.likedIds + comment.id else it.likedIds - comment.id,
+                            likeOverrides = it.likeOverrides + (comment.id to result.likesCount),
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _state.update {
+                        it.copy(
+                            likesInFlight = it.likesInFlight - comment.id,
+                            likedIds = if (wasLiked) it.likedIds + comment.id else it.likedIds - comment.id,
+                            likeOverrides = it.likeOverrides + (comment.id to previous),
+                        )
+                    }
+                    if ((e as? HttpException)?.code() == 401) onUnauthorized()
+                }
+        }
+    }
+
+    suspend fun report(comment: Comment, reason: CommentReportReason) {
+        safetyStore.report(comment.id, reason)
+    }
+
+    suspend fun block(comment: Comment) {
+        val userId = comment.userId ?: return
+        safetyStore.block(userId, comment.userName)
+    }
 
     fun load() {
         if (_state.value.loadState is LoadState.Loading) return

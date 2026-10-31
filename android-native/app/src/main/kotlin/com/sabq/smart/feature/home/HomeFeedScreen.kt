@@ -139,6 +139,11 @@ fun HomeFeedScreen(
     onMuqtarabTopicClick: (angleSlug: String, topicSlug: String) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
+    // Quiet live refresh while Home is resumed (iOS 30s polling parity).
+    androidx.lifecycle.compose.LifecycleResumeEffect(viewModel) {
+        viewModel.startLiveUpdates()
+        onPauseOrDispose { viewModel.stopLiveUpdates() }
+    }
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val unreadCount by bellViewModel.unreadCount.collectAsStateWithLifecycle()
@@ -163,7 +168,7 @@ fun HomeFeedScreen(
     ) {
         when (val s = uiState) {
             HomeFeedUiState.Loading -> LoadingState()
-            is HomeFeedUiState.Error -> ErrorState(message = s.message, onRetry = viewModel::refresh)
+            is HomeFeedUiState.Error -> ErrorState(message = s.message, onRetry = { viewModel.refresh() })
             is HomeFeedUiState.Loaded -> if (isLiteActive) {
                 // وضع Lite: قائمة أخبار مجردة بدل الشجرة الكاملة (مرآة iOS HomeLiteView)
                 com.sabq.smart.feature.lite.HomeLiteScreen(
@@ -171,7 +176,7 @@ fun HomeFeedScreen(
                     onArticleClick = onArticleClick,
                     onBookmark = viewModel::toggleBookmark,
                     onLoadMore = viewModel::loadMore,
-                    onRefresh = viewModel::refresh,
+                    onRefresh = { viewModel.refresh() },
                 )
             } else LoadedFeed(
                 state = s,
@@ -210,7 +215,7 @@ fun HomeFeedScreen(
                     settingsViewModel.setDarkMode(!isDarkMode)
                 },
                 onEndReached = viewModel::loadMore,
-                onRefresh = viewModel::refresh,
+                onRefresh = { viewModel.refresh() },
             )
         }
         com.sabq.smart.feature.lite.LiteBanner(

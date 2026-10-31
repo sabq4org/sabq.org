@@ -16,12 +16,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +76,13 @@ import java.util.Locale
 fun CommentRow(
     comment: Comment,
     depth: Int = 0,
+    currentUserId: String? = null,
+    /** (معجب؟، العدد) — null يخفي زر الإعجاب. */
+    likeState: ((Comment) -> Pair<Boolean, Int>)? = null,
+    onLike: ((Comment) -> Unit)? = null,
+    /** الإبلاغ وحظر صاحب التعليق؛ لا يظهران على تعليق القارئ نفسه. */
+    onReport: ((Comment) -> Unit)? = null,
+    onBlock: ((Comment) -> Unit)? = null,
     onReply: ((Comment) -> Unit)? = null,
 ) {
     val isRTL = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -107,6 +123,10 @@ fun CommentRow(
                             color = SabqTheme.colors.tertiaryInk,
                         ),
                     )
+                }
+                val isOwn = currentUserId != null && comment.userId == currentUserId
+                if (!isOwn && !comment.isPending && (onReport != null || onBlock != null)) {
+                    CommentSafetyMenu(comment = comment, onReport = onReport, onBlock = onBlock)
                 }
             }
 
@@ -156,6 +176,11 @@ fun CommentRow(
                     }
                 }
 
+                if (likeState != null && onLike != null && !comment.isPending) {
+                    val (liked, count) = likeState(comment)
+                    CommentLikeButton(liked = liked, count = count, onClick = { onLike(comment) })
+                }
+
                 if (comment.isPending) {
                     AiModerationChip()
                 }
@@ -185,7 +210,15 @@ fun CommentRow(
                                 replyAvatarCentersPx[idx] = y
                             },
                         ) {
-                            CommentRow(comment = reply, depth = depth + 1)
+                            CommentRow(
+                                comment = reply,
+                                depth = depth + 1,
+                                currentUserId = currentUserId,
+                                likeState = likeState,
+                                onLike = onLike,
+                                onReport = onReport,
+                                onBlock = onBlock,
+                            )
                         }
                     }
                 }
@@ -200,6 +233,88 @@ fun CommentRow(
                 replyTopYs = replyAvatarCentersPx,
                 isRTL = isRTL,
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/** «⋯» بجوار الاسم: إبلاغ عن التعليق، وحظر صاحبه (مرآة iOS safetyMenu). */
+@Composable
+private fun CommentSafetyMenu(
+    comment: Comment,
+    onReport: ((Comment) -> Unit)?,
+    onBlock: ((Comment) -> Unit)?,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .clickable { open = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MoreHoriz,
+                contentDescription = "خيارات التعليق",
+                tint = SabqTheme.colors.tertiaryInk,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (onReport != null) {
+                DropdownMenuItem(
+                    text = { Text("إبلاغ عن التعليق") },
+                    leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        onReport(comment)
+                    },
+                )
+            }
+            if (onBlock != null && comment.userId != null) {
+                DropdownMenuItem(
+                    text = { Text("حظر ${comment.userName ?: "المستخدم"}") },
+                    leadingIcon = { Icon(Icons.Outlined.Block, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        onBlock(comment)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** «إعجاب (N)» بقلب ممتلئ حين يكون القارئ معجبًا (مرآة iOS likeButton). */
+@Composable
+private fun CommentLikeButton(liked: Boolean, count: Int, onClick: () -> Unit) {
+    val haptics = rememberSabqHaptics()
+    val tint = if (liked) SabqTheme.colors.coral else SabqTheme.colors.secondaryInk
+    Row(
+        modifier = Modifier
+            .clickable {
+                haptics.light()
+                onClick()
+            }
+            .padding(vertical = 6.dp, horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            contentDescription = if (liked) "إلغاء الإعجاب، $count إعجاب" else "إعجاب، $count إعجاب",
+            tint = tint,
+            modifier = Modifier.size(13.dp),
+        )
+        if (count > 0) {
+            Text(
+                text = "$count",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tint,
+                ),
             )
         }
     }

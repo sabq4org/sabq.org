@@ -95,6 +95,7 @@ object SabqRoutes {
     /** «الاقتصاد بالأرقام» — نقل الويب /economy (#1493–#1506). */
     const val Economy = "economy"
     const val AiTeam = "about/ai-team"
+    const val BlockedUsers = "account/blocked-users"
     const val Trending = "trending"
     const val DailyBrief = "brief"
     const val InterestsPicker = "interests/picker"
@@ -531,7 +532,13 @@ fun SabqApp(
                         onDashboardClick = { navController.navigate(SabqRoutes.ContributorDashboard) },
                         onSabqPlusClick = { navController.navigate(SabqRoutes.SabqPlus) },
                         onPressCardClick = { navController.navigate(SabqRoutes.PressCard) },
+                        onBlockedUsersClick = { navController.navigate(SabqRoutes.BlockedUsers) },
                         onLogout = { coroutineScope.launch { authVm.logout() } },
+                    )
+                }
+                composable(SabqRoutes.BlockedUsers) {
+                    com.sabq.smart.feature.comments.BlockedUsersScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.SabqPlus) {

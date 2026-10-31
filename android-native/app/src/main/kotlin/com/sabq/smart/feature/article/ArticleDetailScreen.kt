@@ -55,6 +55,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Flag
+import com.sabq.smart.feature.comments.CommentReportReason
+import com.sabq.smart.feature.comments.visibleComments
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -64,12 +68,14 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -433,6 +439,7 @@ private fun ArticleBody(
     }
 
     val commentsState by commentsViewModel.state.collectAsStateWithLifecycle()
+    val commentSafety by commentsViewModel.safety.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val errorTint = SabqTheme.colors.coral
     var feedback by remember { mutableStateOf<CommentFeedback?>(null) }
@@ -731,6 +738,36 @@ private fun ArticleBody(
                         onReply = { commentsViewModel.setReplyTarget(it) },
                         onRetryLoad = { commentsViewModel.load() },
                         onLoginClick = onLoginRequested,
+                        visible = visibleComments(commentsState.comments, commentSafety),
+                        currentUserId = currentUser?.id,
+                        onLike = { c ->
+                            if (currentUser == null) onLoginRequested()
+                            else commentsViewModel.toggleLike(c, onUnauthorized = onLoginRequested)
+                        },
+                        onReport = { c, reason ->
+                            scope.launch {
+                                feedback = runCatching { commentsViewModel.report(c, reason) }.fold(
+                                    onSuccess = {
+                                        CommentFeedback(Icons.Outlined.Flag, Color(0xFF2E8B57), "شكرًا لك، وصل بلاغك وسيراجعه فريق الإشراف")
+                                    },
+                                    onFailure = {
+                                        CommentFeedback(Icons.Filled.WifiOff, errorTint, "تعذر إرسال البلاغ، حاول مرة أخرى")
+                                    },
+                                )
+                            }
+                        },
+                        onBlock = { c ->
+                            scope.launch {
+                                feedback = runCatching { commentsViewModel.block(c) }.fold(
+                                    onSuccess = {
+                                        CommentFeedback(Icons.Outlined.Block, Color(0xFF2E8B57), "تم الحظر، لن تظهر لك تعليقاته")
+                                    },
+                                    onFailure = {
+                                        CommentFeedback(Icons.Filled.WifiOff, errorTint, "تعذر حظر المستخدم، حاول مرة أخرى")
+                                    },
+                                )
+                            }
+                        },
                     )
                 }
             }
@@ -2437,7 +2474,53 @@ private fun CommentsSection(
     onReply: (Comment) -> Unit,
     onRetryLoad: () -> Unit,
     onLoginClick: () -> Unit,
+    visible: List<Comment> = state.comments,
+    currentUserId: String? = null,
+    onLike: (Comment) -> Unit = {},
+    onReport: (Comment, CommentReportReason) -> Unit = { _, _ -> },
+    onBlock: (Comment) -> Unit = {},
 ) {
+    var reportTarget by remember { mutableStateOf<Comment?>(null) }
+    var blockTarget by remember { mutableStateOf<Comment?>(null) }
+    reportTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { reportTarget = null },
+            title = { Text("لماذا تبلّغ عن هذا التعليق؟") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "يُخفى التعليق عنك فورًا، ويراجعه فريق الإشراف.",
+                        style = SabqTheme.typography.metaSmall.copy(color = SabqTheme.colors.secondaryInk),
+                    )
+                    CommentReportReason.entries.forEach { reason ->
+                        TextButton(
+                            onClick = {
+                                reportTarget = null
+                                onReport(target, reason)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(reason.label, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { reportTarget = null }) { Text("إلغاء") } },
+        )
+    }
+    blockTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { blockTarget = null },
+            title = { Text("حظر ${target.userName ?: "المستخدم"}؟") },
+            text = { Text("لن ترى تعليقاته بعد الآن. يمكنك إلغاء الحظر من «حسابي» ← «المستخدمون المحظورون».") },
+            confirmButton = {
+                TextButton(onClick = {
+                    blockTarget = null
+                    onBlock(target)
+                }) { Text("حظر", color = SabqTheme.colors.coral) }
+            },
+            dismissButton = { TextButton(onClick = { blockTarget = null }) { Text("إلغاء") } },
+        )
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2457,7 +2540,16 @@ private fun CommentsSection(
         } else {
             SignInPromptCard(onLoginClick = onLoginClick)
         }
-        CommentsList(state = state, onReply = onReply, onRetryLoad = onRetryLoad)
+        CommentsList(
+            state = state,
+            comments = visible,
+            currentUserId = currentUserId,
+            onLike = onLike,
+            onReport = { c -> if (isSignedIn) reportTarget = c else onLoginClick() },
+            onBlock = { c -> if (isSignedIn) blockTarget = c else onLoginClick() },
+            onReply = onReply,
+            onRetryLoad = onRetryLoad,
+        )
     }
 }
 
@@ -2481,10 +2573,15 @@ private fun CommentsSectionHeader(state: CommentsViewModel.UiState) {
 @Composable
 private fun CommentsList(
     state: CommentsViewModel.UiState,
+    comments: List<Comment>,
+    currentUserId: String?,
+    onLike: (Comment) -> Unit,
+    onReport: (Comment) -> Unit,
+    onBlock: (Comment) -> Unit,
     onReply: (Comment) -> Unit,
     onRetryLoad: () -> Unit,
 ) {
-    if (state.comments.isEmpty()) {
+    if (comments.isEmpty()) {
         when (val ls = state.loadState) {
             CommentsViewModel.LoadState.Idle,
             CommentsViewModel.LoadState.Loading -> CommentSkeletonList()
@@ -2493,8 +2590,16 @@ private fun CommentsList(
         }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            state.comments.forEach { comment ->
-                CommentRow(comment = comment) { tapped -> onReply(tapped) }
+            comments.forEach { comment ->
+                CommentRow(
+                    comment = comment,
+                    currentUserId = currentUserId,
+                    likeState = { c -> state.isLiked(c) to state.likes(c) },
+                    onLike = onLike,
+                    onReport = onReport,
+                    onBlock = onBlock,
+                    onReply = { tapped -> onReply(tapped) },
+                )
                 HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.4f))
             }
         }

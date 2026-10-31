@@ -31,6 +31,8 @@ import { checkTextForSuspiciousWords } from "../utils/suspiciousWordsChecker";
 import {
   isAllowedMemberPushBundleId,
   sanitizeDeviceRegistrationBody,
+  applyInferredDeviceTransport,
+  applyInferredMemberPushTransport,
 } from "../services/deviceRegistrationPolicy";
 
 const router = Router();
@@ -101,6 +103,7 @@ router.put("/members/profile", async (req: Request, res: Response, next: NextFun
 
 router.post("/devices/register", (req: Request, _res: Response, next: NextFunction) => {
   sanitizeDeviceRegistrationBody(req.body);
+  applyInferredDeviceTransport(req.body);
   next();
 });
 
@@ -116,6 +119,7 @@ router.post("/members/push-token", (req: Request, res: Response, next: NextFunct
     }
     req.body.bundleId = rawBundleId.trim();
   }
+  applyInferredMemberPushTransport(req.body);
   next();
 });
 

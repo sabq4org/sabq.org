@@ -133,6 +133,17 @@ class ArticleRepository @Inject constructor(
             .filterNot { excludeId != null && it.id == excludeId }
             .take(5)
 
+    /** Server-side change marker; null when the probe fails. */
+    suspend fun lastServerUpdate(): Double? =
+        runCatching { api.getCacheInvalidationCheck().lastUpdate }.getOrNull()
+
+    suspend fun trackView(articleId: String) {
+        api.trackArticleView(
+            articleId,
+            com.sabq.smart.data.api.ArticleViewBody(appVersion = com.sabq.smart.BuildConfig.VERSION_NAME),
+        )
+    }
+
     suspend fun getMediaAssets(articleId: String): List<MediaAsset> =
         api.getMediaAssets(articleId)
             .filter { it.displayOrder != 0 && it.mediaFile?.url?.isNotBlank() == true }

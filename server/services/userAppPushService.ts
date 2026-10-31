@@ -35,6 +35,9 @@ export interface UserAppPushMessage {
   collapseId?: string;
   /** passive = الساعات الهادئة في الديسك: يصل بلا صوت ولا يضيء الشاشة. */
   interruptionLevel?: "passive" | "active" | "time-sensitive";
+  /** فئة إشعار APNs (أزرار iOS)؛ لا أثر لها على أندرويد. */
+  category?: string;
+  articleId?: string;
 }
 
 export interface UserAppPushResult {
@@ -74,8 +77,13 @@ async function sendPushToUserApps(
     );
 
   // قد يبقى أكثر من صف قديم بالتوكن نفسه؛ منع التكرار هنا خط دفاع أخير.
+  // صفوف أندرويد القديمة سُجّلت خطأً كـ apns (التطبيق لم يرسل provider)؛
+  // حزمة أندرويد تعني FCM دائمًا مهما قال العمود.
+  const normalized = rows.map((row) =>
+    row.bundleId && SABQ_ANDROID_BUNDLE_IDS.has(row.bundleId) ? { ...row, provider: "fcm" } : row,
+  );
   const devices = Array.from(
-    new Map(rows.map((row) => [`${row.provider}:${row.token}`, row])).values(),
+    new Map(normalized.map((row) => [`${row.provider}:${row.token}`, row])).values(),
   );
   if (devices.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] };
 
@@ -92,6 +100,8 @@ async function sendPushToUserApps(
       deeplink: message.deeplink,
       type: message.type,
       priority: message.interruptionLevel ?? "active",
+      category: message.category,
+      articleId: message.articleId,
     });
     if (message.interruptionLevel === "passive") payload.aps.sound = undefined;
     Object.assign(payload, message.data ?? {});
@@ -156,6 +166,21 @@ async function sendPushToUserApps(
   }
 
   return result;
+}
+
+/**
+ * إشعار لتطبيق القارئ «سبق» على المنصتين: iOS (com.sabq.sabqorg) وأندرويد
+ * (com.sabqorg.sabq). تطبيق «مكتب سبق» والتطبيقات الرياضية خارج الجمهور.
+ */
+export function sendPushToSabqReaderApps(
+  userId: string,
+  message: UserAppPushMessage,
+): Promise<UserAppPushResult> {
+  return sendPushToUserApps(
+    userId,
+    [SABQ_READER_BUNDLE_ID, ...SABQ_ANDROID_BUNDLE_IDS],
+    message,
+  );
 }
 
 export function sendGulfCupPush(

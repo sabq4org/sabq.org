@@ -69,6 +69,14 @@ interface SabqApi {
     @GET("api/breaking-ticker/active")
     suspend fun getBreakingTickerActive(): ApiBreakingTickerActive
 
+    /**
+     * Lightweight "has anything changed?" probe. Same endpoint iOS
+     * HomeFeedView polls every 30s while foregrounded; the server bumps
+     * `lastUpdate` on every publish/breaking broadcast.
+     */
+    @GET("api/cache-invalidation/check")
+    suspend fun getCacheInvalidationCheck(): ApiCacheInvalidationCheck
+
     /** Trending page — top articles + keywords. iOS uses
      *  `articlesStore.trendingArticles.prefix(3)` on Home and the full
      *  list (plus `tags`) on the dedicated `TrendingView`. */
@@ -449,6 +457,17 @@ interface SabqApi {
     ): retrofit2.Response<Unit>
 
     // -- likes and behavior ------------------------------------------
+
+    /**
+     * مشاهدة الخبر — مثل iOS `APIClient.trackView`. هذا هو العداد الوحيد الذي
+     * يحتسب الزائر غير المسجّل (`/behavior/track` يرفضه بـ 401)، ويغذّي
+     * «أداء أخباري» والرائج.
+     */
+    @POST("api/v1/articles/{id}/view")
+    suspend fun trackArticleView(
+        @Path("id") articleId: String,
+        @Body body: ArticleViewBody,
+    ): ApiArticleViewResponse
 
     @POST("api/v1/articles/{id}/react")
     suspend fun toggleArticleLike(

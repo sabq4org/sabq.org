@@ -8,6 +8,9 @@ import {
   normalizeDeviceLocale,
   resolveGenericDeviceRegistrationPolicy,
   sanitizeDeviceRegistrationBody,
+  inferPushTransport,
+  applyInferredDeviceTransport,
+  applyInferredMemberPushTransport,
 } from "../../server/services/deviceRegistrationPolicy";
 
 describe("generic device registration identity policy", () => {
@@ -157,5 +160,50 @@ describe("device registration body sanitizing", () => {
     sanitizeDeviceRegistrationBody(body);
     expect(body).toEqual({});
     expect(() => sanitizeDeviceRegistrationBody(undefined)).not.toThrow();
+  });
+});
+
+describe("inferPushTransport (Android omits platform/provider)", () => {
+  const fcmToken = `cAbC123:APA91b${"x".repeat(140)}`;
+  const apnsToken = "a".repeat(64);
+
+  it("treats the Android Play bundle as FCM even when the body says nothing", () => {
+    expect(inferPushTransport({ token: fcmToken, bundleId: "com.sabqorg.sabq" }))
+      .toEqual({ platform: "android", provider: "fcm" });
+  });
+
+  it("overrides a wrong ios default for an Android bundle", () => {
+    expect(inferPushTransport({ token: fcmToken, bundleId: "com.sabqorg.sabq.dev", platform: "ios", provider: "apns" }))
+      .toEqual({ platform: "android", provider: "fcm" });
+  });
+
+  it("keeps explicit iOS values for the iOS reader", () => {
+    expect(inferPushTransport({ token: apnsToken, bundleId: "com.sabq.sabqorg", platform: "ios", provider: "apns" }))
+      .toBeNull();
+  });
+
+  it("infers from token shape when nothing else is known", () => {
+    expect(inferPushTransport({ token: apnsToken })).toEqual({ platform: "ios", provider: "apns" });
+    expect(inferPushTransport({ token: fcmToken })).toEqual({ platform: "android", provider: "fcm" });
+    expect(inferPushTransport({ token: "short" })).toBeNull();
+  });
+
+  it("completes a half-specified body", () => {
+    expect(inferPushTransport({ token: fcmToken, platform: "android" })).toEqual({ platform: "android", provider: "fcm" });
+    expect(inferPushTransport({ token: apnsToken, provider: "apns" })).toEqual({ platform: "ios", provider: "apns" });
+  });
+
+  it("rewrites the route bodies in place", () => {
+    const device: Record<string, unknown> = { deviceToken: fcmToken, bundleId: "com.sabqorg.sabq" };
+    applyInferredDeviceTransport(device);
+    expect(device).toMatchObject({ platform: "android", tokenProvider: "fcm" });
+
+    const member: Record<string, unknown> = { token: fcmToken, bundleId: "com.sabqorg.sabq" };
+    applyInferredMemberPushTransport(member);
+    expect(member).toMatchObject({ platform: "android", provider: "fcm" });
+
+    const ios: Record<string, unknown> = { token: apnsToken, bundleId: "com.sabq.sabqorg" };
+    applyInferredMemberPushTransport(ios);
+    expect(ios).toMatchObject({ platform: "ios", provider: "apns" });
   });
 });

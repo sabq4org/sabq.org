@@ -27,6 +27,9 @@ data class ApiComment(
 
     val user: JsonElement? = null,
 
+    @JsonNames("userId", "user_id")
+    val userIdFlat: String? = null,
+
     @JsonNames("user_name", "author")
     val userNameFlat: String? = null,
 
