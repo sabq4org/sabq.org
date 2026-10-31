@@ -78,6 +78,31 @@ object LiveMatchFollow {
         return nowMs - (m + (s.extra ?: 0)) * 60_000L
     }
 
+    /**
+     * مرساة ساعة ثابتة بين الردود: الخادم يعطي الدقيقة كاملة فقط، فلو أعدنا
+     * الحساب في كل سحب (كل 5 ث) لارتدّ العدّاد إلى «:00» مرارًا داخل الدقيقة.
+     * نُبقي المرساة ما دامت الدقيقة/بدل الضائع/الكود كما هي، ونصحّحها عند تغيّرها.
+     */
+    class ClockAnchor {
+        private var key: Triple<Int?, Int?, String>? = null
+        private var start: Long? = null
+
+        fun anchor(s: WcStatus, nowMs: Long): Long? {
+            val fresh = clockStartMillis(s, nowMs)
+            if (fresh == null) {
+                key = null
+                start = null
+                return null
+            }
+            val k = Triple(s.elapsed, s.extra, s.code.uppercase())
+            if (k != key || start == null) {
+                key = k
+                start = fresh
+            }
+            return start
+        }
+    }
+
     /** آخر حدث مهم (هدف/بطاقة/ركلة جزاء ضائعة) على سطر واحد. */
     fun lastEventText(events: List<WcMatchEvent>): String? {
         val ev = events

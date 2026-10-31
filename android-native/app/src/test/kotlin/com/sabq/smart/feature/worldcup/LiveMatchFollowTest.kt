@@ -81,4 +81,17 @@ class LiveMatchFollowTest {
         val ht = WcMatchDetail(fixture = fixture(live = true, code = "HT", elapsed = 45, home = 0, away = 0))
         assertEquals("الشوط الأول", LiveMatchFollow.detailLine(ht))
     }
+
+    @Test fun clockAnchorStaysStableWithinSameMinute() {
+        val a = LiveMatchFollow.ClockAnchor()
+        val s67 = WcStatus(code = "2H", elapsed = 67, live = true)
+        val t0 = now * 1000
+        val first = a.anchor(s67, t0)
+        assertEquals(first, a.anchor(s67, t0 + 5_000))
+        assertEquals(first, a.anchor(s67, t0 + 10_000))
+        val s68 = s67.copy(elapsed = 68)
+        assertEquals(t0 + 40_000 - 68 * 60_000L, a.anchor(s68, t0 + 40_000))
+        assertNull(a.anchor(s68.copy(code = "HT"), t0 + 50_000))
+        assertEquals(t0 + 60_000 - 68 * 60_000L, a.anchor(s68, t0 + 60_000))
+    }
 }

@@ -42,6 +42,7 @@ class LiveMatchService : Service() {
     private var pollJob: Job? = null
     private var fixtureId: Int = 0
     private var lastNotification: Notification? = null
+    private val clockAnchor = LiveMatchFollow.ClockAnchor()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -148,7 +149,7 @@ class LiveMatchService : Service() {
             .setContentText(LiveMatchFollow.detailLine(d))
             .setOngoing(true)
             .addAction(0, "إيقاف المتابعة", stopPi)
-        val clock = LiveMatchFollow.clockStartMillis(f.status, nowMs)
+        val clock = clockAnchor.anchor(f.status, nowMs)
         val kickoffMs = f.timestamp.toLong() * 1000
         when {
             clock != null -> b.setWhen(clock).setShowWhen(true).setUsesChronometer(true)
