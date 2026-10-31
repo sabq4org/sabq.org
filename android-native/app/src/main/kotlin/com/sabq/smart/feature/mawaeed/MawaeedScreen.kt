@@ -262,7 +262,7 @@ private fun MawaeedOverview(
     MethodBox()
 }
 
-/** صفحة خدمة واحدة — نظير iOS `MawaeedServiceView` (نقل /services/*). */
+/** صفحة خدمة واحدة — نظير iOS `MawaeedServiceView` (نقل /services/…). */
 @Composable
 fun MawaeedServiceScreen(
     title: String,

@@ -19,7 +19,7 @@ import retrofit2.http.Query
 
 /**
  * «مواعيدك» — مرآة iOS `Screens/Mawaeed/MawaeedModels.swift` (نقل /mawaeed و
- * /services/* من الويب). المصدر `GET /api/mawaeed?region=` و`/api/mawaeed/:slug`
+ * /services/… من الويب). المصدر `GET /api/mawaeed?region=` و`/api/mawaeed/:slug`
  * (عامّان). الخادم يرسل النصوص جاهزة، وهذا الملف ينقل منطق الصفحة النقي من
  * shared/mawaeed/{home,dates,display}.ts: أقرب موعد، ترتيب السلاسل، العدّاد
  * الحي بتوقيت الرياض، واختصار العناوين.
