@@ -80,7 +80,7 @@ export function editorialNotificationStyle(
   if (type === "scheduled") return scheduled;
   if (type === "needs_revision") return { icon: Edit3, label: "ملاحظات تحريرية", item: "border-warning/40 bg-warning/10 dark:border-border dark:bg-warning/10", iconClass: "text-warning dark:text-warning" };
   if (type === "survey_invite") return { icon: ClipboardList, label: "دعوة استطلاع", item: "border-primary/40 bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary" };
-  if (type === "rejected" || type === "deleted") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
+  if (type === "rejected" || type === "deleted") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "لم يُنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
   if (type === "social_published") return { icon: Share2, label: "نُشر على X", item: "border-emerald-500/30 bg-emerald-500/10 dark:border-border dark:bg-emerald-950/20", iconClass: "text-emerald-600 dark:text-emerald-400" };
   if (type === "social_scheduled") return { icon: CalendarClock, label: "جدولة على X", item: "border-amber-500/30 bg-amber-500/10 dark:border-border dark:bg-amber-950/20", iconClass: "text-amber-600 dark:text-amber-400" };
   if (type === "social_rejected") return { icon: CircleX, label: "مقترح X", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };

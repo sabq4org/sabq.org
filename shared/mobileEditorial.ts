@@ -3,6 +3,7 @@
 // التوثيق: docs/systems/editorial/MOBILE_EDITORIAL_API.md
 
 import { z } from "zod";
+import { EDITORIAL_STATE_LABELS, type EditRequestOutcome } from "./editorialStates";
 
 /** أخبار المراسل خلال هذه المدة (تحديث أو إنشاء). */
 export const MY_NEWS_WINDOW_DAYS = 120;
@@ -14,13 +15,14 @@ export type MyNewsStatus = (typeof MY_NEWS_STATUSES)[number];
 export const MY_NEWS_FILTERS = ["all", "pending", "needs_changes", "scheduled", "published", "draft"] as const;
 export type MyNewsFilter = (typeof MY_NEWS_FILTERS)[number];
 
+/** من القاموس الموحّد (shared/editorialStates.ts)، فيطابق الويب حرفيًا. */
 export const MY_NEWS_STATUS_LABELS: Record<MyNewsStatus, string> = {
-  draft: "مسودة",
-  pending: "قيد المراجعة",
-  needs_changes: "أُعيد لك",
-  scheduled: "مجدول",
-  published: "منشور",
-  archived: "مؤرشف",
+  draft: EDITORIAL_STATE_LABELS.draft,
+  pending: EDITORIAL_STATE_LABELS.pending,
+  needs_changes: EDITORIAL_STATE_LABELS.needs_changes,
+  scheduled: EDITORIAL_STATE_LABELS.scheduled,
+  published: EDITORIAL_STATE_LABELS.published,
+  archived: EDITORIAL_STATE_LABELS.archived,
 };
 
 /**
@@ -83,7 +85,33 @@ export interface MyNewsItem {
   publishedAt: string | null;
   /** طلب التعديل المفتوح من المراسل نفسه على هذا الخبر، إن وُجد. */
   pendingEditRequest: { id: string; label: string; createdAt: string } | null;
+  /** آخر طلب تعديل من المراسل على الخبر (مفتوح أو مُعتمد أو مرفوض)، للملصق. */
+  lastEditRequest: MyNewsEditRequestBrief | null;
   canRequestEdit: boolean;
+}
+
+export interface MyNewsEditRequestBrief {
+  id: string;
+  outcome: EditRequestOutcome;
+  label: string;
+  urgent: boolean;
+  /** سبب الرفض كما كتبه المحرر. */
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+/** أحدث طلب لكل خبر؛ الملغى لا يظهر للمراسل. */
+export function latestEditRequestByArticle<T extends { articleId: string; status: string; createdAt: string }>(
+  rows: T[],
+): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const row of rows) {
+    if (row.status === "cancelled") continue;
+    const prev = map.get(row.articleId);
+    if (!prev || row.createdAt > prev.createdAt) map.set(row.articleId, row);
+  }
+  return map;
 }
 
 export interface MyNewsBoard {

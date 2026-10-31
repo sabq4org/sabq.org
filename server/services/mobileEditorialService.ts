@@ -17,9 +17,11 @@ import {
   MY_NEWS_WINDOW_DAYS,
   countMyNews,
   filterMyNews,
+  latestEditRequestByArticle,
   myNewsStatus,
   sortMyNews,
   type MyNewsBoard,
+  type MyNewsEditRequestBrief,
   type MyNewsFilter,
   type MyNewsItem,
 } from "@shared/mobileEditorial";
@@ -106,28 +108,53 @@ async function fullRows(ids: string[]): Promise<Row[]> {
     .where(inArray(articles.id, ids))) as Row[];
 }
 
-async function pendingRequests(userId: string, articleIds: string[]) {
-  const map = new Map<string, { id: string; label: string; createdAt: string }>();
+type RequestRow = {
+  id: string;
+  articleId: string;
+  status: string;
+  urgent: boolean;
+  proposed: unknown;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+};
+
+/** آخر طلب تعديل من المراسل لكل خبر معروض (المفتوح يسبق القديم دائمًا لأنه الأحدث). */
+async function latestRequests(userId: string, articleIds: string[]) {
+  const map = new Map<string, MyNewsEditRequestBrief>();
   if (!articleIds.length) return { ready: true, map };
   try {
     const rows = await db
       .select({
         id: articleEditRequests.id,
         articleId: articleEditRequests.articleId,
+        status: articleEditRequests.status,
+        urgent: articleEditRequests.urgent,
         proposed: articleEditRequests.proposed,
+        decisionNote: articleEditRequests.decisionNote,
         createdAt: articleEditRequests.createdAt,
+        decidedAt: articleEditRequests.decidedAt,
       })
       .from(articleEditRequests)
       .where(and(
         eq(articleEditRequests.requesterId, userId),
-        eq(articleEditRequests.status, "pending"),
         inArray(articleEditRequests.articleId, articleIds),
       ));
-    for (const row of rows) {
-      map.set(row.articleId, {
+    const normalized: RequestRow[] = rows.map((row) => ({
+      ...row,
+      createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
+      decidedAt: iso(row.decidedAt),
+    }));
+    for (const [articleId, row] of latestEditRequestByArticle(normalized)) {
+      const outcome = row.status === "approved" || row.status === "rejected" ? row.status : "pending";
+      map.set(articleId, {
         id: row.id,
+        outcome,
         label: editRequestShortLabel(row.proposed as EditRequestProposal),
-        createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
+        urgent: row.urgent,
+        decisionNote: outcome === "rejected" ? row.decisionNote || null : null,
+        createdAt: row.createdAt,
+        decidedAt: row.decidedAt,
       });
     }
     return { ready: true, map };
@@ -149,7 +176,7 @@ export async function getMyNewsBoard(input: { userId: string; filter: MyNewsFilt
   const shownIds = filterMyNews(sortedAll, input.filter).slice(0, MY_NEWS_LIST_LIMIT).map((row) => row.id);
 
   const rows = await fullRows(shownIds);
-  const requests = await pendingRequests(input.userId, shownIds);
+  const requests = await latestRequests(input.userId, shownIds);
   const rowsById = new Map(rows.map((row) => [row.id, row]));
 
   const items: MyNewsItem[] = [];
@@ -158,7 +185,8 @@ export async function getMyNewsBoard(input: { userId: string; filter: MyNewsFilt
     if (!row) continue;
     const state = myNewsStatus(row);
     const slug = row.englishSlug || row.slug;
-    const pending = requests.map.get(row.id) ?? null;
+    const last = requests.map.get(row.id) ?? null;
+    const pending = last?.outcome === "pending" ? { id: last.id, label: last.label, createdAt: last.createdAt } : null;
     items.push({
       id: row.id,
       title: row.title,
@@ -177,6 +205,7 @@ export async function getMyNewsBoard(input: { userId: string; filter: MyNewsFilt
       scheduledAt: iso(row.scheduledAt),
       publishedAt: iso(row.publishedAt),
       pendingEditRequest: pending,
+      lastEditRequest: last,
       canRequestEdit: requests.ready && !pending && articleAcceptsEditRequests(row.status),
     });
   }

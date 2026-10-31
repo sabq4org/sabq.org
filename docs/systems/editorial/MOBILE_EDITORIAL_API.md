@@ -16,7 +16,7 @@
 | المسار | من | الوصف |
 |---|---|---|
 | `GET /me` | أي منسوب | `{ userId, name, canReport, canNews, twoFactorEnabled }` |
-| `GET /my-news?filter=all\|pending\|needs_changes\|scheduled\|published\|draft` | المراسل | `{ counts, editRequestsReady, items[] }`. أخبار المستخدم (مؤلف أو مراسل أو مُرسِل، بلا الرأي) المحدَّثة خلال 120 يومًا، حتى 100. المُعاد له أولًا. الحالات كما في `/dashboard/reporter/articles` (`myNewsStatus` في `shared/mobileEditorial.ts`). كل عنصر يحمل `pendingEditRequest` و`canRequestEdit` و`url` للمنشور |
+| `GET /my-news?filter=all\|pending\|needs_changes\|scheduled\|published\|draft` | المراسل | `{ counts, editRequestsReady, items[] }`. أخبار المستخدم (مؤلف أو مراسل أو مُرسِل، بلا الرأي) المحدَّثة خلال 120 يومًا، حتى 100. المُعاد له أولًا. الحالات كما في `/dashboard/reporter/articles` (`myNewsStatus` في `shared/mobileEditorial.ts`). كل عنصر يحمل `stateLabel` (من القاموس الموحّد) و`pendingEditRequest` و`lastEditRequest` (`outcome` pending/approved/rejected، `label`، `urgent`، `decisionNote` للمرفوض، `decidedAt`؛ الملغى لا يظهر) و`canRequestEdit` و`url` للمنشور |
 | `GET /edit-requests/context/:articleId` | المراسل | المادة وفقراتها القابلة للتعديل وطلبه المفتوح (خدمة الويب `getEditRequestContext`) |
 | `POST /edit-requests` | المراسل | `{ articleId, urgent, note, proposed: { title?, contentEdits?[{before,after}], appendParagraph?, imageUrl?, albumAdd?[] } }` → 201. الصور تُرفع قبلها عبر `POST /api/v1/articles/images` |
 | `POST /edit-requests/:id/cancel` | المراسل | إلغاء طلبه المفتوح |
@@ -32,3 +32,7 @@
 ## غير مشمول بعد
 
 - تعليق لكل صورة، والتصنيف و«عاجل» عند الإرسال من الجوال: تحتاج تغيير `/articles/submit` في `mobileApiRoutes.ts` (فوق سقف الأسطر) فتُنقل لوحدة مستقلة أولًا.
+
+## القاموس الموحّد للحالات (2026-10-31)
+
+كلمات الحالات والأزرار وملصق طلب التعديل في `shared/editorialStates.ts`، ونسختها الحرفية في iOS `sabq app ios/sabq/Services/EditorialStates.swift`. يقرؤها الويب (`/dashboard/reporter/articles`، مساحة الكاتب) والسيرفر (`stateLabel` هنا) وتطبيق «سبق». الاختبار `tests/unit/editorialStates.test.ts` يفشل إن اختلف نص في Swift عن الويب. لا تكتب اسم حالة جديدًا في شاشة؛ أضفه للقاموس.

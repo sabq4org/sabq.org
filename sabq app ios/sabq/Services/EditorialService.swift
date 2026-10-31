@@ -46,18 +46,19 @@ nonisolated enum MyNewsState: String, Decodable, Equatable {
 }
 
 nonisolated enum MyNewsFilter: String, CaseIterable, Identifiable {
-    case all, pending, needs_changes, published, scheduled, draft
+    // نفس ترتيب شرائح الويب (/dashboard/reporter/articles).
+    case all, needs_changes, pending, scheduled, published, draft
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .all: return "الكل"
-        case .pending: return "قيد المراجعة"
-        case .needs_changes: return "أُعيد لك"
-        case .published: return "منشورة"
-        case .scheduled: return "مجدولة"
-        case .draft: return "مسودة"
+        case .all: return EditorialStates.filterAll
+        case .needs_changes: return EditorialStates.filterNeedsChanges
+        case .pending: return EditorialStates.filterPending
+        case .scheduled: return EditorialStates.filterScheduled
+        case .published: return EditorialStates.filterPublished
+        case .draft: return EditorialStates.filterDraft
         }
     }
 }
@@ -67,6 +68,23 @@ nonisolated struct MyNewsItem: Decodable, Identifiable, Equatable {
         let id: String
         let label: String
         let createdAt: Date?
+    }
+
+    struct LastEditRequest: Decodable, Equatable {
+        enum Outcome: String, Decodable, Equatable {
+            case pending, approved, rejected, unknown
+            init(from decoder: Decoder) throws {
+                let raw = try decoder.singleValueContainer().decode(String.self)
+                self = Outcome(rawValue: raw) ?? .unknown
+            }
+        }
+        let id: String
+        let outcome: Outcome
+        let label: String
+        let urgent: Bool
+        let decisionNote: String?
+        let createdAt: Date?
+        let decidedAt: Date?
     }
 
     let id: String
@@ -86,6 +104,8 @@ nonisolated struct MyNewsItem: Decodable, Identifiable, Equatable {
     let scheduledAt: Date?
     let publishedAt: Date?
     let pendingEditRequest: PendingEditRequest?
+    /// آخر طلب تعديل (مفتوح أو مُعتمد أو مرفوض). غائب في سيرفر أقدم.
+    let lastEditRequest: LastEditRequest?
     let canRequestEdit: Bool
 
     var thumbnailURL: URL? { EditorialURL.https(thumbnailUrl ?? imageUrl) }

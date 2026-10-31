@@ -4,7 +4,10 @@ import SwiftUI
 
 /// Routes for the editorial dashboard (registered in SabqNavigation).
 struct MyNewsRoute: Hashable {}
-struct SupervisorNewsRoute: Hashable {}
+struct SupervisorNewsRoute: Hashable {
+    /// شريحة البداية: «عليها طلب تعديل» من لوحة التحكم تفتح الطلبات مباشرة.
+    var filter: EditorialNewsFilter = .all
+}
 struct SupervisorNewsPreviewRoute: Hashable { let id: String }
 struct EditRequestReviewRoute: Hashable { let id: String }
 
@@ -167,5 +170,144 @@ extension View {
         frame(maxWidth: .infinity, alignment: .leading)
             .padding(SabqLayout.cardInset)
             .sabqNewsSurface()
+    }
+}
+
+// MARK: - الشارة الموحّدة وملصق طلب التعديل (نفس كلمات الويب)
+
+/// شارة حالة الخبر أو المقال. النص من `EditorialStates`.
+struct EditorialStatePill: View {
+    enum Tone { case neutral, info, warning, scheduled, success, danger }
+
+    let title: String
+    let tone: Tone
+
+    static func tone(for label: String) -> Tone {
+        switch label {
+        case EditorialStates.published: return .success
+        case EditorialStates.scheduled, EditorialStates.approved: return .scheduled
+        case EditorialStates.needsChanges: return .warning
+        case EditorialStates.pending: return .info
+        case EditorialStates.notPublished: return .danger
+        default: return .neutral
+        }
+    }
+
+    init(_ title: String, tone: Tone? = nil) {
+        self.title = title
+        self.tone = tone ?? Self.tone(for: title)
+    }
+
+    private var ink: Color {
+        switch tone {
+        case .neutral: return SabqTheme.textSecondary
+        case .info: return SabqTheme.primary
+        case .warning: return SabqTheme.warning
+        case .scheduled: return SabqTheme.teal
+        case .success: return SabqTheme.success
+        case .danger: return SabqTheme.danger
+        }
+    }
+
+    var body: some View {
+        Text(title)
+            .sabqText(SabqType.tag)
+            .foregroundStyle(ink)
+            .padding(.horizontal, SabqLayout.space8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(tone == .neutral ? SabqTheme.surfaceMuted : ink.opacity(0.12)))
+            .lineLimit(1)
+    }
+}
+
+/// ملصق طلب التعديل على صف الخبر: نقطة نابضة للمفتوح (حمراء إن كان عاجلًا)،
+/// وعلامة صح للمُعتمد، وعلامة × لغير المُعتمد. نفس ملصق الويب.
+struct EditRequestBadge: View {
+    enum Outcome { case pending, approved, rejected }
+
+    let outcome: Outcome
+    let detail: String
+    var urgent = false
+    var count = 1
+    /// نص بديل كامل، مثل شريحة «عليها طلب تعديل» في لوحة التحكم.
+    var title: String? = nil
+
+    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var ink: Color {
+        switch outcome {
+        case .pending: return urgent ? SabqTheme.danger : SabqTheme.warning
+        case .approved: return SabqTheme.success
+        case .rejected: return SabqTheme.danger
+        }
+    }
+
+    private var text: String {
+        let more = count > 1 ? " (\(count))" : ""
+        if let title { return title + more }
+        let base: String
+        switch outcome {
+        case .pending: base = urgent ? EditorialStates.requestUrgent : EditorialStates.requestPending
+        case .approved: base = EditorialStates.requestApproved
+        case .rejected: base = EditorialStates.requestRejected
+        }
+        return detail.isEmpty ? base + more : "\(base) · \(detail)\(more)"
+    }
+
+    var body: some View {
+        HStack(spacing: SabqLayout.space8) {
+            switch outcome {
+            case .pending:
+                Circle()
+                    .fill(ink)
+                    .frame(width: 8, height: 8)
+                    .overlay(
+                        Circle()
+                            .stroke(ink.opacity(pulse ? 0 : 0.5), lineWidth: pulse ? 6 : 0)
+                            .scaleEffect(pulse ? 1.8 : 1)
+                    )
+                    .onAppear {
+                        guard !reduceMotion else { return }
+                        withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true }
+                    }
+            case .approved:
+                Image(systemName: "checkmark").font(SabqFonts.app(size: 12, weight: .bold))
+            case .rejected:
+                Image(systemName: "xmark").font(SabqFonts.app(size: 12, weight: .bold))
+            }
+            Text(text)
+                .sabqText(SabqType.metaEmphasis)
+                .lineLimit(1)
+        }
+        .foregroundStyle(ink)
+        .padding(.horizontal, SabqLayout.space12)
+        .frame(minHeight: 32)
+        .background(
+            Capsule()
+                .fill(ink.opacity(0.08))
+                .overlay(Capsule().stroke(ink.opacity(0.35), lineWidth: 1))
+        )
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// حبة زر صغيرة في صفوف القوائم (طلب تعديل، فتح الخبر).
+struct EditorialPillButtonLabel: View {
+    let title: String
+    var systemImage: String? = nil
+    var emphasized = false
+
+    var body: some View {
+        HStack(spacing: SabqLayout.space4) {
+            if let systemImage {
+                Image(systemName: systemImage).font(SabqFonts.app(size: 13, weight: .semibold))
+            }
+            Text(title).sabqText(SabqType.metaEmphasis)
+        }
+        .foregroundStyle(emphasized ? SabqTheme.primary : SabqTheme.textPrimary)
+        .padding(.horizontal, SabqLayout.space12)
+        .frame(minHeight: 36)
+        .background(Capsule().fill(emphasized ? SabqTheme.primary.opacity(0.1) : SabqTheme.chipFill))
     }
 }
