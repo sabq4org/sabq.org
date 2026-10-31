@@ -83,18 +83,41 @@ class ReaderNotificationSettingsViewModel @Inject constructor(
         }
     }
 
-    /** حفظ فوري عند كل تغيير (كما iOS)؛ الفشل يعيد المفتاح لحالته المحفوظة. */
+    private var pending: ReaderNotificationPrefs? = null
+    private var saving = false
+
+    /**
+     * حفظ فوري عند كل تغيير (كما iOS). الطلبات متسلسلة: طلب واحد في الطريق،
+     * وأحدث حالة معلّقة تُرسل بعده، فلا يكتب طلب قديم فوق تغيير أحدث.
+     * الفشل يعيد الشاشة إلى آخر حالة حفظها الخادم.
+     */
     fun update(transform: (ReaderNotificationPrefs) -> ReaderNotificationPrefs) {
         val next = transform(_state.value.prefs)
         if (!_state.value.loaded || next == _state.value.prefs) return
         _state.update { it.copy(prefs = next) }
+        pending = next
+        if (!saving) drain()
+    }
+
+    private fun drain() {
+        saving = true
         viewModelScope.launch {
-            runCatching { api.updatePreferences(next) }
-                .onSuccess { result ->
-                    saved = result
-                    if (_state.value.prefs == next) _state.update { it.copy(prefs = result) }
+            try {
+                while (true) {
+                    val body = pending ?: break
+                    pending = null
+                    runCatching { api.updatePreferences(body) }
+                        .onSuccess { result ->
+                            saved = result
+                            if (pending == null && _state.value.prefs == body) _state.update { it.copy(prefs = result) }
+                        }
+                        .onFailure {
+                            if (pending == null) _state.update { it.copy(prefs = saved) }
+                        }
                 }
-                .onFailure { _state.update { it.copy(prefs = saved) } }
+            } finally {
+                saving = false
+            }
         }
     }
 }

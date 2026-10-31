@@ -255,16 +255,26 @@ fun ReaderInboxScreen(
                                 onClick = { viewModel.open(item)?.let(onOpenTarget) },
                                 onDelete = { viewModel.delete(item) },
                             )
-                            if (index == state.items.lastIndex) {
-                                LaunchedEffect(item.id) { viewModel.loadMore() }
-                            }
                         }
                     }
                 }
             }
+            // الشاشة عمود قابل للتمرير يركّب كل الصفوف، فلا نحمّل التالي تلقائيًا
+            // عند تركيب آخر صف (كان يجلب الصندوق كله دون تمرير): زر صريح بدلًا منه.
             if (state.loadingMore) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = colors.primaryEnd, modifier = Modifier.size(24.dp))
+                }
+            } else if (state.hasMore && state.items.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { viewModel.loadMore() }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("عرض المزيد", color = colors.primaryEnd, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

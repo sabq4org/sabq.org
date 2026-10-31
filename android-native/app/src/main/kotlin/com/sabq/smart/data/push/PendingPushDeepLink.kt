@@ -53,7 +53,8 @@ class PendingPushDeepLink @Inject constructor() {
         val path = deepLinkPath?.takeIf {
             it.startsWith("/asian-cup") || it == "/roshn" ||
                 it.startsWith("/roshn/") || it.startsWith("/sports/team/") ||
-                it == "/kings-cup" || it.startsWith("/kings-cup/")
+                it == "/kings-cup" || it.startsWith("/kings-cup/") ||
+                it == "/mawaeed" || it == "/sports/matches" || it == "/sports/live"
         }
         val survey = surveyToken?.takeIf { it.isNotBlank() }
         val draft = draftArticleId?.takeIf { it.isNotBlank() }
