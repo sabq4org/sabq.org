@@ -187,8 +187,8 @@ struct AdminDashboardView: View {
                 listSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.top, SabqLayout.space8)
-            .padding(.bottom, 112)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .sabqNavigationEdge()
         .sabqAutoHideTabBar()
@@ -257,13 +257,9 @@ struct AdminDashboardView: View {
     /// the mobile platform-admin Bearer check.
     private var inboxSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            Text("صندوق الإدارة")
-                .sabqText(SabqType.sectionHeading)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
+            HomeSectionHeader(title: "صندوق الإدارة")
 
-            let columns = SabqGrid.adaptive(spacing: SabqLayout.space8)
-            LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
+            VStack(spacing: 0) {
                 NavigationLink(value: AdminContactMessagesRoute()) {
                     adminShortcut(
                         title: "رسائل التواصل",
@@ -273,6 +269,8 @@ struct AdminDashboardView: View {
                     )
                 }
                 .buttonStyle(.plain)
+
+                SidebarRowDivider()
 
                 NavigationLink(value: AdminOpinionTicketsRoute()) {
                     adminShortcut(
@@ -284,40 +282,34 @@ struct AdminDashboardView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, SabqLayout.space16)
+            .sabqNewsSurface()
         }
     }
 
     private func adminShortcut(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.background)
-                )
-                .accessibilityHidden(true)
+        HStack(spacing: SabqLayout.space12) {
+            SmallSquareBadge(systemImage: icon, tint: tint)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
                     .sabqText(SabqType.rowTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
                 Text(subtitle)
                     .sabqText(SabqType.meta)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
             }
             Spacer(minLength: 0)
+            Image(systemName: "chevron.forward")
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding(SabqLayout.space12)
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .padding(.vertical, SabqLayout.space12)
+        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     // MARK: Metrics strip
@@ -325,27 +317,26 @@ struct AdminDashboardView: View {
     @ViewBuilder
     private var metricsSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            Text("نظرة عامة")
-                .sabqText(SabqType.sectionHeading)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
+            HomeSectionHeader(title: "نظرة عامة")
 
             let columns = SabqGrid.adaptive(spacing: SabqLayout.space8)
             if let counts = vm.counts {
                 LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                     AdminStatGridCard(
                         card: AdminStatCard(key: "draft", title: "المسودات", value: "\(counts.draft)",
-                                            breakdown: "اضغط للعرض", icon: "doc.text", tint: SabqTheme.warning)
+                                            breakdown: nil, icon: "doc.text", tint: SabqTheme.warning),
+                        isSelected: vm.selectedStatus == .draft
                     ) { Task { await vm.select(.draft) } }
                     AdminStatGridCard(
                         card: AdminStatCard(key: "scheduled", title: "المجدولة", value: "\(counts.scheduled)",
-                                            breakdown: "اضغط للعرض", icon: "clock", tint: SabqTheme.primary)
+                                            breakdown: nil, icon: "clock", tint: SabqTheme.primary),
+                        isSelected: vm.selectedStatus == .scheduled
                     ) { Task { await vm.select(.scheduled) } }
                 }
             } else if vm.isStatsLoading {
                 LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                     ForEach(0..<2, id: \.self) { _ in
-                        SkeletonBox(height: 80, radius: SabqRadius.medium)
+                        SkeletonBox(height: 72, radius: SabqRadius.medium)
                     }
                 }
             }
@@ -357,31 +348,45 @@ struct AdminDashboardView: View {
     @ViewBuilder
     private var listSection: some View {
         if let error = vm.error, vm.items.isEmpty {
-            errorState(error)
+            ErrorStateView(message: error) { Task { await vm.load() } }
+                .frame(maxWidth: .infinity, minHeight: 240)
         } else if vm.isLoading && vm.items.isEmpty {
             VStack(spacing: 0) {
                 ForEach(0..<4, id: \.self) { index in
-                    if index > 0 { Divider().overlay(SabqTheme.separator) }
+                    if index > 0 { SidebarRowDivider() }
                     AdminNewsRowSkeleton()
                 }
             }
+            .padding(.horizontal, SabqLayout.space16)
+            .sabqNewsSurface()
         } else if vm.items.isEmpty {
-            emptyState
+            EmptyStateView(
+                icon: "tray",
+                tint: SabqTheme.textTertiary,
+                title: "لا توجد أخبار",
+                subtitle: "لا شيء في \(vm.selectedStatus.label) حاليًا"
+            )
+            .frame(maxWidth: .infinity, minHeight: 240)
         } else {
-            LazyVStack(spacing: 0) {
-                ForEach(vm.items) { item in
-                    if item.id != vm.items.first?.id {
-                        Divider().overlay(SabqTheme.separator)
+            VStack(spacing: SabqLayout.space12) {
+                LazyVStack(spacing: 0) {
+                    ForEach(vm.items) { item in
+                        if item.id != vm.items.first?.id {
+                            SidebarRowDivider()
+                        }
+                        AdminNewsRow(
+                            item: item,
+                            isPublishing: vm.publishingIds.contains(item.id),
+                            onPublish: { pendingPublish = item },
+                            onRequestRevision: { pendingAction = .requestRevision(item) },
+                            onArchive: { pendingAction = .archive(item) },
+                            onPermanentDelete: { pendingAction = .permanentDelete(item) }
+                        )
                     }
-                    AdminNewsRow(
-                        item: item,
-                        isPublishing: vm.publishingIds.contains(item.id),
-                        onPublish: { pendingPublish = item },
-                        onRequestRevision: { pendingAction = .requestRevision(item) },
-                        onArchive: { pendingAction = .archive(item) },
-                        onPermanentDelete: { pendingAction = .permanentDelete(item) }
-                    )
                 }
+                .padding(.horizontal, SabqLayout.space16)
+                .sabqNewsSurface()
+
                 if vm.canLoadMore {
                     loadMoreButton
                 }
@@ -393,12 +398,12 @@ struct AdminDashboardView: View {
         Button {
             Task { await vm.loadMore() }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 if vm.isLoadingMore {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "arrow.down")
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
+                        .font(SabqType.button.font)
                 }
                 Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
                     .sabqText(SabqType.button)
@@ -412,47 +417,6 @@ struct AdminDashboardView: View {
         }
         .buttonStyle(.plain)
         .disabled(vm.isLoadingMore)
-        .padding(.top, SabqLayout.space8)
-    }
-
-    // MARK: Empty / error states
-
-    private var emptyState: some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "tray")
-                .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.textTertiary)
-                .accessibilityHidden(true)
-            Text("لا توجد أخبار في \(vm.selectedStatus.label)")
-                .sabqText(SabqType.excerpt)
-                .foregroundStyle(SabqTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 240)
-    }
-
-    private func errorState(_ message: String) -> some View {
-        VStack(spacing: SabqLayout.space16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.textTertiary)
-                .accessibilityHidden(true)
-            Text(message)
-                .sabqText(SabqType.excerpt)
-                .foregroundStyle(SabqTheme.textSecondary)
-            Button { Task { await vm.load() } } label: {
-                Text("إعادة المحاولة")
-                    .sabqText(SabqType.button)
-                    .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, SabqLayout.space24)
-                    .frame(minHeight: SabqLayout.controlHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.actionFill)
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, minHeight: 240)
     }
 }
 

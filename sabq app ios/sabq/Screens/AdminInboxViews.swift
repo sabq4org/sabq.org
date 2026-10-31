@@ -84,20 +84,25 @@ private struct AdminInboxFilterChip: View {
         .frame(minHeight: 36)
         .background(
             Capsule(style: .continuous)
-                .fill(isActive ? SabqTheme.skyTint : SabqTheme.surfaceMuted)
+                .fill(isActive ? SabqTheme.skyTint : SabqTheme.surface)
         )
+        .overlay {
+            if !isActive {
+                Capsule(style: .continuous)
+                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+            }
+        }
+        // الشكل المرئي 36 ومساحة اللمس 44.
+        .frame(minHeight: SabqLayout.touchTarget)
+        .contentShape(Rectangle())
         .environment(\.layoutDirection, .rightToLeft)
     }
 }
 
-/// Quiet block: muted fill, radius 12, no border or shadow.
+/// Standard block on the gray page: white surface + hairline border.
 private struct AdminInboxCardModifier: ViewModifier {
     func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: adminInboxCorner, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
-            )
+        content.sabqBlockSurface()
     }
 }
 
@@ -150,22 +155,10 @@ private struct AdminInboxEmptyState: View {
     var compact = false
 
     var body: some View {
-        VStack(spacing: SabqLayout.space8) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 28, weight: .light))
-                .foregroundStyle(SabqTheme.textTertiary)
-                .accessibilityHidden(true)
-            Text(title)
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Text(subtitle)
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, minHeight: compact ? 140 : 220)
-        .padding(SabqLayout.space24)
-        .adminInboxCard()
+        EmptyStateView(icon: icon, tint: SabqTheme.textSecondary, title: title, subtitle: subtitle)
+            .padding(.horizontal, SabqLayout.space16)
+            .frame(maxWidth: .infinity, minHeight: compact ? 140 : 220)
+            .adminInboxCard()
     }
 }
 
@@ -174,23 +167,10 @@ private struct AdminInboxErrorState: View {
     let retry: () -> Void
 
     var body: some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(SabqFonts.app(size: 28, weight: .light))
-                .foregroundStyle(SabqTheme.textSecondary)
-                .accessibilityHidden(true)
-            Text(text)
-                .sabqText(SabqType.excerpt)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-            Button("إعادة المحاولة", action: retry)
-                .font(SabqType.button.font)
-                .foregroundStyle(SabqTheme.primary)
-                .frame(minHeight: SabqLayout.touchTarget)
-        }
-        .frame(maxWidth: .infinity, minHeight: 220)
-        .padding(SabqLayout.space24)
-        .adminInboxCard()
+        ErrorStateView(message: text, retryAction: retry)
+            .padding(.horizontal, SabqLayout.space16)
+            .frame(maxWidth: .infinity, minHeight: 220)
+            .adminInboxCard()
     }
 }
 
@@ -258,6 +238,8 @@ private struct AdminInboxStatusMenuLabel: View {
             Capsule(style: .continuous)
                 .fill(SabqTheme.skyTint)
         )
+        // الشكل المرئي 34 ومساحة اللمس 44.
+        .frame(minHeight: SabqLayout.touchTarget)
         .contentShape(Rectangle())
     }
 }
@@ -325,7 +307,7 @@ struct AdminContactMessagesView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space12)
-            .padding(.bottom, 108)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .sabqNavigationEdge()
         .sabqAutoHideTabBar()
@@ -527,7 +509,7 @@ struct AdminContactMessageDetailView: View {
                 }
             }
             .padding(SabqLayout.pageMargin)
-            .padding(.bottom, 108)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .sabqNavigationEdge()
         .sabqAutoHideTabBar()
@@ -738,7 +720,7 @@ struct AdminOpinionTicketsView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space12)
-            .padding(.bottom, 108)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .sabqNavigationEdge()
         .sabqAutoHideTabBar()
@@ -892,7 +874,7 @@ struct AdminOpinionTicketDetailView: View {
                 }
             }
             .padding(SabqLayout.pageMargin)
-            .padding(.bottom, 108)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .sabqNavigationEdge()
         .sabqAutoHideTabBar()
@@ -1015,6 +997,7 @@ struct AdminOpinionTicketDetailView: View {
                                         Capsule(style: .continuous)
                                             .fill(message.isFromAdmin ? SabqTheme.surface : SabqTheme.skyTint)
                                     )
+                                    .frame(minHeight: SabqLayout.touchTarget)
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
@@ -1058,10 +1041,7 @@ struct AdminOpinionTicketDetailView: View {
                         .font(SabqType.meta.font)
                         .foregroundStyle(SabqTheme.textSecondary)
                         .padding(.leading, SabqLayout.space12)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
-                        )
+                        .sabqBlockSurface()
                     }
                     AdminInboxReplyEditor(text: $replyText, placeholder: "اكتب ردك للكاتب هنا…", minHeight: 110)
                     AdminInboxSendButton(

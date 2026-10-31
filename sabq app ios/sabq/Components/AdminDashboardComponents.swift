@@ -8,28 +8,29 @@ import SwiftUI
 
 // MARK: Stat tile
 
-/// Compact KPI block for the 2-column "نظرة عامة" grid (icon + number + title +
-/// a small breakdown line). Quiet muted fill, no border or shadow.
+/// Compact KPI block for the 2-column "نظرة عامة" grid: number + title on a
+/// white block surface. Tapping filters the list below; the active filter is
+/// outlined in the brand colour so the card doubles as a tab indicator.
 struct AdminStatGridCard: View {
     let card: AdminStatCard
+    var isSelected: Bool = false
     var onTap: (() -> Void)? = nil
 
     var body: some View {
         Button { onTap?() } label: { cardBody }
             .buttonStyle(.plain)
             .disabled(onTap == nil)
+            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     private var cardBody: some View {
-        HStack(alignment: .top, spacing: SabqLayout.space12) {
-            Image(systemName: card.icon)
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(card.tint)
-                .frame(width: 24, height: 24)
-                .accessibilityHidden(true)
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        return HStack(alignment: .center, spacing: SabqLayout.space12) {
+            SmallSquareBadge(systemImage: card.icon, tint: card.tint)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(card.value)
-                    .sabqText(SabqType.sectionHeading)
+                    .font(SabqType.articleTitle.font)
+                    .monospacedDigit()
                     .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -48,12 +49,14 @@ struct AdminStatGridCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(SabqLayout.space12)
-        .frame(maxWidth: .infinity, minHeight: 80, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SabqTheme.surface, in: shape)
+        .overlay(
+            shape.strokeBorder(isSelected ? SabqTheme.primary : SabqTheme.separator,
+                               lineWidth: isSelected ? 1.5 : 0.75)
         )
+        .contentShape(shape)
     }
 }
 
@@ -66,14 +69,14 @@ struct AdminStatusBadge: View {
     var body: some View {
         HStack(spacing: SabqLayout.space4) {
             Image(systemName: status.icon)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqType.timestamp.font.weight(.semibold))
                 .accessibilityHidden(true)
             Text(status.badgeLabel)
                 .sabqText(SabqType.tag)
         }
         .foregroundStyle(status.tint)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(.horizontal, SabqLayout.space8)
+        .padding(.vertical, SabqLayout.space4)
         .background(
             Capsule(style: .continuous)
                 .fill(status.tint.opacity(0.12))
@@ -83,32 +86,38 @@ struct AdminStatusBadge: View {
 
 // MARK: Segmented control
 
-/// Three-way capsule switcher used both on the dashboard (section filter) and
-/// in the editor (status picker).
+/// Status switcher used both on the dashboard (section filter) and in the
+/// editor (status picker): one white track, the active segment filled.
 struct AdminSegmentedControl: View {
     let selected: AdminArticleStatus
     let onSelect: (AdminArticleStatus) -> Void
 
     var body: some View {
-        HStack(spacing: SabqLayout.space8) {
+        let track = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        HStack(spacing: SabqLayout.space4) {
             ForEach(AdminArticleStatus.allCases) { status in
                 let isActive = status == selected
                 Button { onSelect(status) } label: {
                     Text(status.label)
                         .sabqText(SabqType.metaEmphasis)
-                        .foregroundStyle(isActive ? SabqTheme.onAction : SabqTheme.textPrimary)
+                        .foregroundStyle(isActive ? SabqTheme.onAction : SabqTheme.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget - SabqLayout.space4)
                         .background(
-                            Capsule(style: .continuous)
-                                .fill(isActive ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
+                            RoundedRectangle(cornerRadius: SabqRadius.small + 2, style: .continuous)
+                                .fill(isActive ? SabqTheme.actionFill : Color.clear)
                         )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isActive ? [.isSelected] : [])
             }
         }
+        .padding(SabqLayout.space4)
+        .background(SabqTheme.surface, in: track)
+        .overlay(track.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .animation(.snappy(duration: 0.2), value: selected)
     }
 }
 
@@ -129,18 +138,19 @@ struct AdminNewsRow: View {
             HStack(alignment: .center, spacing: SabqLayout.space8) {
                 AdminStatusBadge(status: item.status)
                 Spacer(minLength: 0)
-                HStack(spacing: 4) {
-                    Text("\(rowTimestampLabel):")
-                        .sabqText(SabqType.meta)
-                        .foregroundStyle(SabqTheme.textTertiary)
+                HStack(spacing: SabqLayout.space4) {
+                    Text(rowTimestampLabel)
                     Text(SabqFormatters.riyadhDateTime.string(from: rowTimestampDate))
-                        .sabqText(SabqType.meta)
-                        .foregroundStyle(SabqTheme.textTertiary)
                 }
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
             }
 
             Text(item.title)
-                .sabqText(SabqType.rowTitle)
+                .font(SabqType.rowTitle.font.weight(.semibold))
+                .lineSpacing(SabqType.rowTitle.lineSpacing)
                 .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
@@ -184,7 +194,7 @@ struct AdminNewsRow: View {
                             .frame(minHeight: SabqLayout.touchTarget)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
+                                    .fill(SabqTheme.success.opacity(0.12))
                             )
                         } else {
                             actionLabel(title: "نشر الآن", systemImage: "paperplane", tint: SabqTheme.success)
@@ -209,7 +219,7 @@ struct AdminNewsRow: View {
     private var revisionCue: some View {
         HStack(alignment: .top, spacing: SabqLayout.space8) {
             Image(systemName: "exclamationmark.bubble")
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(SabqTheme.warning)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
@@ -239,7 +249,7 @@ struct AdminNewsRow: View {
         let tint: Color = schedule.isOverdue ? SabqTheme.danger : SabqTheme.primary
         return HStack(alignment: .top, spacing: SabqLayout.space8) {
             Image(systemName: schedule.isOverdue ? "exclamationmark.triangle" : "clock")
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
@@ -278,7 +288,7 @@ struct AdminNewsRow: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .font(SabqType.rowTitle.font.weight(.semibold))
                 .foregroundStyle(SabqTheme.textSecondary)
                 .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
                 .contentShape(Rectangle())
@@ -288,7 +298,7 @@ struct AdminNewsRow: View {
     private func metaLabel(icon: String, text: String) -> some View {
         HStack(spacing: SabqLayout.space4) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 12))
+                .font(SabqType.tag.font)
                 .accessibilityHidden(true)
             Text(text).sabqText(SabqType.meta)
         }
@@ -306,13 +316,13 @@ struct AdminNewsRow: View {
     private func actionLabel(title: String, systemImage: String, tint: Color) -> some View {
         HStack(spacing: SabqLayout.space8) {
             Image(systemName: systemImage)
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqType.metaEmphasis.font)
                 .accessibilityHidden(true)
             Text(title).sabqText(SabqType.metaEmphasis)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, SabqLayout.space12)
-        .frame(minHeight: 38)
+        .padding(.horizontal, SabqLayout.space16)
+        .frame(minHeight: SabqLayout.touchTarget)
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
                 .fill(tint == SabqTheme.primary ? SabqTheme.skyTint : tint.opacity(0.12))
