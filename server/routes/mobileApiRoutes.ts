@@ -32,6 +32,7 @@ import {
   selfAssignWriterSchedule,
 } from "../services/opinionWritersService";
 import { scheduleOpinionResubmitNotification } from "../services/opinionResubmitNotify";
+import { parseExpectedVersion, resubmitMobileArticle, saveMobileAdminArticle } from "../services/mobileArticleWriteService";
 import {
   isOwnSubmissionImageUrl,
   loadMobileSubmitter,
@@ -5135,6 +5136,8 @@ router.get("/articles/:id/draft", async (req: Request, res: Response) => {
         // off this to avoid letting the writer submit two edits in a row.
         reviewStatus: article.reviewStatus,
         status: article.status,
+        // نسخة المادة التي يُرسلها التطبيق مع إعادة الإرسال (expectedUpdatedAt).
+        updatedAt: article.updatedAt?.toISOString() ?? null,
       },
     });
   } catch (error) {
@@ -5150,166 +5153,41 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
     }
 
-    const articleId = req.params.id;
-
     const { z } = await import("zod");
     const schema = z.object({
       title: z.string().trim().min(3, "العنوان قصير جداً"),
       content: z.string().trim().min(20, "النص قصير جداً"),
-      // Optional new hero — only sent when the writer replaced the
-      // existing image. If absent the stored imageUrl is preserved.
+      // Optional new hero / album: omit to keep what's stored.
       heroImage: z.string().optional(),
-      // Optional new album for news kind. Same semantics: omit to
-      // keep what's already there.
       albumImages: z.array(z.string()).max(10).optional(),
+      // Version the form was opened on; old app builds don't send it.
+      expectedUpdatedAt: z.string().optional(),
     });
     const data = schema.parse(req.body);
 
-    const [existing] = await db
-      .select({
-        id: articles.id,
-        authorId: articles.authorId,
-        reporterId: articles.reporterId,
-        articleType: articles.articleType,
-        reviewStatus: articles.reviewStatus,
-        imageUrl: articles.imageUrl,
-        albumImages: articles.albumImages,
-      })
-      .from(articles)
-      .where(eq(articles.id, articleId))
-      .limit(1);
-
-    if (!existing) {
-      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    // Guards, image upload and the version/lock-guarded write live in
+    // services/mobileArticleWriteService.ts.
+    const result = await resubmitMobileArticle({
+      userId: session.userId,
+      articleId: req.params.id,
+      title: data.title,
+      htmlContent: toMobileArticleHTML(data.content),
+      excerpt: data.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220),
+      heroImage: data.heroImage,
+      albumImages: data.albumImages,
+      expectedUpdatedAt: parseExpectedVersion(data.expectedUpdatedAt),
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, code: result.code, message: result.message });
     }
-    if (existing.authorId !== session.userId && existing.reporterId !== session.userId) {
-      return res.status(403).json({ success: false, message: "ليس لديك صلاحية لتعديل هذا المقال" });
-    }
-    if (existing.reviewStatus !== "needs_changes") {
-      return res.status(409).json({
-        success: false,
-        message: "هذا المقال ليس في حالة \"يحتاج تعديل\"",
-      });
-    }
+    const updated = result.article;
+    console.log(`[Mobile API] /articles/${updated.id}/resubmit by ${session.userId}`);
 
-    // Hero + album handling. New base64 images use the same canonical
-    // R2-rollout service as /articles/submit; existing HTTPS URLs pass through.
-    const uploadDataUrl = async (dataUrl: string, idHint: string): Promise<string | null> => {
-      const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
-      if (!m) return null;
-      const mimeType = `image/${m[1].toLowerCase() === "heif" ? "heic" : m[1].toLowerCase()}`;
-      const buffer = Buffer.from(m[2], "base64");
-      const result = await newsImageStorageService.upload({
-        buffer,
-        filename: `${idHint}.${m[1]}`,
-        mimeType,
-        purpose: "mobile-article-revision",
-        metadata: { source: "mobile-app", articleId },
-        rolloutKey: `${session.userId}:${idHint}`,
-      });
-      return result.success && result.deliveryUrl ? result.deliveryUrl : null;
-    };
+    // Same editor alerts as the web submit, in the background.
+    scheduleOpinionResubmitNotification(result.before.reviewStatus, updated);
+    scheduleNewsDraftNotification(result.before.reviewStatus, updated);
 
-    let heroImageUrl = existing.imageUrl;
-    if (data.heroImage !== undefined) {
-      if (data.heroImage.startsWith("data:")) {
-        try {
-          const url = await uploadDataUrl(
-            data.heroImage,
-            `mobile-revision-${articleId}-hero-${Date.now()}`,
-          );
-          if (url) heroImageUrl = url;
-        } catch (err) {
-          console.error("[Mobile API] /articles/:id/resubmit hero upload failed:", err);
-        }
-      } else if (data.heroImage.startsWith("http")) {
-        heroImageUrl = data.heroImage;
-      }
-    }
-
-    let albumUrls: string[] | null = null;
-    if (data.albumImages !== undefined) {
-      albumUrls = [];
-      for (const img of data.albumImages) {
-        if (img.startsWith("data:")) {
-          try {
-            const url = await uploadDataUrl(
-              img,
-              `mobile-revision-${articleId}-album-${Date.now()}-${albumUrls.length}`,
-            );
-            if (url) albumUrls.push(url);
-          } catch (err) {
-            console.error("[Mobile API] /articles/:id/resubmit album upload failed:", err);
-          }
-        } else if (img.startsWith("http")) {
-          albumUrls.push(img);
-        }
-      }
-    }
-
-    const htmlContent = toMobileArticleHTML(data.content);
-    const plainExcerpt = data.content
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 220);
-
-    const updates: any = {
-      title: data.title.trim(),
-      content: htmlContent,
-      excerpt: plainExcerpt,
-      imageUrl: heroImageUrl,
-      // Flip the review state so the editor sees this in their queue
-      // again. `pending_review` matches the dashboard's existing filter
-      // (ArticlesManagement.tsx) and triggers the standard editor
-      // alert when the audit pipeline picks it up.
-      reviewStatus: "pending_review",
-      // PRESERVE reviewNotes + reviewedAt + reviewedBy — the dashboard
-      // uses these (via `isResubmittedAfterRevision` in
-      // client/src/lib/articleRevision.ts) to paint the amber
-      // "resubmitted" stripe on the row, so editors can tell apart
-      // brand-new drafts from drafts that came back after a revision
-      // request. Wiping them made resubmissions look like first-time
-      // submissions in the dashboard (reported 2026-05-20).
-      //
-      // Safe to keep: /articles/my-revisions filters on
-      // reviewStatus='needs_changes' only, so the writer won't see
-      // the same article in their revision queue twice — they're
-      // out of the queue the moment reviewStatus flips here.
-      updatedAt: new Date(),
-    };
-    if (albumUrls !== null) updates.albumImages = albumUrls;
-
-    const [updated] = await db
-      .update(articles)
-      .set(updates)
-      .where(eq(articles.id, articleId))
-      .returning({
-        id: articles.id,
-        title: articles.title,
-        slug: articles.slug,
-        status: articles.status,
-        reviewStatus: articles.reviewStatus,
-        articleType: articles.articleType,
-        authorId: articles.authorId,
-        reporterId: articles.reporterId,
-      });
-
-    console.log(`[Mobile API] /articles/${articleId}/resubmit by ${session.userId}`);
-
-    // مقال رأي عاد إلى pending_review: نفس تنبيه الإرسال على الويب
-    // (الكاتب + المحررون + push الديسك + بريد بوت «مكتب سبق»)، في الخلفية.
-    if (updated) {
-      scheduleOpinionResubmitNotification(existing.reviewStatus, updated);
-      scheduleNewsDraftNotification(existing.reviewStatus, updated);
-    }
-
-    // Shape the response so the iOS `ArticleSubmissionResponse`
-    // decoder doesn't need any optional gymnastics — `kind` is the
-    // field the decoder requires alongside id/title/status. Without
-    // it, the iOS client treated a successful save as a decode
-    // failure and showed "تعذر إرسال التعديل" even though the row
-    // had already been updated (reported 2026-05-20).
+    // `kind` is required by the iOS ArticleSubmissionResponse decoder.
     res.json({
       success: true,
       message: "تم إرسال التعديل بنجاح. سيراجعه فريق التحرير قريباً.",
@@ -5319,6 +5197,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
         slug: updated.slug,
         kind: updated.articleType === "opinion" ? "opinion" : "news",
         status: updated.status,
+        updatedAt: updated.updatedAt?.toISOString() ?? null,
       },
     });
   } catch (error: any) {
@@ -7918,38 +7797,18 @@ router.post("/admin/articles/:id/publish", async (req: Request, res: Response) =
   }
 });
 
-// PATCH /api/v1/admin/articles/:id — real edit
+// PATCH /api/v1/admin/articles/:id — real edit. Version + lock guarded and
+// recorded in the article history (services/mobileArticleWriteService.ts).
 router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
     if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
 
-    const id = req.params.id;
-    const [existing] = await db
-      .select({ id: articles.id, publishedAt: articles.publishedAt, seo: articles.seo, status: articles.status, scheduledAt: articles.scheduledAt })
-      .from(articles)
-      .where(eq(articles.id, id))
-      .limit(1);
-    if (!existing) return res.status(404).json({ success: false, message: "الخبر غير موجود" });
-
-    const b = req.body || {};
-    const { buildMobileAdminArticleUpdates, runWithExclusiveBreaking } = await import("../services/breakingNewsService");
-    const updates = buildMobileAdminArticleUpdates(b, existing);
-
-    const scheduleError = mobileScheduleError(
-      (updates.status as string | undefined) ?? existing.status,
-      Object.prototype.hasOwnProperty.call(b, "scheduledAt") ? b.scheduledAt : existing.scheduledAt,
-    );
-    if (scheduleError) return res.status(400).json({ success: false, message: scheduleError });
-
-    await runWithExclusiveBreaking(
-      async (tx) => {
-        const [updated] = await tx.update(articles).set(updates).where(eq(articles.id, id)).returning();
-        return updated;
-      },
-      { reason: "mobile-edit-breaking-clear" },
-    );
-
+    const result = await saveMobileAdminArticle({ adminId: admin.userId, articleId: req.params.id, body: req.body || {} });
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, code: result.code, message: result.message });
+    }
+    const id = result.article.id;
     const forSeo = await fetchArticleForNotify(id);
     if (forSeo?.status === "published" || forSeo?.newsType === "breaking") triggerPublishSeo(forSeo, "mobile-edit");
     res.json({ success: true, item: await fetchAdminArticleItem(id), article: await fetchAdminArticleDetail(id) });

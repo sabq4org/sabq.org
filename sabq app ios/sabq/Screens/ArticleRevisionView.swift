@@ -40,6 +40,9 @@ struct ArticleRevisionView: View {
 
     @State private var screenState: Stage = .loading
     @State private var errorMessage: String?
+    /// 409: تغيّرت المادة بعد فتح النموذج (راجعها محرر أو نُشرت) أو هي مقفلة.
+    /// النص يبقى في النموذج، ويعرض الشريط نسخه أو إعادة تحميل النسخة الحالية.
+    @State private var conflict: ArticleWriteConflictError?
     @State private var noteCollapsed = false
 
     // بلا @FocusState — معطّل في هذا السياق على iOS الحديث ويُسقط الكيبورد
@@ -227,6 +230,9 @@ struct ArticleRevisionView: View {
             if let errorMessage {
                 errorBanner(errorMessage)
             }
+            if conflict != nil {
+                conflictActions
+            }
 
             fieldLabel("العنوان", required: true)
             TextField("عنوان المقال", text: $title, axis: .vertical)
@@ -391,6 +397,30 @@ struct ArticleRevisionView: View {
         .disabled(!isFormValid || screenState == .submitting)
     }
 
+    /// مسار التعارض: انسخ النص قبل أي تحميل، ثم اعرض النسخة الحالية
+    /// (أو شاشة «أُرسل التعديل» إن لم تعد المادة تنتظر تعديلك).
+    private var conflictActions: some View {
+        HStack(spacing: SabqLayout.space8) {
+            Button {
+                UIPasteboard.general.string = "\(title)\n\n\(bodyText)"
+                SabqHaptics.success()
+            } label: {
+                Label("انسخ نصّي", systemImage: "doc.on.doc")
+                    .sabqText(SabqType.meta)
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                Task { await loadDraft() }
+            } label: {
+                Label("اعرض النسخة الحالية", systemImage: "arrow.clockwise")
+                    .sabqText(SabqType.meta)
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func errorBanner(_ text: String) -> some View {
         HStack(alignment: .top, spacing: SabqLayout.space8) {
             Image(systemName: "exclamationmark.triangle")
@@ -459,6 +489,8 @@ struct ArticleRevisionView: View {
         do {
             let payload = try await APIClient.shared.fetchArticleDraft(id: articleId)
             draft = payload
+            conflict = nil
+            errorMessage = nil
             // Short-circuit when the article isn't actively waiting for
             // edits anymore (already resubmitted, accepted, archived,
             // or moved to a different review state). Without this gate
@@ -504,13 +536,24 @@ struct ArticleRevisionView: View {
         } else {
             var datas: [Data] = []
             var previews: [UIImage] = []
+            var failed = 0
             for item in items {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let img = UIImage(data: data) {
                     let prepared = SabqImageUpload.prepare(img)
                     datas.append(prepared.data)
                     previews.append(prepared.image)
+                } else {
+                    failed += 1
                 }
+            }
+            // صورة تعذّرت قراءتها لا تُسقط بصمت: الاختيار كله لا يُعتمد.
+            if failed > 0 {
+                errorMessage = failed == items.count
+                    ? "تعذّرت قراءة الصور المختارة. اخترها مرة أخرى."
+                    : "تعذّرت قراءة \(failed) من الصور المختارة، فلم يتغير الألبوم. اخترها مرة أخرى."
+                pickerItems = []
+                return
             }
             if let firstData = datas.first, let firstPreview = previews.first {
                 newHeroData = firstData
@@ -528,6 +571,7 @@ struct ArticleRevisionView: View {
     private func resubmit() async {
         guard isFormValid else { return }
         errorMessage = nil
+        conflict = nil
         screenState = .submitting
         do {
             _ = try await APIClient.shared.resubmitArticle(
@@ -535,12 +579,17 @@ struct ArticleRevisionView: View {
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 content: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
                 heroImageData: replacedHero ? newHeroData : nil,
-                albumImageData: replacedAlbum ? newAlbumData : nil
+                albumImageData: replacedAlbum ? newAlbumData : nil,
+                expectedUpdatedAt: draft?.updatedAt
             )
             store.removeOptimistically(id: articleId)
             await store.refresh()
             withAnimation { screenState = .success }
             SabqHaptics.success()
+        } catch let writeConflict as ArticleWriteConflictError {
+            conflict = writeConflict
+            errorMessage = writeConflict.message
+            screenState = .form
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
             screenState = .form

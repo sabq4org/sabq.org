@@ -13,6 +13,9 @@ final class AdminEditorViewModel: ObservableObject {
     @Published var isSaving = false
     @Published var loaded = false
     @Published var error: String?
+    /// 409 من الخادم: حُفظ الخبر من مكان آخر بعد فتحه أو هو مقفل عند محرر.
+    /// التعديل يبقى على الشاشة حتى يختار المحرر إعادة التحميل صراحة.
+    @Published var conflict: ArticleWriteConflictError?
 
     // Editable fields
     @Published var title = ""
@@ -69,6 +72,8 @@ final class AdminEditorViewModel: ObservableObject {
     private let service: AdminServicing
     private var initialStatus: AdminArticleStatus = .draft
     private var clearScheduleRequested = false
+    /// نسخة الخبر التي فُتح عليها المحرر، تُرسل مع الحفظ وتتحدث بعده.
+    private(set) var articleVersion: String?
 
     init(articleId: String?, newArticleType: String? = nil, service: AdminServicing? = nil) {
         self.articleId = articleId
@@ -85,9 +90,13 @@ final class AdminEditorViewModel: ObservableObject {
     func load(includeCategories: Bool = true) async {
         isLoading = true
         error = nil
+        conflict = nil
+        // الأقسام تُجلب بالتوازي مع الخبر بدل انتظارها بعده.
+        async let categoriesTask: [APICategory]? = includeCategories ? Self.loadCategories() : nil
         if let id = articleId {
             do {
                 let d = try await service.fetchDetail(id: id)
+                articleVersion = d.updatedAt
                 title = d.title
                 subtitle = d.subtitle
                 excerpt = d.excerpt
@@ -132,8 +141,8 @@ final class AdminEditorViewModel: ObservableObject {
             hasSchedule = false
             loaded = true
         }
-        if includeCategories {
-            categories = await Self.loadCategories()
+        if let loadedCategories = await categoriesTask {
+            categories = loadedCategories
         }
         isLoading = false
     }
@@ -341,11 +350,18 @@ final class AdminEditorViewModel: ObservableObject {
             authorId: isOpinion ? authorId : nil,
             scheduledAt: scheduledISO,
             seo: seo,
-            clearScheduledAt: clearScheduleRequested || status == .published
+            clearScheduledAt: clearScheduleRequested || status == .published,
+            expectedUpdatedAt: articleVersion
         )
         do {
-            try await service.saveArticle(id: articleId ?? "", payload: payload)
+            if let newVersion = try await service.saveArticle(id: articleId ?? "", payload: payload) {
+                articleVersion = newVersion
+            }
             return true
+        } catch let conflict as ArticleWriteConflictError {
+            self.conflict = conflict
+            self.error = conflict.message
+            return false
         } catch {
             self.error = "تعذّر حفظ التعديلات"
             return false
@@ -576,7 +592,19 @@ struct AdminArticleEditorView: View {
             get: { vm.error != nil && !vm.isLoading },
             set: { if !$0 { vm.error = nil } }
         )) {
-            Button("حسنًا", role: .cancel) { vm.error = nil }
+            if vm.conflict != nil {
+                // التعديل يبقى حتى يختار المحرر صراحة استبداله بالنسخة الحالية.
+                Button("أعد تحميل النسخة الحالية", role: .destructive) {
+                    vm.error = nil
+                    Task {
+                        await vm.load(includeCategories: false)
+                        htmlController.setHTML(vm.contentHTML)
+                    }
+                }
+                Button("أبقِ تعديلي", role: .cancel) { vm.error = nil }
+            } else {
+                Button("حسنًا", role: .cancel) { vm.error = nil }
+            }
         } message: {
             Text(vm.error ?? "حاول مرة أخرى")
         }

@@ -212,8 +212,9 @@ final class FakeAdminService: AdminServicing, @unchecked Sendable {
         guard let detail else { throw TestError.unimplemented }
         return detail
     }
-    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws {
+    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws -> String? {
         savedPayload = payload
+        return nil
     }
     func generateSummary(text: String) async throws -> String { "" }
     func generateSEO(title: String, content: String, excerpt: String) async throws -> AdminSEO { AdminSEO() }

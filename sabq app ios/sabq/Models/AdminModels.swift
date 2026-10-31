@@ -357,11 +357,13 @@ nonisolated struct AdminArticleDetail: Decodable, Hashable {
     var publishedAt: Date?
     var writerWeeklySlot: AdminWriterWeeklySlot?
     var views: Int
+    /// نسخة الخبر كما أرسلها الخادم (ISO بدقة المللي ثانية)؛ تُعاد مع الحفظ.
+    var updatedAt: String?
 
     private enum CodingKeys: String, CodingKey {
         case id, title, subtitle, excerpt, content, slug, status, articleType, newsType
         case categoryId, categoryName, reporterId, reporterName, authorId, authorName, isFeatured, isReading, hideFromHomepage
-        case aiSummary, imageUrl, thumbnailUrl, seo, scheduledAt, publishedAt, writerWeeklySlot, views
+        case aiSummary, imageUrl, thumbnailUrl, seo, scheduledAt, publishedAt, writerWeeklySlot, views, updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -395,6 +397,7 @@ nonisolated struct AdminArticleDetail: Decodable, Hashable {
         let pub = (try? c.decode(String.self, forKey: .publishedAt)) ?? ""
         publishedAt = SabqFormatters.parseISO8601(pub)
         writerWeeklySlot = try? c.decodeIfPresent(AdminWriterWeeklySlot.self, forKey: .writerWeeklySlot)
+        updatedAt = try? c.decodeIfPresent(String.self, forKey: .updatedAt)
     }
 }
 
@@ -465,11 +468,13 @@ nonisolated struct AdminArticleEditPayload: Encodable {
     /// Encodes scheduledAt as JSON null only when the editor explicitly
     /// clears it. Ordinary draft saves omit the field and preserve the value.
     var clearScheduledAt: Bool = false
+    /// النسخة التي فُتح عليها المحرر؛ الخادم يرد 409 إن حُفظ الخبر بعدها.
+    var expectedUpdatedAt: String? = nil
 
     private enum CodingKeys: String, CodingKey {
         case title, subtitle, excerpt, content, status, newsType, isFeatured, isReading
         case hideFromHomepage, aiSummary, imageUrl, categoryId, reporterId, authorId
-        case scheduledAt, seo
+        case scheduledAt, seo, expectedUpdatedAt
     }
 
     func encode(to encoder: Encoder) throws {
@@ -494,6 +499,7 @@ nonisolated struct AdminArticleEditPayload: Encodable {
             try c.encodeNil(forKey: .scheduledAt)
         }
         try c.encode(seo, forKey: .seo)
+        try c.encodeIfPresent(expectedUpdatedAt, forKey: .expectedUpdatedAt)
     }
 }
 

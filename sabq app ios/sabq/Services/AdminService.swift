@@ -27,7 +27,8 @@ protocol AdminServicing: Sendable {
     /// Full article for the editor.
     func fetchDetail(id: String) async throws -> AdminArticleDetail
     /// Persist all editor fields.
-    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws
+    /// Returns the article's new version (`updatedAt`) for the next save.
+    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws -> String?
 
     // AI tools
     /// الموجز الذكي — summarize plain text.
@@ -174,12 +175,12 @@ struct LiveAdminService: AdminServicing {
         return article
     }
 
-    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws {
-        _ = try await APIClient.shared.patch(
-            AdminNewsItemResponse.self,
+    func saveArticle(id: String, payload: AdminArticleEditPayload) async throws -> String? {
+        try await APIClient.shared.patch(
+            AdminArticleDetailResponse.self,
             path: "/admin/articles/\(id)",
             body: payload
-        )
+        ).article?.updatedAt
     }
 
     func generateSummary(text: String) async throws -> String {
