@@ -1,7 +1,7 @@
 // خدمة «النشر أولاً»: أعلام من system_settings،
 // حكم المراجع (معلوماتي)، سجل المراجعة، وسبب التحديث. الاستعلامات هنا (ADR-001).
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articlePublishOverrides,
@@ -17,14 +17,12 @@ import {
   PUBLISH_FIRST_FLAGS_DEFAULT,
   buildRevisionLogRow,
   flagEnabledFromSetting,
-  formatPublishFirstUpdateLines,
   isAcceptableCategoryId,
   isPublishFirstVerdict,
   planContentRevision,
   validateBotDraftUpload,
   type PublishFirstFlags,
   type PublishFirstFlagName,
-  type PublicUpdateLine,
   type RevisionPlan,
 } from "@shared/publishFirst";
 const FLAG_TTL_MS = 5_000;
@@ -234,29 +232,6 @@ export async function listArticlePublishFirstHistory(articleId: string) {
   return { verdicts, revisions, overrides };
 }
 
-export async function listPublicUpdateLines(articleId: string): Promise<PublicUpdateLine[]> {
-  try {
-    const flags = await getPublishFirstFlags();
-    if (!flags.updateLine) return [];
-    const rows = await db
-      .select({
-        id: articleRevisions.id,
-        updateReason: articleRevisions.updateReason,
-        createdAt: articleRevisions.createdAt,
-      })
-      .from(articleRevisions)
-      .where(and(
-        eq(articleRevisions.articleId, articleId),
-        sql`nullif(btrim(${articleRevisions.updateReason}), '') is not null`,
-      ))
-      .orderBy(asc(articleRevisions.createdAt));
-    return formatPublishFirstUpdateLines(rows);
-  } catch (error) {
-    console.error("[publish-first] update lines failed", error);
-    return [];
-  }
-}
-
 const ROLLBACK_COLUMNS = ["title", "subtitle", "excerpt", "content", "categoryId", "imageUrl", "riskLabel"] as const;
 
 export async function rollbackArticleRevision(input: {
@@ -343,11 +318,4 @@ export async function prepareDashboardArticleSave(input: {
   });
   if (revisionPlan) input.updateData.correctedAt = revisionPlan.correctedAt;
   return { revisionPlan };
-}
-
-export async function attachPublishedUpdateLines<T extends { id?: string; status?: string | null }>(article: T): Promise<T> {
-  if (article?.id && article.status === "published") {
-    (article as T & { updateLines?: PublicUpdateLine[] }).updateLines = await listPublicUpdateLines(article.id);
-  }
-  return article;
 }

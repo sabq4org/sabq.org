@@ -36,7 +36,6 @@ import {
   articleSmartCategories,
 } from "@shared/schema";
 import { eq, or, and, desc, ne, isNull, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
-import { listPublicUpdateLines } from "../services/publishFirstService";
 import {
   buildCloudflareUrl,
   generateResponsiveSrcSet,
@@ -3194,9 +3193,6 @@ router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async
         tags: meta.tags,
       },
       jsonLd: meta.jsonLd,
-      updateLines: lang === "ar" && "id" in row && row.id
-        ? await listPublicUpdateLines(row.id)
-        : [],
     });
   } catch (err) {
     console.error("[articles/seo-bundle] error:", err);
