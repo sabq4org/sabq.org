@@ -2,9 +2,18 @@
 // (تطبيق الحقول المختارة على المادة نفسها مع نسخة في سجل التعديلات) والرفض.
 // الاستعلامات هنا (ADR-001)؛ المنطق الخالص في shared/articleEditRequests.ts.
 
-import { and, asc, desc, eq, gt, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articleEditRequests, articles, notificationsInbox, users, type Article } from "@shared/schema";
+import {
+  articleEditRequests,
+  articles,
+  editorialNotificationPrefs,
+  editorialNotifications,
+  notificationsInbox,
+  pushDevices,
+  users,
+  type Article,
+} from "@shared/schema";
 import {
   articleAcceptsEditRequests,
   baseSnapshotFor,
@@ -30,15 +39,35 @@ import { recordArticleSave } from "./articleHistoryService";
 import { logArticleEvent } from "./articleEventsService";
 import { sendDraftSubmittedNotification } from "../notificationService";
 import { notificationBus } from "../notificationBus";
+import { createCustomNotificationPayload, isApnsConfigured, sendPushNotification } from "./apnsService";
+import { SABQ_READER_BUNDLE_ID } from "./deviceRegistrationPolicy";
+import { isNonHumanAccount } from "./editorialStakeholderIds";
 
 type Fail = { ok: false; status: number; message: string; code?: string; missing?: string[] };
 
 const NOT_READY: Fail = { ok: false, status: 503, code: "EDIT_REQUESTS_NOT_READY", message: "ميزة طلبات التعديل لم تُفعّل بعد" };
 
+const PENDING_EXISTS: Fail = {
+  ok: false,
+  status: 409,
+  code: "EDIT_REQUEST_PENDING",
+  message: "لديك طلب قيد المراجعة على هذا الخبر. ألغِه أولًا لإرسال طلب جديد.",
+};
+
+function pgCode(error: unknown): string | undefined {
+  const e = error as { code?: string; cause?: { code?: string } } | null | undefined;
+  return e?.code ?? e?.cause?.code;
+}
+
 /** الجدول غير موجود بعد (قبل تنفيذ SQL الإنتاج) أو بلا صلاحيات. */
-function isNotReady(error: any): boolean {
-  const code = error?.code ?? error?.cause?.code;
+function isNotReady(error: unknown): boolean {
+  const code = pgCode(error);
   return code === "42P01" || code === "42501";
+}
+
+/** خرق الفهرس الفريد الجزئي «طلب مفتوح واحد» (migrations/20261031_article_edit_requests_one_pending.sql). */
+function isPendingUniqueViolation(error: unknown): boolean {
+  return pgCode(error) === "23505";
 }
 
 async function displayNames(ids: Array<string | null | undefined>): Promise<Map<string, string>> {
@@ -111,29 +140,35 @@ export async function createEditRequest(input: EditRequestInput, userId: string)
     return { ok: false as const, status: 409, code: "ARTICLE_NOT_EDITABLE", message: "لا يمكن طلب تعديل خبر مؤرشف" };
   }
   try {
-    const [existing] = await db
-      .select({ id: articleEditRequests.id })
-      .from(articleEditRequests)
-      .where(and(
-        eq(articleEditRequests.articleId, article.id),
-        eq(articleEditRequests.requesterId, userId),
-        eq(articleEditRequests.status, "pending"),
-      ))
-      .limit(1);
-    if (existing) {
-      return { ok: false as const, status: 409, code: "EDIT_REQUEST_PENDING", message: "لديك طلب قيد المراجعة على هذا الخبر. ألغِه أولًا لإرسال طلب جديد." };
-    }
-    const [row] = await db
-      .insert(articleEditRequests)
-      .values({
-        articleId: article.id,
-        requesterId: userId,
-        urgent: input.urgent,
-        note: input.note,
-        proposed: input.proposed as Record<string, unknown>,
-        baseSnapshot: baseSnapshotFor(article),
-      })
-      .returning();
+    // الفحص والإدراج في معاملة واحدة تحت قفل استشاري على (المادة، صاحب الطلب):
+    // طلبان متزامنان يتسلسلان، فيرى الثاني طلب الأول ويرجع 409. القفل يُفك مع
+    // نهاية المعاملة (آمن مع -pooler). الفهرس الفريد الجزئي حزام ثانٍ.
+    const row = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('article_edit_requests'), hashtext(${`${article.id}:${userId}`}))`);
+      const [existing] = await tx
+        .select({ id: articleEditRequests.id })
+        .from(articleEditRequests)
+        .where(and(
+          eq(articleEditRequests.articleId, article.id),
+          eq(articleEditRequests.requesterId, userId),
+          eq(articleEditRequests.status, "pending"),
+        ))
+        .limit(1);
+      if (existing) return null;
+      const [inserted] = await tx
+        .insert(articleEditRequests)
+        .values({
+          articleId: article.id,
+          requesterId: userId,
+          urgent: input.urgent,
+          note: input.note,
+          proposed: input.proposed as Record<string, unknown>,
+          baseSnapshot: baseSnapshotFor(article),
+        })
+        .returning();
+      return inserted;
+    });
+    if (!row) return PENDING_EXISTS;
 
     const names = await displayNames([userId]);
     const requesterName = names.get(userId) ?? "مراسل";
@@ -159,6 +194,7 @@ export async function createEditRequest(input: EditRequestInput, userId: string)
     return { ok: true as const, request: row };
   } catch (error) {
     if (isNotReady(error)) return NOT_READY;
+    if (isPendingUniqueViolation(error)) return PENDING_EXISTS;
     throw error;
   }
 }
@@ -270,32 +306,169 @@ export async function getEditRequestDetail(id: string, input: { userId: string; 
   }
 }
 
-async function notifyRequester(input: {
+type DecisionNotice = {
   requesterId: string | null;
   requestId: string;
   articleId: string;
   articleTitle: string;
+  articleSlug?: string | null;
+  articleStatus?: string | null;
+  articleType?: string | null;
   approved: boolean;
   reason?: string | null;
-}) {
-  if (!input.requesterId) return;
+};
+
+/** نوع صف «إشعاراتي التحريرية» لقرار الطلب (varchar(30) في editorial_notifications). */
+export const EDIT_REQUEST_DECISION_TYPES = {
+  approved: "edit_request_approved",
+  rejected: "edit_request_rejected",
+} as const;
+
+/**
+ * رابط القرار في التطبيق: المنشور يفتح المادة، وغيره يفتح مسودتها. معرّف الطلب
+ * في الاستعلام هو مفتاح منع التكرار (إشعار تحريري واحد لكل طلب)، ومحلّل الروابط
+ * في iOS يتجاهل الاستعلام.
+ */
+export function editRequestDecisionDeepLink(input: Pick<DecisionNotice, "requestId" | "articleId" | "articleSlug" | "articleStatus" | "articleType">): string {
+  const query = `?editRequest=${encodeURIComponent(input.requestId)}`;
+  if (input.articleStatus === "published" && input.articleSlug) {
+    const host = input.articleType === "opinion" ? "opinion" : "article";
+    return `sabq://${host}/${input.articleSlug}${query}`;
+  }
+  return `sabq://draft/${input.articleId}${query}`;
+}
+
+function decisionCopy(input: DecisionNotice) {
   const title = input.approved ? "اعتُمد طلب تعديلك" : "لم يُعتمد طلب تعديلك";
   const body = input.approved
     ? `حُدّث الخبر: ${input.articleTitle}`
     : `${input.articleTitle}${input.reason ? ` — السبب: ${input.reason}` : ""}`;
-  await db.insert(notificationsInbox).values({
-    userId: input.requesterId,
-    type: "ArticleEditRequestDecision",
-    title,
-    body,
-    deeplink: `/dashboard/articles?editRequest=${input.requestId}`,
-    read: false,
-    metadata: { articleId: input.articleId, editRequestId: input.requestId, approved: input.approved },
-  });
-  notificationBus.emit("new-notification", { userId: input.requesterId, type: "ArticleEditRequestDecision", title, body });
+  return { title, body };
 }
 
-/** يحجز الطلب المفتوح لقرار واحد؛ يعيد null إن حُسم أو أُلغي قبل ذلك. */
+/**
+ * يُستدعى بعد حسم الطلب (بعد commit) ومن الفائز بالحجز وحده، فلا يتكرر مع
+ * إعادة المحاولة (المحاولة الثانية ترجع EDIT_REQUEST_CLOSED قبل الوصول هنا).
+ * ثلاث قنوات مستقلة: صندوق القارئ («أخباري» وجرس الرئيسية)، والبث اللحظي،
+ * و«إشعاراتي التحريرية» مع دفع iOS حسب التفضيلات.
+ */
+async function notifyRequester(input: DecisionNotice) {
+  if (!input.requesterId) return;
+  const recipientId = input.requesterId;
+  const { title, body } = decisionCopy(input);
+  const deeplink = `/dashboard/articles?editRequest=${input.requestId}`;
+  const metadata = { articleId: input.articleId, editRequestId: input.requestId, approved: input.approved };
+  try {
+    const [inbox] = await db.insert(notificationsInbox).values({
+      userId: recipientId,
+      type: "ArticleEditRequestDecision",
+      title,
+      body,
+      deeplink,
+      read: false,
+      metadata,
+    }).returning();
+    notificationBus.emit(recipientId, {
+      id: inbox?.id,
+      type: "ArticleEditRequestDecision",
+      title,
+      body,
+      deeplink,
+      read: false,
+      metadata,
+      createdAt: inbox?.createdAt,
+    });
+  } catch (error) {
+    console.error("[edit-requests] inbox decision failed", error);
+  }
+  await deliverEditorialDecision(input, title, body);
+}
+
+/** نفس قواعد notifyEditorialEvent: تفضيل «طلب تعديل» (revisionEnabled)، ودفع iOS لحزمة القارئ فقط. */
+async function deliverEditorialDecision(input: DecisionNotice, title: string, body: string) {
+  const userId = input.requesterId;
+  if (!userId || isNonHumanAccount(userId)) return;
+  try {
+    const [prefs] = await db
+      .select({ revisionEnabled: editorialNotificationPrefs.revisionEnabled })
+      .from(editorialNotificationPrefs)
+      .where(eq(editorialNotificationPrefs.userId, userId))
+      .limit(1);
+    if (prefs && prefs.revisionEnabled === false) return;
+
+    const type = input.approved ? EDIT_REQUEST_DECISION_TYPES.approved : EDIT_REQUEST_DECISION_TYPES.rejected;
+    const deepLink = editRequestDecisionDeepLink(input);
+    const [already] = await db
+      .select({ id: editorialNotifications.id })
+      .from(editorialNotifications)
+      .where(and(
+        eq(editorialNotifications.userId, userId),
+        inArray(editorialNotifications.type, [EDIT_REQUEST_DECISION_TYPES.approved, EDIT_REQUEST_DECISION_TYPES.rejected]),
+        eq(editorialNotifications.deepLink, deepLink),
+      ))
+      .limit(1);
+    if (already) return;
+
+    const [logRow] = await db
+      .insert(editorialNotifications)
+      .values({
+        userId,
+        type,
+        title,
+        body,
+        articleId: input.articleId,
+        articleTitle: input.articleTitle,
+        articleSlug: input.articleSlug ?? null,
+        deepLink,
+        reviewerNote: input.approved ? null : input.reason ?? null,
+        deliveryStatus: "pending",
+      })
+      .returning({ id: editorialNotifications.id });
+
+    const devices = await db
+      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider })
+      .from(pushDevices)
+      .where(and(
+        eq(pushDevices.userId, userId),
+        eq(pushDevices.platform, "ios"),
+        eq(pushDevices.bundleId, SABQ_READER_BUNDLE_ID),
+        eq(pushDevices.isActive, true),
+      ));
+    const tokens = Array.from(new Set(devices.filter((d) => d.provider === "apns").map((d) => d.token)));
+    if (tokens.length === 0) {
+      await db.update(editorialNotifications).set({ deliveryStatus: "no_device" }).where(eq(editorialNotifications.id, logRow.id));
+      return;
+    }
+    if (!isApnsConfigured()) {
+      await db.update(editorialNotifications)
+        .set({ deliveryStatus: "failed", deliveryError: "APNS_NOT_CONFIGURED" })
+        .where(eq(editorialNotifications.id, logRow.id));
+      return;
+    }
+    const results = await Promise.all(tokens.map((token) => sendPushNotification(
+      token,
+      createCustomNotificationPayload(title, body, {
+        deeplink: deepLink,
+        articleId: input.articleId,
+        type: `editorial.${type}`,
+        priority: input.approved ? "active" : "time-sensitive",
+        category: "EDITORIAL_EDIT_REQUEST",
+      }),
+      { priority: "10", pushType: "alert", topic: SABQ_READER_BUNDLE_ID },
+    )));
+    const anySuccess = results.some((r) => r.success);
+    await db.update(editorialNotifications)
+      .set({
+        deliveryStatus: anySuccess ? "sent" : "failed",
+        deliveryError: anySuccess ? null : results.map((r) => r.reason || "unknown").join("; "),
+      })
+      .where(eq(editorialNotifications.id, logRow.id));
+  } catch (error) {
+    console.error("[edit-requests] editorial decision notify failed", error);
+  }
+}
+
+/** يحجز الطلب المفتوح للرفض؛ يعيد null إن حُسم أو أُلغي قبل ذلك. */
 async function claimPending(id: string, status: "approved" | "rejected", actorId: string, decisionNote: string | null) {
   const [row] = await db
     .update(articleEditRequests)
@@ -305,17 +478,24 @@ async function claimPending(id: string, status: "approved" | "rejected", actorId
   return row ?? null;
 }
 
-async function releaseClaim(id: string) {
-  await db
-    .update(articleEditRequests)
-    .set({ status: "pending", decidedBy: null, decidedAt: null, decisionNote: null, updatedAt: new Date() })
-    .where(eq(articleEditRequests.id, id));
+const CLOSED: Fail = { ok: false, status: 409, code: "EDIT_REQUEST_CLOSED", message: "الطلب حُسم أو أُلغي" };
+
+/** إشارة داخلية لإلغاء معاملة الاعتماد (فيعود الطلب مفتوحًا والمادة كما كانت). */
+class ApprovalAbort extends Error {
+  constructor(readonly reason: "closed" | "conflict") {
+    super(`edit-request approval aborted: ${reason}`);
+  }
 }
 
 /**
  * الاعتماد: يطبّق الحقول المختارة على المادة نفسها (لا تتغير حالتها)، فيُحفظ
  * الوضع السابق والجديد نسختين في سجل التعديلات باسم المعتمد مع ذكر صاحب الطلب.
  * manual = عُدّل في المحرر ثم اعتُمد، فلا يُطبَّق شيء هنا.
+ *
+ * الحجز (pending → approved) وكتابة المادة في معاملة واحدة: أي فشل أو توقف
+ * قبل commit يعيد الطلب مفتوحًا والمادة كما كانت، فلا «معتمد بلا تطبيق».
+ * الآثار بعد commit (سجل النسخ، مراجعة النشر أولاً، الصورة المصغرة، الإشعار)
+ * لا تعيد الطلب مفتوحًا عند فشلها؛ كلها تُسجَّل في السجل وتُكمل.
  */
 export async function approveEditRequest(input: {
   id: string;
@@ -324,43 +504,28 @@ export async function approveEditRequest(input: {
   updateLine?: string | null;
   manual?: boolean;
 }) {
-  let claimed;
+  let request: typeof articleEditRequests.$inferSelect | undefined;
   try {
-    claimed = await claimPending(input.id, "approved", input.actorId, input.manual ? "عُدّل في المحرر" : null);
+    [request] = await db.select().from(articleEditRequests).where(eq(articleEditRequests.id, input.id)).limit(1);
   } catch (error) {
     if (isNotReady(error)) return NOT_READY;
     throw error;
   }
-  if (!claimed) return { ok: false as const, status: 409, code: "EDIT_REQUEST_CLOSED", message: "الطلب حُسم أو أُلغي" } satisfies Fail;
+  if (!request || request.status !== "pending") return CLOSED;
 
-  // أي خطأ قبل كتابة المادة يعيد الطلب مفتوحًا، فلا يبقى «معتمدًا» دون تطبيق.
-  let applied = false;
-  try {
-    const result = await applyClaimedRequest(claimed, input, () => { applied = true; });
-    if (!result.ok && !applied) await releaseClaim(claimed.id);
-    return result;
-  } catch (error) {
-    if (!applied) await releaseClaim(claimed.id).catch((e) => console.error("[edit-requests] release failed", e));
-    throw error;
-  }
-}
-
-async function applyClaimedRequest(
-  claimed: typeof articleEditRequests.$inferSelect,
-  input: { actorId: string; fields: EditRequestField[]; updateLine?: string | null; manual?: boolean },
-  markApplied: () => void,
-) {
-  const existing = await loadArticle(claimed.articleId);
+  const existing = await loadArticle(request.articleId);
   if (!existing) return { ok: false as const, status: 404, message: "الخبر غير موجود" } satisfies Fail;
-  const names = await displayNames([claimed.requesterId, input.actorId]);
-  const requesterName = claimed.requesterId ? names.get(claimed.requesterId) ?? "مراسل" : "مراسل";
+  const names = await displayNames([request.requesterId, input.actorId]);
+  const requesterName = request.requesterId ? names.get(request.requesterId) ?? "مراسل" : "مراسل";
 
   if (input.manual) {
-    markApplied();
-    await db
+    // حجز وتسجيل في عبارة واحدة مشروطة: لا شيء يُطبَّق على المادة هنا.
+    const [claimed] = await db
       .update(articleEditRequests)
-      .set({ appliedFields: [], updatedAt: new Date() })
-      .where(eq(articleEditRequests.id, claimed.id));
+      .set({ status: "approved", decidedBy: input.actorId, decidedAt: new Date(), decisionNote: "عُدّل في المحرر", appliedFields: [], updatedAt: new Date() })
+      .where(and(eq(articleEditRequests.id, request.id), eq(articleEditRequests.status, "pending")))
+      .returning();
+    if (!claimed) return CLOSED;
     logArticleEvent({
       articleId: existing.id,
       eventType: "approved",
@@ -368,12 +533,12 @@ async function applyClaimedRequest(
       summary: `اعتُمد طلب تعديل ${requesterName} بعد تعديله في المحرر`,
       metadata: { editRequestId: claimed.id, requesterId: claimed.requesterId, manual: true },
     }).catch((error) => console.error("[edit-requests] event log failed", error));
-    notifyRequester({ requesterId: claimed.requesterId, requestId: claimed.id, articleId: existing.id, articleTitle: existing.title, approved: true })
+    notifyRequester(decisionNoticeFor(claimed, existing, true))
       .catch((error) => console.error("[edit-requests] notify requester failed", error));
     return { ok: true as const, article: existing, before: existing, appliedFields: [] as EditRequestField[], missingParagraphs: [] as string[], changed: false, request: claimed };
   }
 
-  const proposed = claimed.proposed as EditRequestProposal;
+  const proposed = request.proposed as EditRequestProposal;
   const { patch, appliedFields, missingParagraphs } = buildEditRequestPatch({
     article: { content: existing.content, albumImages: existing.albumImages, seo: (existing.seo ?? null) as Record<string, unknown> | null },
     proposed,
@@ -399,31 +564,49 @@ async function applyClaimedRequest(
     updateReason: updateLine,
   });
 
-  // الكتابة مشروطة بنسخة المادة التي بُني عليها التعديل: إن حفظها محرر أو اعتماد
-  // آخر في هذه الأثناء لا يُكتب فوقه، ويعود الطلب مفتوحًا لإعادة المحاولة.
-  const { article: updated } = await runWithExclusiveBreaking(
-    async (tx) => {
-      const [row] = await tx
-        .update(articles)
-        .set({ ...patch, ...(revisionPlan?.contentChanged ? { correctedAt: new Date() } : {}), updatedAt: nextArticleVersion } as any)
-        .where(and(
-          eq(articles.id, existing.id),
-          matchesArticleVersion(existing.updatedAt ?? new Date(0)),
-          articleLockAllowsWriter(input.actorId),
-        ))
-        .returning();
-      return row as Article | undefined;
-    },
-    { reason: "article-edit-request-breaking-clear" },
-  );
-  if (!updated) {
-    const conflict = await articleWriteConflict(existing.id, input.actorId);
-    return conflict.code === "ARTICLE_LOCKED"
-      ? { ok: false as const, status: 409, code: "ARTICLE_LOCKED", message: "الخبر مفتوح للتحرير عند مستخدم آخر" } satisfies Fail
-      : { ok: false as const, status: 409, code: "ARTICLE_CHANGED", message: "تغيّر الخبر أثناء الاعتماد. أعد فتح الطلب وحاول مجددًا." } satisfies Fail;
+  // الحجز أولًا داخل المعاملة يقفل صف الطلب: اعتماد متزامن ثانٍ ينتظر ثم لا يجد
+  // pending فيُلغى. الكتابة مشروطة بنسخة المادة التي بُني عليها التعديل وبقفل
+  // التحرير: إن حفظها غيره في الأثناء تُلغى المعاملة كلها ويبقى الطلب مفتوحًا.
+  let claimed: typeof articleEditRequests.$inferSelect | undefined;
+  let updated: Article;
+  try {
+    ({ article: updated } = await runWithExclusiveBreaking(
+      async (tx) => {
+        const [claimRow] = await tx
+          .update(articleEditRequests)
+          .set({ status: "approved", decidedBy: input.actorId, decidedAt: new Date(), decisionNote: null, appliedFields, updatedAt: new Date() })
+          .where(and(eq(articleEditRequests.id, request.id), eq(articleEditRequests.status, "pending")))
+          .returning();
+        if (!claimRow) throw new ApprovalAbort("closed");
+        const [row] = await tx
+          .update(articles)
+          .set({ ...patch, ...(revisionPlan?.contentChanged ? { correctedAt: new Date() } : {}), updatedAt: nextArticleVersion } as any)
+          .where(and(
+            eq(articles.id, existing.id),
+            matchesArticleVersion(existing.updatedAt ?? new Date(0)),
+            articleLockAllowsWriter(input.actorId),
+          ))
+          .returning();
+        if (!row) throw new ApprovalAbort("conflict");
+        claimed = claimRow;
+        return row as Article;
+      },
+      { reason: "article-edit-request-breaking-clear" },
+    ));
+  } catch (error) {
+    if (error instanceof ApprovalAbort) {
+      if (error.reason === "closed") return CLOSED;
+      const conflict = await articleWriteConflict(existing.id, input.actorId);
+      return conflict.code === "ARTICLE_LOCKED"
+        ? { ok: false as const, status: 409, code: "ARTICLE_LOCKED", message: "الخبر مفتوح للتحرير عند مستخدم آخر" } satisfies Fail
+        : { ok: false as const, status: 409, code: "ARTICLE_CHANGED", message: "تغيّر الخبر أثناء الاعتماد. أعد فتح الطلب وحاول مجددًا." } satisfies Fail;
+    }
+    if (isNotReady(error)) return NOT_READY;
+    throw error;
   }
-  markApplied();
+  const decided = claimed!;
 
+  // ما بعد commit: لا شيء هنا يعيد الطلب مفتوحًا.
   if (appliedFields.includes("imageUrl") && updated.imageUrl) {
     const imageUrl = updated.imageUrl;
     void (async () => {
@@ -447,20 +630,41 @@ async function applyClaimedRequest(
     actorId: input.actorId,
     reason: updateLine,
     summary: `اعتُمد طلب تعديل من ${requesterName}`,
-    metadata: { editRequestId: claimed.id, requesterId: claimed.requesterId, requesterName },
+    metadata: { editRequestId: decided.id, requesterId: decided.requesterId, requesterName },
   }).catch((error) => {
     console.error("[edit-requests] history log failed", error);
     return null;
   });
-  await db
-    .update(articleEditRequests)
-    .set({ appliedFields, appliedVersionId: version?.id ?? null, updatedAt: new Date() })
-    .where(eq(articleEditRequests.id, claimed.id))
-    .catch((error) => console.error("[edit-requests] applied fields write failed", error));
-  notifyRequester({ requesterId: claimed.requesterId, requestId: claimed.id, articleId: existing.id, articleTitle: updated.title, approved: true })
+  if (version?.id) {
+    await db
+      .update(articleEditRequests)
+      .set({ appliedVersionId: version.id, updatedAt: new Date() })
+      .where(eq(articleEditRequests.id, decided.id))
+      .catch((error) => console.error("[edit-requests] applied version write failed", error));
+  }
+  notifyRequester(decisionNoticeFor(decided, updated, true))
     .catch((error) => console.error("[edit-requests] notify requester failed", error));
 
-  return { ok: true as const, article: updated, before: existing, appliedFields, missingParagraphs, changed: true, request: claimed };
+  return { ok: true as const, article: updated, before: existing, appliedFields, missingParagraphs, changed: true, request: decided };
+}
+
+function decisionNoticeFor(
+  request: typeof articleEditRequests.$inferSelect,
+  article: Pick<Article, "id" | "title" | "slug" | "status" | "articleType"> | null | undefined,
+  approved: boolean,
+  reason?: string | null,
+): DecisionNotice {
+  return {
+    requesterId: request.requesterId,
+    requestId: request.id,
+    articleId: request.articleId,
+    articleTitle: article?.title ?? "",
+    articleSlug: article?.slug ?? null,
+    articleStatus: article?.status ?? null,
+    articleType: article?.articleType ?? null,
+    approved,
+    reason: reason ?? null,
+  };
 }
 
 export async function rejectEditRequest(input: { id: string; actorId: string; reason: string }) {
@@ -471,9 +675,9 @@ export async function rejectEditRequest(input: { id: string; actorId: string; re
     if (isNotReady(error)) return NOT_READY;
     throw error;
   }
-  if (!claimed) return { ok: false as const, status: 409, code: "EDIT_REQUEST_CLOSED", message: "الطلب حُسم أو أُلغي" } satisfies Fail;
+  if (!claimed) return CLOSED;
   const [article] = await db
-    .select({ id: articles.id, title: articles.title })
+    .select({ id: articles.id, title: articles.title, slug: articles.slug, status: articles.status, articleType: articles.articleType })
     .from(articles)
     .where(eq(articles.id, claimed.articleId))
     .limit(1);
@@ -485,14 +689,8 @@ export async function rejectEditRequest(input: { id: string; actorId: string; re
     summary: `رُفض طلب تعديل ${claimed.requesterId ? names.get(claimed.requesterId) ?? "مراسل" : "مراسل"}`,
     metadata: { editRequestId: claimed.id, requesterId: claimed.requesterId, reason: input.reason },
   }).catch((error) => console.error("[edit-requests] event log failed", error));
-  notifyRequester({
-    requesterId: claimed.requesterId,
-    requestId: claimed.id,
-    articleId: claimed.articleId,
-    articleTitle: article?.title ?? "",
-    approved: false,
-    reason: input.reason,
-  }).catch((error) => console.error("[edit-requests] notify requester failed", error));
+  notifyRequester(decisionNoticeFor(claimed, article, false, input.reason))
+    .catch((error) => console.error("[edit-requests] notify requester failed", error));
   return { ok: true as const, request: claimed };
 }
 

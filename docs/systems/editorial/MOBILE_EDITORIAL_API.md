@@ -21,6 +21,8 @@
 | `GET /edit-requests/context/:articleId` | المراسل أو كاتب الرأي (منذ 2026-10-31) | المادة وفقراتها القابلة للتعديل وطلبه المفتوح (خدمة الويب `getEditRequestContext`) |
 | `POST /edit-requests` | المراسل أو كاتب الرأي | `{ articleId, urgent, note, proposed: { title?, contentEdits?[{before,after}], appendParagraph?, imageUrl?, albumAdd?[] } }` → 201. الصور تُرفع قبلها عبر `POST /api/v1/articles/images` |
 | `POST /edit-requests/:id/cancel` | المراسل أو كاتب الرأي | إلغاء طلبه المفتوح |
+
+> **قرار الطلب في «إشعاراتي التحريرية» (2026-10-31):** الاعتماد أو الرفض يظهر أيضًا في `GET /api/v1/notifications` بنوع `edit_request_approved` أو `edit_request_rejected` (السبب في `reviewerNote`)، ورابط `sabq://article/<slug>?editRequest=<id>` أو `sabq://draft/<articleId>?editRequest=<id>`، مع دفع APNs بنوع `editorial.edit_request_*` حسب تفضيل `revisionEnabled`. أشكال الاستجابة لم تتغير، والطلب الثاني المتزامن يرجع `409 EDIT_REQUEST_PENDING` كالمعتاد. التطبيق يعرض النوعين الجديدين بالأيقونة الافتراضية إلى أن يُضافا إلى `EditorialNotificationsView`.
 | `GET /news`, `/news/categories`, `/news/:id`, `POST /news/:id/publish\|schedule\|return`, `GET /news/edit-requests/:id`, `POST …/approve\|reject` | المشرف (`articles.publish`) | نفس مسارات «الأخبار» في «مكتب سبق» حرفيًا (`registerStaffNewsRoutes` في `server/routes/staffNewsDesk.ts`)، الشكل في [`STAFF_APP_API.md`](./STAFF_APP_API.md) |
 
 ## التطبيق (iOS)

@@ -1257,6 +1257,12 @@ export const articleEditRequests = pgTable("article_edit_requests", {
 }, (table) => [
   index("idx_article_edit_requests_article_status").on(table.articleId, table.status),
   index("idx_article_edit_requests_status_created").on(table.status, table.createdAt.desc()),
+  // طلب مفتوح واحد لكل صاحب طلب على المادة. يُنشأ على الإنتاج يدويًا عبر
+  // migrations/20261031_article_edit_requests_one_pending.sql (CONCURRENTLY)؛
+  // إعلانه هنا يمنع drizzle-kit من اقتراح حذفه.
+  uniqueIndex("idx_article_edit_requests_one_pending")
+    .on(table.articleId, table.requesterId)
+    .where(sql`status = 'pending'`),
 ]);
 
 export type ArticleEditRequest = typeof articleEditRequests.$inferSelect;
