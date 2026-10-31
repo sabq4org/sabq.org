@@ -654,10 +654,13 @@ function ArticleWireRow({
   article,
   desktop,
   onTitleClick,
+  editorView = true,
 }: {
   article: Article;
   desktop: boolean;
   onTitleClick?: () => void;
+  /** ملصق «مخفي من الرئيسية» قرار تحريري يظهر للمحررين فقط. */
+  editorView?: boolean;
 }) {
   const moment = wireMoment(article, desktop);
   const who = wireAttribution(article);
@@ -749,7 +752,7 @@ function ArticleWireRow({
         ) : null}
         <SourceAttributionBadge who={who} />
         {categoryChip}
-        {!desktop ? <ArticleFlags article={article} omit={["featured", "reading"]} /> : null}
+        {!desktop ? <ArticleFlags article={article} omit={editorView ? ["featured", "reading"] : ["featured", "reading", "hidden"]} /> : null}
       </div>
     </div>
   );
@@ -934,9 +937,11 @@ function DeskThumb({ article }: { article: Article }) {
 function ArticleDeskMain({
   article,
   onTitleClick,
+  editorView = true,
 }: {
   article: Article;
   onTitleClick?: () => void;
+  editorView?: boolean;
 }) {
   const who = wireAttribution(article);
   const type = article.articleType && article.articleType !== "news" ? TYPE_CHIP[article.articleType] : null;
@@ -995,7 +1000,7 @@ function ArticleDeskMain({
             <span className="truncate font-medium text-foreground/80">{who.byline}</span>
           </span>
         ) : null}
-        <ArticleFlags article={article} />
+        <ArticleFlags article={article} omit={editorView ? [] : ["hidden"]} />
       </div>
     </div>
   );
@@ -2380,6 +2385,7 @@ export default function ArticlesManagement() {
                                     <ArticleDeskMain
                                       article={article}
                                       onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                                      editorView={isNewsroomEditor}
                                     />
                                   </div>
                                   <div className="flex shrink-0 items-start gap-1.5 pt-0.5 text-muted-foreground" title="القراءات">
@@ -2391,6 +2397,7 @@ export default function ArticlesManagement() {
                                 <ArticleDeskMain
                                   article={article}
                                   onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                                  editorView={isNewsroomEditor}
                                 />
                               )}
                               {isTouchTablet && (
@@ -2498,6 +2505,7 @@ export default function ArticlesManagement() {
                         article={article}
                         desktop={false}
                         onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                        editorView={isNewsroomEditor}
                       />
                       <EditorialDraftReviewCue
                         article={article}
