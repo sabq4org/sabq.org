@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CheckCircle
@@ -140,6 +141,7 @@ fun SettingsScreen(
     onSabqPlusClick: () -> Unit = {},
     onPressCardClick: () -> Unit = {},
     onOpenRevisionsClick: () -> Unit = {},
+    onBlockedUsersClick: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -242,6 +244,19 @@ fun SettingsScreen(
                 SabqAnalytics.setConsent(settingsContext, enabled)
             },
         )
+
+        // 5.2) الخصوصية والبيانات — المستخدمون المحظورون (للمسجّل فقط، مرآة iOS)
+        if (currentUser != null) {
+            SurfaceCard(accent = SabqTheme.colors.leaf) {
+                SettingsRow(
+                    title = "المستخدمون المحظورون",
+                    subtitle = "من حظرتهم في التعليقات",
+                    icon = Icons.Filled.Block,
+                    tint = SabqTheme.colors.coral,
+                    onClick = onBlockedUsersClick,
+                )
+            }
+        }
 
         // 5.5) تجربة التصفح (وضع Lite)
         com.sabq.smart.feature.lite.BrowsingExperienceSection(

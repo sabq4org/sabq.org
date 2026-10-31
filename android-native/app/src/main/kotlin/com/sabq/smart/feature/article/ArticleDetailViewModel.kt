@@ -70,6 +70,7 @@ class ArticleDetailViewModel @Inject constructor(
                     loadRelatedOpinions(article)
                     loadReporterTitle(article)
                     loadMediaAssets(article.id)
+                    trackView(article.id)
                 }
                 .onFailure { e ->
                     val current = _state.value
@@ -82,6 +83,17 @@ class ArticleDetailViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+    }
+
+    /** مرة واحدة لكل فتح للخبر، مثل iOS ArticleDetailView. */
+    private var viewTracked = false
+
+    private fun trackView(articleId: String) {
+        if (viewTracked || articleId.isBlank()) return
+        viewTracked = true
+        viewModelScope.launch {
+            runCatching { repo.trackView(articleId) }
         }
     }
 

@@ -113,11 +113,45 @@ class HomeFeedViewModel @Inject constructor(
         }
     }
 
-    fun refresh() {
+    private var livePollJob: kotlinx.coroutines.Job? = null
+    private var lastServerUpdate: Double? = null
+
+    /**
+     * iOS parity (HomeFeedView.swift ~L299): while Home is on screen,
+     * poll `/api/cache-invalidation/check` every 30s and refresh quietly
+     * only when the server marker moves. Every second tick (60s) also
+     * refreshes the extras (breaking ticker, audio bulletin) even if the
+     * marker did not move, like the iOS hero/ticker check.
+     */
+    fun startLiveUpdates() {
+        if (livePollJob?.isActive == true) return
+        livePollJob = viewModelScope.launch {
+            var tick = 0
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                tick++
+                val marker = repo.lastServerUpdate() ?: continue
+                val previous = lastServerUpdate
+                lastServerUpdate = marker
+                if (previous != null && marker != previous) {
+                    refresh(silent = true)
+                } else if (tick % 2 == 0) {
+                    loadExtras()
+                }
+            }
+        }
+    }
+
+    fun stopLiveUpdates() {
+        livePollJob?.cancel()
+        livePollJob = null
+    }
+
+    fun refresh(silent: Boolean = false) {
         val current = _state.value
         val slug = if (current is HomeFeedUiState.Loaded) current.selectedSlug else null
         viewModelScope.launch {
-            _state.update { c ->
+            if (!silent) _state.update { c ->
                 if (c is HomeFeedUiState.Loaded) c.copy(isRefreshing = true) else c
             }
             runCatching {

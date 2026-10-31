@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 data class Comment(
     val id: String,
     val body: String,
+    val userId: String? = null,
     val userName: String?,
     val userAvatar: String?,
     val createdAt: String,
@@ -35,6 +36,7 @@ fun ApiComment.toDomain(): Comment {
     return Comment(
         id = id.ifBlank { "anon-${hashCode()}" },
         body = body,
+        userId = userIdFlat?.takeIf { it.isNotBlank() } ?: resolveUserId(user),
         userName = resolvedName,
         userAvatar = resolvedAvatar,
         createdAt = createdAt,
@@ -57,6 +59,11 @@ private fun resolveUserName(element: kotlinx.serialization.json.JsonElement?): S
     val combined = "$first $last".trim()
     return combined.takeIf { it.isNotEmpty() }
         ?: obj["name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+private fun resolveUserId(element: kotlinx.serialization.json.JsonElement?): String? {
+    if (element !is JsonObject) return null
+    return element.jsonObject["id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 }
 
 private fun resolveUserAvatar(element: kotlinx.serialization.json.JsonElement?): String? {

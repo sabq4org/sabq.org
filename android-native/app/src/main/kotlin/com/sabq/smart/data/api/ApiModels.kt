@@ -1,5 +1,6 @@
 package com.sabq.smart.data.api
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -861,3 +862,22 @@ data class ApiWriterSchedulePickResponse(
     val message: String? = null,
 )
 
+
+
+/** جسم `/articles/:id/view`؛ الخادم يفترض «ios» عند غياب platform. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ArticleViewBody(
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val platform: String = "android",
+    val appVersion: String? = null,
+)
+
+@Serializable
+data class ApiArticleViewResponse(
+    val success: Boolean = false,
+)
+
+/** `GET /api/cache-invalidation/check` → `{ lastUpdate }` (epoch ms). */
+@Serializable
+data class ApiCacheInvalidationCheck(val lastUpdate: Double? = null)
