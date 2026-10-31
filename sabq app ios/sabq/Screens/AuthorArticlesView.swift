@@ -46,8 +46,6 @@ struct AuthorArticlesView: View {
                     topCategoriesRow(cats)
                 }
 
-                SabqSectionBand()
-
                 articlesSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)
@@ -110,8 +108,9 @@ struct AuthorArticlesView: View {
     private var avatarInitial: some View {
         ZStack {
             Circle()
-                .fill(SabqTheme.surfaceMuted)
+                .fill(SabqTheme.surface)
                 .frame(width: 88, height: 88)
+                .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
             Text(String((page?.author.name ?? authorName).prefix(1)))
                 .font(SabqType.articleTitle.font)
                 .foregroundStyle(SabqTheme.textSecondary)
@@ -202,7 +201,7 @@ struct AuthorArticlesView: View {
         }
     }
 
-    /// ألوان التصنيفات لا تلوّن النص ولا الخلفية؛ شريحة هادئة موحّدة.
+    /// ألوان التصنيفات لا تلوّن النص ولا الخلفية؛ شريحة بيضاء بحدّ رفيع على الخلفية الرمادية.
     private func categoryChip(_ cat: APIAuthorCategory) -> some View {
         HStack(spacing: SabqLayout.space4) {
             Image(systemName: cat.icon ?? "circle.fill")
@@ -217,7 +216,8 @@ struct AuthorArticlesView: View {
         .font(SabqType.tag.font)
         .padding(.horizontal, SabqLayout.space12)
         .frame(minHeight: 36)
-        .background(Capsule(style: .continuous).fill(SabqTheme.surfaceMuted))
+        .background(Capsule(style: .continuous).fill(SabqTheme.surface))
+        .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.separator, lineWidth: 0.75))
         .accessibilityElement(children: .combine)
     }
 

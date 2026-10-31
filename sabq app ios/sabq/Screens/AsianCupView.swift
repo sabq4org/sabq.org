@@ -28,23 +28,18 @@ struct AsianCupView: View {
             VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 hero
                 if let facts, facts.hasContent { factsBlock(facts) }
-                SabqSectionBand()
                 matchesSection
                 if !groups.isEmpty {
-                    SabqSectionBand()
                     groupsSection
                 }
                 if let bracket, !bracket.rounds.isEmpty {
-                    SabqSectionBand()
                     bracketSection(bracket)
                 }
-                SabqSectionBand()
                 AcRacesSection(
                     scorers: scorers, assists: assists, cards: cards,
                     isLoading: racesLoading,
                     started: fixtures.contains { $0.status.live || $0.status.finished }
                 )
-                SabqSectionBand()
                 teamsSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)
@@ -235,7 +230,7 @@ struct AsianCupView: View {
         }
     }
 
-    /// قائمة مباريات بلا صناديق: صفوف تفصلها خطوط رفيعة.
+    /// قائمة مباريات على سطح واحد: صفوف تفصلها خطوط رفيعة.
     private func matchList(_ list: [AcFixture]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(list.enumerated()), id: \.element.id) { index, fx in
@@ -246,6 +241,8 @@ struct AsianCupView: View {
                 .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     private func matchRow(_ fx: AcFixture) -> some View {
@@ -288,6 +285,7 @@ struct AsianCupView: View {
                         .font(SabqType.metaEmphasis.font)
                         .foregroundStyle(AcStyle.accent)
                         .padding(.bottom, SabqLayout.space4)
+                    VStack(spacing: 0) {
                     ForEach(Array(g.rows.enumerated()), id: \.element.id) { index, row in
                         if index > 0 { AcRowDivider() }
                         Button {
@@ -314,6 +312,9 @@ struct AsianCupView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -352,7 +353,8 @@ struct AsianCupView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, SabqLayout.space8)
+                        .padding(.vertical, SabqLayout.space12).padding(.horizontal, SabqLayout.space8)
+                        .sabqBlockSurface()
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

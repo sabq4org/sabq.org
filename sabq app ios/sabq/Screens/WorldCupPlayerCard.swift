@@ -89,7 +89,7 @@ struct WCPlayerSheet: View {
                 }
                 HStack(spacing: SabqLayout.space8) {
                     if !p.position.isEmpty {
-                        chip(p.position, fill: SabqTheme.surfaceMuted, fg: WCTheme.emeraldDeep)
+                        chip(p.position, fill: SabqTheme.surface, fg: WCTheme.emeraldDeep)
                     }
                     if let number = p.number {
                         HStack(spacing: SabqLayout.space4) {
@@ -98,10 +98,11 @@ struct WCPlayerSheet: View {
                         }
                         .foregroundStyle(SabqTheme.textPrimary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                        .background(Capsule().fill(SabqTheme.surfaceMuted))
+                        .background(Capsule().fill(SabqTheme.surface))
+                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                     }
                     if p.injury != nil {
-                        chip("مصاب حاليًا", fill: SabqTheme.surfaceMuted, fg: SabqTheme.warning)
+                        chip("مصاب حاليًا", fill: SabqTheme.surface, fg: SabqTheme.warning)
                     }
                 }
             }
@@ -114,7 +115,7 @@ struct WCPlayerSheet: View {
             if p.photo.isEmpty {
                 Text(String(p.name.prefix(2)))
                     .font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(SabqTheme.textSecondary)
-                    .frame(width: 76, height: 76).background(Circle().fill(SabqTheme.surfaceMuted))
+                    .frame(width: 76, height: 76).background(Circle().fill(SabqTheme.surface))
             } else {
                 WCRemoteImage(url: p.photo, contentMode: .fill)
                     .frame(width: 76, height: 76).clipShape(Circle())
@@ -128,6 +129,7 @@ struct WCPlayerSheet: View {
             .sabqText(SabqType.tag).foregroundStyle(fg)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
             .background(Capsule().fill(fill))
+            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
     }
 
     // MARK: شريط الحقائق
@@ -183,8 +185,9 @@ struct WCPlayerSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionTitle(icon: "clock.arrow.circlepath", text: "المسيرة")
                 .padding(.bottom, SabqLayout.space8)
-            ForEach(career) { stop in
-                WCRowSeparator()
+            VStack(spacing: 0) {
+            ForEach(Array(career.enumerated()), id: \.element.id) { idx, stop in
+                if idx > 0 { WCRowSeparator() }
                 HStack(spacing: SabqLayout.space12) {
                     WCRemoteImage(url: stop.logo)
                         .padding(4)
@@ -202,6 +205,9 @@ struct WCPlayerSheet: View {
                 }
                 .padding(.vertical, SabqLayout.space12)
             }
+            }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -216,12 +222,14 @@ struct WCPlayerSheet: View {
                     Text("\(titles) بطولة")
                         .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                        .background(Capsule().fill(SabqTheme.surfaceMuted))
+                        .background(Capsule().fill(SabqTheme.surface))
+                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                 }
             }
             .padding(.bottom, SabqLayout.space8)
-            ForEach(trophies) { trophy in
-                WCRowSeparator()
+            VStack(spacing: 0) {
+            ForEach(Array(trophies.enumerated()), id: \.element.id) { idx, trophy in
+                if idx > 0 { WCRowSeparator() }
                 HStack(spacing: SabqLayout.space12) {
                     Image(systemName: "trophy.fill")
                         .font(SabqFonts.app(size: 13))
@@ -245,6 +253,9 @@ struct WCPlayerSheet: View {
                 }
                 .padding(.vertical, SabqLayout.space12)
             }
+            }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -304,7 +315,8 @@ struct WCPlayerStatsGrid: View {
                         .font(SabqFonts.app(size: 13, weight: .semibold).monospacedDigit())
                         .foregroundStyle(ratingColor(rating))
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                        .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surfaceMuted))
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surface))
+                        .overlay(RoundedRectangle(cornerRadius: SabqRadius.small).strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
@@ -370,11 +382,13 @@ struct WCPlayerFormSection: View {
                     resultsStrip
                     if hasXg { xgChart }
                     VStack(spacing: 0) {
-                        ForEach(matches) { m in
-                            WCRowSeparator()
+                        ForEach(Array(matches.enumerated()), id: \.element.id) { idx, m in
+                            if idx > 0 { WCRowSeparator() }
                             matchRow(m)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -396,7 +410,8 @@ struct WCPlayerFormSection: View {
             Text("آخر \(matches.count)")
                 .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                 .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                .background(Capsule().fill(SabqTheme.surfaceMuted))
+                .background(Capsule().fill(SabqTheme.surface))
+                .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                 .environment(\.layoutDirection, .leftToRight)
         }
     }
@@ -409,7 +424,8 @@ struct WCPlayerFormSection: View {
                     .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(resultColor(m.result))
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(SabqTheme.surfaceMuted))
+                    .background(Circle().fill(SabqTheme.surface))
+                    .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
             }
             Spacer(minLength: 0)
         }

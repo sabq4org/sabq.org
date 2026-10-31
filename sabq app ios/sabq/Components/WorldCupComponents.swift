@@ -265,10 +265,10 @@ struct WCLoading: View {
 // MARK: - أسطح النموذج المعتمد
 
 extension View {
-    /// بلوك هادئ (معلومة/لوحة خاصة): تعبئة surfaceMuted بلا حدّ ولا ظل، زاوية 12.
+    /// بلوك البطولة: سطح أبيض بحدّ رفيع على خلفية التطبيق الرمادية (كان
+    /// surfaceMuted فاختفى بعد #2039 — مراجعة المالك 2026-10-31).
     func wcQuietBlock() -> some View {
-        background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-            .fill(SabqTheme.surfaceMuted))
+        sabqBlockSurface()
     }
 }
 

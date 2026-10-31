@@ -33,7 +33,7 @@ struct MawaeedServiceView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space8)
-            .padding(.bottom, 120)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle(route.title)
@@ -119,6 +119,8 @@ struct MawaeedServiceView: View {
                             MawaeedRow(card: card, now: now)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -129,25 +131,31 @@ struct MawaeedServiceView: View {
                     .font(SabqType.sectionHeading.font)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .accessibilityAddTraits(.isHeader)
-                ForEach(view.faq, id: \.question) { item in
-                    DisclosureGroup {
-                        Text(item.answer)
-                            .sabqText(SabqType.excerpt)
-                            .foregroundStyle(SabqTheme.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, SabqLayout.space8)
-                    } label: {
-                        Text(item.question)
-                            .font(SabqType.rowTitle.font)
-                            .foregroundStyle(SabqTheme.textPrimary)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(view.faq.enumerated()), id: \.element.question) { index, item in
+                        if index > 0 {
+                            Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                        }
+                        DisclosureGroup {
+                            Text(item.answer)
+                                .sabqText(SabqType.excerpt)
+                                .foregroundStyle(SabqTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, SabqLayout.space8)
+                        } label: {
+                            Text(item.question)
+                                .font(SabqType.rowTitle.font)
+                                .foregroundStyle(SabqTheme.textPrimary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .tint(block.kind.tone)
+                        .padding(.vertical, SabqLayout.space12)
                     }
-                    .tint(block.kind.tone)
-                    .padding(.vertical, SabqLayout.space8)
-                    Rectangle().fill(SabqTheme.separator).frame(height: 1)
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }

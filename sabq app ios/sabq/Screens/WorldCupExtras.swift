@@ -30,7 +30,8 @@ struct WCRacesSection: View {
                             .foregroundStyle(tab == t ? SabqTheme.onAction : SabqTheme.textPrimary)
                             .padding(.horizontal, SabqLayout.space16)
                             .frame(minHeight: SabqLayout.touchTarget)
-                            .background(Capsule().fill(tab == t ? WCTheme.royal : SabqTheme.surfaceMuted))
+                            .background(Capsule().fill(tab == t ? WCTheme.royal : SabqTheme.surface))
+                            .overlay(Capsule().strokeBorder(tab == t ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
                     }
                     .buttonStyle(.plain)
                 }
@@ -84,8 +85,8 @@ struct WCRacesSection: View {
                     }
                     .padding(.bottom, SabqLayout.space16)
                 }
-                ForEach(rest) { s in
-                    WCRowSeparator()
+                ForEach(Array(rest.enumerated()), id: \.element.id) { idx, s in
+                    if idx > 0 || showPodium { WCRowSeparator() }
                     Button { selectedPlayer = WCPlayerSelection(s.playerId) } label: {
                         WCLeaderRow(rank: s.rank, name: s.name, photo: s.photo, team: s.team, minutes: s.minutes) {
                             metric("\(s.goals)", sub: "\(s.assists) صناعة")
@@ -94,6 +95,9 @@ struct WCRacesSection: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.top, showPodium ? SabqLayout.space16 : 0)
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -110,8 +114,8 @@ struct WCRacesSection: View {
             WCRaceEmpty(message: empty)
         } else {
             VStack(spacing: 0) {
-                ForEach(leaders) { l in
-                    WCRowSeparator()
+                ForEach(Array(leaders.enumerated()), id: \.element.id) { idx, l in
+                    if idx > 0 { WCRowSeparator() }
                     Button { selectedPlayer = WCPlayerSelection(l.playerId) } label: {
                         WCLeaderRow(rank: l.rank, name: l.name, photo: l.photo, team: l.team, minutes: l.minutes) {
                             trailing(l)
@@ -120,6 +124,8 @@ struct WCRacesSection: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -584,10 +590,14 @@ struct WCTeamSheet: View {
                 .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             }
             .padding(.bottom, SabqLayout.space8)
-            ForEach(group.rows) { row in
-                WCRowSeparator()
-                groupRow(row)
+            VStack(spacing: 0) {
+                ForEach(Array(group.rows.enumerated()), id: \.element.id) { idx, row in
+                    if idx > 0 { WCRowSeparator() }
+                    groupRow(row)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -732,7 +742,7 @@ struct WCTeamSheet: View {
         Text(t)
             .font(SabqFonts.app(size: 12, weight: .medium).monospacedDigit()).foregroundStyle(SabqTheme.textPrimary)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-            .background(Capsule().fill(SabqTheme.surface))
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
     }
 
     // MARK: الملعب
@@ -743,7 +753,7 @@ struct WCTeamSheet: View {
                 Image(systemName: "sportscourt.fill")
                     .font(.system(size: 22)).foregroundStyle(WCTheme.emeraldDeep)
                     .frame(width: 44, height: 44)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surface))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(WCTheme.emeraldDeep.opacity(0.12)))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("الملعب").sabqText(SabqType.tag).foregroundStyle(WCTheme.emeraldDeep)
@@ -781,8 +791,9 @@ struct WCTeamSheet: View {
                     Text("الإصابات والغيابات").sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
                 }
                 .padding(.bottom, SabqLayout.space8)
-                ForEach(injuries) { inj in
-                    WCRowSeparator()
+                VStack(spacing: 0) {
+                ForEach(Array(injuries.enumerated()), id: \.element.id) { idx, inj in
+                    if idx > 0 { WCRowSeparator() }
                     HStack(spacing: SabqLayout.space12) {
                         Circle().fill(SabqTheme.danger).frame(width: 8, height: 8)
                         VStack(alignment: .leading, spacing: 0) {
@@ -800,6 +811,9 @@ struct WCTeamSheet: View {
                     }
                     .padding(.vertical, SabqLayout.space12)
                 }
+                }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -818,7 +832,8 @@ struct WCTeamSheet: View {
                         Text("\(s.matches) مباراة")
                             .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                             .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.surfaceMuted))
+                            .background(Capsule().fill(SabqTheme.surface))
+                            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                     }
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: SabqLayout.space8)], spacing: SabqLayout.space8) {
@@ -859,10 +874,14 @@ struct WCTeamSheet: View {
                     Text("(\(fixtures.count))").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 }
                 .padding(.bottom, SabqLayout.space8)
-                ForEach(fixtures) { f in
-                    WCRowSeparator()
-                    WCMatchCard(fixture: f) { route = .match(f.id) }
+                VStack(spacing: 0) {
+                    ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
+                        if idx > 0 { WCRowSeparator() }
+                        WCMatchCard(fixture: f) { route = .match(f.id) }
+                    }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -884,10 +903,14 @@ struct WCTeamSheet: View {
                         VStack(alignment: .leading, spacing: 0) {
                             Text(sec.label).sabqText(SabqType.rowTitle).foregroundStyle(WCTheme.emeraldDeep)
                                 .padding(.bottom, SabqLayout.space8)
-                            ForEach(players) { p in
-                                WCRowSeparator()
-                                playerRow(p)
+                            VStack(spacing: 0) {
+                                ForEach(Array(players.enumerated()), id: \.element.id) { idx, p in
+                                    if idx > 0 { WCRowSeparator() }
+                                    playerRow(p)
+                                }
                             }
+                            .padding(.horizontal, SabqLayout.space12)
+                            .sabqNewsSurface()
                         }
                     }
                 }

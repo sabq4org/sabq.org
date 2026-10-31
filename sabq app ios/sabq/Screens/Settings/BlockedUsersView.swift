@@ -12,7 +12,9 @@ struct BlockedUsersView: View {
             Section {
                 ForEach(safety.blockedUsers) { user in
                     row(user)
-                        .listRowBackground(SabqTheme.background)
+                        // صفوف بيضاء داخل بطاقة واحدة على خلفية التطبيق الرمادية.
+                        .listRowBackground(SabqTheme.surface)
+                        .listRowSeparatorTint(SabqTheme.separator)
                 }
             } footer: {
                 if let errorMessage {
@@ -28,7 +30,7 @@ struct BlockedUsersView: View {
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(SabqTheme.background)
         .overlay {

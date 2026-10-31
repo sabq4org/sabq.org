@@ -103,7 +103,6 @@ struct ExploreView: View {
         sectionsGridSection
 
         if !recentSearches.isEmpty {
-            SabqSectionBand()
             recentSearchesSection
         }
     }
@@ -336,8 +335,8 @@ struct DiscoveryCategoryTile: View {
     }
 }
 
-/// شريحة هادئة (كلمة مفتاحية، بحث سابق): كبسولة surfaceMuted بنص أساسي،
-/// ومساحة لمس 44 نقطة.
+/// شريحة هادئة (كلمة مفتاحية، بحث سابق): كبسولة بيضاء بحدّ رفيع ونص أساسي
+/// — تبقى مرئية على الخلفية الرمادية — ومساحة لمس 44 نقطة.
 struct DiscoveryChip: View {
     let title: String
     var icon: String? = nil
@@ -357,7 +356,8 @@ struct DiscoveryChip: View {
         .padding(.horizontal, SabqLayout.space12)
         .padding(.vertical, SabqLayout.space8)
         .frame(minHeight: 36)
-        .background(Capsule(style: .continuous).fill(SabqTheme.surfaceMuted))
+        .background(Capsule(style: .continuous).fill(SabqTheme.surface))
+        .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.separator, lineWidth: 0.75))
         .frame(minHeight: SabqLayout.touchTarget)
         .contentShape(Rectangle())
     }

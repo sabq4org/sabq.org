@@ -44,10 +44,7 @@ struct ChangePasswordSheet: View {
                         .padding(.horizontal, SabqLayout.space16)
                         .padding(.vertical, SabqLayout.space12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
-                        )
+                        .sabqBlockSurface()
                     } else {
                         VStack(spacing: SabqLayout.space16) {
                             secureField(label: "كلمة المرور الحالية", placeholder: "أدخل كلمة المرور الحالية", text: $currentPassword)

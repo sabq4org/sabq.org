@@ -34,7 +34,7 @@ struct MawaeedView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space8)
-            .padding(.bottom, 120)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("مواعيدك")
@@ -172,10 +172,12 @@ struct MawaeedView: View {
                             }
                             .padding(SabqLayout.space12)
                             .frame(width: 128, alignment: .leading)
-                            .background(isSelected ? block.kind.fill.opacity(0.12) : SabqTheme.surfaceMuted,
+                            // غير المختارة بيضاء بحدّ رفيع كي تظهر على خلفية الصفحة الرمادية.
+                            .background(isSelected ? block.kind.fill.opacity(0.12) : SabqTheme.surface,
                                         in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                .stroke(isSelected ? block.kind.tone : .clear, lineWidth: 1.5))
+                                .strokeBorder(isSelected ? block.kind.tone : SabqTheme.separator,
+                                              lineWidth: isSelected ? 1.5 : 0.75))
                         }
                         .buttonStyle(.plain)
                         .disabled(block.next == nil)
@@ -213,7 +215,7 @@ struct MawaeedView: View {
             }
             .padding(SabqLayout.space12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            .sabqBlockSurface()
             .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -302,7 +304,7 @@ struct MawaeedView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 
     private func legend(label: String, text: String, ink: Color, fill: Color) -> some View {

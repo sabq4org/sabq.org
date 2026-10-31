@@ -145,7 +145,7 @@ struct KeywordArticlesView: View {
                 .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surfaceMuted)
+                        .fill(SabqTheme.primary.opacity(0.12))
                 )
                 .accessibilityHidden(true)
         }
@@ -170,7 +170,11 @@ struct KeywordArticlesView: View {
             .frame(minHeight: 36)
             .background(
                 Capsule(style: .continuous)
-                    .fill(isFollowing ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
+                    .fill(isFollowing ? SabqTheme.actionFill : SabqTheme.surface)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(isFollowing ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
             )
             .frame(minHeight: SabqLayout.touchTarget)
             .contentShape(Rectangle())

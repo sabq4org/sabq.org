@@ -1120,14 +1120,7 @@ struct ArticleDetailView: View {
 
     private var weeklyPhotosHeader: some View {
         HStack(spacing: 12) {
-            Image(systemName: "camera.fill")
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.primary)
-                .frame(width: 40, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.surfaceMuted)
-                )
+            SmallSquareBadge(systemImage: "camera.fill", tint: SabqTheme.primary)
 
             Text("صور الأسبوع")
                 .font(SabqType.sectionHeading.font)
@@ -1154,7 +1147,8 @@ struct ArticleDetailView: View {
                     .fill(SabqTheme.primary)
                     .frame(width: 14, height: 14)
                     .overlay(
-                        Circle().stroke(SabqTheme.background, lineWidth: 4)
+                        // حلقة بلون الصفحة البيضاء تقطع خط الزمن خلف النقطة.
+                        Circle().stroke(SabqTheme.surface, lineWidth: 4)
                     )
             }
             .frame(width: 22, alignment: .top)

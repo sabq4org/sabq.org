@@ -52,6 +52,8 @@ struct CalendarView: View {
                             .padding(.vertical, SabqLayout.rowPadding)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                     .accessibilityHidden(true)
                 } else if let errorMessage {
                     EmptyStateView(
@@ -70,9 +72,8 @@ struct CalendarView: View {
                         subtitle: "لا توجد فعاليات أو أيام عالمية مسجّلة للفترة القادمة."
                     )
                 } else {
-                    ForEach(Array(grouped.enumerated()), id: \.offset) { groupIndex, group in
-                        if groupIndex > 0 { SabqSectionBand() }
-                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    ForEach(Array(grouped.enumerated()), id: \.offset) { _, group in
+                        VStack(alignment: .leading, spacing: SabqLayout.space8) {
                             Text(group.date)
                                 .font(SabqType.sectionHeading.font)
                                 .foregroundStyle(SabqTheme.textPrimary)
@@ -84,6 +85,8 @@ struct CalendarView: View {
                                     eventRow(event)
                                 }
                             }
+                            .padding(.horizontal, SabqLayout.space12)
+                            .sabqNewsSurface()
                         }
                     }
                 }

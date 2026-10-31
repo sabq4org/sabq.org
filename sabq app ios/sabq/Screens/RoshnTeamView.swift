@@ -21,7 +21,7 @@ struct RoshnTeamView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 hero
 
                 if loading, profile == nil {
@@ -132,7 +132,7 @@ struct RoshnTeamView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, SabqLayout.space12)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .sabqBlockSurface()
                 .accessibilityElement(children: .combine)
             }
         }
@@ -158,6 +158,8 @@ struct RoshnTeamView: View {
                 }
                 Spacer()
             }
+            .padding(SabqLayout.space12)
+            .sabqBlockSurface()
             .accessibilityElement(children: .combine)
         }
     }
@@ -184,6 +186,8 @@ struct RoshnTeamView: View {
                 }
                 Spacer()
             }
+            .padding(SabqLayout.space12)
+            .sabqBlockSurface()
             .accessibilityElement(children: .combine)
         }
     }
@@ -215,7 +219,7 @@ struct RoshnTeamView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SabqLayout.space12)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                    .sabqBlockSurface()
                     .accessibilityElement(children: .combine)
                 }
             }
@@ -256,6 +260,9 @@ struct RoshnTeamView: View {
                     }
                 }
             }
+            .padding(.top, SabqLayout.space12)
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -290,6 +297,8 @@ struct RoshnTeamView: View {
                     .accessibilityElement(children: .combine)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -314,6 +323,9 @@ struct RoshnTeamView: View {
                             squadRow(player)
                         }
                     }
+                    .padding(.top, SabqLayout.space12)
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -372,14 +384,12 @@ struct RoshnTeamView: View {
 
     // MARK: أقسام وحالات
 
-    /// قسم بلا صندوق: شريط فصل رمادي ثم عنوان 20 ثم المحتوى على الصفحة.
+    /// قسم: عنوان 20 ثم المحتوى على سطح أبيض؛ الفصل بين الأقسام بمسافة الصفحة (24).
     private func section<Content: View>(
         title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            SabqSectionBand()
-                .padding(.bottom, SabqLayout.space8)
             RoshnSectionHeading(title: title)
             content()
         }

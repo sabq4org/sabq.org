@@ -226,9 +226,14 @@ struct CommentRow: View {
                 .font(SabqType.tag.font)
                 .padding(.horizontal, SabqLayout.space8)
                 .padding(.vertical, SabqLayout.space4)
+                // قسم التعليقات سطح رمادي هادئ، فالشارة بيضاء بحدّ رفيع كي تظهر.
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surfaceMuted)
+                        .fill(SabqTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
                 )
             }
             Spacer(minLength: 0)

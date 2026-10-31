@@ -163,7 +163,6 @@ struct MuqtarabLandingView: View {
                     )
                 } else {
                     if !angles.isEmpty { anglesSection }
-                    if !angles.isEmpty && !topics.isEmpty { SabqSectionBand() }
                     if !topics.isEmpty { topicsSection }
                 }
             }
@@ -213,18 +212,23 @@ struct MuqtarabLandingView: View {
     }
 
     private var topicsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             MuqSectionHeading(title: "أحدث المواضيع")
-                .padding(.bottom, SabqLayout.space4)
             let rows = topics.filter { $0.angle?.slug != nil }
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, topic in
-                if index > 0 { MuqRowSeparator() }
-                NavigationLink(value: MuqtarabTopicRoute(
-                    angleSlug: topic.angle?.slug ?? "", topicSlug: topic.slug, title: topic.title
-                )) {
-                    MuqTopicCard(topic: topic, showAnglePill: true)
+            if !rows.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, topic in
+                        if index > 0 { MuqRowSeparator() }
+                        NavigationLink(value: MuqtarabTopicRoute(
+                            angleSlug: topic.angle?.slug ?? "", topicSlug: topic.slug, title: topic.title
+                        )) {
+                            MuqTopicCard(topic: topic, showAnglePill: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -421,10 +425,10 @@ struct MuqWriterByline: View {
 
     private func avatar(_ writer: MuqWriter, name: String) -> some View {
         ZStack {
-            Circle().fill(SabqTheme.surfaceMuted)
+            Circle().fill(SabqTheme.surface)
             if let raw = writer.avatar, let url = URL(string: URLConstants.absolutize(raw)) {
                 CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 200) {
-                    SabqTheme.surfaceMuted
+                    SabqTheme.surface
                 }
             } else {
                 Text(String(name.prefix(1)))
@@ -434,6 +438,7 @@ struct MuqWriterByline: View {
         }
         .frame(width: 44, height: 44)
         .clipShape(Circle())
+        .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
         .accessibilityHidden(true)
     }
 }
@@ -474,19 +479,21 @@ struct MuqtarabAngleView: View {
                         subtitle: "لم ينشر كاتب هذه الزاوية مواضيع بعد."
                     )
                 } else {
-                    SabqSectionBand()
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
                         MuqSectionHeading(title: "المواضيع")
-                            .padding(.bottom, SabqLayout.space4)
-                        ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
-                            if index > 0 { MuqRowSeparator() }
-                            NavigationLink(value: MuqtarabTopicRoute(
-                                angleSlug: slug, topicSlug: topic.slug, title: topic.title
-                            )) {
-                                MuqTopicCard(topic: topic, angleColorHex: angle?.colorHex ?? initialColorHex)
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
+                                if index > 0 { MuqRowSeparator() }
+                                NavigationLink(value: MuqtarabTopicRoute(
+                                    angleSlug: slug, topicSlug: topic.slug, title: topic.title
+                                )) {
+                                    MuqTopicCard(topic: topic, angleColorHex: angle?.colorHex ?? initialColorHex)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                     }
                 }
             }
@@ -556,15 +563,16 @@ struct MuqtarabAngleView: View {
 
     private func writerAvatar(_ writer: MuqWriter, name: String) -> some View {
         ZStack {
-            Circle().fill(SabqTheme.surfaceMuted)
+            Circle().fill(SabqTheme.surface)
             if let raw = writer.avatar, let url = URL(string: URLConstants.absolutize(raw)) {
-                CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 200) { SabqTheme.surfaceMuted }
+                CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 200) { SabqTheme.surface }
             } else {
                 Text(String(name.prefix(1))).font(SabqType.button.font).foregroundStyle(SabqTheme.textSecondary)
             }
         }
         .frame(width: 40, height: 40)
         .clipShape(Circle())
+        .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
         .accessibilityHidden(true)
     }
 
@@ -634,7 +642,7 @@ struct MuqtarabTopicView: View {
             .padding(.top, SabqLayout.space16)
             .padding(.bottom, SabqLayout.space40)
         }
-        .background(SabqTheme.background)
+        .background(SabqTheme.surface)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle("مُقترب")
@@ -705,9 +713,8 @@ struct MuqtarabTopicView: View {
 
         // المزيد من الزاوية
         if !related.isEmpty {
-            SabqSectionBand()
-                .padding(.vertical, SabqLayout.space8)
             relatedSection
+                .padding(.top, SabqLayout.space8)
         }
     }
 
@@ -746,7 +753,8 @@ struct MuqtarabTopicView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        // صفحة القراءة بيضاء كصفحة الخبر؛ الموجز ببطاقة السماء نفسها في الخبر.
+        .sabqSkyCardSurface()
     }
 
     @ViewBuilder
@@ -784,7 +792,8 @@ struct MuqtarabTopicView: View {
                         .font(SabqType.tag.font)
                         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
                         .foregroundStyle(SabqTheme.textPrimary)
-                        .background(Capsule().fill(SabqTheme.surfaceMuted))
+                        .background(Capsule().fill(SabqTheme.surface))
+                        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                 }
             }
         }
@@ -793,12 +802,7 @@ struct MuqtarabTopicView: View {
 
     private func signatureCard(_ sig: String) -> some View {
         HStack(alignment: .top, spacing: SabqLayout.space12) {
-            Image(systemName: "person")
-                .font(SabqType.rowTitle.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .frame(width: 36, height: 36)
-                .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
-                .accessibilityHidden(true)
+            SmallSquareBadge(systemImage: "person", tint: SabqTheme.textSecondary)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text("توقيع الكاتب").font(SabqType.tag.font).foregroundStyle(SabqTheme.primary)
                 Text(sig)
@@ -810,20 +814,23 @@ struct MuqtarabTopicView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     private var relatedSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             MuqSectionHeading(title: "المزيد من \(angle?.nameAr ?? "الزاوية")")
-                .padding(.bottom, SabqLayout.space4)
-            ForEach(Array(related.enumerated()), id: \.element.id) { index, topic in
-                if index > 0 { MuqRowSeparator() }
-                NavigationLink(value: MuqtarabTopicRoute(angleSlug: angleSlug, topicSlug: topic.slug, title: topic.title)) {
-                    MuqTopicCard(topic: topic, angleColorHex: angle?.colorHex)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(related.enumerated()), id: \.element.id) { index, topic in
+                    if index > 0 { MuqRowSeparator() }
+                    NavigationLink(value: MuqtarabTopicRoute(angleSlug: angleSlug, topicSlug: topic.slug, title: topic.title)) {
+                        MuqTopicCard(topic: topic, angleColorHex: angle?.colorHex)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -900,16 +907,13 @@ struct MuqtarabWriterView: View {
     private func content(_ p: MuqWriterProfile) -> some View {
         hero(p)
 
-        SabqSectionBand()
-
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                 MuqSectionHeading(title: "مواضيع الكاتب")
                 Text("\(p.topics.count)")
                     .font(SabqType.meta.font).monospacedDigit()
                     .foregroundStyle(SabqTheme.textTertiary)
             }
-            .padding(.bottom, SabqLayout.space4)
 
             if p.topics.isEmpty {
                 EmptyStateView(
@@ -917,13 +921,17 @@ struct MuqtarabWriterView: View {
                     title: "لا مواضيع بعد", subtitle: "لم ينشر هذا الكاتب مواضيع حتى الآن."
                 )
             } else {
-                ForEach(Array(p.topics.enumerated()), id: \.element.id) { index, topic in
-                    if index > 0 { MuqRowSeparator() }
-                    NavigationLink(value: MuqtarabTopicRoute(angleSlug: topic.angleSlug, topicSlug: topic.slug, title: topic.title)) {
-                        writerTopicCard(topic)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(p.topics.enumerated()), id: \.element.id) { index, topic in
+                        if index > 0 { MuqRowSeparator() }
+                        NavigationLink(value: MuqtarabTopicRoute(angleSlug: topic.angleSlug, topicSlug: topic.slug, title: topic.title)) {
+                            writerTopicCard(topic)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -931,9 +939,9 @@ struct MuqtarabWriterView: View {
     private func hero(_ p: MuqWriterProfile) -> some View {
         VStack(spacing: SabqLayout.space12) {
             ZStack {
-                Circle().fill(SabqTheme.surfaceMuted)
+                Circle().fill(SabqTheme.surface)
                 if let raw = p.writer.avatar, let url = URL(string: URLConstants.absolutize(raw)) {
-                    CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 300) { SabqTheme.surfaceMuted }
+                    CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 300) { SabqTheme.surface }
                 } else {
                     Text(String(p.writer.name.prefix(1)))
                         .font(SabqFonts.headline(size: 32))
@@ -942,6 +950,7 @@ struct MuqtarabWriterView: View {
             }
             .frame(width: 88, height: 88)
             .clipShape(Circle())
+            .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
             .accessibilityHidden(true)
 
             Text(p.writer.name)
@@ -975,7 +984,8 @@ struct MuqtarabWriterView: View {
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .padding(.horizontal, SabqLayout.space12)
                                 .frame(minHeight: 36)
-                                .background(Capsule().fill(SabqTheme.surfaceMuted))
+                                .background(Capsule().fill(SabqTheme.surface))
+                                .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                                 .contentShape(Capsule())
                             }
                             .buttonStyle(.plain)

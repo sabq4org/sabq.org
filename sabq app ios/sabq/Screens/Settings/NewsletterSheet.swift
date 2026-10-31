@@ -98,7 +98,7 @@ struct NewsletterSheet: View {
             // Animated envelope with subtle pulse
             ZStack {
                 Circle()
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.primary.opacity(0.12))
                     .frame(width: 110, height: 110)
                 Image(systemName: "sparkles")
                     .sabqText(SabqType.button)
@@ -119,7 +119,8 @@ struct NewsletterSheet: View {
             .foregroundStyle(SabqTheme.primary)
             .padding(.horizontal, SabqLayout.space8)
             .padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surfaceMuted))
+            .background(Capsule().fill(SabqTheme.surface))
+            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
 
             Text("النشرة الذكية")
                 .sabqText(SabqType.leadTitle)
@@ -140,7 +141,7 @@ struct NewsletterSheet: View {
         VStack(spacing: SabqLayout.space12) {
             ZStack {
                 Circle()
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.success.opacity(0.12))
                     .frame(width: 110, height: 110)
                 Image(systemName: "checkmark.circle.fill")
                     .font(SabqFonts.app(size: 56, weight: .regular))
@@ -175,7 +176,7 @@ struct NewsletterSheet: View {
         VStack(spacing: SabqLayout.space12) {
             ZStack {
                 Circle()
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(tint.opacity(0.12))
                     .frame(width: 110, height: 110)
                 Image(systemName: icon)
                     .font(SabqFonts.app(size: 50, weight: .regular))
@@ -248,10 +249,7 @@ struct NewsletterSheet: View {
         }
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: - Form card
@@ -334,9 +332,10 @@ struct NewsletterSheet: View {
                 }
                 .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // داخل بطاقة بيضاء: تعبئة هادئة كي يتمايز الصندوق.
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.surface)
+                        .fill(SabqTheme.surfaceMuted)
                 )
 
                 if let errorMessage {

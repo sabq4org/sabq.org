@@ -42,6 +42,8 @@ struct ArticleRevisionsListView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
@@ -81,21 +83,13 @@ struct ArticleRevisionsListView: View {
     // MARK: Empty state
 
     private var emptyState: some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "checkmark.seal")
-                .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.success)
-                .accessibilityHidden(true)
-            Text("لا توجد مقالات بانتظار التعديل")
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Text("ستظهر هنا أي مقالات يطلب فريق التحرير تعديلها.")
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, SabqLayout.space40)
+        EmptyStateView(
+            icon: "checkmark.seal",
+            tint: SabqTheme.success,
+            title: "لا توجد مقالات بانتظار التعديل",
+            subtitle: "ستظهر هنا أي مقالات يطلب فريق التحرير تعديلها."
+        )
+        .padding(.vertical, SabqLayout.space16)
         .padding(.horizontal, SabqLayout.space16)
     }
 

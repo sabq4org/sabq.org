@@ -60,9 +60,9 @@ struct LegalPageView: View {
             VStack(alignment: .leading, spacing: 0) {
                 hero
                 introCard
-                    .padding(.bottom, SabqLayout.space8)
                 ForEach(content.sections) { section in
                     sectionCard(section)
+                        .padding(.top, SabqLayout.space12)
                 }
                 if let footer = content.footer {
                     footerCard(footer)
@@ -82,7 +82,7 @@ struct LegalPageView: View {
 
     // MARK: Hero
 
-    /// Unboxed title block on the white page.
+    /// Unboxed title block on the gray page.
     private var hero: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             HStack(spacing: SabqLayout.space4) {
@@ -96,7 +96,11 @@ struct LegalPageView: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
             )
 
             Text(content.title)
@@ -123,7 +127,7 @@ struct LegalPageView: View {
 
     // MARK: Intro card
 
-    /// Quiet surfaceMuted block.
+    /// White block on the gray page.
     private var introCard: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             HStack(spacing: SabqLayout.space8) {
@@ -144,15 +148,12 @@ struct LegalPageView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: Section
 
-    /// Unboxed section: heading + body, a thin separator above.
+    /// Section block: heading + body on a white surface.
     private func sectionCard(_ section: LegalSection) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
@@ -174,13 +175,9 @@ struct LegalPageView: View {
                 }
             }
         }
-        .padding(.vertical, SabqLayout.space24)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(SabqTheme.separator)
-                .frame(height: 1)
-        }
+        .sabqBlockSurface()
     }
 
     @ViewBuilder
@@ -258,10 +255,7 @@ struct LegalPageView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space24)
         .padding(.horizontal, SabqLayout.space16)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 }
 

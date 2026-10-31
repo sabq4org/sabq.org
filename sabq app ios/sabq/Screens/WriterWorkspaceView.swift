@@ -454,16 +454,16 @@ struct WriterWorkspaceView: View {
                         Image(systemName: vm.canCreateNewArticle ? "square.and.pencil" : "lock.fill")
                             .font(.system(size: 13, weight: .semibold))
                         Text("إضافة مقال")
-                            .sabqText(SabqType.metaEmphasis)
+                            .sabqText(SabqType.button)
                     }
                     .foregroundStyle(vm.canCreateNewArticle ? SabqTheme.onAction : SabqTheme.disabledInk)
-                    .padding(.horizontal, SabqLayout.space12)
-                    .frame(minHeight: 38)
+                    .padding(.horizontal, SabqLayout.space16)
+                    .frame(minHeight: SabqLayout.controlHeight)
                     .background(
-                        Capsule(style: .continuous)
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                             .fill(vm.canCreateNewArticle ? SabqTheme.actionFill : SabqTheme.disabledFill)
                     )
-                    .contentShape(Capsule(style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!vm.canCreateNewArticle)
@@ -552,7 +552,10 @@ struct WriterWorkspaceView: View {
                     .padding(.horizontal, SabqLayout.space8)
                     .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
                     .background(
-                        Capsule().fill(isActive ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
+                        Capsule().fill(isActive ? SabqTheme.actionFill : SabqTheme.surface)
+                    )
+                    .overlay(
+                        Capsule().strokeBorder(isActive ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
                     )
                 }
                 .buttonStyle(.plain)
@@ -582,7 +585,7 @@ struct WriterWorkspaceView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, 104)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .refreshable { await vm.load() }
     }
@@ -782,7 +785,7 @@ struct WriterWorkspaceView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, 104)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         // سحب الإصبع نحو الأسفل يُنزل الكيبورد أثناء الكتابة في استوديو الفكرة
         .scrollDismissesKeyboard(.interactively)
@@ -801,10 +804,8 @@ struct WriterWorkspaceView: View {
                     .font(SabqType.excerpt.font)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .frame(minHeight: 96)
-                    .padding(SabqLayout.space8)
                     .scrollContentBackground(.hidden)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surface))
-                    .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+                    .modifier(SabqInputSurface())
                 if let coachError = vm.coachError {
                     Text(coachError)
                         .sabqText(SabqType.meta)
@@ -981,7 +982,7 @@ struct WriterWorkspaceView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
-            .padding(.bottom, 104)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .refreshable { await vm.load() }
     }
@@ -1015,7 +1016,7 @@ struct WriterWorkspaceView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 
@@ -1040,7 +1041,8 @@ struct WriterWorkspaceView: View {
                     .foregroundStyle(SabqTheme.textTertiary)
             }
             .padding(SabqLayout.space16)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .sabqBlockSurface()
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -1059,6 +1061,8 @@ struct WriterWorkspaceView: View {
                     trackingCard(article)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -1169,7 +1173,7 @@ struct WriterWorkspaceView: View {
                         }
                     }
                     if let summary = result.summary, !summary.isEmpty {
-                        quoteText(summary)
+                        quoteText(summary, onPage: true)
                     }
                     VStack(spacing: 0) {
                         ForEach(result.checks) { check in
@@ -1195,6 +1199,8 @@ struct WriterWorkspaceView: View {
                             .padding(.vertical, SabqLayout.space12)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                     bulletBlock(title: "عناوين مقترحة", items: result.headlineSuggestions, icon: "textformat")
                     bulletBlock(title: "نقاط قوة", items: result.strengths, icon: "hand.thumbsup")
                     bulletBlock(title: "ادّعاءات تحتاج توثيقًا", items: result.sourceFlags + result.sensitiveClaims, icon: "exclamationmark.triangle")
@@ -1215,7 +1221,8 @@ struct WriterWorkspaceView: View {
 
     // MARK: - لبنات مشتركة
 
-    /// قسم غير مؤطر: عنوان بأيقونة بسيطة ثم المحتوى مباشرة على الصفحة.
+    /// بلوك أبيض على خلفية التطبيق الرمادية: عنوان بأيقونة بسيطة ثم المحتوى؛
+    /// التعبئات الهادئة داخله (المؤشرات، الاقتباسات) تتمايز عن السطح الأبيض.
     private func workspaceCard(icon: String, tint: Color, title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HStack(spacing: SabqLayout.space8) {
@@ -1232,6 +1239,8 @@ struct WriterWorkspaceView: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SabqLayout.cardInset)
+        .sabqBlockSurface()
     }
 
     private func metricTile(value: String, label: String) -> some View {
@@ -1250,13 +1259,14 @@ struct WriterWorkspaceView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func quoteText(_ text: String) -> some View {
+    /// داخل البلوك الأبيض تعبئة هادئة؛ مباشرة على الصفحة الرمادية (`onPage`) سطح أبيض.
+    private func quoteText(_ text: String, onPage: Bool = false) -> some View {
         Text(text)
             .sabqText(SabqType.excerpt)
             .foregroundStyle(SabqTheme.textSecondary)
             .padding(SabqLayout.space12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .sabqBlockSurface(onPage ? SabqTheme.surface : SabqTheme.surfaceMuted)
     }
 
     @ViewBuilder

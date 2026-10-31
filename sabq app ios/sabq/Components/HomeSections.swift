@@ -130,7 +130,8 @@ enum LatestTimelineStyle {
     static var dividerInset: CGFloat { railWidth + gap }
 }
 
-/// الخط العمودي خلف نقاط الشريط الزمني — يوضع خلف القائمة كاملة.
+/// الخط العمودي خلف نقاط الشريط الزمني — يوضع خلف القائمة كاملة. القائمة على
+/// سطح `sabqNewsSurface` الأبيض، فحلقات النقاط بلون السطح لتقطع الخط.
 struct LatestTimelineRail: View {
     var body: some View {
         HStack(spacing: 0) {
@@ -180,7 +181,7 @@ struct LatestTimelineDayDivider: View {
         HStack(spacing: LatestTimelineStyle.gap) {
             Circle()
                 .strokeBorder(SabqTheme.tertiaryInk, lineWidth: 2)
-                .background(Circle().fill(SabqTheme.background))
+                .background(Circle().fill(SabqTheme.surface))
                 .frame(width: 11, height: 11)
                 .frame(width: LatestTimelineStyle.railWidth)
             Text(label)
@@ -209,7 +210,7 @@ struct LatestTimelineRow: View {
             Circle()
                 .fill(article.category.tint)
                 .frame(width: LatestTimelineStyle.dotSize, height: LatestTimelineStyle.dotSize)
-                .overlay(Circle().stroke(SabqTheme.background, lineWidth: 3))
+                .overlay(Circle().stroke(SabqTheme.surface, lineWidth: 3))
                 .frame(width: LatestTimelineStyle.railWidth)
                 .padding(.top, 5)
                 .accessibilityHidden(true)

@@ -1243,8 +1243,9 @@ struct SmallSquareBadge: View {
     let tint: Color
 
     var body: some View {
+        // تعبئة بلون الأيقونة الخفيف تظهر على الأبيض والرمادي معًا (كان surfaceMuted فاختفى على الرمادي).
         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-            .fill(SabqTheme.surfaceMuted)
+            .fill(tint.opacity(0.12))
             .frame(width: 40, height: 40)
             .overlay {
                 Image(systemName: systemImage)
@@ -1261,7 +1262,7 @@ struct SquareIconBadge: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-            .fill(SabqTheme.surfaceMuted)
+            .fill(tint.opacity(0.12))
             .frame(width: 72, height: 72)
             .overlay {
                 Image(systemName: systemImage)
@@ -1294,7 +1295,11 @@ struct SmallActionButton: View {
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
             )
         }
         .buttonStyle(.plain)
@@ -1346,8 +1351,12 @@ struct CategoryChip: View {
                         .fill(
                             isSelected
                                 ? AnyShapeStyle(SabqTheme.actionFill)
-                                : AnyShapeStyle(SabqTheme.surfaceMuted)
+                                : AnyShapeStyle(SabqTheme.surface)
                         )
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(isSelected ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
                 )
         }
         .buttonStyle(.plain)
@@ -1367,7 +1376,11 @@ struct StatusChip: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
             )
     }
 }
@@ -2021,11 +2034,7 @@ struct CategoryTile: View {
         }
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-
-        )
+        .sabqBlockSurface()
     }
 }
 
@@ -2046,7 +2055,7 @@ struct EmptyStateView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(tint)
                 .frame(width: 56, height: 56)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: SabqRadius.medium))
                 .accessibilityHidden(true)
 
             Text(title)

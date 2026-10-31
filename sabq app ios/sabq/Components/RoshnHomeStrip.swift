@@ -240,7 +240,7 @@ struct RoshnHomeStrip: View {
     // MARK: البطاقة الموحّدة — بطاقة هادئة متناسقة مع الصحيفة
     //
     // تحديث 2026-10-17: استبدال الشريط الأخضر الصلب الكامل ببطاقة هادئة تتبع
-    // سطح الصحيفة (SabqTheme.surfaceMuted) مع شريط جانبي زمردي وشعار الدوري،
+    // سطح البلوك الأبيض (sabqBlockSurface) مع شعار الدوري،
     // لمنع التنافر اللوني في الرئيسية (قرار تصور سبق الهادئ).
 
     private func banner(subtitle: String, @ViewBuilder trailing: () -> some View) -> some View {

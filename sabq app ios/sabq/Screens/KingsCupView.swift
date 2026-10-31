@@ -193,8 +193,8 @@ struct KcHeroSection: View {
     private var header: some View {
         VStack(spacing: SabqLayout.space8) {
             HStack(spacing: SabqLayout.space8) {
-                pill(icon: "trophy.fill", text: "تغطية خاصة", bg: SabqTheme.surfaceMuted,
-                     fg: SabqTheme.textPrimary, iconTint: KcTheme.gold)
+                pill(icon: "trophy.fill", text: "تغطية خاصة", bg: SabqTheme.surface,
+                     fg: SabqTheme.textPrimary, iconTint: KcTheme.gold, stroke: SabqTheme.separator)
                 if liveCount > 0 {
                     pill(icon: "dot.radiowaves.left.and.right",
                          text: liveCount == 1 ? "مباراة مباشرة" : "\(liveCount) مباريات مباشرة",
@@ -320,7 +320,7 @@ struct KcHeroSection: View {
         .frame(minWidth: 110)
     }
 
-    private func pill(icon: String, text: String, bg: Color, fg: Color, iconTint: Color) -> some View {
+    private func pill(icon: String, text: String, bg: Color, fg: Color, iconTint: Color, stroke: Color = .clear) -> some View {
         HStack(spacing: SabqLayout.space4) {
             Image(systemName: icon).foregroundStyle(iconTint).accessibilityHidden(true)
             Text(text)
@@ -329,6 +329,7 @@ struct KcHeroSection: View {
         .foregroundStyle(fg)
         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space4)
         .background(Capsule().fill(bg))
+        .overlay(Capsule().strokeBorder(stroke, lineWidth: 0.75))
     }
 }
 
@@ -384,8 +385,8 @@ struct KcHeroTodayStrip: View {
                 .sabqText(SabqType.tag)
             }
             .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
-            .background(shape.fill(SabqTheme.surfaceMuted))
-            .overlay(shape.stroke(active ? KcTheme.accentFill : Color.clear, lineWidth: 1.5))
+            .background(shape.fill(SabqTheme.surface))
+            .overlay(shape.strokeBorder(active ? KcTheme.accentFill : SabqTheme.separator, lineWidth: active ? 1.5 : 0.75))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(active ? .isSelected : [])
@@ -430,7 +431,7 @@ struct KcHistorySection: View {
     private func factCard(icon: String, tint: Color, label: String, name: String, logo: String, sub: String? = nil) -> some View {
         HStack(spacing: SabqLayout.space12) {
             ZStack {
-                Circle().fill(SabqTheme.surface).frame(width: 44, height: 44)
+                Circle().fill(tint.opacity(0.12)).frame(width: 44, height: 44)
                 if logo.isEmpty {
                     Image(systemName: icon).foregroundStyle(tint)
                 } else {
@@ -525,6 +526,9 @@ struct KcMatchesSection: View {
                                 KcMatchCard(fixture: f) { onOpenMatch(f.id) }
                             }
                         }
+                        .padding(.top, SabqLayout.space12)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                     }
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)
@@ -732,6 +736,8 @@ struct KcRacesSection: View {
                                 sub: s.assists > 0 ? "\(s.assists) صناعة" : nil)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         case .assists:
             if assists.isEmpty {
@@ -744,6 +750,8 @@ struct KcRacesSection: View {
                                 value: "\(l.assists ?? 0)", valueLabel: "صناعة", sub: nil)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         case .cards:
             if let c = cards, !(c.yellow.isEmpty && c.red.isEmpty) {
@@ -757,6 +765,9 @@ struct KcRacesSection: View {
                                         value: "\(l.red ?? 0)", valueLabel: "حمراء", sub: nil, valueColor: KcTheme.liveText)
                             }
                         }
+                        .padding(.top, SabqLayout.space12)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                     }
                     if !c.yellow.isEmpty {
                         VStack(alignment: .leading, spacing: 0) {
@@ -767,6 +778,9 @@ struct KcRacesSection: View {
                                         value: "\(l.yellow ?? 0)", valueLabel: "صفراء", sub: nil, valueColor: SabqTheme.warning)
                             }
                         }
+                        .padding(.top, SabqLayout.space12)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                     }
                 }
             } else {
@@ -826,6 +840,9 @@ struct KcTeamsSection: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.vertical, SabqLayout.space16)
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqBlockSurface()
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .sheet(item: $selectedTeam) { team in

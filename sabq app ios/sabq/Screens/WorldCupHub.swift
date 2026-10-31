@@ -70,7 +70,7 @@ struct WCFactsSection: View {
                 Image(systemName: icon)
                     .font(SabqFonts.app(size: 15)).foregroundStyle(SabqTheme.warning)
                     .frame(width: 32, height: 32)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.warning.opacity(0.12)))
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 0) {
@@ -174,7 +174,8 @@ struct WCKnockoutSection: View {
                                 .foregroundStyle(active ? SabqTheme.onAction : SabqTheme.textPrimary)
                                 .padding(.horizontal, SabqLayout.space16)
                                 .frame(minHeight: SabqLayout.touchTarget)
-                                .background(Capsule().fill(active ? WCTheme.royal : SabqTheme.surfaceMuted))
+                                .background(Capsule().fill(active ? WCTheme.royal : SabqTheme.surface))
+                                .overlay(Capsule().strokeBorder(active ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
                         }
                         .buttonStyle(.plain)
                     }
@@ -184,11 +185,13 @@ struct WCKnockoutSection: View {
 
             if let round = selectedRound {
                 LazyVStack(spacing: 0) {
-                    ForEach(round.matches) { f in
-                        WCRowSeparator()
+                    ForEach(Array(round.matches.enumerated()), id: \.element.id) { idx, f in
+                        if idx > 0 { WCRowSeparator() }
                         WCMatchCard(fixture: f) { onOpenMatch(f.id) }
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
                 .padding(.horizontal, SabqLayout.pageMargin)
             }
         }
@@ -207,7 +210,7 @@ struct WCKnockoutSection: View {
 
                 VStack(spacing: 0) {
                     ForEach(["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"], id: \.self) { label in
-                        WCRowSeparator()
+                        if label != "دور الـ32" { WCRowSeparator() }
                         HStack {
                             Image(systemName: "flag.checkered").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.warning)
                                 .accessibilityHidden(true)
@@ -218,6 +221,8 @@ struct WCKnockoutSection: View {
                         .padding(.vertical, SabqLayout.space12)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
                 .padding(.horizontal, SabqLayout.pageMargin)
             }
         }
@@ -282,7 +287,8 @@ struct WCQualifiedSoFar: View {
                             .sabqText(SabqType.tag)
                             .foregroundStyle(SabqTheme.textSecondary)
                             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                            .background(Capsule().fill(SabqTheme.surfaceMuted))
+                            .background(Capsule().fill(SabqTheme.surface))
+                            .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                     }
                 }
             }
@@ -317,7 +323,7 @@ struct WCQualifiedSoFar: View {
                 .font(SabqFonts.app(size: 12))
                 .foregroundStyle(WCTheme.emeraldDeep)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(SabqTheme.surface))
+                .background(Circle().fill(WCTheme.emeraldDeep.opacity(0.12)))
             WCTeamLogo(team: row.team, size: 24, ring: SabqTheme.separator)
             Text(row.team.name)
                 .font(SabqFonts.app(size: 13))
@@ -373,6 +379,8 @@ struct WCNewsSection: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
             .padding(.horizontal, SabqLayout.pageMargin)
         }
     }

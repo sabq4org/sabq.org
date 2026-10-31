@@ -33,10 +33,6 @@ struct OpinionsView: View {
                         mostViewedSection
                     }
 
-                    if !mostViewed.isEmpty && !latest.isEmpty {
-                        SabqSectionBand()
-                    }
-
                     if !latest.isEmpty {
                         latestSection
                     }
@@ -347,5 +343,7 @@ struct OpinionAuthorAvatar: View {
                     .font(SabqFonts.app(size: size * 0.42, weight: .bold))
                     .foregroundStyle(SabqTheme.textSecondary)
             }
+            // حدّ رفيع يُبقي الدائرة مرئية على الخلفية الرمادية وعلى السطح الأبيض معًا.
+            .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
     }
 }

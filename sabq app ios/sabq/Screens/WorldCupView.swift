@@ -249,11 +249,11 @@ struct WCHeroSection: View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 pill(icon: "trophy.fill", text: "تغطية خاصة",
-                     bg: SabqTheme.surfaceMuted, fg: SabqTheme.warning)
+                     bg: SabqTheme.surface, fg: SabqTheme.warning)
                 if liveCount > 0, overview?.champion == nil {
                     pill(icon: "dot.radiowaves.left.and.right",
                          text: liveCount == 1 ? "مباراة مباشرة" : "\(liveCount) مباريات مباشرة",
-                         bg: SabqTheme.surfaceMuted, fg: SabqTheme.breaking)
+                         bg: SabqTheme.surface, fg: SabqTheme.breaking)
                 }
             }
             Text("مونديال 2026")
@@ -406,6 +406,7 @@ struct WCHeroSection: View {
         .foregroundStyle(fg)
         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space4)
         .background(Capsule().fill(bg))
+        .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
     }
 }
 
@@ -468,12 +469,13 @@ struct WCHeroTodayStrip: View {
             .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
             )
-            // المميّزة تُعلَّم بحدّ بلون الهوية لا بتعبئة ملوّنة
+            // المميّزة تُعلَّم بحدّ بلون الهوية لا بتعبئة ملوّنة؛ الباقي بحدّ رفيع
             .overlay(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .stroke(active ? WCTheme.emeraldDeep : Color.clear, lineWidth: 1.5)
+                    .strokeBorder(active ? WCTheme.emeraldDeep : SabqTheme.separator,
+                                  lineWidth: active ? 1.5 : 0.75)
             )
         }
         .buttonStyle(.plain)
@@ -643,7 +645,8 @@ struct WCArabTeamsSpotlight: View {
             Text("\(count) منتخبات")
                 .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textPrimary)
                 .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                .background(Capsule().fill(SabqTheme.surfaceMuted))
+                .background(Capsule().fill(SabqTheme.surface))
+                .overlay(Capsule().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
         }
     }
 
@@ -660,7 +663,8 @@ struct WCArabTeamsSpotlight: View {
                         .foregroundStyle(isSelected ? SabqTheme.onAction : SabqTheme.textPrimary)
                         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
                         .frame(minHeight: SabqLayout.touchTarget)
-                        .background(Capsule().fill(isSelected ? WCTheme.royal : SabqTheme.surfaceMuted))
+                        .background(Capsule().fill(isSelected ? WCTheme.royal : SabqTheme.surface))
+                        .overlay(Capsule().strokeBorder(isSelected ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
                     }
                     .buttonStyle(.plain)
                 }
@@ -725,6 +729,8 @@ struct WCArabTeamsSpotlight: View {
 
             WCTeamSquadStrip(teamId: digest.team.id)
         }
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
     }
 
     private func groupSubtitle(_ digest: WCArabTeamDigest) -> String {
@@ -787,7 +793,7 @@ struct WCArabTeamsSpotlight: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space8)
-        .wcQuietBlock()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     private func groupMiniTable(_ group: WCGroup?, selectedId: Int) -> some View {
@@ -826,7 +832,7 @@ struct WCArabTeamsSpotlight: View {
                     }
                 }
                 .padding(SabqLayout.space12)
-                .wcQuietBlock()
+                .sabqBlockSurface(SabqTheme.surfaceMuted)
             }
         }
     }
@@ -955,7 +961,7 @@ struct WCMatchesSection: View {
                                 if t == .live && count > 0 {
                                     Text("\(count)").sabqText(SabqType.tag)
                                         .padding(.horizontal, SabqLayout.space4)
-                                        .background(Capsule().fill(SabqTheme.surface))
+                                        .background(Capsule().fill(SabqTheme.breaking.opacity(0.12)))
                                         .foregroundStyle(SabqTheme.breaking)
                                 }
                             }
@@ -963,7 +969,8 @@ struct WCMatchesSection: View {
                             .foregroundStyle(tab == t ? SabqTheme.onAction : SabqTheme.textPrimary)
                             .padding(.horizontal, SabqLayout.space16)
                             .frame(minHeight: SabqLayout.touchTarget)
-                            .background(Capsule().fill(tab == t ? WCTheme.royal : SabqTheme.surfaceMuted))
+                            .background(Capsule().fill(tab == t ? WCTheme.royal : SabqTheme.surface))
+                            .overlay(Capsule().strokeBorder(tab == t ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
                         }
                         .buttonStyle(.plain)
                     }
@@ -986,10 +993,14 @@ struct WCMatchesSection: View {
                                 Text("(\(day.items.count))").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                             }
                             .padding(.bottom, SabqLayout.space8)
-                            ForEach(day.items) { f in
-                                WCRowSeparator()
-                                WCMatchCard(fixture: f) { onOpenMatch(f.id) }
+                            VStack(spacing: 0) {
+                                ForEach(Array(day.items.enumerated()), id: \.element.id) { idx, f in
+                                    if idx > 0 { WCRowSeparator() }
+                                    WCMatchCard(fixture: f) { onOpenMatch(f.id) }
+                                }
                             }
+                            .padding(.horizontal, SabqLayout.space12)
+                            .sabqNewsSurface()
                         }
                     }
                 }
@@ -1123,11 +1134,15 @@ struct WCStandingsSection: View {
                 .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             }
             .padding(.bottom, SabqLayout.space8)
-            ForEach(group.rows) { row in
-                WCRowSeparator()
-                Button { selectedTeam = row.team } label: { standingRow(row) }
-                    .buttonStyle(.plain)
+            VStack(spacing: 0) {
+                ForEach(Array(group.rows.enumerated()), id: \.element.id) { idx, row in
+                    if idx > 0 { WCRowSeparator() }
+                    Button { selectedTeam = row.team } label: { standingRow(row) }
+                        .buttonStyle(.plain)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -1277,12 +1292,12 @@ struct WCPulseCard: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surface))
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
         } else if p.status.finished {
             Text(p.status.label.isEmpty ? "انتهت" : p.status.label)
                 .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
                 .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                .background(Capsule().fill(SabqTheme.surface))
+                .background(Capsule().fill(SabqTheme.surfaceMuted))
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 Text("تبدأ بعد \(WCFormat.countdown(to: p.timestamp))")
@@ -1290,7 +1305,7 @@ struct WCPulseCard: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surface))
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
         }
     }
 
@@ -1348,7 +1363,7 @@ struct WCPulseCard: View {
         .foregroundStyle(SabqTheme.textPrimary)
         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surface))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small).fill(SabqTheme.surfaceMuted))
     }
 
     private var goalBanner: some View {

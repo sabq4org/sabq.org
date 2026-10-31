@@ -88,10 +88,10 @@ struct LiteBannerView: View {
                     lite.acceptRecovery()
                 } label: {
                     Text("عودة")
-                        .font(SabqType.metaEmphasis.font)
+                        .font(SabqType.button.font)
                         .foregroundStyle(SabqTheme.onAction)
                         .padding(.horizontal, SabqLayout.space16)
-                        .frame(minHeight: SabqLayout.touchTarget)
+                        .frame(minHeight: SabqLayout.controlHeight)
                         .background(
                             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                                 .fill(SabqTheme.actionFill)
@@ -104,10 +104,10 @@ struct LiteBannerView: View {
                     lite.dismissRecovery()
                 } label: {
                     Text("ابقَ في Lite")
-                        .font(SabqType.metaEmphasis.font)
+                        .font(SabqType.button.font)
                         .foregroundStyle(SabqTheme.textPrimary)
                         .padding(.horizontal, SabqLayout.space16)
-                        .frame(minHeight: SabqLayout.touchTarget)
+                        .frame(minHeight: SabqLayout.controlHeight)
                         .overlay(
                             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                                 .stroke(SabqTheme.outline, lineWidth: 1)

@@ -40,6 +40,8 @@ struct LoyaltyRewardsView: View {
                             rewardCard(reward)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
             .padding(SabqLayout.pageMargin)
@@ -82,7 +84,7 @@ struct LoyaltyRewardsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space24)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 
@@ -190,7 +192,7 @@ struct LoyaltyRewardsView: View {
         .foregroundStyle(SabqTheme.success)
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -204,7 +206,7 @@ struct LoyaltyRewardsView: View {
         .foregroundStyle(SabqTheme.danger)
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 
     // MARK: Networking

@@ -85,7 +85,7 @@ struct DailyBriefView: View {
         }
     }
 
-    /// مربع رقم هادئ: تعبئة `surfaceMuted` بلا حد ولا لون تصنيف.
+    /// مربع رقم هادئ: سطح أبيض بحدّ رفيع بلا لون تصنيف.
     private func statTile(value: String, label: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space4) {
             Image(systemName: icon)
@@ -186,15 +186,7 @@ struct DailyBriefView: View {
         let interestSlugs = Set(user.interests.compactMap { $0.slug?.lowercased() })
         let (icon, label, subtitle, _) = Self.inferMood(from: interestSlugs)
         return HStack(alignment: .center, spacing: SabqLayout.space12) {
-            Image(systemName: icon)
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.primary)
-                .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surface)
-                )
-                .accessibilityHidden(true)
+            SmallSquareBadge(systemImage: icon, tint: SabqTheme.primary)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text("مزاجك القرائي اليوم")
                     .font(SabqType.meta.font)
@@ -288,8 +280,10 @@ struct DailyBriefView: View {
     }
 
     private func avatarPlaceholder(user: APIUser) -> some View {
+        // على خلفية الصفحة الرمادية: دائرة بيضاء بحدّ رفيع كي لا تختفي.
         Circle()
-            .fill(SabqTheme.surfaceMuted)
+            .fill(SabqTheme.surface)
+            .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
             .frame(width: 64, height: 64)
             .overlay {
                 Text(String(user.displayName.prefix(1)))
@@ -352,7 +346,11 @@ struct DailyBriefView: View {
                             .frame(minHeight: 32)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
+                                    .fill(SabqTheme.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
                             )
                     }
                 }
@@ -377,15 +375,7 @@ struct DailyBriefView: View {
 
     private func featureTile(title: String, subtitle: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            Image(systemName: icon)
-                .font(SabqType.rowTitle.font)
-                .foregroundStyle(SabqTheme.primary)
-                .frame(width: 36, height: 36)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surface)
-                )
-                .accessibilityHidden(true)
+            SmallSquareBadge(systemImage: icon, tint: SabqTheme.primary)
             Text(title)
                 .font(SabqType.rowTitle.font)
                 .foregroundStyle(SabqTheme.textPrimary)
@@ -421,7 +411,7 @@ struct DailyBriefView: View {
                 .frame(width: 56, height: 56)
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.surfaceMuted)
+                        .fill(SabqTheme.primary.opacity(0.12))
                 )
                 .accessibilityHidden(true)
 
@@ -452,7 +442,11 @@ struct DailyBriefView: View {
                         .frame(maxWidth: .infinity, minHeight: 32)
                         .background(
                             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
+                                .fill(SabqTheme.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
                         )
                 }
             }

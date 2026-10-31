@@ -97,34 +97,15 @@ struct PassportSheetView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "exclamationmark.shield")
-                .font(SabqFonts.app(size: 48, weight: .ultraLight))
-                .foregroundStyle(SabqTheme.textTertiary)
-                .accessibilityHidden(true)
-            Text("تعذّر تحميل جواز المحتوى")
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Text(message)
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-            Button {
-                Task { await load() }
-            } label: {
-                Text("إعادة المحاولة")
-                    .sabqText(SabqType.button)
-                    .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, SabqLayout.space24)
-                    .frame(minHeight: SabqLayout.controlHeight)
-                    .background(SabqTheme.actionFill,
-                                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .padding(.top, SabqLayout.space4)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, SabqLayout.space40)
+        EmptyStateView(
+            icon: "exclamationmark.shield",
+            tint: SabqTheme.textTertiary,
+            title: "تعذّر تحميل جواز المحتوى",
+            subtitle: message,
+            action: { Task { await load() } },
+            actionTitle: "إعادة المحاولة"
+        )
+        .padding(.vertical, SabqLayout.space16)
     }
 
     private func load() async {
@@ -180,11 +161,7 @@ private struct PassportTrustHeader: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space24)
         .padding(.horizontal, SabqLayout.space16)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
-        .padding(.bottom, SabqLayout.space8)
+        .sabqBlockSurface()
     }
 
     private var tierColor: Color {
@@ -270,9 +247,7 @@ private struct PassportAIFootprintCard: View {
             }
         }
         .padding(.top, SabqLayout.space24)
-        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private var header: some View {
@@ -312,10 +287,7 @@ private struct PassportAIFootprintCard: View {
         }
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     private func row(
@@ -368,10 +340,7 @@ private struct PassportAIFootprintCard: View {
         }
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: tier + metadata helpers
@@ -521,57 +490,60 @@ private struct PassportSourceCard: View {
                 .foregroundStyle(SabqTheme.textPrimary)
                 .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: SabqLayout.space8) {
-                Image(systemName: channelIcon)
-                    .sabqText(SabqType.button)
-                    .foregroundStyle(SabqTheme.primary)
-                    .frame(width: 28)
-
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                    Text(channelLabel)
-                        .sabqText(SabqType.metaEmphasis)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                    if let raw = source.rawSource, !raw.isEmpty {
-                        Text(raw)
-                            .sabqText(SabqType.meta)
-                            .foregroundStyle(SabqTheme.textTertiary)
-                            .lineLimit(2)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-
-            if isPublisherNews, let publisher {
-                Rectangle().fill(SabqTheme.separator).frame(height: 1)
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 HStack(spacing: SabqLayout.space8) {
-                    Image(systemName: "newspaper.fill")
+                    Image(systemName: channelIcon)
                         .sabqText(SabqType.button)
                         .foregroundStyle(SabqTheme.primary)
                         .frame(width: 28)
-                    Text(publisher.agencyName)
-                        .sabqText(SabqType.metaEmphasis)
-                        .foregroundStyle(SabqTheme.textPrimary)
+
+                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                        Text(channelLabel)
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                        if let raw = source.rawSource, !raw.isEmpty {
+                            Text(raw)
+                                .sabqText(SabqType.meta)
+                                .foregroundStyle(SabqTheme.textTertiary)
+                                .lineLimit(2)
+                        }
+                    }
                     Spacer(minLength: 0)
                 }
-            }
 
-            if let urlStr = source.sourceUrl, let url = URL(string: urlStr) {
-                Link(destination: url) {
+                if isPublisherNews, let publisher {
+                    Rectangle().fill(SabqTheme.separator).frame(height: 1)
                     HStack(spacing: SabqLayout.space8) {
-                        Image(systemName: "arrow.up.right.square")
-                            .sabqText(SabqType.tag)
-                        Text("فتح المصدر الأصلي")
+                        Image(systemName: "newspaper.fill")
+                            .sabqText(SabqType.button)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(width: 28)
+                        Text(publisher.agencyName)
                             .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                        Spacer(minLength: 0)
                     }
-                    .foregroundStyle(SabqTheme.primary)
-                    .frame(minHeight: SabqLayout.touchTarget)
+                }
+
+                if let urlStr = source.sourceUrl, let url = URL(string: urlStr) {
+                    Link(destination: url) {
+                        HStack(spacing: SabqLayout.space8) {
+                            Image(systemName: "arrow.up.right.square")
+                                .sabqText(SabqType.tag)
+                            Text("فتح المصدر الأصلي")
+                                .sabqText(SabqType.metaEmphasis)
+                        }
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(minHeight: SabqLayout.touchTarget)
+                    }
                 }
             }
+            .padding(SabqLayout.space16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sabqBlockSurface()
         }
         .padding(.top, SabqLayout.space24)
-        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private var channelLabel: String {
@@ -628,11 +600,11 @@ private struct PassportAIImagesCard: View {
                     imageCell(img)
                 }
             }
+            .padding(SabqLayout.space12)
+            .sabqBlockSurface()
         }
         .padding(.top, SabqLayout.space24)
-        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private func imageCell(_ img: APIPassport.AIImageGeneration) -> some View {
@@ -703,29 +675,32 @@ private struct PassportSEOHistoryCard: View {
                     .foregroundStyle(SabqTheme.textSecondary)
             }
 
-            HStack(spacing: SabqLayout.space8) {
-                Tag(entry.provider, tint: SabqTheme.textSecondary)
-                Tag(entry.model, tint: SabqTheme.textSecondary)
-                if entry.manualOverride == true {
-                    Tag("تعديل يدوي", tint: SabqTheme.warning)
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                HStack(spacing: SabqLayout.space8) {
+                    Tag(entry.provider, tint: SabqTheme.textSecondary)
+                    Tag(entry.model, tint: SabqTheme.textSecondary)
+                    if entry.manualOverride == true {
+                        Tag("تعديل يدوي", tint: SabqTheme.warning)
+                    }
                 }
-            }
 
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                if let by = entry.generatedByName ?? entry.generatedBy {
-                    Text("مُنشئ: \(by)")
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    if let by = entry.generatedByName ?? entry.generatedBy {
+                        Text("مُنشئ: \(by)")
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                    }
+                    Text(formatDate(entry.createdAt))
                         .sabqText(SabqType.meta)
-                        .foregroundStyle(SabqTheme.textSecondary)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
-                Text(formatDate(entry.createdAt))
-                    .sabqText(SabqType.meta)
-                    .foregroundStyle(SabqTheme.textTertiary)
             }
+            .padding(SabqLayout.space16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sabqBlockSurface()
         }
         .padding(.top, SabqLayout.space24)
-        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private struct Tag: View {
