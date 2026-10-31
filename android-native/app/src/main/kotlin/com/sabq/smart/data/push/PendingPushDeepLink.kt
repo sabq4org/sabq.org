@@ -54,7 +54,8 @@ class PendingPushDeepLink @Inject constructor() {
             it.startsWith("/asian-cup") || it == "/roshn" ||
                 it.startsWith("/roshn/") || it.startsWith("/sports/team/") ||
                 it == "/kings-cup" || it.startsWith("/kings-cup/") ||
-                it == "/mawaeed" || it == "/sports/matches" || it == "/sports/live"
+                it == "/mawaeed" || it == "/sports/matches" || it == "/sports/live" ||
+                it.startsWith("/world-cup/match/")
         }
         val survey = surveyToken?.takeIf { it.isNotBlank() }
         val draft = draftArticleId?.takeIf { it.isNotBlank() }
