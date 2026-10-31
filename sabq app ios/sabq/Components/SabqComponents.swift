@@ -1623,12 +1623,27 @@ struct FeaturedCarousel: View {
                 .padding(.bottom, SabqLayout.space4)
 
             HStack(spacing: SabqLayout.space8) {
-                Text(article.categoryTitle)
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(SabqTheme.primary)
+                if article.isBreaking {
+                    // العاجل يحلّ محل التصنيف بأحمر «عاجل» نفسه في صفحة الخبر وشريط العاجل.
+                    HStack(spacing: SabqLayout.space4) {
+                        Image(systemName: "bolt.fill")
+                            .font(SabqType.timestamp.font.weight(.semibold))
+                            .accessibilityHidden(true)
+                        Text("عاجل")
+                            .font(SabqType.tag.font)
+                    }
+                    .foregroundStyle(SabqTheme.breaking)
                     .padding(.horizontal, SabqLayout.space8)
                     .padding(.vertical, 2.5)
-                    .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                    .background(Capsule(style: .continuous).fill(SabqTheme.breaking.opacity(0.1)))
+                } else {
+                    Text(article.categoryTitle)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                }
                 if article.isFreshlyPublished {
                     Text("جديد")
                         .font(SabqType.tag.font)
@@ -1672,12 +1687,12 @@ struct FeaturedCarousel: View {
                 } label: {
                     VStack(spacing: SabqLayout.space8) {
                         thumb(article, isActive: isActive)
-                        progressLine(isActive: isActive)
+                        progressLine(isActive: isActive, tint: accent(for: article))
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(article.title)
+                .accessibilityLabel(article.isBreaking ? "عاجل: \(article.title)" : article.title)
                 .accessibilityHint("يعرض الخبر في البطاقة")
                 .accessibilityAddTraits(isActive ? [.isSelected] : [])
             }
@@ -1704,21 +1719,28 @@ struct FeaturedCarousel: View {
                 }
             }
             .clipShape(shape)
+            // العاجل بإطار أحمر حتى وهو غير نشط، فيُعرف من الشريط قبل أن يصله العرض.
             .overlay(
-                shape.strokeBorder(isActive ? SabqTheme.primary : SabqTheme.separator,
-                                   lineWidth: isActive ? 2 : 0.75)
+                shape.strokeBorder(
+                    isActive || article.isBreaking ? accent(for: article) : SabqTheme.separator,
+                    lineWidth: isActive ? 2 : (article.isBreaking ? 1.5 : 0.75)
+                )
             )
             .opacity(isActive ? 1 : 0.55)
             .scaleEffect(isActive ? 1 : 0.96)
             .animation(.snappy(duration: 0.3), value: isActive)
     }
 
-    private func progressLine(isActive: Bool) -> some View {
+    private func accent(for article: Article) -> Color {
+        article.isBreaking ? SabqTheme.breaking : SabqTheme.primary
+    }
+
+    private func progressLine(isActive: Bool, tint: Color) -> some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(SabqTheme.separator)
                 Capsule()
-                    .fill(SabqTheme.primary)
+                    .fill(tint)
                     .frame(width: isActive ? proxy.size.width * (reduceMotion ? 1 : progress) : 0)
             }
         }
