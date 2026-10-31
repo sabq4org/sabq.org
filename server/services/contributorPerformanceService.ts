@@ -14,14 +14,16 @@ import {
   peakDay,
   periodDays,
   rankOf,
+  snapshotViewDeltas,
   trendPct,
   type ContributorPerformance,
   type PerformancePeriod,
+  PERFORMANCE_PERIODS,
 } from "@shared/contributorPerformance";
 import { withCache } from "../memoryCache";
 
 const USER_TTL_MS = 60_000;
-const RANK_TTL_MS = 5 * 60_000;
+const RANK_TTL_MS = 30 * 60_000;
 const TOP_LIMIT = 5;
 
 interface OwnedRow {
@@ -79,6 +81,17 @@ function monthlyOwnerViews(): Promise<Array<{ ownerId: string | null; views: num
   });
 }
 
+const RANK_WAIT_MS = 400;
+
+/** الترتيب لا يؤخر الصفحة: إن لم يجهز خلال المهلة يُعرض بدونه ويكمل في الخلفية. */
+function rankWithin(ms: number): Promise<Array<{ ownerId: string | null; views: number }>> {
+  const rank = monthlyOwnerViews().catch(() => [] as Array<{ ownerId: string | null; views: number }>);
+  return Promise.race([
+    rank,
+    new Promise<Array<{ ownerId: string | null; views: number }>>((resolve) => setTimeout(() => resolve([]), ms)),
+  ]);
+}
+
 async function compute(userId: string, role: "reporter" | "writer", period: PerformancePeriod): Promise<ContributorPerformance> {
   const now = new Date();
   const days = periodDays(period);
@@ -119,7 +132,7 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
   if (!ids.length) {
     const [[followers], rankRows] = await Promise.all([
       db.select({ c: sql<number>`count(*)::int` }).from(socialFollows).where(followersWhere),
-      monthlyOwnerViews().catch(() => []),
+      rankWithin(RANK_WAIT_MS),
     ]);
     const series = fillSeries([], seriesDays, now);
     return {
@@ -129,23 +142,22 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
     };
   }
 
-  // يوم البداية لسلسلة الرسم وللمقارنة بالفترة السابقة بنفس الطول.
-  const statsFrom = isoDay(addDays(now, -((days ?? 30) * (days ? 2 : 1))));
+  // لقطات تراكمية من يوم الأساس: الفترة الحالية + السابقة بنفس الطول للمقارنة.
+  const today = isoDay(now);
+  const baseDay = isoDay(addDays(now, -(days ? days * 2 : seriesDays)));
+  const cut = isoDay(addDays(now, -(seriesDays - 1)));
   const createdSince = (col: AnyColumn) => (periodStart ? gte(col, periodStart) : undefined);
+  const recentIds = published
+    .filter((a) => !a.publishedAt || isoDay(a.publishedAt) > isoDay(addDays(now, -400)))
+    .map((a) => a.id);
 
-  const [dailyRows, perArticleRows, likesRows, commentRows, bookmarkRows, followerRows, featuredRows, rankRows] = await Promise.all([
-    db
-      .select({ date: articleDailyStats.date, views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int` })
-      .from(articleDailyStats)
-      .where(and(inArray(articleDailyStats.articleId, ids), gte(articleDailyStats.date, statsFrom)))
-      .groupBy(articleDailyStats.date),
-    days
+  const [snapshotRows, likesRows, commentRows, bookmarkRows, followerRows, featuredRows, rankRows] = await Promise.all([
+    recentIds.length
       ? db
-        .select({ articleId: articleDailyStats.articleId, views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int` })
+        .select({ articleId: articleDailyStats.articleId, date: articleDailyStats.date, views: articleDailyStats.views })
         .from(articleDailyStats)
-        .where(and(inArray(articleDailyStats.articleId, ids), gte(articleDailyStats.date, isoDay(periodStart!))))
-        .groupBy(articleDailyStats.articleId)
-      : Promise.resolve([] as Array<{ articleId: string; views: number }>),
+        .where(and(inArray(articleDailyStats.articleId, recentIds), gte(articleDailyStats.date, baseDay)))
+      : Promise.resolve([] as Array<{ articleId: string; date: string; views: number }>),
     db
       .select({ articleId: reactions.articleId, c: sql<number>`count(*)::int` })
       .from(reactions)
@@ -168,17 +180,23 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
       .where(and(inArray(comments.articleId, ids), eq(comments.status, "approved"), gte(comments.createdAt, addDays(now, -7))))
       .orderBy(desc(comments.createdAt))
       .limit(1),
-    monthlyOwnerViews().catch(() => []),
+    rankWithin(RANK_WAIT_MS),
   ]);
 
-  const daily = dailyRows.map((r) => ({ date: String(r.date).slice(0, 10), views: Number(r.views) || 0 }));
-  const series = fillSeries(daily, seriesDays, now);
+  const deltas = snapshotViewDeltas({
+    rows: snapshotRows.map((r) => ({ articleId: r.articleId, date: String(r.date), views: Number(r.views) || 0 })),
+    articles: published.map((a) => ({ id: a.id, views: a.views ?? 0, publishedAt: a.publishedAt })),
+    baseDay,
+    today,
+  });
+  const series = fillSeries(deltas.filter((d) => d.date >= cut), seriesDays, now);
+  const periodViewsBy = new Map<string, number>();
+  for (const d of deltas) if (d.date >= cut) periodViewsBy.set(d.articleId, (periodViewsBy.get(d.articleId) ?? 0) + d.views);
   let views: number;
   let viewsTrendPct: number | null = null;
   if (days) {
-    const cut = isoDay(periodStart!);
-    views = daily.filter((r) => r.date >= cut).reduce((sum, r) => sum + r.views, 0);
-    const previous = daily.filter((r) => r.date < cut).reduce((sum, r) => sum + r.views, 0);
+    views = Array.from(periodViewsBy.values()).reduce((sum, n) => sum + n, 0);
+    const previous = deltas.filter((d) => d.date < cut).reduce((sum, d) => sum + d.views, 0);
     viewsTrendPct = trendPct(views, previous);
   } else {
     views = owned.reduce((sum, a) => sum + (a.views ?? 0), 0);
@@ -186,7 +204,6 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
 
   const likesBy = new Map(likesRows.map((r) => [r.articleId, Number(r.c) || 0]));
   const commentsBy = new Map(commentRows.map((r) => [r.articleId, Number(r.c) || 0]));
-  const periodViewsBy = new Map(perArticleRows.map((r) => [r.articleId, Number(r.views) || 0]));
   const viewsFor = (a: OwnedRow) => (days ? periodViewsBy.get(a.id) ?? 0 : a.views ?? 0);
   const topArticles = published
     .filter((a) => viewsFor(a) > 0)
@@ -224,11 +241,22 @@ async function compute(userId: string, role: "reporter" | "writer", period: Perf
   };
 }
 
-export function getContributorPerformance(input: { userId: string; role: "reporter" | "writer"; period: PerformancePeriod }) {
-  return withCache(
-    `contributor-performance:${input.userId}:${input.role}:${input.period}`,
-    USER_TTL_MS,
-    () => compute(input.userId, input.role, input.period),
-  );
+function cachedPerformance(userId: string, role: "reporter" | "writer", period: PerformancePeriod) {
+  return withCache(`contributor-performance:${userId}:${role}:${period}`, USER_TTL_MS, async () => {
+    const started = Date.now();
+    const result = await compute(userId, role, period);
+    const ms = Date.now() - started;
+    if (ms > 1500) console.warn(`[contributor-performance] slow compute ${ms}ms period=${period} role=${role}`);
+    return result;
+  });
+}
+
+export async function getContributorPerformance(input: { userId: string; role: "reporter" | "writer"; period: PerformancePeriod }) {
+  const result = await cachedPerformance(input.userId, input.role, input.period);
+  // تبديل الفترة في التطبيق يجد نسخته جاهزة.
+  for (const other of PERFORMANCE_PERIODS) {
+    if (other !== input.period) void cachedPerformance(input.userId, input.role, other).catch(() => undefined);
+  }
+  return result;
 }
 

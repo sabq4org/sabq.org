@@ -90,3 +90,40 @@ export function rankOf(rows: Array<{ ownerId: string | null; views: number }>, u
   const index = sorted.findIndex((r) => r.ownerId === userId);
   return index >= 0 ? { rank: index + 1, total: sorted.length } : null;
 }
+
+/**
+ * `article_daily_stats.views` لقطة تراكمية (إجمالي مشاهدات الخبر نهاية اليوم)
+ * لا مشاهدات اليوم وحده، ولا يُكتب صف اليوم الجاري. لذلك مشاهدات اليوم D =
+ * لقطة D ناقص لقطة اليوم السابق، ومشاهدات اليوم الجاري = العدّاد الحالي ناقص
+ * آخر لقطة. `baseDay` يوم قبل بداية السلسلة ويُستعمل أساسًا فقط.
+ * الخبر المنشور بعد `baseDay` يبدأ من صفر؛ والأقدم بلا لقطة أساس لا يُحسب
+ * فرق أول صف له حتى لا يظهر إجماليه كله في يوم واحد.
+ */
+export function snapshotViewDeltas(input: {
+  rows: Array<{ articleId: string; date: string; views: number }>;
+  articles: Array<{ id: string; views: number; publishedAt: Date | null }>;
+  baseDay: string;
+  today: string;
+}): Array<{ articleId: string; date: string; views: number }> {
+  const byArticle = new Map<string, Array<{ date: string; views: number }>>();
+  for (const row of input.rows) {
+    const date = String(row.date).slice(0, 10);
+    const list = byArticle.get(row.articleId) ?? [];
+    list.push({ date, views: Number(row.views) || 0 });
+    byArticle.set(row.articleId, list);
+  }
+  const out: Array<{ articleId: string; date: string; views: number }> = [];
+  for (const article of input.articles) {
+    const fresh = article.publishedAt ? isoDay(article.publishedAt) > input.baseDay : false;
+    let prev: number | null = fresh ? 0 : null;
+    const rows = (byArticle.get(article.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
+    for (const row of rows) {
+      if (row.date <= input.baseDay) { prev = row.views; continue; }
+      if (prev !== null && row.views > prev) out.push({ articleId: article.id, date: row.date, views: row.views - prev });
+      prev = row.views;
+    }
+    const current = Number(article.views) || 0;
+    if (prev !== null && current > prev) out.push({ articleId: article.id, date: input.today, views: current - prev });
+  }
+  return out;
+}
