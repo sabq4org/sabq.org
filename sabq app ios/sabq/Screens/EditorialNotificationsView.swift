@@ -334,6 +334,8 @@ struct EditorialNotificationsView: View {
         case "needs_revision": return ("pencil.and.scribble", SabqTheme.warning)
         case "archived":       return ("archivebox", SabqTheme.textTertiary)
         case "survey_invite":  return ("checklist", SabqTheme.primary)
+        case "edit_request_approved": return ("checkmark.circle", SabqTheme.success)
+        case "edit_request_rejected": return ("arrow.uturn.backward.circle", SabqTheme.warning)
         default:               return ("bell", SabqTheme.textSecondary)
         }
     }
@@ -507,6 +509,8 @@ struct EditorialNotificationDetailView: View {
         case "needs_revision": return ("pencil.and.scribble", SabqTheme.warning, "طلب تعديل")
         case "archived":       return ("archivebox", SabqTheme.textTertiary, "أرشفة")
         case "survey_invite":  return ("checklist", SabqTheme.primary, "دعوة استطلاع")
+        case "edit_request_approved": return ("checkmark.circle", SabqTheme.success, "اعتُمد طلب التعديل")
+        case "edit_request_rejected": return ("arrow.uturn.backward.circle", SabqTheme.warning, "لم يُعتمد طلب التعديل")
         default:               return ("bell", SabqTheme.textSecondary, "إشعار")
         }
     }
@@ -712,7 +716,12 @@ struct EditorialNotificationDetailView: View {
             guard let raw = item.deepLink, let url = URL(string: raw),
                   case let .survey(token)? = NotificationsStore.shared.parseSabqDeepLink(url: url) else { return nil }
             return ActionDescriptor(title: "شارك برأيك الآن", icon: "checklist", deepLink: .survey(token: token))
-        case "scheduled", "rejected", "archived":
+        case "edit_request_approved":
+            // المنشور يُفتح للقراءة؛ المسودة تبقى في «أخباري».
+            guard item.deepLink?.hasPrefix("sabq://draft") != true,
+                  let slug = item.articleSlug, !slug.isEmpty else { return nil }
+            return ActionDescriptor(title: "اقرأ الخبر بعد التعديل", icon: "doc.text", deepLink: .article(slug: slug))
+        case "scheduled", "rejected", "archived", "edit_request_rejected":
             // No actionable destination: scheduled has no detail page
             // until publish, and rejected/archived articles aren't
             // public. The card already shows date + reviewer note, so
