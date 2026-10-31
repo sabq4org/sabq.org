@@ -4,7 +4,7 @@ import SwiftUI
 //
 // جدار الألقاب + شبكة النسخ من /kings-cup/record — بيانات المزوّد الحقيقية
 // للنهائيات (بطل/وصيف/نتيجة/ترجيح) للمواسم المتاحة. مرآة قسم سجلّ الويب
-// بنموذج سبق: حامل اللقب بلوك هادئ، والجدار والنسخ صفوف بفواصل رفيعة،
+// بنموذج سبق: حامل اللقب بلوك أبيض، والجدار صفوف بفواصل رفيعة على سطح أبيض،
 // وبلا تمرير أفقي: النسخ شبكة ملتفّة.
 
 struct KcRecordSection: View {
@@ -108,6 +108,8 @@ struct KcRecordSection: View {
                 }
             }
         }
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     private func titleCount(_ n: Int) -> String {

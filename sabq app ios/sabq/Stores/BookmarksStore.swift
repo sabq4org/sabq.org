@@ -4,9 +4,14 @@ import SwiftUI
 final class BookmarksStore {
     private(set) var bookmarkedIDs: Set<String> = []
     private(set) var cachedArticles: [String: Article] = [:]
+    /// ترتيب الحفظ، الأحدث أولًا. الصفحة تُعرض بترتيب الحفظ لا بتاريخ النشر:
+    /// القارئ يبحث عمّا حفظه للتو (بلاغ المالك 2026-10-31). الخادم يرجع
+    /// `articleIds` مرتبة بـ `bookmarks.createdAt` تنازليًا فتُعتمد عند المزامنة.
+    private(set) var savedOrder: [String] = []
 
     private let storageKey = "sabq_bookmarks_v1"
     private let articleCacheKey = "sabq_bookmarks_articles_v1"
+    private let orderDefaultsName = "sabq_bookmarks_order_v1"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: storageKey),
@@ -19,6 +24,10 @@ final class BookmarksStore {
                 cachedArticles[cached.id] = cached.toArticle()
             }
         }
+        if let data = UserDefaults.standard.data(forKey: orderDefaultsName),
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            savedOrder = decoded.filter { bookmarkedIDs.contains($0) }
+        }
     }
 
     func isBookmarked(_ articleID: String) -> Bool {
@@ -30,9 +39,12 @@ final class BookmarksStore {
         if wasBookmarked {
             bookmarkedIDs.remove(articleID)
             cachedArticles.removeValue(forKey: articleID)
+            savedOrder.removeAll { $0 == articleID }
         } else {
             bookmarkedIDs.insert(articleID)
             if let article { cachedArticles[articleID] = article }
+            savedOrder.removeAll { $0 == articleID }
+            savedOrder.insert(articleID, at: 0)
         }
         persist()
         persistArticleCache()
@@ -99,9 +111,12 @@ final class BookmarksStore {
                     try? await APIClient.shared.postRaw(path: "/bookmarks/\(id)")
                 }
 
-                if !toAddLocally.isEmpty || !toPushToServer.isEmpty {
-                    persist()
-                }
+                // الترتيب: ما حُفظ محليًا ولم يصل الخادم بعد أولًا (أحدث
+                // بالتعريف)، ثم ترتيب الخادم بتاريخ الحفظ.
+                let localOnly = savedOrder.filter { toPushToServer.contains($0) }
+                let missingLocalOnly = toPushToServer.subtracting(localOnly)
+                savedOrder = localOnly + Array(missingLocalOnly) + response.articleIds
+                persist()
 
                 // Hydrate article metadata from the response so the
                 // Bookmarks tab can render titles + images even after a
@@ -109,9 +124,24 @@ final class BookmarksStore {
                 // enough fields to build a minimal Article shell.
                 var didUpdateCache = false
                 for item in response.articles ?? [] {
-                    if cachedArticles[item.id] == nil {
-                        let dateFormatter = ISO8601DateFormatter()
-                        let date = item.publishedAt.flatMap { dateFormatter.date(from: $0) } ?? Date()
+                    // الخادم يرسل أجزاء الثانية (`.000Z`) التي يرفضها
+                    // ISO8601DateFormatter الافتراضي، فكان التاريخ يسقط إلى
+                    // «الآن» ويُخزَّن خطأً دائمًا («قبل أسبوع» لخبر يناير).
+                    let serverDate = item.publishedAt.flatMap { SabqFormatters.parseISO8601($0) }
+                    let imageURL = item.imageUrl.flatMap { $0.isEmpty ? nil : URLConstants.absolutize($0) }
+                    if let cached = cachedArticles[item.id] {
+                        // إصلاح الكاش القديم المخزَّن بالتاريخ الخاطئ أو بلا صورة.
+                        let needsDate = serverDate.map { abs($0.timeIntervalSince(cached.publishDate)) > 60 } ?? false
+                        let needsImage = (cached.imageURL?.hasPrefix("http") != true) && imageURL != nil
+                        if needsDate || needsImage {
+                            cachedArticles[item.id] = cached.replacing(
+                                publishDate: needsDate ? serverDate : nil,
+                                imageURL: needsImage ? imageURL : nil
+                            )
+                            didUpdateCache = true
+                        }
+                    } else {
+                        let date = serverDate ?? .distantPast
                         let category = ArticleCategory.allCases.first { $0.title == item.categoryName } ?? .saudi
                         cachedArticles[item.id] = Article(
                             id: item.id,
@@ -126,7 +156,7 @@ final class BookmarksStore {
                             isBreaking: false,
                             isFeatured: false,
                             tags: [],
-                            imageURL: item.imageUrl,
+                            imageURL: imageURL,
                             slug: item.slug,
                             articleURL: nil
                         )
@@ -161,7 +191,15 @@ final class BookmarksStore {
             }
         }
         if didUpdateCache { persistArticleCache() }
-        return result.sorted { $0.publishDate > $1.publishDate }
+        let rank = Dictionary(savedOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return result.sorted { lhs, rhs in
+            switch (rank[lhs.id], rank[rhs.id]) {
+            case let (l?, r?): return l < r
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil): return lhs.publishDate > rhs.publishDate
+            }
+        }
     }
 
     /// Wipe in-memory + on-disk state. Called by the Settings "مسح البيانات
@@ -172,13 +210,18 @@ final class BookmarksStore {
     func clear() {
         bookmarkedIDs.removeAll()
         cachedArticles.removeAll()
+        savedOrder.removeAll()
         UserDefaults.standard.removeObject(forKey: storageKey)
+        UserDefaults.standard.removeObject(forKey: orderDefaultsName)
         UserDefaults.standard.removeObject(forKey: articleCacheKey)
     }
 
     private func persist() {
         if let data = try? JSONEncoder().encode(bookmarkedIDs) {
             UserDefaults.standard.set(data, forKey: storageKey)
+        }
+        if let data = try? JSONEncoder().encode(savedOrder) {
+            UserDefaults.standard.set(data, forKey: orderDefaultsName)
         }
     }
 
@@ -250,5 +293,49 @@ private struct CachedArticle: Codable {
             slug: slug,
             articleURL: articleURL
         )
+    }
+}
+
+private extension Article {
+    /// نسخة بتاريخ نشر و/أو صورة مصحّحين من الخادم، والباقي كما هو.
+    func replacing(publishDate newDate: Date?, imageURL newImage: String?) -> Article {
+        var copy = Article(
+            id: id,
+            title: title,
+            excerpt: excerpt,
+            aiSummary: aiSummary,
+            body: body,
+            bodyHTML: bodyHTML,
+            category: category,
+            author: author,
+            publishDate: newDate ?? publishDate,
+            isBreaking: isBreaking,
+            isFeatured: isFeatured,
+            tags: tags,
+            imageURL: newImage ?? imageURL,
+            slug: slug,
+            articleURL: articleURL
+        )
+        copy.categoryLabel = categoryLabel
+        copy.categoryId = categoryId
+        copy.authorImageURL = authorImageURL
+        copy.authorRole = authorRole
+        copy.authorSlug = authorSlug
+        copy.isAuthorVerified = isAuthorVerified
+        copy.editorialModifiedAt = editorialModifiedAt
+        copy.isReading = isReading
+        copy.imageFocalPoint = imageFocalPoint
+        copy.isAiGeneratedImage = isAiGeneratedImage
+        copy.aiImageModel = aiImageModel
+        copy.viewsCount = viewsCount
+        copy.articleType = articleType
+        copy.weeklyPhotos = weeklyPhotos
+        copy.mediaAssets = mediaAssets
+        copy.whatsappCta = whatsappCta
+        copy.subtitle = subtitle
+        copy.updateLines = updateLines
+        copy.videoURL = videoURL
+        copy.videoThumbnailURL = videoThumbnailURL
+        return copy
     }
 }

@@ -17,9 +17,10 @@ struct MyKeywordsView: View {
                     NavigationLink(value: KeywordRoute(keyword: keyword)) {
                         row(keyword)
                     }
-                    .listRowBackground(SabqTheme.background)
+                    // صفوف بيضاء داخل بطاقة واحدة على خلفية التطبيق الرمادية.
+                    .listRowBackground(SabqTheme.surface)
                     .listRowSeparatorTint(SabqTheme.separator)
-                    .listRowInsets(EdgeInsets(top: 0, leading: SabqLayout.pageMargin, bottom: 0, trailing: SabqLayout.pageMargin))
+                    .listRowInsets(EdgeInsets(top: 0, leading: SabqLayout.space16, bottom: 0, trailing: SabqLayout.space16))
                 }
                 .onDelete { offsets in
                     for keyword in offsets.map({ followedKeywords.followed[$0] }) {
@@ -38,7 +39,7 @@ struct MyKeywordsView: View {
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(SabqTheme.background)
         .overlay {

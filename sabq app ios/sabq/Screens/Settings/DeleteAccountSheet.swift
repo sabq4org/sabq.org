@@ -108,7 +108,7 @@ struct DeleteAccountSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.surfaceMuted)
+                            .fill(SabqTheme.surface)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)

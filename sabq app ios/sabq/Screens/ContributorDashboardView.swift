@@ -338,28 +338,9 @@ struct ContributorDashboardView: View {
                     .tint(SabqTheme.primary)
                     .frame(maxWidth: .infinity, minHeight: 300)
             } else if let error = vm.error {
-                VStack(spacing: SabqLayout.space16) {
-                    Image(systemName: "chart.bar.xaxis.ascending")
-                        .font(SabqFonts.app(size: 40, weight: .light))
-                        .foregroundStyle(SabqTheme.textTertiary)
-                        .accessibilityHidden(true)
-                    Text(error)
-                        .sabqText(SabqType.excerpt)
-                        .foregroundStyle(SabqTheme.textSecondary)
-                    Button { Task { await vm.load() } } label: {
-                        Text("إعادة المحاولة")
-                            .sabqText(SabqType.button)
-                            .foregroundStyle(SabqTheme.onAction)
-                            .padding(.horizontal, SabqLayout.space24)
-                            .frame(minHeight: SabqLayout.controlHeight)
-                            .background(
-                                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .fill(SabqTheme.actionFill)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-                .frame(maxWidth: .infinity, minHeight: 300)
+                ErrorStateView(message: error) { Task { await vm.load() } }
+                    .padding(.horizontal, SabqLayout.pageMargin)
+                    .frame(maxWidth: .infinity, minHeight: 300)
             } else if let data = vm.analytics {
                 VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
                     VStack(alignment: .leading, spacing: SabqLayout.space16) {
@@ -391,7 +372,7 @@ struct ContributorDashboardView: View {
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)
                 .padding(.top, SabqLayout.space8)
-                .padding(.bottom, 104)
+                .padding(.bottom, SabqLayout.tabBarClearance)
             }
         }
         .background(SabqTheme.background)
@@ -463,7 +444,7 @@ struct ContributorDashboardView: View {
                     .padding(.vertical, SabqLayout.space4)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .fill(SabqTheme.background)
+                            .fill((t >= 0 ? SabqTheme.success : SabqTheme.danger).opacity(0.12))
                     )
                 }
             }
@@ -478,7 +459,7 @@ struct ContributorDashboardView: View {
         }
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 
@@ -499,7 +480,7 @@ struct ContributorDashboardView: View {
                 }
                 .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+                .sabqBlockSurface()
 
                 // Best article
                 if let best = data.bestArticleThisWeek {
@@ -527,7 +508,7 @@ struct ContributorDashboardView: View {
                     }
                     .padding(SabqLayout.space12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+                    .sabqBlockSurface()
                 }
             }
         }
@@ -579,8 +560,9 @@ struct ContributorDashboardView: View {
     @ViewBuilder
     private func engagementSection(_ data: ContributorAnalytics) -> some View {
         if !data.topArticles.isEmpty {
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 sectionTitle("أعلى المقالات تفاعلاً")
+                VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(data.topArticles.prefix(5).enumerated()), id: \.element.id) { index, article in
                     if index > 0 { Divider().overlay(SabqTheme.separator) }
                     HStack(spacing: SabqLayout.space12) {
@@ -603,6 +585,9 @@ struct ContributorDashboardView: View {
                     }
                     .padding(.vertical, SabqLayout.space12)
                 }
+                }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
 
@@ -633,7 +618,7 @@ struct ContributorDashboardView: View {
             }
             .padding(SabqLayout.space16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .sabqBlockSurface()
         }
     }
 
@@ -668,7 +653,7 @@ struct ContributorDashboardView: View {
                 }
                 .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+                .sabqBlockSurface()
 
                 // Ranking
                 if let ranking = vm.ranking {
@@ -706,7 +691,7 @@ struct ContributorDashboardView: View {
                     }
                     .padding(SabqLayout.space12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+                    .sabqBlockSurface()
                 }
             }
         }
@@ -746,7 +731,7 @@ struct ContributorDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 
@@ -755,8 +740,9 @@ struct ContributorDashboardView: View {
     @ViewBuilder
     private func articlesSection(_ data: ContributorAnalytics) -> some View {
         if !data.articles.isEmpty {
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 sectionTitle(data.role == "reporter" ? "أخباري" : "مقالاتي")
+                VStack(alignment: .leading, spacing: 0) {
                 ForEach(data.articles.prefix(10)) { article in
                     if article.id != data.articles.first?.id {
                         Divider().overlay(SabqTheme.separator)
@@ -776,6 +762,9 @@ struct ContributorDashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, SabqLayout.space12)
                 }
+                }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -904,7 +893,7 @@ struct WriterScheduleBannerCard: View {
                 .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.background)
+                        .fill(tint.opacity(0.12))
                 )
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
@@ -920,7 +909,7 @@ struct WriterScheduleBannerCard: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 }
@@ -945,7 +934,7 @@ struct WriterDayPickerCard: View {
                     .frame(width: 36, height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .fill(SabqTheme.background)
+                            .fill(SabqTheme.primary.opacity(0.12))
                     )
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: SabqLayout.space4) {
@@ -1018,7 +1007,7 @@ struct WriterDayPickerCard: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
     }
 }
 

@@ -99,6 +99,8 @@ struct ReaderNotificationSettingsView: View {
                 .sabqText(SabqType.sectionHeading)
                 .foregroundStyle(SabqTheme.textPrimary)
             VStack(spacing: 0) { content() }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             Text(footer)
                 .sabqText(SabqType.meta)
                 .foregroundStyle(SabqTheme.textTertiary)

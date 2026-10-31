@@ -181,7 +181,7 @@ struct EconomyView: View {
                 }
                 .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .sabqBlockSurface()
                 .accessibilityElement(children: .combine)
             }
         }
@@ -210,7 +210,7 @@ struct EconomyView: View {
                         .foregroundStyle(SabqTheme.primary)
                 }
                 .padding(SabqLayout.space16)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .sabqBlockSurface()
             } else if let next = d.nextDecisionDate {
                 Text("قرار الفائدة القادم: \(EconomyFormat.fmtDateAr(next)) — الريبو ثابت عند \(repo.valueText) منذ \(EconomyFormat.fmtDateAr(repo.asOf)). المصدر: البنك المركزي السعودي.")
                     .sabqText(SabqType.meta)
@@ -265,6 +265,8 @@ struct EconomyView: View {
                         }
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -293,12 +295,12 @@ private struct EconomySectionHead: View {
     }
 }
 
-/// بلوك هادئ: تعبئة رمادية خفيفة بزوايا 12 بلا حد.
+/// البلوك القياسي على خلفية الصفحة الرمادية: سطح أبيض بزوايا 16 وحدّ رفيع.
 private func economyCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
     VStack(alignment: .leading, spacing: SabqLayout.space8) { content() }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
 }
 
 // MARK: - وحدة إنفاق الأسبوع (WeeklySpendingModule.tsx)
@@ -483,6 +485,8 @@ struct EconomyWeeklyModule: View {
                 .padding(.vertical, SabqLayout.space12)
             }
         }
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     private static let shareOpacities: [Double] = [1, 0.8, 0.62, 0.46, 0.34, 0.24]
@@ -608,7 +612,7 @@ struct EconomyWeeksChart: View {
             }
         }
         .padding(SabqLayout.space12)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 
     private func points(in size: CGSize) -> [CGPoint] {

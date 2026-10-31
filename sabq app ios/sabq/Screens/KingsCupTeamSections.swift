@@ -51,6 +51,8 @@ struct KcCoachCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
     }
 
     private func periodLabel(_ stop: KcCoachStop) -> String {
@@ -88,6 +90,8 @@ struct KcTeamStatsCard: View {
             if !stats.timing.isEmpty { timingChart }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
     }
 
     private var wdl: String {
@@ -171,21 +175,26 @@ struct KcTeamMatchesBlock: View {
     let matches: KcTeamMatches
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             kcBlockHeading("مباريات النادي في كأس الملك")
 
-            if !matches.fixtures.isEmpty {
-                if let season = matches.season {
-                    seasonLabel("نسخة \(KcFormat.seasonLabel(season))")
+            VStack(alignment: .leading, spacing: 0) {
+                if !matches.fixtures.isEmpty {
+                    if let season = matches.season {
+                        seasonLabel("نسخة \(KcFormat.seasonLabel(season))")
+                    }
+                    rows(matches.fixtures)
                 }
-                rows(matches.fixtures)
-            }
 
-            if let prev = matches.previous {
-                seasonLabel("مشواره في نسخة \(KcFormat.seasonLabel(prev.season))")
-                    .padding(.top, matches.fixtures.isEmpty ? 0 : SabqLayout.space16)
-                rows(prev.fixtures)
+                if let prev = matches.previous {
+                    seasonLabel("مشواره في نسخة \(KcFormat.seasonLabel(prev.season))")
+                        .padding(.top, matches.fixtures.isEmpty ? 0 : SabqLayout.space16)
+                    rows(prev.fixtures)
+                }
             }
+            .padding(.top, SabqLayout.space8)
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -279,6 +288,9 @@ struct KcTransfersBlock: View {
                 .padding(.vertical, SabqLayout.space12)
             }
         }
+        .padding(.top, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 }
 
@@ -305,32 +317,37 @@ struct KcTeamTitlesBlock: View {
                     Text("ضمن المدى المتاح منذ \(KcFormat.seasonLabel(since))")
                         .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 }
-                ForEach(Array(editions.enumerated()), id: \.element.id) { index, e in
-                    if index > 0 { KcRowSeparator() }
-                    HStack(spacing: SabqLayout.space12) {
-                        Image(systemName: "trophy.fill").foregroundStyle(KcTheme.gold).accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("نسخة \(KcFormat.seasonLabel(e.season))")
-                                .sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
-                            if let runnerUp = e.runnerUp {
-                                HStack(spacing: SabqLayout.space4) {
-                                    Text("على حساب \(runnerUp.name)")
-                                    if let score = e.score {
-                                        Text(score).fontWeight(.semibold)
-                                            .environment(\.layoutDirection, .leftToRight)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(editions.enumerated()), id: \.element.id) { index, e in
+                        if index > 0 { KcRowSeparator() }
+                        HStack(spacing: SabqLayout.space12) {
+                            Image(systemName: "trophy.fill").foregroundStyle(KcTheme.gold).accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("نسخة \(KcFormat.seasonLabel(e.season))")
+                                    .sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
+                                if let runnerUp = e.runnerUp {
+                                    HStack(spacing: SabqLayout.space4) {
+                                        Text("على حساب \(runnerUp.name)")
+                                        if let score = e.score {
+                                            Text(score).fontWeight(.semibold)
+                                                .environment(\.layoutDirection, .leftToRight)
+                                        }
+                                        if let pens = e.penalties {
+                                            Text("(\(pens) ر.ت)")
+                                                .environment(\.layoutDirection, .leftToRight)
+                                        }
                                     }
-                                    if let pens = e.penalties {
-                                        Text("(\(pens) ر.ت)")
-                                            .environment(\.layoutDirection, .leftToRight)
-                                    }
+                                    .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                                 }
-                                .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                             }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.vertical, SabqLayout.space12)
                     }
-                    .padding(.vertical, SabqLayout.space12)
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
+                .padding(.top, SabqLayout.space12)
             }
         }
     }

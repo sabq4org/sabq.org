@@ -71,10 +71,7 @@ struct HomeSidebarView: View {
             modeButton("سياق الخبر", mode: .context)
         }
         .padding(SabqLayout.space4)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     private func modeButton(_ title: String, mode: HomeSidebarMode) -> some View {

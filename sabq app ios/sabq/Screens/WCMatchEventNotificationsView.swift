@@ -31,7 +31,7 @@ struct WCMatchEventNotificationsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(SabqLayout.space16)
-                .wcQuietBlock()
+                .sabqBlockSurface()
 
                 Button {
                     // يفتح فارا إن كان مثبّتًا، وإلا صفحته في المتجر
@@ -40,13 +40,12 @@ struct WCMatchEventNotificationsView: View {
                     }
                 } label: {
                     Text("افتح تطبيق فارا")
-                        .sabqText(SabqType.rowTitle)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, SabqLayout.space12)
+                        .sabqText(SabqType.button)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                         .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.primary)
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.actionFill)
                         )
                 }
                 .buttonStyle(.plain)

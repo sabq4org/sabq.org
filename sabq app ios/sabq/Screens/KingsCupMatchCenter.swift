@@ -187,6 +187,9 @@ struct KingsCupMatchCenter: View {
                 .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity)
+        .sabqBlockSurface()
     }
 
     private func headerLine(_ f: KcFixture) -> String {
@@ -243,12 +246,17 @@ struct KcEventsTimeline: View {
             if detail.events.isEmpty {
                 kcEmptyText("الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة")
             } else {
-                Text("مجريات المباراة").sabqText(SabqType.metaEmphasis).foregroundStyle(KcTheme.accent)
-                    .accessibilityAddTraits(.isHeader)
-                ForEach(Array(sorted.enumerated()), id: \.element.id) { index, ev in
-                    if index > 0 { KcRowSeparator() }
-                    row(ev)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("مجريات المباراة").sabqText(SabqType.metaEmphasis).foregroundStyle(KcTheme.accent)
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(Array(sorted.enumerated()), id: \.element.id) { index, ev in
+                        if index > 0 { KcRowSeparator() }
+                        row(ev)
+                    }
                 }
+                .padding(.top, SabqLayout.space12)
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -305,7 +313,7 @@ struct KcLineupsView: View {
         if detail.lineups.isEmpty {
             kcEmptyText("التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة")
         } else {
-            VStack(spacing: SabqLayout.space32) {
+            VStack(spacing: SabqLayout.space24) {
                 ForEach(detail.lineups) { lineup in KcPitch(lineup: lineup) }
             }
         }
@@ -346,6 +354,8 @@ struct KcPitch: View {
             }
             if !lineup.substitutes.isEmpty { bench }
         }
+        .padding(SabqLayout.space12)
+        .sabqBlockSurface()
     }
 
     private var bench: some View {
@@ -427,6 +437,9 @@ struct KcStatsView: View {
             VStack(spacing: SabqLayout.space16) {
                 ForEach(stats.rows) { statRow($0) }
             }
+            .padding(.vertical, SabqLayout.space16)
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         } else {
             kcEmptyText("الإحصائيات تظهر هنا أثناء المباراة")
         }
@@ -504,11 +517,15 @@ struct KcRatingsView: View {
                         .buttonStyle(.plain)
                         .padding(.bottom, SabqLayout.space8)
                     }
-                    ForEach(Array(players.enumerated()), id: \.element.id) { index, p in
-                        if index > 0 { KcRowSeparator() }
-                        Button { onOpenPlayer(p.id) } label: { playerRow(p) }
-                            .buttonStyle(.plain)
+                    VStack(spacing: 0) {
+                        ForEach(Array(players.enumerated()), id: \.element.id) { index, p in
+                            if index > 0 { KcRowSeparator() }
+                            Button { onOpenPlayer(p.id) } label: { playerRow(p) }
+                                .buttonStyle(.plain)
+                        }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -612,7 +629,7 @@ struct KcTvStrip: View {
         }
         .padding(.horizontal, SabqLayout.space12)
         .frame(minHeight: 36)
-        .background(Capsule().fill(SabqTheme.surfaceMuted))
+        .background(Capsule().fill(SabqTheme.chipFill))
 
         if let urlString = ch.url, let url = URL(string: urlString) {
             Button { openURL(url) } label: { content }.buttonStyle(.plain)
@@ -742,33 +759,41 @@ struct KcTeamSheet: View {
     }
 
     private func fixturesBlock(_ fixtures: [KcFixture]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             kcBlockHeading("مباريات النادي")
-            ForEach(Array(fixtures.enumerated()), id: \.element.id) { index, f in
-                if index > 0 { KcRowSeparator() }
-                KcTeamFixtureRow(fixture: f)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(fixtures.enumerated()), id: \.element.id) { index, f in
+                    if index > 0 { KcRowSeparator() }
+                    KcTeamFixtureRow(fixture: f)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
     private func scorersBlock(_ scorers: [KcTeamTopScorer]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             kcBlockHeading("هدّافو النادي")
-            ForEach(Array(scorers.enumerated()), id: \.element.id) { index, s in
-                if index > 0 { KcRowSeparator() }
-                Button { if s.id > 0 { openPlayer = KcPlayerSelection(id: s.id) } } label: {
-                    HStack(spacing: SabqLayout.space12) {
-                        KcAvatar(url: s.photo, size: 36)
-                        Text(s.name).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
-                        Spacer()
-                        Text("\(s.goals)").sabqText(SabqType.sectionHeading).foregroundStyle(KcTheme.accent).monospacedDigit()
-                        Text("هدف").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(scorers.enumerated()), id: \.element.id) { index, s in
+                    if index > 0 { KcRowSeparator() }
+                    Button { if s.id > 0 { openPlayer = KcPlayerSelection(id: s.id) } } label: {
+                        HStack(spacing: SabqLayout.space12) {
+                            KcAvatar(url: s.photo, size: 36)
+                            Text(s.name).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
+                            Spacer()
+                            Text("\(s.goals)").sabqText(SabqType.sectionHeading).foregroundStyle(KcTheme.accent).monospacedDigit()
+                            Text("هدف").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
+                        }
+                        .padding(.vertical, SabqLayout.space12)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, SabqLayout.space12)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -796,6 +821,8 @@ struct KcTeamSheet: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(SabqLayout.space12)
+            .sabqBlockSurface()
         }
     }
 }

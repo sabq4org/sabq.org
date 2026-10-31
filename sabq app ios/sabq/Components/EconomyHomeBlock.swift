@@ -458,15 +458,19 @@ struct EconomyMonthlyCardView: View {
     }
 }
 
-/// بلوك هادئ للبطاقات الاقتصادية: تعبئة رمادية خفيفة بزوايا 12 بلا حد ولا شريط
-/// ملوّن — لون الاتجاه يبقى في الرقم نفسه. `tone` محفوظ لتوافق النداءات.
+/// بطاقة اقتصادية على خلفية الصفحة الرمادية: سطح أبيض بحدّ رفيع بلا شريط ملوّن —
+/// لون الاتجاه يبقى في الرقم نفسه. `tone` محفوظ لتوافق النداءات.
 struct EconomyAccentCardModifier: ViewModifier {
     let tone: Color
     var radius: CGFloat = SabqRadius.medium
 
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
-            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(
+                shape.fill(SabqTheme.surface)
+                    .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+            )
     }
 }
 

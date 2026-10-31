@@ -136,9 +136,15 @@ struct CommentComposer: View {
             .buttonStyle(.plain)
         }
         .padding(.leading, SabqLayout.space12)
+        // يقع داخل قسم التعليقات الرمادي الهادئ: سطح أبيض بحدّ رفيع كي يظهر.
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                .allowsHitTesting(false)
         )
     }
 

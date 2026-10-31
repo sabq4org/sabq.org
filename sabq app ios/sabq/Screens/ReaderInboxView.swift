@@ -28,7 +28,7 @@ struct ReaderInboxView: View {
                     NavigationLink(value: EditorialNotificationsRoute()) {
                         editorialRow
                     }
-                    .listRowBackground(SabqTheme.background)
+                    .listRowBackground(SabqTheme.surface)
                     .listRowSeparatorTint(SabqTheme.separator)
                 }
             }
@@ -37,7 +37,8 @@ struct ReaderInboxView: View {
                 ForEach(items) { item in
                     Button { open(item) } label: { row(item) }
                         .buttonStyle(.plain)
-                        .listRowBackground(SabqTheme.background)
+                        // صفوف بيضاء داخل بطاقة واحدة على خلفية التطبيق الرمادية.
+                        .listRowBackground(SabqTheme.surface)
                         .listRowSeparatorTint(SabqTheme.separator)
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) { delete(item) } label: {
@@ -47,9 +48,6 @@ struct ReaderInboxView: View {
                         .onAppear {
                             if item.id == items.last?.id { Task { await loadMore() } }
                         }
-                }
-                if loadingMore {
-                    ProgressView().frame(maxWidth: .infinity).listRowBackground(SabqTheme.background)
                 }
             } header: {
                 HStack(spacing: SabqLayout.space16) {
@@ -77,8 +75,18 @@ struct ReaderInboxView: View {
                 // هامش رأس القائمة الافتراضي ~10 نقاط على شاشة Duo المطوية
                 .padding(.horizontal, SabqLayout.space8)
             }
+
+            // مؤشر «المزيد» خارج البطاقة البيضاء.
+            if loadingMore {
+                Section {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                }
+            }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(SabqLayout.space16)
         .scrollContentBackground(.hidden)
         .background(SabqTheme.background)
         .overlay { stateOverlay }
@@ -202,7 +210,7 @@ struct ReaderInboxView: View {
         else { return "" }
         // فرق ساعة الجهاز عن الخادم قد يجعل الإشعار «في المستقبل»
         if date > Date() { return "الآن" }
-        return SabqFormatters.relativeArabic.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 
     // MARK: - Actions

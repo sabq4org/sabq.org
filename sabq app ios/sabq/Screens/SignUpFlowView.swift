@@ -191,10 +191,7 @@ struct SignUpFlowView: View {
                 }
             }
             .padding(SabqLayout.space24)
-            .background(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
-            )
+            .sabqBlockSurface()
             .padding(.horizontal, SabqLayout.space16)
 
             Spacer(minLength: SabqLayout.space16)
@@ -319,14 +316,7 @@ struct SignUpFlowView: View {
             .multilineTextAlignment(.leading)
             .padding(.horizontal, SabqLayout.space12)
             .padding(.vertical, SabqLayout.space12)
-            .background(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .stroke(SabqTheme.outline, lineWidth: 1)
-            )
+            .sabqBlockSurface()
     }
 
     private func userBubble(_ text: String) -> some View {
@@ -382,11 +372,13 @@ struct SignUpFlowView: View {
                 Image(systemName: "paperplane.fill")
                     .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(canSubmit ? SabqTheme.onAction : SabqTheme.disabledInk)
-                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
-                    .background(
-                        Circle().fill(canSubmit ? SabqTheme.actionFill : SabqTheme.disabledFill)
-                    )
                     .rotationEffect(.degrees(180))
+                    .frame(width: SabqLayout.controlHeight, height: SabqLayout.controlHeight)
+                    .background(
+                        canSubmit ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                        in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    )
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
@@ -410,8 +402,8 @@ struct SignUpFlowView: View {
                         interestChip(category: category)
                     }
                 }
-                .padding(.horizontal, SabqLayout.space12)
-                .padding(.vertical, SabqLayout.space8)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space12)
             }
             .frame(maxHeight: 220)
 
@@ -450,17 +442,31 @@ struct SignUpFlowView: View {
             SabqHaptics.light()
             if isOn { selectedInterests.remove(id) } else { selectedInterests.insert(id) }
         } label: {
-            Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
-                .sabqText(SabqType.tag)
-                .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textPrimary)
-                .padding(.horizontal, SabqLayout.space8)
-                .padding(.vertical, SabqLayout.space8)
-                .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
-                .background(
-                    Capsule().fill(isOn ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
-                )
+            // على الخلفية الرمادية: غير المختار أبيض بحدّ رفيع، والمختار
+            // مُشبَع بلون primary خفيف مع حدّ primary وعلامة صح.
+            let shape = RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+            HStack(spacing: SabqLayout.space4) {
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(SabqFonts.app(size: 11, weight: .bold))
+                        .accessibilityHidden(true)
+                }
+                Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
+                    .sabqText(SabqType.metaEmphasis)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(isOn ? SabqTheme.primary : SabqTheme.textPrimary)
+            .padding(.horizontal, SabqLayout.space8)
+            .padding(.vertical, SabqLayout.space8)
+            .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+            .background(isOn ? SabqTheme.primary.opacity(0.1) : SabqTheme.surface, in: shape)
+            .overlay(shape.strokeBorder(isOn ? SabqTheme.primary : SabqTheme.separator,
+                                        lineWidth: isOn ? 1.5 : 0.75))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 
     private func errorRetry(_ msg: String) -> some View {

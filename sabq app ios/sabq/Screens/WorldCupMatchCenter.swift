@@ -204,6 +204,9 @@ struct WorldCupMatchCenter: View {
                 .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity)
+        .sabqBlockSurface()
     }
 
     private func teamHead(_ team: WCTeam) -> some View {
@@ -227,7 +230,8 @@ struct WorldCupMatchCenter: View {
                             .foregroundStyle(tab == t ? SabqTheme.onAction : SabqTheme.textPrimary)
                             .padding(.horizontal, SabqLayout.space16)
                             .frame(minHeight: SabqLayout.touchTarget)
-                            .background(Capsule().fill(tab == t ? WCTheme.royal : SabqTheme.surfaceMuted))
+                            .background(Capsule().fill(tab == t ? WCTheme.royal : SabqTheme.surface))
+                            .overlay(Capsule().strokeBorder(tab == t ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
                     }
                     .buttonStyle(.plain)
                 }
@@ -411,12 +415,16 @@ struct WCEventsTimeline: View {
             Text("مجريات المباراة")
                 .sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
                 .padding(.bottom, SabqLayout.space8)
-            // سرد غير مؤطّر بفواصل رفيعة
-            ForEach(sorted) { ev in
-                WCRowSeparator()
-                Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
-                    .buttonStyle(.plain)
+            // سرد على سطح واحد بفواصل رفيعة
+            VStack(spacing: 0) {
+                ForEach(Array(sorted.enumerated()), id: \.element.id) { idx, ev in
+                    if idx > 0 { WCRowSeparator() }
+                    Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
+                        .buttonStyle(.plain)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -510,7 +518,7 @@ struct WCPressureView: View {
                         Text("\(Int(latest.value))")
                             .font(SabqFonts.app(size: 12, weight: .regular).monospacedDigit()).foregroundStyle(SabqTheme.textPrimary)
                             .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.surfaceMuted))
+                            .background(Capsule().fill(SabqTheme.chipFill))
                             .environment(\.layoutDirection, .leftToRight)
                     }
                 }
@@ -595,7 +603,7 @@ struct WCPitch: View {
                     Text(f).font(SabqFonts.app(size: 12, weight: .medium).monospacedDigit())
                         .foregroundStyle(SabqTheme.textSecondary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
-                        .background(Capsule().fill(SabqTheme.surfaceMuted))
+                        .background(Capsule().fill(SabqTheme.chipFill))
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
@@ -633,7 +641,7 @@ struct WCPitch: View {
             Text(p.number.map { "\($0)" } ?? "•")
                 .font(SabqFonts.app(size: 12, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(SabqTheme.surface))
+                .background(Circle().fill(WCTheme.emeraldDeep.opacity(0.12)))
                 .environment(\.layoutDirection, .leftToRight)
             Text(p.name)
                 .font(SabqFonts.app(size: 12, weight: .regular)).foregroundStyle(SabqTheme.textPrimary)
@@ -642,7 +650,7 @@ struct WCPitch: View {
         }
         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space8)
         .frame(minHeight: SabqLayout.touchTarget)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
     }
 
     private var pitch: some View {
@@ -718,7 +726,11 @@ struct WCStatsView: View {
             if let w = facts?.weather { weatherCard(w) }
             if let f = facts, !f.absentees.isEmpty { absenteesView(f.absentees) }
             if !stats.isEmpty {
-                ForEach(stats) { statRow($0) }
+                VStack(spacing: SabqLayout.space16) {
+                    ForEach(stats) { statRow($0) }
+                }
+                .padding(SabqLayout.space16)
+                .sabqBlockSurface()
             }
             if loaded && nothing {
                 emptyText("الإحصائيات تظهر هنا أثناء المباراة")
@@ -908,11 +920,15 @@ struct WCRatingsView: View {
                     .buttonStyle(.plain)
                     .padding(.bottom, SabqLayout.space8)
                 }
-                ForEach(detail.ratings) { p in
-                    WCRowSeparator()
-                    Button { onOpenPlayer(p.id) } label: { playerRow(p) }
-                        .buttonStyle(.plain)
+                VStack(spacing: 0) {
+                    ForEach(Array(detail.ratings.enumerated()), id: \.element.id) { idx, p in
+                        if idx > 0 { WCRowSeparator() }
+                        Button { onOpenPlayer(p.id) } label: { playerRow(p) }
+                            .buttonStyle(.plain)
+                    }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -1017,6 +1033,9 @@ struct WCPredictionView: View {
                 }
             }
         }
+        // لوحة واحدة بيضاء: التعبئات الهادئة داخلها (المسارات والخلايا) تبقى مرئية
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
         .task(id: detail.fixture.id) {
             forecast = try? await APIClient.shared.fetchWorldCupForecast(fixtureId: detail.fixture.id)
             loaded = true
@@ -1201,7 +1220,7 @@ struct WCTvStrip: View {
         }
         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
         .frame(minHeight: SabqLayout.touchTarget)
-        .background(Capsule().fill(SabqTheme.surfaceMuted))
+        .background(Capsule().fill(SabqTheme.chipFill))
 
         if let urlString = ch.url, let url = URL(string: urlString) {
             Button { openURL(url) } label: { content }.buttonStyle(.plain)
@@ -1230,10 +1249,14 @@ struct WCCommentaryView: View {
             if items.isEmpty {
                 emptyText("التعليق الحي يبدأ مع صافرة الانطلاق")
             } else {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    if index > 0 { WCRowSeparator() }
-                    row(item)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { WCRowSeparator() }
+                        row(item)
+                    }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
         // الهوية تشمل live: من فتح المركز قبل الصافرة كانت الحلقة تخرج نهائيًا

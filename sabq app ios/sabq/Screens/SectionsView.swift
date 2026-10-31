@@ -22,8 +22,6 @@ struct SectionsView: View {
                     }
                 }
 
-                SabqSectionBand()
-
                 trendingTagsSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)

@@ -419,6 +419,8 @@ struct RoshnView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -481,6 +483,8 @@ struct RoshnView: View {
                         }
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -587,6 +591,8 @@ struct RoshnView: View {
                     }
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -612,7 +618,7 @@ struct RoshnView: View {
 // MARK: - عناصر روشن المشتركة على نموذج سبق
 //
 // اللون الزمردي يبقى هوية (ترويسة، تبويب نشط، شارات)، والبنية من نظام سبق:
-// صفحة بيضاء، قوائم بلا صناديق تفصلها خطوط رفيعة، كتل هادئة surfaceMuted،
+// صفحة رمادية، قوائم على سطح أبيض واحد تفصل صفوفه خطوط رفيعة، كتل بيضاء بحدّ رفيع،
 // وزوايا 8/12/كبسولة فقط.
 
 extension RoshnTheme {
@@ -663,7 +669,8 @@ struct RoshnChip: View {
         .foregroundStyle(selected ? Color.white : SabqTheme.textPrimary)
         .padding(.horizontal, SabqLayout.space12)
         .padding(.vertical, SabqLayout.space8)
-        .background(Capsule().fill(selected ? RoshnTheme.accentFill : SabqTheme.surfaceMuted))
+        .background(Capsule().fill(selected ? RoshnTheme.accentFill : SabqTheme.surface))
+        .overlay(Capsule().strokeBorder(selected ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
         .frame(minHeight: SabqLayout.touchTarget)
         .contentShape(Rectangle())
     }
@@ -718,7 +725,7 @@ struct RoshnNoticeBlock: View {
         .padding(.horizontal, SabqLayout.space12)
         .padding(.vertical, SabqLayout.space4)
         .frame(minHeight: SabqLayout.controlHeight)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 }
 
@@ -750,7 +757,8 @@ struct RoshnLoadingRows: View {
         VStack(spacing: SabqLayout.space8) {
             ForEach(0..<count, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
+                    .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
                     .frame(height: height)
             }
         }
@@ -1014,6 +1022,8 @@ struct RoshnRacesSection: View {
                                       primary: "\(s.goals)", secondary: "\(s.assists) صناعة")
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             case .assists:
                 if store.assists.isEmpty {
@@ -1026,6 +1036,8 @@ struct RoshnRacesSection: View {
                                       primary: "\(l.assists ?? 0)", secondary: "\(l.goals ?? 0) أهداف")
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             case .cards:
                 let yellow = store.cards?.yellow ?? []
@@ -1039,6 +1051,8 @@ struct RoshnRacesSection: View {
                                       primary: "🟨 \(l.yellow ?? 0)", secondary: "🟥 \(l.red ?? 0)")
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }
@@ -1079,7 +1093,7 @@ struct RoshnRacesSection: View {
         }
         .padding(.vertical, SabqLayout.space16)
         .padding(.horizontal, SabqLayout.space8)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 
     private func leaderRow(rank: Int, name: String, photo: String, team: RsTeam,
@@ -1379,7 +1393,11 @@ struct RoshnPredictionsView: View {
                     .frame(minHeight: SabqLayout.touchTarget)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .fill(selected ? RoshnTheme.accentFill : SabqTheme.surfaceMuted)
+                            .fill(selected ? RoshnTheme.accentFill : SabqTheme.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                            .strokeBorder(selected ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
                     )
                 }
                 .buttonStyle(.plain)
@@ -1473,7 +1491,7 @@ struct RoshnPredictionsView: View {
                 }
                 .padding(.horizontal, SabqLayout.space12)
                 .frame(minHeight: SabqLayout.controlHeight)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .sabqBlockSurface()
             }
 
             if store.loading, store.contests.isEmpty {
@@ -1489,6 +1507,8 @@ struct RoshnPredictionsView: View {
                         openContestCard(contest)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
 
             if !settledContests.isEmpty {
@@ -1499,6 +1519,8 @@ struct RoshnPredictionsView: View {
                         settledContestRow(contest)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -1518,7 +1540,7 @@ struct RoshnPredictionsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 
@@ -1570,7 +1592,7 @@ struct RoshnPredictionsView: View {
                     }
                     .padding(.horizontal, SabqLayout.space12)
                     .frame(minHeight: SabqLayout.controlHeight)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                    .sabqBlockSurface()
                 }
 
                 sectionLabel("حصاد الموسم")
@@ -1583,6 +1605,8 @@ struct RoshnPredictionsView: View {
                         ledgerRow(item)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -1678,6 +1702,8 @@ struct RoshnPredictionsView: View {
                         leaderRow(entry)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -1704,7 +1730,7 @@ struct RoshnPredictionsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(SabqLayout.space16)
-            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            .sabqBlockSurface()
 
             VStack(alignment: .leading, spacing: 0) {
                 howStep(number: 1, icon: "square.and.pencil",
@@ -1723,6 +1749,8 @@ struct RoshnPredictionsView: View {
                         title: "نافس على صدارة الموسم",
                         text: "رصيدك التراكمي يحدد مركزك بين المتنافسين في تبويب المتصدرين")
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
 
             RoshnNoticeBlock(icon: "person.crop.circle.badge.checkmark",
                              message: "المشاركة تتطلب تسجيل الدخول بحسابك في سبق — التصفح متاح للجميع")

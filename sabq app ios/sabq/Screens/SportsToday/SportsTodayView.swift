@@ -31,10 +31,7 @@ struct SportsTodayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                Picker("اليوم", selection: $day) {
-                    ForEach(Day.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                SabqSegmentedPicker("اليوم", selection: $day, options: Day.allCases.map { ($0, $0.label) })
 
                 if !loaded {
                     SkeletonBox(height: 280, radius: SabqRadius.medium)
@@ -54,7 +51,7 @@ struct SportsTodayView: View {
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space8)
-            .padding(.bottom, 120)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("مباريات \(day.label)")
@@ -156,7 +153,7 @@ struct SportsTodayView: View {
                 }
             }
             .padding(.horizontal, SabqLayout.space12)
-            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            .sabqNewsSurface()
         }
     }
 

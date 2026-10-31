@@ -149,6 +149,9 @@ struct AsianCupMatchCenter: View {
                 .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity)
+        .sabqBlockSurface()
     }
 
     private func teamHead(_ team: AcTeam) -> some View {
@@ -347,6 +350,8 @@ private struct AcCommentaryView: View {
                         .padding(.vertical, SabqLayout.space12)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             } else {
                 acEmptyText("التعليق المباشر غير متاح لهذه المباراة")
             }
@@ -501,11 +506,15 @@ struct AcEventsTimeline: View {
             Text("مجريات المباراة")
                 .font(SabqType.metaEmphasis.font).foregroundStyle(SabqTheme.textPrimary)
                 .padding(.bottom, SabqLayout.space4)
-            ForEach(Array(sorted.enumerated()), id: \.element.id) { index, ev in
-                if index > 0 { AcRowDivider() }
-                Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
-                    .buttonStyle(.plain)
+            VStack(spacing: 0) {
+                ForEach(Array(sorted.enumerated()), id: \.element.id) { index, ev in
+                    if index > 0 { AcRowDivider() }
+                    Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
+                        .buttonStyle(.plain)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -743,7 +752,7 @@ struct AcPitch: View {
             Text(p.number.map { "\($0)" } ?? "•")
                 .font(SabqType.tag.font.monospacedDigit()).foregroundStyle(AcStyle.accent)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(SabqTheme.surface))
+                .background(Circle().fill(AcStyle.accent.opacity(0.12)))
                 .environment(\.layoutDirection, .leftToRight)
             Text(p.name)
                 .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textPrimary)
@@ -752,7 +761,7 @@ struct AcPitch: View {
         }
         .padding(.horizontal, SabqLayout.space8)
         .frame(minHeight: SabqLayout.touchTarget)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
         .contentShape(Rectangle())
     }
 
@@ -827,7 +836,11 @@ struct AcStatsView: View {
             if let w = facts?.weather { weatherCard(w) }
             if let f = facts, !f.absentees.isEmpty { absenteesView(f.absentees) }
             if !stats.isEmpty {
-                ForEach(stats) { statRow($0) }
+                VStack(spacing: SabqLayout.space16) {
+                    ForEach(stats) { statRow($0) }
+                }
+                .padding(SabqLayout.space16)
+                .sabqBlockSurface()
             }
             if loaded && nothing {
                 acEmptyText("الإحصائيات تظهر هنا أثناء المباراة")
@@ -1013,11 +1026,15 @@ struct AcRatingsView: View {
                     .buttonStyle(.plain)
                     .padding(.bottom, SabqLayout.space8)
                 }
-                ForEach(Array(detail.ratings.enumerated()), id: \.element.id) { index, p in
-                    if index > 0 { AcRowDivider() }
-                    Button { onOpenPlayer(p.id) } label: { playerRow(p) }
-                        .buttonStyle(.plain)
+                VStack(spacing: 0) {
+                    ForEach(Array(detail.ratings.enumerated()), id: \.element.id) { index, p in
+                        if index > 0 { AcRowDivider() }
+                        Button { onOpenPlayer(p.id) } label: { playerRow(p) }
+                            .buttonStyle(.plain)
+                    }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -1063,39 +1080,49 @@ struct AcPredictionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space16) {
-            if let ft {
-                VStack(spacing: SabqLayout.space12) {
-                    bar("فوز \(detail.fixture.home.name)", ft.home, AcStyle.accentFill)
-                    bar("التعادل", ft.draw, SabqTheme.textTertiary)
-                    bar("فوز \(detail.fixture.away.name)", ft.away, AcTheme.sky)
-                }
-            } else if loaded {
-                Text("لا تتوفر توقعات لهذه المباراة")
-                    .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
-                    .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space4)
-            }
-
-            if ft != nil {
-                Text("توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا")
-                    .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textTertiary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-
-            SabqSectionBand()
-            Text("سجل المواجهات").sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-            if detail.headToHead.isEmpty {
-                Text("أول مواجهة رسمية بين المنتخبين — التاريخ يبدأ من هنا")
-                    .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
-                    .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space8)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(detail.headToHead.enumerated()), id: \.element.id) { index, m in
-                        if index > 0 { AcRowDivider() }
-                        h2hRow(m)
+        VStack(alignment: .leading, spacing: SabqLayout.space24) {
+            if ft != nil || loaded {
+                // لوحة بيضاء واحدة: مسارات الأشرطة الهادئة داخلها تبقى مرئية
+                VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                    if let ft {
+                        VStack(spacing: SabqLayout.space12) {
+                            bar("فوز \(detail.fixture.home.name)", ft.home, AcStyle.accentFill)
+                            bar("التعادل", ft.draw, SabqTheme.textTertiary)
+                            bar("فوز \(detail.fixture.away.name)", ft.away, AcTheme.sky)
+                        }
+                    } else {
+                        Text("لا تتوفر توقعات لهذه المباراة")
+                            .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space4)
                     }
+
+                    if ft != nil {
+                        Text("توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا")
+                            .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textTertiary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+                .padding(SabqLayout.space16)
+                .sabqBlockSurface()
+            }
+
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                Text("سجل المواجهات").sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                if detail.headToHead.isEmpty {
+                    Text("أول مواجهة رسمية بين المنتخبين — التاريخ يبدأ من هنا")
+                        .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
+                        .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space8)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(detail.headToHead.enumerated()), id: \.element.id) { index, m in
+                            if index > 0 { AcRowDivider() }
+                            h2hRow(m)
+                        }
+                    }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }

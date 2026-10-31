@@ -1076,6 +1076,13 @@ export const articles = pgTable("articles", {
   index("idx_articles_status_published").on(table.status, table.publishedAt.desc()),
   index("idx_articles_category_status").on(table.categoryId, table.status),
   index("idx_articles_author_status").on(table.authorId, table.status),
+  // صفحة الكاتب (reporter_id OR author_id) مرتبة بالنشر — migrations/20261031_author_page_indexes.sql
+  index("idx_articles_reporter_published")
+    .on(table.reporterId, table.publishedAt.desc())
+    .where(sql`${table.status} = 'published'`),
+  index("idx_articles_author_published")
+    .on(table.authorId, table.publishedAt.desc())
+    .where(sql`${table.status} = 'published'`),
   // Mobile "my revisions" filters this rare state by either owner and sorts
   // by reviewedAt. Partial indexes avoid scanning the entire articles table.
   index("idx_articles_needs_changes_author_reviewed")

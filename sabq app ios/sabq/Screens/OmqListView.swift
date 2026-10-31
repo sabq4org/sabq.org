@@ -228,22 +228,21 @@ struct OmqDetailView: View {
         }
     }
 
-    /// قسم بلا صندوق: شريط فصل رمادي، ثم عنوان 20 ونص القراءة.
+    /// قسم في بلوك أبيض على الخلفية الرمادية: عنوان 20 ثم نص القراءة.
+    /// المسافة 24 بين الأقسام من الحاوية الأم بدل شريط الفصل.
     private func section(title: String, body: String) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space24) {
-            SabqSectionBand()
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            DiscoverySectionHeading(title: title)
 
-            VStack(alignment: .leading, spacing: SabqLayout.space12) {
-                DiscoverySectionHeading(title: title)
-
-                Text(body)
-                    .sabqText(SabqType.articleBody)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(body)
+                .sabqText(SabqType.articleBody)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqBlockSurface()
     }
 
     private func load() async {

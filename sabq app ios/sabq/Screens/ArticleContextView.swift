@@ -81,6 +81,9 @@ struct ArticleContextView: View {
                     .accessibilityLabel(timelineAccessibility(item))
                 }
             }
+            .padding(SabqLayout.cardInset)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sabqBlockSurface()
         }
     }
 
@@ -142,6 +145,8 @@ struct ArticleContextView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -163,6 +168,8 @@ struct ArticleContextView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -181,7 +188,7 @@ struct ArticleContextView: View {
                             .frame(minHeight: 32)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(SabqTheme.surfaceMuted)
+                                    .fill(SabqTheme.chipFill)
                             )
                             .frame(minHeight: SabqLayout.touchTarget)
                             .contentShape(Rectangle())
@@ -221,7 +228,7 @@ struct ArticleContextView: View {
     }
 
     private func relatedRow(title: String, meta: String, imageURL: String?, focalPoint: ImageFocalPoint?, tint: Color) -> some View {
-        // صف بلا بطاقة على الصفحة، والمصغّرة في طرف السطر كـ`CompactArticleRow`.
+        // صف داخل سطح القائمة الأبيض، والمصغّرة في طرف السطر كـ`CompactArticleRow`.
         // `tint` لم يعد يلوّن الخانة: الخانة الموحّدة لكل الصور.
         _ = tint
         return HStack(alignment: .top, spacing: SabqLayout.space12) {

@@ -215,7 +215,7 @@ struct SurveyView: View {
 
             HStack(spacing: SabqLayout.space12) {
                 ZStack {
-                    Circle().fill(SabqTheme.surfaceMuted)
+                    Circle().fill(accent.opacity(0.12))
                     Text(String(firstName.prefix(1)))
                         .font(SabqType.sectionHeading.font)
                         .foregroundStyle(SabqTheme.primary)
@@ -273,7 +273,7 @@ struct SurveyView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
         .accessibilityElement(children: .combine)
     }
 
@@ -322,7 +322,7 @@ struct SurveyView: View {
                     .foregroundStyle(SabqTheme.textSecondary)
                     .padding(.horizontal, SabqLayout.space8)
                     .padding(.vertical, SabqLayout.space4)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .background(SabqTheme.chipFill, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .padding(.bottom, SabqLayout.space12)
 
                 (Text(question.text) + Text(question.isRequired ? " *" : "").foregroundColor(SabqTheme.danger))
@@ -502,8 +502,12 @@ struct SurveyView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: SabqLayout.touchTarget)
                             .background(
-                                selectedValue == value ? SabqTheme.actionFill : SabqTheme.surfaceMuted,
+                                selectedValue == value ? SabqTheme.actionFill : SabqTheme.surface,
                                 in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .strokeBorder(selectedValue == value ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
                             )
                     }
                     .buttonStyle(.plain)
@@ -667,7 +671,7 @@ struct PendingSurveysCard: View {
                         .font(SabqFonts.app(size: 18, weight: .regular))
                         .foregroundStyle(SabqTheme.primary)
                         .frame(width: 40, height: 40)
-                        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: SabqLayout.space4) {
                         Text("استطلاع بانتظارك: \(invite.title)")
@@ -686,7 +690,7 @@ struct PendingSurveysCard: View {
                         .accessibilityHidden(true)
                 }
                 .padding(SabqLayout.space16)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .sabqBlockSurface()
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

@@ -70,7 +70,7 @@ struct LoyaltyHistoryView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
     }
 
     // MARK: Grouping
@@ -124,13 +124,17 @@ struct LoyaltyHistoryView: View {
                     .foregroundStyle(SabqTheme.success)
                     .environment(\.layoutDirection, .leftToRight)
             }
-            .padding(.bottom, SabqLayout.space4)
-            ForEach(Array(bucket.events.enumerated()), id: \.element.id) { index, event in
-                if index > 0 {
-                    Rectangle().fill(SabqTheme.separator).frame(height: 1)
+            .padding(.bottom, SabqLayout.space8)
+            VStack(spacing: 0) {
+                ForEach(Array(bucket.events.enumerated()), id: \.element.id) { index, event in
+                    if index > 0 {
+                        Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                    }
+                    eventRow(event)
                 }
-                eventRow(event)
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -263,9 +267,6 @@ struct LoyaltyHistoryView: View {
     }
 
     private func relativeTime(_ date: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ar")
-        f.unitsStyle = .full
-        return f.localizedString(for: date, relativeTo: Date())
+        SabqFormatters.arabicRelative(date)
     }
 }

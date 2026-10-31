@@ -248,7 +248,7 @@ struct ArticleSubmissionView: View {
         .padding(.horizontal, SabqLayout.space16)
         .padding(.top, SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
     }
 
     private var dayGateSheet: some View {
@@ -520,7 +520,7 @@ struct ArticleSubmissionView: View {
                         }
                     } label: {
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .fill(SabqTheme.surfaceMuted)
+                            .fill(SabqTheme.surface)
                             .frame(width: 100, height: 100)
                             .overlay {
                                 Image(systemName: "plus")
@@ -732,6 +732,8 @@ struct ArticleSubmissionView: View {
                     desc: "سيصلك بريد فور الموافقة على النشر أو الجدولة"
                 )
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -809,10 +811,7 @@ struct ArticleSubmissionView: View {
         }
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 }
 

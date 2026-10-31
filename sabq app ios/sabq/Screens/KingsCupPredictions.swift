@@ -25,7 +25,7 @@ struct KcPredictCTA: View {
                     .font(SabqType.sectionHeading.font)
                     .foregroundStyle(KcTheme.accent)
                     .frame(width: 44, height: 44)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(KcTheme.accent.opacity(0.12)))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -355,11 +355,15 @@ struct KcPredictionsView: View {
                     .padding(.vertical, SabqLayout.space24)
             }
 
-            VStack(spacing: 0) {
-                ForEach(Array(openContests.enumerated()), id: \.element.id) { index, contest in
-                    if index > 0 { KcRowSeparator() }
-                    openContestCard(contest)
+            if !openContests.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(openContests.enumerated()), id: \.element.id) { index, contest in
+                        if index > 0 { KcRowSeparator() }
+                        openContestCard(contest)
+                    }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
 
             if !settledContests.isEmpty {
@@ -370,6 +374,8 @@ struct KcPredictionsView: View {
                         settledContestRow(contest)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -583,7 +589,7 @@ struct KcPredictionsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space8)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
     }
 
     @ViewBuilder
@@ -657,6 +663,8 @@ struct KcPredictionsView: View {
                         ledgerRow(item)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -761,6 +769,8 @@ struct KcPredictionsView: View {
                         leaderRow(entry)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -827,6 +837,8 @@ struct KcPredictionsView: View {
                         text: "رصيدك التراكمي يحدد مركزك بين المتنافسين في تبويب المتصدّرين")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(SabqLayout.space16)
+            .sabqBlockSurface()
 
             HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "person.crop.circle.badge.checkmark")

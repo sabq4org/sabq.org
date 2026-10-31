@@ -189,13 +189,15 @@ private struct WCPredTodayTab: View {
             } else if matches.isEmpty {
                 emptyText("لا توجد مباريات قابلة للتوقّع اليوم أو غدًا — تابع الجدول لاحقًا")
             } else {
-                // بطاقات غير مؤطّرة تفصلها خطوط رفيعة
+                // بطاقات على سطح واحد تفصلها خطوط رفيعة
                 VStack(spacing: 0) {
                     ForEach(Array(matches.enumerated()), id: \.element.id) { index, m in
                         if index > 0 { WCRowSeparator() }
                         card(m)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
         .task { await load() }
@@ -296,7 +298,7 @@ private struct WCPredTodayTab: View {
                     .font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.danger)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space8).padding(.horizontal, SabqLayout.space8)
-                    .wcQuietBlock()
+                    .sabqBlockSurface(SabqTheme.surfaceMuted)
             }
 
             if dirty {
@@ -388,7 +390,7 @@ private struct WCPredTodayTab: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .wcQuietBlock()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     private func submit(_ m: WCPredictableMatch) async {
@@ -471,12 +473,12 @@ func statusBadge(_ status: String, points: Int) -> some View {
         Text("لم تُصب")
             .sabqText(SabqType.tag).foregroundStyle(SabqTheme.danger)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surfaceMuted))
+            .background(Capsule().fill(SabqTheme.chipFill))
     default:
         Text("بانتظار النتيجة")
             .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(Capsule().fill(SabqTheme.surfaceMuted))
+            .background(Capsule().fill(SabqTheme.chipFill))
     }
 }
 
@@ -682,12 +684,13 @@ private struct WCPredTournamentTab: View {
                                 .padding(.vertical, SabqLayout.space8).padding(.horizontal, SabqLayout.space4)
                                 .background(
                                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                        .fill(SabqTheme.surfaceMuted)
+                                        .fill(SabqTheme.surface)
                                 )
-                                // المختار يُعلَّم بحدّ بلون الهوية لا بتعبئة ملوّنة
+                                // المختار يُعلَّم بحدّ بلون الهوية لا بتعبئة ملوّنة؛ الباقي بحدّ رفيع
                                 .overlay(
                                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                        .stroke(selected ? WCTheme.royal : Color.clear, lineWidth: 2)
+                                        .strokeBorder(selected ? WCTheme.royal : SabqTheme.separator,
+                                                      lineWidth: selected ? 2 : 0.75)
                                 )
                                 .opacity(t.eliminated ? 0.45 : 1)
                                 .saturation(t.eliminated ? 0 : 1)
@@ -765,7 +768,7 @@ private struct WCPredTournamentTab: View {
                     .padding(.vertical, SabqLayout.space8)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .fill(active ? WCTheme.royal : (passed ? SabqTheme.surfaceStrong : SabqTheme.surface))
+                            .fill(active ? WCTheme.royal : (passed ? SabqTheme.surfaceStrong : SabqTheme.surfaceMuted))
                     )
                 }
                 VStack(spacing: 1) {
@@ -777,7 +780,7 @@ private struct WCPredTournamentTab: View {
                 .padding(.vertical, SabqLayout.space8)
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surface)
+                        .fill(SabqTheme.surfaceMuted)
                 )
             }
         }
@@ -883,11 +886,12 @@ private struct WCPredTournamentTab: View {
                                 .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
                                 .background(
                                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                        .fill(SabqTheme.surfaceMuted)
+                                        .fill(SabqTheme.surface)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                        .stroke(selected ? WCTheme.royal : Color.clear, lineWidth: 2)
+                                        .strokeBorder(selected ? WCTheme.royal : SabqTheme.separator,
+                                                      lineWidth: selected ? 2 : 0.75)
                                 )
                                 .opacity(s.eliminated ? 0.45 : 1)
                                 .saturation(s.eliminated ? 0 : 1)
@@ -1064,6 +1068,8 @@ private struct WCPredMineTab: View {
                         row(item)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
         .task(id: authStore.isLoggedIn) { if authStore.isLoggedIn { await load() } }
@@ -1290,7 +1296,7 @@ struct WCWinCelebration: View {
             celebCrest(name: item.awayTeamName, logo: item.awayTeamLogo)
         }
         .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
-        .wcQuietBlock()
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     private func celebCrest(name: String?, logo url: String?) -> some View {
@@ -1389,10 +1395,14 @@ private struct WCPredLeaderboardTab: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, SabqLayout.space8)
                 }
-                ForEach(Array(leaders.enumerated()), id: \.element.id) { index, l in
-                    if index > 0 { WCRowSeparator() }
-                    row(l)
+                VStack(spacing: 0) {
+                    ForEach(Array(leaders.enumerated()), id: \.element.id) { index, l in
+                        if index > 0 { WCRowSeparator() }
+                        row(l)
+                    }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
                 if let viewer, !leaders.contains(where: { $0.userId == viewer.userId }) {
                     viewerRow(viewer)
                 }
@@ -1452,12 +1462,11 @@ private struct WCPredLeaderboardTab: View {
     /// صف «أنت» المثبَّت — رتبة صاحب الجلسة الحقيقية وهو خارج الصفحة المعروضة.
     private func viewerRow(_ v: WCPredViewer) -> some View {
         VStack(spacing: SabqLayout.space8) {
-            WCRowSeparator()
             HStack(spacing: SabqLayout.space12) {
                 Text("\(v.rank)")
                     .font(SabqFonts.app(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(SabqTheme.warning)
                     .frame(width: 32, height: 32)
-                    .background(Circle().fill(SabqTheme.surface))
+                    .background(Circle().fill(SabqTheme.warning.opacity(0.12)))
                     .environment(\.layoutDirection, .leftToRight)
                 Image(systemName: "person.crop.circle.fill")
                     .font(.system(size: 30)).foregroundStyle(SabqTheme.warning)
@@ -1478,6 +1487,7 @@ private struct WCPredLeaderboardTab: View {
             .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space12)
             .wcQuietBlock()
         }
+        .padding(.top, SabqLayout.space12)
     }
 
     private var loadMoreButton: some View {

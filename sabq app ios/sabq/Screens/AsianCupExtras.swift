@@ -59,6 +59,8 @@ struct AcRacesSection: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         case .assists:
             if assists.isEmpty {
@@ -76,6 +78,8 @@ struct AcRacesSection: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         case .cards:
             if cards.isEmpty {
@@ -98,6 +102,8 @@ struct AcRacesSection: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -187,14 +193,11 @@ struct AcTeamSheet: View {
                         followBar
                         quickFacts
                         if let group = profile?.group, !group.rows.isEmpty {
-                            SabqSectionBand()
                             groupTable(group)
                         }
                         coachCard
                         seasonStatsSection
-                        SabqSectionBand()
                         matchesSection
-                        SabqSectionBand()
                         squadSection
                     }
                     .padding(.horizontal, SabqLayout.pageMargin)
@@ -402,10 +405,14 @@ struct AcTeamSheet: View {
                 .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             }
             .padding(.bottom, SabqLayout.space8)
-            ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
-                if index > 0 { AcRowDivider() }
-                groupRow(row)
+            VStack(spacing: 0) {
+                ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 { AcRowDivider() }
+                    groupRow(row)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -457,7 +464,7 @@ struct AcTeamSheet: View {
                 Image(systemName: "person.crop.square.fill")
                     .font(SabqType.sectionHeading.font).foregroundStyle(SabqTheme.textTertiary)
                     .frame(width: 44, height: 44)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.textTertiary.opacity(0.12)))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("المدرّب").font(SabqType.tag.font).foregroundStyle(AcStyle.accent)
@@ -514,6 +521,7 @@ struct AcTeamSheet: View {
                     Text("(\(fixtures.count))").font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
                 }
                 .padding(.bottom, SabqLayout.space4)
+                VStack(spacing: 0) {
                 ForEach(Array(fixtures.enumerated()), id: \.element.id) { index, fx in
                     if index > 0 { AcRowDivider() }
                     Button { route = .match(fx.id) } label: {
@@ -538,6 +546,9 @@ struct AcTeamSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
+                }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -570,10 +581,14 @@ struct AcTeamSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(label).font(SabqType.metaEmphasis.font).foregroundStyle(AcStyle.accent)
                 .padding(.bottom, SabqLayout.space4)
-            ForEach(Array(players.enumerated()), id: \.element.id) { index, p in
-                if index > 0 { AcRowDivider() }
-                playerRow(p)
+            VStack(spacing: 0) {
+                ForEach(Array(players.enumerated()), id: \.element.id) { index, p in
+                    if index > 0 { AcRowDivider() }
+                    playerRow(p)
+                }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 

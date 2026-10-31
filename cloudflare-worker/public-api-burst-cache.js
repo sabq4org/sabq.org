@@ -22,6 +22,7 @@ export const NEW_PUBLIC_API_CACHE_ROUTES = [
   { match: (path) => path === "/api/v1/articles", ttl: 15 },
   { match: (path) => path === "/api/v1/sections", ttl: 300 },
   { match: (path) => path === "/api/v1/trending", ttl: 60 },
+  { match: (path) => path === "/api/v1/authors/by-name", ttl: 120 },
   { match: (path) => path === "/api/homepage", ttl: 60 },
   { match: (path) => path === "/api/categories", ttl: 60 },
   { match: (path) => path === "/api/sports/competitions", ttl: 300 },

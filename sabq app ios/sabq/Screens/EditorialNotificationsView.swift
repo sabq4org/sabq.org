@@ -102,48 +102,55 @@ struct EditorialNotificationsView: View {
                 emptyState
             } else {
                 // List (with .swipeActions) instead of LazyVStack so each
-                // row gets a native swipe-to-delete handle. We aggressively
-                // strip List's default chrome to keep the same visual rhythm
-                // (thin separators, no inset background, custom row padding).
+                // row gets a native swipe-to-delete handle. The rows sit in
+                // one white inset card on the gray page; the two buttons
+                // stay outside it on clear rows.
                 List {
                     if notificationsStore.unreadCount > 0 {
-                        markAllReadButton
+                        Section {
+                            markAllReadButton
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets())
+                        }
+                    }
+
+                    Section {
+                        ForEach(items) { item in
+                            notificationRow(item)
+                                .listRowBackground(SabqTheme.surface)
+                                .listRowSeparator(.visible)
+                                .listRowSeparatorTint(SabqTheme.separator)
+                                .listRowInsets(EdgeInsets(top: 0, leading: SabqLayout.space16, bottom: 0, trailing: SabqLayout.space16))
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        // The optimistic remove MUST happen
+                                        // synchronously inside this action so
+                                        // SwiftUI's swipe animation has an empty
+                                        // slot to settle into. With the previous
+                                        // `Task { await deleteNotification(item) }`
+                                        // wrapper, the items array wasn't mutated
+                                        // until the API call returned — by then
+                                        // SwiftUI had already snapped the row
+                                        // back into place. User-visible bug: every
+                                        // delete appeared to "come back".
+                                        deleteNotification(item)
+                                    } label: {
+                                        Label("حذف", systemImage: "trash.fill")
+                                    }
+                                }
+                        }
+                    }
+
+                    Section {
+                        clearAllFooter
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 0, leading: SabqLayout.pageMargin, bottom: SabqLayout.space8, trailing: SabqLayout.pageMargin))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: SabqLayout.space40, trailing: 0))
                     }
-
-                    ForEach(items) { item in
-                        notificationRow(item)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.visible)
-                            .listRowSeparatorTint(SabqTheme.separator)
-                            .listRowInsets(EdgeInsets(top: 0, leading: SabqLayout.pageMargin, bottom: 0, trailing: SabqLayout.pageMargin))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    // The optimistic remove MUST happen
-                                    // synchronously inside this action so
-                                    // SwiftUI's swipe animation has an empty
-                                    // slot to settle into. With the previous
-                                    // `Task { await deleteNotification(item) }`
-                                    // wrapper, the items array wasn't mutated
-                                    // until the API call returned — by then
-                                    // SwiftUI had already snapped the row
-                                    // back into place. User-visible bug: every
-                                    // delete appeared to "come back".
-                                    deleteNotification(item)
-                                } label: {
-                                    Label("حذف", systemImage: "trash.fill")
-                                }
-                            }
-                    }
-
-                    clearAllFooter
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: SabqLayout.space16, leading: SabqLayout.pageMargin, bottom: SabqLayout.space40, trailing: SabqLayout.pageMargin))
                 }
-                .listStyle(.plain)
+                .listStyle(.insetGrouped)
+                .listSectionSpacing(SabqLayout.space16)
                 .scrollContentBackground(.hidden)
                 .background(SabqTheme.background)
             }
@@ -239,7 +246,7 @@ struct EditorialNotificationsView: View {
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.chipFill)
             )
         }
         .buttonStyle(.plain)
@@ -336,10 +343,7 @@ struct EditorialNotificationsView: View {
     // the editorial team's standard across the rest of the product.
     private func relativeDate(from iso: String) -> String {
         guard let date = SabqFormatters.parseISO8601(iso) else { return iso }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "ar-u-nu-latn")
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 
     @MainActor
@@ -521,7 +525,7 @@ struct EditorialNotificationDetailView: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.chipFill)
             )
             Text(item.title)
                 .sabqText(SabqType.leadTitle)
@@ -733,10 +737,7 @@ struct EditorialNotificationDetailView: View {
         .foregroundStyle(SabqTheme.success)
         .padding(.horizontal, SabqLayout.space16)
         .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     private func actionButton(_ action: ActionDescriptor) -> some View {
@@ -762,10 +763,7 @@ struct EditorialNotificationDetailView: View {
 
     private func relativeArabic(_ iso: String) -> String {
         guard let date = SabqFormatters.parseISO8601(iso) else { return iso }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "ar-u-nu-latn")
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 }
 
@@ -820,6 +818,8 @@ struct NotificationPreferencesView: View {
                             isOn: preferenceBinding(\.rejectedEnabled)
                         )
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
 
                 if let preferenceError {
                     VStack(alignment: .leading, spacing: SabqLayout.space8) {

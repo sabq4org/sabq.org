@@ -31,20 +31,28 @@ struct HajjBlockView: View {
 
     @ViewBuilder
     private func content(block: APIHajjBlockResponse) -> some View {
-        // قسم غير مؤطر كبقية أقسام الرئيسية: الرأس الموحّد ثم الأيام ثم صفوف بفواصل.
+        // كبقية أقسام الرئيسية: الرأس الموحّد على الصفحة، ثم الأيام والصفوف على سطح أبيض.
         HomeSectionCard(title: block.title ?? "صدى الحج", context: updatedLabel(block)) {
             EmptyView()
         } content: {
-            if let subtitle = block.subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .sabqText(SabqType.meta)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .lineLimit(2)
-                    .padding(.bottom, SabqLayout.space12)
-            }
-            if let phase = block.hajjPhase {
-                dayStrip(phase: phase, hajjDay: block.hajjDay, daysToArafat: block.daysToArafat)
-                    .padding(.bottom, SabqLayout.space4)
+            let subtitle = block.subtitle.flatMap { $0.isEmpty ? nil : $0 }
+            if subtitle != nil || block.hajjPhase != nil {
+                // حشوة علوية كي لا يلتصق السطر الأول بحافة السطح الأبيض.
+                VStack(alignment: .leading, spacing: 0) {
+                    if let subtitle {
+                        Text(subtitle)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .lineLimit(2)
+                            .padding(.bottom, SabqLayout.space12)
+                    }
+                    if let phase = block.hajjPhase {
+                        dayStrip(phase: phase, hajjDay: block.hajjDay, daysToArafat: block.daysToArafat)
+                            .padding(.bottom, SabqLayout.space4)
+                    }
+                }
+                .padding(.top, SabqLayout.space12)
+                .padding(.bottom, block.articles?.isEmpty ?? true ? SabqLayout.space8 : 0)
             }
             if let articles = block.articles, !articles.isEmpty {
                 ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
@@ -175,10 +183,7 @@ struct HajjBlockView: View {
     }
 
     private func relativeTime(_ date: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ar")
-        f.unitsStyle = .full
-        return f.localizedString(for: date, relativeTo: Date())
+        SabqFormatters.arabicRelative(date)
     }
 }
 

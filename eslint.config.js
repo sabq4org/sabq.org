@@ -178,8 +178,11 @@ export default tseslint.config(
     // fresh-window caching for /homepage, /news/paginated, /articles/:id and
     // cached comments/likes; the comment-tree query moved to
     // services/mobileCommentTreeService.ts (ADR-001). File is now 10058 lines.
+    // RATCHETED DOWN 2026-10-31 (author-page slowness): the /authors/by-name
+    // queries + two-level cache moved to services/mobileAuthorPageService.ts
+    // (ADR-001). File is now 9913 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10058 }] },
+    rules: { "max-lines": ["error", { max: 9913 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

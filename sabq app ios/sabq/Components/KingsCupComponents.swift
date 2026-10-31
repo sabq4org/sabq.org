@@ -3,8 +3,8 @@ import SwiftUI
 // MARK: - كأس الملك — مكوّنات مشتركة
 //
 // هوية كأس الملك (أخضر زمردي + ذهبي) تبقى لونَ إبراز فقط: الترويسات والتبويب
-// النشط والشارات. الصفحة نفسها بنموذج سبق: خلفية بيضاء/داكنة، قوائم بلا صناديق
-// بفواصل رفيعة، زوايا 8/12/كبسولة، وسلّم SabqType. لا تدرّجات ولا ظلال.
+// النشط والشارات. الصفحة نفسها بنموذج سبق: خلفية رمادية، بلوكات وقوائم على سطح
+// أبيض بحدّ رفيع وفواصل رفيعة، زوايا 8/12/كبسولة، وسلّم SabqType. لا تدرّجات ولا ظلال.
 
 /// أدوار ألوان كأس الملك فوق رموز سبق.
 enum KcTheme {
@@ -61,7 +61,8 @@ struct KcChip: View {
             .foregroundStyle(selected ? SabqTheme.onAction : SabqTheme.textPrimary)
             .padding(.horizontal, SabqLayout.space16)
             .frame(maxWidth: fillWidth ? .infinity : nil, minHeight: 36)
-            .background(Capsule().fill(selected ? KcTheme.accentFill : SabqTheme.surfaceMuted))
+            .background(Capsule().fill(selected ? KcTheme.accentFill : SabqTheme.surface))
+            .overlay(Capsule().strokeBorder(selected ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
             .frame(minHeight: SabqLayout.touchTarget)
             .contentShape(Rectangle())
         }
@@ -70,7 +71,7 @@ struct KcChip: View {
     }
 }
 
-/// بلاطة رقم/وصف هادئة.
+/// بلاطة رقم/وصف هادئة — تُوضع داخل بطاقة بيضاء (تعبئتها الهادئة لا تظهر على الصفحة الرمادية).
 struct KcFactTile: View {
     let value: String
     let label: String
@@ -214,8 +215,8 @@ struct KcCountdownChips: View {
         }
         .frame(minWidth: 56)
         .padding(.vertical, SabqLayout.space8)
-        // يجلس داخل بلوك الهيرو الهادئ، فيأخذ سطح الصفحة ليبقى ظاهرًا.
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
+        // يجلس داخل بطاقة الهيرو البيضاء، فيأخذ التعبئة الهادئة ليبقى ظاهرًا.
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 }
 

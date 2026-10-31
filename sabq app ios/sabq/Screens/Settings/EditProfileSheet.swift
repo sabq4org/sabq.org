@@ -44,10 +44,7 @@ struct EditProfileSheet: View {
                         .padding(.horizontal, SabqLayout.space12)
                         .padding(.vertical, SabqLayout.space12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
-                        )
+                        .sabqBlockSurface()
                     }
 
                     VStack(spacing: SabqLayout.space16) {
@@ -62,14 +59,18 @@ struct EditProfileSheet: View {
                             editField(label: "اسم العائلة", placeholder: "أدخل اسم العائلة", text: $lastName)
                         }
                         if firstNameLocked || lastNameLocked {
-                            HStack(spacing: SabqLayout.space8) {
-                                Image(systemName: "info.circle.fill")
-                                    .sabqText(SabqType.tag)
+                            // ملاحظة هادئة بلا سطح: نص ثانوي تحت حقلي الاسم.
+                            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+                                Image(systemName: "info.circle")
+                                    .sabqText(SabqType.meta)
                                     .foregroundStyle(SabqTheme.textTertiary)
+                                    .accessibilityHidden(true)
                                 Text("لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات")
-                                    .sabqText(SabqType.tag)
-                                    .foregroundStyle(SabqTheme.textTertiary)
+                                    .sabqText(SabqType.meta)
+                                    .foregroundStyle(SabqTheme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
+                            .padding(.horizontal, SabqLayout.space4)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         editField(label: "المدينة", placeholder: "أدخل مدينتك", text: $city)
@@ -87,18 +88,23 @@ struct EditProfileSheet: View {
                                 .sabqText(SabqType.metaEmphasis)
                                 .foregroundStyle(SabqTheme.textPrimary)
 
+                            // نفس سطح الحقول: أبيض بحدّ `outline`؛ خلفية TextEditor
+                            // الافتراضية مخفية حتى لا تظهر داكنة في الوضع الليلي.
                             TextEditor(text: $bio)
                                 .sabqText(SabqType.excerpt)
                                 .foregroundStyle(SabqTheme.textPrimary)
-                                .frame(minHeight: 80)
-                                .padding(SabqLayout.space12)
+                                .scrollContentBackground(.hidden)
+                                .frame(minHeight: 96)
+                                .padding(.horizontal, SabqLayout.space12)
+                                .padding(.vertical, SabqLayout.space8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                    RoundedRectangle(cornerRadius: SabqTheme.buttonRadius)
                                         .fill(SabqTheme.surface)
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                    RoundedRectangle(cornerRadius: SabqTheme.buttonRadius)
                                         .stroke(SabqTheme.outline, lineWidth: 1)
+                                        .allowsHitTesting(false)
                                 )
                                 .overlay(alignment: .topLeading) {
                                     if bio.isEmpty {
@@ -106,7 +112,7 @@ struct EditProfileSheet: View {
                                             .sabqText(SabqType.excerpt)
                                             .foregroundStyle(SabqTheme.textTertiary)
                                             .padding(.horizontal, SabqLayout.space16)
-                                            .padding(.vertical, SabqLayout.space24)
+                                            .padding(.vertical, SabqLayout.space16)
                                             .allowsHitTesting(false)
                                     }
                                 }
@@ -124,10 +130,7 @@ struct EditProfileSheet: View {
                         .padding(.horizontal, SabqLayout.space12)
                         .padding(.vertical, SabqLayout.space12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
-                        )
+                        .sabqBlockSurface()
                     }
 
                     Button {
@@ -283,10 +286,7 @@ struct EditProfileSheet: View {
                 .padding(.horizontal, SabqLayout.space12)
                 .padding(.vertical, SabqLayout.space8)
                 .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.surfaceMuted)
-                )
+                .sabqBlockSurface()
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -301,7 +301,8 @@ struct EditProfileSheet: View {
 
     private var avatarPlaceholder: some View {
         Circle()
-            .fill(SabqTheme.surfaceMuted)
+            .fill(SabqTheme.surface)
+            .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
             .frame(width: 90, height: 90)
             .overlay {
                 Text(String((authStore.currentUser?.displayName ?? "م").prefix(1)))
@@ -329,12 +330,11 @@ struct EditProfileSheet: View {
                 .sabqText(SabqType.metaEmphasis)
                 .foregroundStyle(SabqTheme.textPrimary)
 
-            Picker("الجنس", selection: $gender) {
-                Text("غير محدد").tag("")
-                Text("ذكر").tag("male")
-                Text("أنثى").tag("female")
-            }
-            .modifier(SabqAdaptivePickerStyle())
+            SabqSegmentedPicker(
+                "الجنس",
+                selection: $gender,
+                options: [("", "غير محدد"), ("male", "ذكر"), ("female", "أنثى")]
+            )
         }
     }
 
@@ -344,26 +344,27 @@ struct EditProfileSheet: View {
                 .sabqText(SabqType.metaEmphasis)
                 .foregroundStyle(SabqTheme.textPrimary)
 
+            // نفس سطح الحقل القابل للتعديل (أبيض بحدّ) حتى لا يختفي على الورقة
+            // الرمادية؛ القيمة بلون ثانوي مع القفل تكفي لتقرأ «للقراءة فقط».
             HStack(spacing: SabqLayout.space8) {
                 Image(systemName: icon)
                     .sabqText(SabqType.meta)
                     .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
                 Text(value)
-                    .sabqText(SabqType.excerpt)
+                    .font(SabqType.rowTitle.font)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
                 Image(systemName: "lock.fill")
-                    .sabqText(SabqType.tag)
+                    .sabqText(SabqType.meta)
                     .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, SabqLayout.space16)
-            .padding(.vertical, SabqLayout.space12)
-            .background(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
-            )
+            .modifier(SabqInputSurface())
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("غير قابل للتعديل")
         }
     }
 }

@@ -624,7 +624,7 @@ struct AdminArticleEditorView: View {
         }
         .foregroundStyle(SabqTheme.primary)
         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.primary.opacity(0.12)))
     }
 
     private var basicSection: some View {
@@ -851,14 +851,19 @@ struct AdminArticleEditorView: View {
                         Button { vm.removeKeyword(kw) } label: {
                             Image(systemName: "xmark")
                                 .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .frame(width: 24, height: 24)
+                                .frame(width: 28, height: SabqLayout.touchTarget)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
                     .foregroundStyle(SabqTheme.textPrimary)
-                    .padding(.leading, SabqLayout.space8).padding(.trailing, SabqLayout.space4).padding(.vertical, SabqLayout.space4)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+                    .padding(.leading, SabqLayout.space8).padding(.trailing, SabqLayout.space4)
+                    // مساحة لمس زر الحذف 44 والشريحة المرئية أقصر منها.
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                            .fill(SabqTheme.chipFill)
+                            .padding(.vertical, 6)
+                    )
                 }
             }
             HStack(spacing: SabqLayout.space8) {
@@ -951,25 +956,9 @@ struct AdminArticleEditorView: View {
     }
 
     private var errorState: some View {
-        VStack(spacing: SabqLayout.space16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.textTertiary)
-                .accessibilityHidden(true)
-            Text(vm.error ?? "تعذّر تحميل الخبر")
-                .sabqText(SabqType.excerpt)
-                .foregroundStyle(SabqTheme.textSecondary)
-            Button { Task { await vm.load() } } label: {
-                Text("إعادة المحاولة")
-                    .sabqText(SabqType.button)
-                    .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, SabqLayout.space24)
-                    .frame(minHeight: SabqLayout.controlHeight)
-                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.actionFill))
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, minHeight: 320)
+        ErrorStateView(message: vm.error ?? "تعذّر تحميل الخبر") { Task { await vm.load() } }
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .frame(maxWidth: .infinity, minHeight: 320)
     }
 
     // MARK: Building blocks
@@ -1093,7 +1082,7 @@ struct SabqEditorToolbar: View {
             }
             .padding(SabqLayout.space4)
         }
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
     }
 
     private var divider: some View {
@@ -1216,6 +1205,8 @@ struct AdminProofIssuesSheet: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                         .padding(.horizontal, SabqLayout.pageMargin)
                         .padding(.vertical, SabqLayout.space8)
                     }
@@ -1298,6 +1289,8 @@ struct AdminUserPickerSheet: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
                         .padding(.horizontal, SabqLayout.pageMargin)
                         .padding(.bottom, SabqLayout.space24)
                     }
@@ -1379,11 +1372,11 @@ struct AdminPublishingOptions: View {
             if !vm.isOpinion {
                 VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     fieldLabel("نوع الخبر")
-                    Picker("", selection: $vm.newsType) {
-                        Text("عادي").tag("regular")
-                        Text("عاجل").tag("breaking")
-                    }
-                    .pickerStyle(.segmented)
+                    SabqSegmentedPicker(
+                        "نوع الخبر",
+                        selection: $vm.newsType,
+                        options: [("regular", "عادي"), ("breaking", "عاجل")]
+                    )
                 }
             }
             VStack(spacing: 0) {
@@ -1396,6 +1389,8 @@ struct AdminPublishingOptions: View {
                 Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
                     .frame(minHeight: SabqLayout.controlHeight)
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
             .font(SabqType.excerpt.font)
             .foregroundStyle(SabqTheme.textPrimary)
             .tint(SabqTheme.actionFill)
@@ -1436,7 +1431,7 @@ struct AdminPublishingOptions: View {
         .padding(.leading, SabqLayout.space12)
         .padding(.vertical, SabqLayout.space4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .sabqBlockSurface()
     }
 
 }

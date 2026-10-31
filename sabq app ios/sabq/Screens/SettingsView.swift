@@ -834,12 +834,12 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 settingLabel(title: "وضع التصفح", subtitle: lite.browsingMode.arabicSubtitle)
 
-                Picker("وضع التصفح", selection: Bindable(lite).browsingMode) {
-                    ForEach(SabqBrowsingMode.allCases) { mode in
-                        Text(mode.arabicLabel).tag(mode)
-                    }
-                }
-                .modifier(SabqAdaptivePickerStyle())
+                SabqSegmentedPicker(
+                    "وضع التصفح",
+                    selection: Bindable(lite).browsingMode,
+                    options: SabqBrowsingMode.allCases.map { ($0, $0.arabicLabel) },
+                    onSurface: true
+                )
             }
             .padding(.vertical, SabqLayout.space12)
         }
@@ -887,12 +887,12 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 settingLabel(title: "المظهر", subtitle: "اختر مظهر التطبيق أو اتبع إعداد الجهاز")
 
-                Picker("المظهر", selection: $appearanceRaw) {
-                    ForEach(AppAppearance.allCases) { mode in
-                        Text(mode.arabicLabel).tag(mode.rawValue)
-                    }
-                }
-                .modifier(SabqAdaptivePickerStyle())
+                SabqSegmentedPicker(
+                    "المظهر",
+                    selection: $appearanceRaw,
+                    options: AppAppearance.allCases.map { ($0.rawValue, $0.arabicLabel) },
+                    onSurface: true
+                )
             }
             .padding(.vertical, SabqLayout.space12)
 
@@ -901,11 +901,12 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 settingLabel(title: "نمط بطاقات الأخبار", subtitle: "اختر شكل عرض الأخبار في الواجهة")
 
-                Picker("نمط البطاقة", selection: $cardStyleRaw) {
-                    Text("موسّع").tag("spacious")
-                    Text("كلاسيكي").tag("classic")
-                }
-                .modifier(SabqAdaptivePickerStyle())
+                SabqSegmentedPicker(
+                    "نمط البطاقة",
+                    selection: $cardStyleRaw,
+                    options: [("spacious", "موسّع"), ("classic", "كلاسيكي")],
+                    onSurface: true
+                )
             }
             .padding(.vertical, SabqLayout.space12)
 
@@ -954,7 +955,28 @@ struct SettingsView: View {
     // MARK: - Subscription
 
     private var subscriptionSection: some View {
-        SettingsSection(title: "اشتراكات", subtitle: "ابقَ على اطلاع دائم") {
+        SettingsSection(title: "اهتماماتك", subtitle: "ما نرشّحه لك وما يصلك منّا") {
+            // مدخل دائم لتعديل الاهتمامات (بلاغ المالك 2026-10-31): كانت ورقة
+            // الاهتمامات لا تُفتح إلا من بانر «أكمل بياناتك» حين تكون فارغة،
+            // فمن اختار اهتماماته مرة لا يجد طريقًا لتعديلها.
+            if authStore.isLoggedIn {
+                Button {
+                    if interestsCategories.isEmpty {
+                        interestsCategories = InterestsCategoryCache.shared.get()
+                    }
+                    showInterestsPicker = true
+                } label: {
+                    settingsRow(
+                        title: "اهتماماتي",
+                        subtitle: interestsSubtitle,
+                        icon: "square.grid.2x2"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                SettingsRowDivider()
+            }
+
             Button { showNewsletter = true } label: {
                 settingsRow(
                     title: "النشرة البريدية",
@@ -979,6 +1001,17 @@ struct SettingsView: View {
         }
     }
 
+    private var interestsSubtitle: String {
+        let count = authStore.currentUser?.interests.count ?? 0
+        switch count {
+        case 0: return "اختر الأقسام التي تهمّك لنرشّح لك أخبارها"
+        case 1: return "تتابع قسمًا واحدًا · اضغط للتعديل"
+        case 2: return "تتابع قسمين · اضغط للتعديل"
+        case 3...10: return "تتابع \(count) أقسام · اضغط للتعديل"
+        default: return "تتابع \(count) قسمًا · اضغط للتعديل"
+        }
+    }
+
     // MARK: - About
 
     private var aboutSection: some View {
@@ -991,7 +1024,7 @@ struct SettingsView: View {
                 .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, SabqLayout.space8)
+                .padding(.vertical, SabqLayout.space16)
 
             SettingsRowDivider()
 

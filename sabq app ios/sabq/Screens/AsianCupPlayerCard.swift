@@ -89,7 +89,7 @@ struct AcPlayerSheet: View {
                         }
                         .foregroundStyle(SabqTheme.textPrimary)
                         .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-                        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
                     }
                     if p.injury != nil {
                         chip("مصاب حاليًا", fg: SabqTheme.warning)
@@ -115,7 +115,7 @@ struct AcPlayerSheet: View {
         Text(text)
             .font(SabqType.tag.font).foregroundStyle(fg)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
     }
 
     @ViewBuilder private func factTiles(_ p: AcPlayerCard) -> some View {
@@ -165,6 +165,7 @@ struct AcPlayerSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionTitle(icon: "clock.arrow.circlepath", text: "المسيرة")
                 .padding(.bottom, SabqLayout.space8)
+            VStack(spacing: 0) {
             ForEach(Array(career.enumerated()), id: \.element.id) { index, stop in
                 if index > 0 { AcRowDivider() }
                 HStack(spacing: SabqLayout.space12) {
@@ -185,6 +186,9 @@ struct AcPlayerSheet: View {
                 }
                 .padding(.vertical, SabqLayout.space12)
             }
+            }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -198,6 +202,7 @@ struct AcPlayerSheet: View {
                 }
             }
             .padding(.bottom, SabqLayout.space8)
+            VStack(spacing: 0) {
             ForEach(Array(trophies.enumerated()), id: \.element.id) { index, trophy in
                 if index > 0 { AcRowDivider() }
                 HStack(spacing: SabqLayout.space12) {
@@ -226,6 +231,9 @@ struct AcPlayerSheet: View {
                 }
                 .padding(.vertical, SabqLayout.space12)
             }
+            }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -337,6 +345,8 @@ struct AcPlayerFormSection: View {
                             .padding(.vertical, SabqLayout.space12)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         }

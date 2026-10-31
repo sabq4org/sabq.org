@@ -192,9 +192,9 @@ struct HomeFeedView: View {
 
                     // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
                     // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
+                    // فاصل الأقسام مسافة 24 لا خط: 16 من العمود + 8 هنا.
                     SportsPortalStrip()
-
-                    SabqSectionBand()
+                        .padding(.bottom, SabqLayout.space8)
 
                     // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
                     // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
@@ -218,9 +218,8 @@ struct HomeFeedView: View {
                         personalJourneyBlock
                     }
 
-                    SabqSectionBand()
-
                     latestArticlesSection
+                        .padding(.top, SabqLayout.space8)
                         .id(Self.latestSectionID)
 
                     opinionsPreviewSection
@@ -706,8 +705,23 @@ struct HomeFeedView: View {
         Array(articlesStore.featuredArticles.prefix(3))
     }
 
-    /// الخبر الرئيسي بصورته وعنوانه الكبير، ثم بقية المميّزة صفوفًا تحته.
+    /// البارزة الثلاثة كاروسيل بشريط صورها (طلب المالك 2026-10-31). مقاسات
+    /// الإتاحة الكبيرة تبقى على التخطيط العمودي: العنوان الطويل لا يتسع لشريحة.
+    @ViewBuilder
     private var featuredSection: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            featuredRowsSection
+        } else {
+            FeaturedCarousel(
+                articles: heroArticles,
+                isBookmarked: { bookmarksStore.isBookmarked($0.id) },
+                onBookmark: { bookmarksStore.toggle($0.id, article: $0) }
+            )
+        }
+    }
+
+    /// الخبر الرئيسي بصورته وعنوانه الكبير، ثم بقية المميّزة صفوفًا تحته.
+    private var featuredRowsSection: some View {
         let featured = heroArticles
         return VStack(alignment: .leading, spacing: 0) {
             if let lead = featured.first {
@@ -715,7 +729,8 @@ struct HomeFeedView: View {
                     FeaturedArticleCard(
                         article: lead,
                         onBookmark: { bookmarksStore.toggle(lead.id, article: lead) },
-                        isBookmarked: bookmarksStore.isBookmarked(lead.id)
+                        isBookmarked: bookmarksStore.isBookmarked(lead.id),
+                        bleed: SabqLayout.space12
                     )
                 }
                 .buttonStyle(.plain)
@@ -782,10 +797,8 @@ struct HomeFeedView: View {
             }
 
             HStack(alignment: .top, spacing: gap) {
-                VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                VStack(alignment: .leading, spacing: SabqLayout.space24) {
                     spreadFeaturedSection
-
-                    SabqSectionBand()
 
                     latestArticlesSection
                         .id(Self.latestSectionID)
@@ -941,7 +954,6 @@ struct HomeFeedView: View {
     private var opinionsPreviewSection: some View {
         let opinions = Array(articlesStore.opinions.prefix(5))
         if !opinions.isEmpty {
-            SabqSectionBand()
             HomeSectionCard(title: "آراء تستحق القراءة") {
                 ReaderLink(value: OpinionsRoute()) {
                     HomeSectionLinkLabel()
@@ -960,6 +972,8 @@ struct HomeFeedView: View {
                     }
                 }
             }
+            // مسافة 24 قبل القسم بدل الخط الفاصل (16 من العمود + 8).
+            .padding(.top, SabqLayout.space8)
         }
     }
 
@@ -978,49 +992,50 @@ struct HomeFeedView: View {
 
     private var latestArticlesSection: some View {
         let articles = latestTimelineArticles
-        return HomeSectionCard(
-            title: articlesStore.selectedCategory?.title ?? "آخر الأخبار",
-            lazy: true
-        ) {
-            EmptyView()
-        } content: {
-            ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
-                if index > 0 {
-                    SidebarRowDivider()
-                }
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HomeSectionCard(
+                title: articlesStore.selectedCategory?.title ?? "آخر الأخبار",
+                lazy: true
+            ) {
+                EmptyView()
+            } content: {
+                ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
+                    if index > 0 {
+                        SidebarRowDivider()
+                    }
 
-                ArticleLink(article: article) {
-                    CompactArticleRow(
-                        article: article,
-                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                        isBookmarked: bookmarksStore.isBookmarked(article.id),
-                        isNew: articlesStore.isRecentlyAdded(article.id),
-                        showsCategory: articlesStore.selectedCategory == nil
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("home.article.\(article.id)")
-                .contextMenu {
-                    Button {
-                        bookmarksStore.toggle(article.id, article: article)
-                    } label: {
-                        Label(
-                            bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ المقال",
-                            systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark"
+                    ArticleLink(article: article) {
+                        CompactArticleRow(
+                            article: article,
+                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                            isBookmarked: bookmarksStore.isBookmarked(article.id),
+                            isNew: articlesStore.isRecentlyAdded(article.id),
+                            showsCategory: articlesStore.selectedCategory == nil
                         )
                     }
-                }
-                .onAppear {
-                    // Prefetch images for the next 5 articles
-                    let upcoming = articles.dropFirst(index + 1).prefix(5)
-                    let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-                    if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("home.article.\(article.id)")
+                    .contextMenu {
+                        Button {
+                            bookmarksStore.toggle(article.id, article: article)
+                        } label: {
+                            Label(
+                                bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ المقال",
+                                systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark"
+                            )
+                        }
+                    }
+                    .onAppear {
+                        // Prefetch images for the next 5 articles
+                        let upcoming = articles.dropFirst(index + 1).prefix(5)
+                        let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
+                        if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
+                    }
                 }
             }
 
+            // «تحميل المزيد» خارج سطح القائمة الأبيض.
             if articlesStore.hasMore && articlesStore.selectedCategory == nil {
-                SidebarRowDivider()
-
                 VStack(spacing: 6) {
                     // فشل شبكي أثناء "تحميل المزيد": رسالة صريحة بدل
                     // إخفاء الزر بصمت كأن القائمة انتهت (تدقيق err-1).
@@ -1043,6 +1058,10 @@ struct HomeFeedView: View {
                                 .foregroundStyle(articlesStore.loadMoreFailed ? SabqTheme.danger : SabqTheme.primary)
                         }
                         .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.surface)
+                        )
                         .overlay(
                             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                                 .stroke(SabqTheme.outline, lineWidth: 1)
@@ -1052,7 +1071,6 @@ struct HomeFeedView: View {
                     .buttonStyle(.plain)
                     .disabled(articlesStore.isLoading)
                 }
-                .padding(.top, SabqLayout.space12)
             }
         }
     }
@@ -1187,10 +1205,8 @@ struct HomeFeedView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
+        // داخل بطاقة الرحلة البيضاء: سطح هادئ كي يتمايز صف المقاييس.
+        .sabqBlockSurface(SabqTheme.surfaceMuted)
     }
 
     private func metricCell(value: String, unit: String?, label: String) -> some View {

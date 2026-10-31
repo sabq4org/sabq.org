@@ -28,10 +28,12 @@ struct SocialAuthButtons: View {
     @State private var appleCoordinator: AppleSignInCoordinator?
 
     var body: some View {
+        // «أو» يفصل نموذج الدخول عن البدائل فيسبقها؛ كان بعدها فبدا معلّقًا
+        // فوق رابط إنشاء الحساب.
         VStack(spacing: SabqLayout.space12) {
+            dividerOr
             appleButton
             googleButton
-            dividerOr
         }
     }
 

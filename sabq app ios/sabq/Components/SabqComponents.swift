@@ -133,17 +133,31 @@ struct HomeFeedSkeleton: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 0) {
-                FeaturedCardSkeleton()
-                    .padding(.bottom, SabqLayout.space12)
-                ForEach(0..<3, id: \.self) { index in
-                    SidebarRowDivider()
-                    ArticleRowSkeleton()
-                        .padding(.vertical, SabqLayout.space12)
-                        .id(index)
+            // شكل كاروسيل البارزة: صورة بعرض البطاقة، عنوان، ثم شريط الصور الثلاث.
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                Rectangle()
+                    .fill(SabqTheme.outline.opacity(0.5))
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .shimmer(radius: 0)
+                    .padding(.bottom, SabqLayout.space4)
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                    SkeletonBox(width: 72, height: 18, radius: SabqRadius.small)
+                    SkeletonBox(height: 22)
+                    SkeletonBox(width: 240, height: 22)
+                    HStack(spacing: SabqLayout.space8) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.outline.opacity(0.5))
+                                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                                .shimmer(radius: SabqRadius.small)
+                        }
+                    }
+                    .padding(.top, SabqLayout.space8)
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .padding(.bottom, SabqLayout.space16)
             }
-            .padding(SabqLayout.space12)
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .sabqNewsSurface()
 
             SkeletonBox(height: 56, radius: SabqRadius.medium)
@@ -1129,14 +1143,11 @@ struct SurfaceCard<Content: View>: View {
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
-        // سطح أبيض بحدّ رفيع على خلفية التطبيق الرمادية — نفس لغة بقية البطاقات.
+        // بطاقة المكتب: بيضاء بظل خفيف بلا حدّ — نفس لغة بقية البطاقات.
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
         )
         .sabqRTL()
     }
@@ -1229,8 +1240,9 @@ struct SmallSquareBadge: View {
     let tint: Color
 
     var body: some View {
+        // تعبئة بلون الأيقونة الخفيف تظهر على الأبيض والرمادي معًا (كان surfaceMuted فاختفى على الرمادي).
         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-            .fill(SabqTheme.surfaceMuted)
+            .fill(tint.opacity(0.12))
             .frame(width: 40, height: 40)
             .overlay {
                 Image(systemName: systemImage)
@@ -1247,7 +1259,7 @@ struct SquareIconBadge: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-            .fill(SabqTheme.surfaceMuted)
+            .fill(tint.opacity(0.12))
             .frame(width: 72, height: 72)
             .overlay {
                 Image(systemName: systemImage)
@@ -1280,7 +1292,7 @@ struct SmallActionButton: View {
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.chipFill)
             )
         }
         .buttonStyle(.plain)
@@ -1332,8 +1344,12 @@ struct CategoryChip: View {
                         .fill(
                             isSelected
                                 ? AnyShapeStyle(SabqTheme.actionFill)
-                                : AnyShapeStyle(SabqTheme.surfaceMuted)
+                                : AnyShapeStyle(SabqTheme.surface)
                         )
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(isSelected ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
                 )
         }
         .buttonStyle(.plain)
@@ -1353,7 +1369,7 @@ struct StatusChip: View {
             .padding(.vertical, SabqLayout.space4)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.chipFill)
             )
     }
 }
@@ -1396,6 +1412,26 @@ struct FeaturedArticleCard: View {
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
+    /// حشوة السطح الحاوي: تمتد الصورة بقدرها يمينًا ويسارًا وأعلى فتملأ رأس
+    /// البطاقة حتى حوافها بلا إطار داخلي (طلب المالك 2026-10-31).
+    var bleed: CGFloat = 0
+
+    /// بلا نقطة تركيز من المحرر يُقصّ على الثلث العلوي: الصور الطولية غالبًا
+    /// وجوه، والقص من المنتصف يقطع الرأس. الأفقية لا يتأثر قصّها تقريبًا.
+    private var heroFocalPoint: ImageFocalPoint {
+        article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30)
+    }
+
+    private var imageShape: UnevenRoundedRectangle {
+        let r = SabqRadius.medium
+        return UnevenRoundedRectangle(
+            topLeadingRadius: r,
+            bottomLeadingRadius: bleed > 0 ? 0 : r,
+            bottomTrailingRadius: bleed > 0 ? 0 : r,
+            topTrailingRadius: r,
+            style: .continuous
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1408,7 +1444,7 @@ struct FeaturedArticleCard: View {
                 .overlay {
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, fitsMismatchedAspect: true) {
+                            FocalCachedAsyncImage(url: url, focalPoint: heroFocalPoint) {
                                 SabqImagePlaceholder()
                             }
                         } else {
@@ -1418,17 +1454,15 @@ struct FeaturedArticleCard: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-                )
+                .clipShape(imageShape)
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
                     inset: 10
                 )
-                .padding(.bottom, SabqLayout.space12)
+                .padding(.horizontal, -bleed)
+                .padding(.top, -bleed)
+                .padding(.bottom, SabqLayout.space16)
 
             HStack(alignment: .center, spacing: 8) {
                 Text(article.categoryTitle)
@@ -1494,14 +1528,254 @@ struct FeaturedArticleCard: View {
         .accessibilityAction(named: isBookmarked ? "إزالة من المحفوظات" : "حفظ الخبر", onBookmark)
     }
 
+    private var heroWhen: String { article.heroWhenLabel }
+}
+
+extension Article {
     /// «قبل 40 دقيقة» لخبر اليوم، و«أمس 4:35 م» لخبر الأمس، والتاريخ لما قبله.
-    private var heroWhen: String {
+    var heroWhenLabel: String {
         let cal = SabqFormatters.riyadhCalendar
-        let date = article.publishDate
-        if cal.isDateInToday(date) { return article.relativeDate }
+        let date = publishDate
+        if cal.isDateInToday(date) { return relativeDate }
         let clock = "\(SabqFormatters.riyadhHourMinute.string(from: date)) \(SabqFormatters.riyadhPeriod.string(from: date))"
         if cal.isDateInYesterday(date) { return "أمس \(clock)" }
-        return article.dateFormatted
+        return dateFormatted
+    }
+}
+
+// MARK: - Featured Carousel
+
+/// البارزة الثلاثة في بطاقة واحدة (طلب المالك 2026-10-31): شريحة تُقلَّب أفقيًا
+/// بصورة تملأ رأس البطاقة وعنوان كبير، وتحتها شريط الصور الثلاث يعمل
+/// فهرسًا — تحت النشطة خط يمتلئ كالقصص ثم ينتقل العرض للتالي. اللمس أو
+/// السحب يعيد العدّ، و«تقليل الحركة» يوقف التقليب التلقائي.
+struct FeaturedCarousel: View {
+    let articles: [Article]
+    let isBookmarked: (Article) -> Bool
+    let onBookmark: (Article) -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selection: String?
+    @State private var progress: CGFloat = 0
+
+    /// مدة بقاء الشريحة قبل الانتقال التلقائي.
+    private static let dwell: Double = 6
+
+    private var activeID: String? { selection ?? articles.first?.id }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(articles) { article in
+                        ArticleLink(article: article) { slide(article) }
+                            .buttonStyle(.plain)
+                            .containerRelativeFrame(.horizontal)
+                            .id(article.id)
+                            .contextMenu { bookmarkButton(article) }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $selection)
+
+            if articles.count > 1 {
+                thumbStrip
+                    .padding(.horizontal, SabqLayout.space12)
+                    .padding(.top, SabqLayout.space16)
+                    .padding(.bottom, SabqLayout.space12)
+            } else {
+                Color.clear.frame(height: SabqLayout.space12)
+            }
+        }
+        .clipShape(shape)
+        .sabqNewsSurface()
+        .task(id: activeID) { await runDwell() }
+    }
+
+    // MARK: Slide
+
+    private func slide(_ article: Article) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .overlay {
+                    if let urlString = article.imageURL, let url = URL(string: urlString) {
+                        FocalCachedAsyncImage(
+                            url: url,
+                            focalPoint: article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30)
+                        ) {
+                            SabqImagePlaceholder()
+                        }
+                    } else {
+                        SabqImagePlaceholder()
+                            .environment(\.sabqImageLoadFailed, true)
+                    }
+                }
+                .clipped()
+                .aiImageBadgeOverlay(
+                    isVisible: article.isAiGeneratedImage,
+                    model: article.aiImageModel,
+                    inset: 10
+                )
+                .padding(.bottom, SabqLayout.space4)
+
+            HStack(spacing: SabqLayout.space8) {
+                if article.isBreaking {
+                    // العاجل يحلّ محل التصنيف بأحمر «عاجل» نفسه في صفحة الخبر وشريط العاجل.
+                    HStack(spacing: SabqLayout.space4) {
+                        Image(systemName: "bolt.fill")
+                            .font(SabqType.timestamp.font.weight(.semibold))
+                            .accessibilityHidden(true)
+                        Text("عاجل")
+                            .font(SabqType.tag.font)
+                    }
+                    .foregroundStyle(SabqTheme.breaking)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .padding(.vertical, 2.5)
+                    .background(Capsule(style: .continuous).fill(SabqTheme.breaking.opacity(0.1)))
+                } else {
+                    Text(article.categoryTitle)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                }
+                if article.isFreshlyPublished {
+                    Text("جديد")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.success)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.success.opacity(0.08)))
+                } else {
+                    Text(article.heroWhenLabel)
+                        .font(SabqType.timestamp.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .monospacedDigit()
+                }
+            }
+            .lineLimit(1)
+            .padding(.horizontal, SabqLayout.space12)
+
+            SabqRTLText(
+                article.title,
+                uiFont: SabqType.leadTitle.uiFont,
+                color: SabqTheme.textPrimary,
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                lineSpacing: SabqType.leadTitle.lineSpacing,
+                textStyle: SabqType.leadTitle.uiTextStyle
+            )
+            .padding(.horizontal, SabqLayout.space12)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Thumbnail index
+
+    private var thumbStrip: some View {
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
+            ForEach(articles) { article in
+                let isActive = article.id == activeID
+                Button {
+                    SabqHaptics.light()
+                    withAnimation(.snappy(duration: 0.35)) { selection = article.id }
+                } label: {
+                    VStack(spacing: SabqLayout.space8) {
+                        thumb(article, isActive: isActive)
+                        progressLine(isActive: isActive, tint: accent(for: article))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(article.isBreaking ? "عاجل: \(article.title)" : article.title)
+                .accessibilityHint("يعرض الخبر في البطاقة")
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+    }
+
+    private func thumb(_ article: Article, isActive: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+        return Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16.0 / 10.0, contentMode: .fit)
+            .overlay {
+                if let urlString = article.imageURL, let url = URL(string: urlString) {
+                    FocalCachedAsyncImage(
+                        url: url,
+                        focalPoint: article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30),
+                        maxPixelSize: 360
+                    ) {
+                        SabqImagePlaceholder()
+                    }
+                } else {
+                    SabqImagePlaceholder()
+                        .environment(\.sabqImageLoadFailed, true)
+                }
+            }
+            .clipShape(shape)
+            // العاجل بإطار أحمر حتى وهو غير نشط، فيُعرف من الشريط قبل أن يصله العرض.
+            .overlay(
+                shape.strokeBorder(
+                    isActive || article.isBreaking ? accent(for: article) : SabqTheme.separator,
+                    lineWidth: isActive ? 2 : (article.isBreaking ? 1.5 : 0.75)
+                )
+            )
+            .opacity(isActive ? 1 : 0.55)
+            .scaleEffect(isActive ? 1 : 0.96)
+            .animation(.snappy(duration: 0.3), value: isActive)
+    }
+
+    private func accent(for article: Article) -> Color {
+        article.isBreaking ? SabqTheme.breaking : SabqTheme.primary
+    }
+
+    private func progressLine(isActive: Bool, tint: Color) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(SabqTheme.separator)
+                Capsule()
+                    .fill(tint)
+                    .frame(width: isActive ? proxy.size.width * (reduceMotion ? 1 : progress) : 0)
+            }
+        }
+        .frame(height: 3)
+        .accessibilityHidden(true)
+    }
+
+    // MARK: Auto-advance
+
+    /// يملأ خط النشطة خلال `dwell` ثم ينتقل للتالي. يُلغى ويعاد من الصفر كلما
+    /// تغيّرت الشريحة (سحب أو لمس صورة)، ويتوقف حين تغادر البطاقة الشاشة.
+    private func runDwell() async {
+        progress = 0
+        guard !reduceMotion, articles.count > 1 else { return }
+        // انتظار قصير حتى يستقر التمرير قبل بدء العدّ.
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { return }
+        withAnimation(.linear(duration: Self.dwell)) { progress = 1 }
+        try? await Task.sleep(for: .seconds(Self.dwell))
+        guard !Task.isCancelled,
+              let current = activeID,
+              let index = articles.firstIndex(where: { $0.id == current }) else { return }
+        let next = articles[(index + 1) % articles.count].id
+        withAnimation(.snappy(duration: 0.5)) { selection = next }
+    }
+
+    private func bookmarkButton(_ article: Article) -> some View {
+        Button { onBookmark(article) } label: {
+            Label(
+                isBookmarked(article) ? "إزالة من المحفوظات" : "حفظ المقال",
+                systemImage: isBookmarked(article) ? "bookmark.slash" : "bookmark"
+            )
+        }
     }
 }
 
@@ -1691,7 +1965,7 @@ struct CompactArticleRow: View {
                 if showNew {
                     newPill
                 } else {
-                    Text(SabqFormatters.relativeArabic.localizedString(for: article.publishDate, relativeTo: context.date))
+                    Text(SabqFormatters.arabicRelative(article.publishDate, now: context.date))
                         .font(SabqType.timestamp.font)
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(SabqTheme.tertiaryInk)
@@ -1749,11 +2023,7 @@ struct CategoryTile: View {
         }
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-
-        )
+        .sabqBlockSurface()
     }
 }
 
@@ -1774,7 +2044,7 @@ struct EmptyStateView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(tint)
                 .frame(width: 56, height: 56)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: SabqRadius.medium))
                 .accessibilityHidden(true)
 
             Text(title)
@@ -2031,6 +2301,74 @@ struct FlowLayout: Layout {
     }
 }
 
+/// المبدّل الموحّد (بلاغ المالك 2026-10-31: المبدّل الرمادي الأصلي باهت على
+/// الخلفية الرمادية ولا يشبه بقية التطبيق). مسار واحد، والخيار النشط مملوء بلون
+/// الفعل. على الخلفية الرمادية المسار أبيض بحدّ رفيع، وداخل بطاقة بيضاء
+/// (`onSurface`) رمادي هادئ. مقاسات الإتاحة الكبيرة تتحول إلى قائمة.
+struct SabqSegmentedPicker<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let options: [(value: Value, label: String)]
+    var onSurface: Bool = false
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    init(_ title: String, selection: Binding<Value>, options: [(value: Value, label: String)], onSurface: Bool = false) {
+        self.title = title
+        self._selection = selection
+        self.options = options
+        self.onSurface = onSurface
+    }
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Picker(title, selection: $selection) {
+                ForEach(options.indices, id: \.self) { i in
+                    Text(options[i].label).tag(options[i].value)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            track
+        }
+    }
+
+    private var track: some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        return HStack(spacing: SabqLayout.space4) {
+            ForEach(options.indices, id: \.self) { i in
+                let option = options[i]
+                let isActive = option.value == selection
+                Button {
+                    guard !isActive else { return }
+                    SabqHaptics.light()
+                    withAnimation(.snappy(duration: 0.2)) { selection = option.value }
+                } label: {
+                    Text(option.label)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(isActive ? SabqTheme.onAction : SabqTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget - SabqLayout.space4)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small + 2, style: .continuous)
+                                .fill(isActive ? SabqTheme.actionFill : Color.clear)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+        .padding(SabqLayout.space4)
+        // مسار رمادي مزرق بلا حدّ كمبدّلات المكتب.
+        .background(onSurface ? SabqTheme.surfaceMuted : SabqTheme.chipFill, in: shape)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+    }
+}
+
 struct SabqAdaptivePickerStyle: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -2053,9 +2391,14 @@ extension View {
     /// `SabqTheme.surfaceMuted` كي يتمايز البلوك عن الصفحة.
     func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-        return background(shape.fill(fill))
-            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
-            .clipShape(shape)
+        // هوية المكتب: الأبيض بظل خفيف بلا حدّ؛ التعبئة الهادئة داخل صفحة بيضاء بلا ظل.
+        let raised = fill == SabqTheme.surface
+        return clipShape(shape)
+            .background(
+                shape.fill(fill)
+                    .shadow(color: raised ? SabqTheme.shadow : .clear,
+                            radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+            )
     }
 
     /// بطاقة تحريرية مميزة بخلفية سماوية سبق هادئة وإطار سماوي ناعم.

@@ -14,19 +14,21 @@ nonisolated enum AcStyle {
 }
 
 extension View {
-    /// بلوك هادئ: تعبئة رمادية خفيفة بلا حدود، زاوية 12.
+    /// بلوك البطولة: سطح أبيض بحدّ رفيع على الخلفية الرمادية (كان surfaceMuted فاختفى).
     func acQuietBlock() -> some View {
-        background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        sabqBlockSurface()
     }
 
-    /// شريحة/تبويب: المختار بلون الهوية ونص أبيض، والباقي رمادي هادئ.
+    /// شريحة/تبويب: المختار بلون الهوية ونص أبيض، والباقي أبيض بحدّ رفيع
+    /// (الرمادي الهادئ كان يختفي على خلفية التطبيق الرمادية).
     func acChip(selected: Bool) -> some View {
         self
             .font(SabqType.tag.font)
             .foregroundStyle(selected ? SabqTheme.onAction : SabqTheme.textPrimary)
             .padding(.horizontal, SabqLayout.space12)
             .frame(minHeight: SabqLayout.touchTarget)
-            .background(Capsule().fill(selected ? AcStyle.accentFill : SabqTheme.surfaceMuted))
+            .background(Capsule().fill(selected ? AcStyle.accentFill : SabqTheme.surface))
+            .overlay(Capsule().strokeBorder(selected ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
             .contentShape(Capsule())
     }
 }
@@ -84,6 +86,7 @@ struct AcPlayerAvatar: View {
         Group {
             if photo.isEmpty {
                 Circle().fill(SabqTheme.surfaceMuted)
+                    .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                     .overlay {
                         if let initials, !initials.isEmpty {
                             Text(initials)
@@ -125,7 +128,8 @@ struct AcStatusPill: View {
         .font(SabqType.tag.font)
         .padding(.horizontal, SabqLayout.space8)
         .padding(.vertical, SabqLayout.space4)
-        .background(Capsule().fill(onDark ? Color.white.opacity(0.16) : SabqTheme.surfaceMuted))
+        .background(Capsule().fill(onDark ? Color.white.opacity(0.16) : SabqTheme.surface))
+        .overlay(Capsule().strokeBorder(onDark ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
     }
 
     private var elapsedText: String {
@@ -333,7 +337,7 @@ struct AcRatingBadge: View {
             .font(SabqType.tag.font.monospacedDigit())
             .foregroundStyle(color)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
             .environment(\.layoutDirection, .leftToRight)
     }
 
@@ -345,7 +349,7 @@ struct AcRatingBadge: View {
     }
 }
 
-/// شارة رمادية صغيرة (عدد، تشكيلة، قناة).
+/// شارة صغيرة (عدد، تشكيلة، قناة): بيضاء بحدّ رفيع لتُقرأ على الخلفية الرمادية.
 struct AcTag: View {
     let text: String
 
@@ -354,7 +358,7 @@ struct AcTag: View {
             .font(SabqType.tag.font)
             .foregroundStyle(SabqTheme.textSecondary)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.chipFill))
     }
 }
 

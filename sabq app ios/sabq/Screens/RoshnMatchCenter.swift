@@ -267,7 +267,11 @@ struct RoshnMatchCenter: View {
                         .frame(minHeight: SabqLayout.touchTarget)
                         .background(
                             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(current == item ? RoshnTheme.accentFill : SabqTheme.surfaceMuted)
+                                .fill(current == item ? RoshnTheme.accentFill : SabqTheme.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .strokeBorder(current == item ? Color.clear : SabqTheme.separator, lineWidth: 0.75)
                         )
                 }
                 .buttonStyle(.plain)
@@ -318,7 +322,7 @@ struct RoshnMatchCenter: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(SabqLayout.space16)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .sabqBlockSurface()
             } else {
                 emptyNote("لا توقعات منشورة لهذه المباراة.")
             }
@@ -359,7 +363,7 @@ struct RoshnMatchCenter: View {
                         pctCellCount("فوز \(d.fixture.away.name)", tally.away, RoshnTheme.gold)
                     }
                     .padding(SabqLayout.space12)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                    .sabqBlockSurface()
 
                     Text("آخر المواجهات")
                         .font(SabqType.rowTitle.font)
@@ -370,6 +374,8 @@ struct RoshnMatchCenter: View {
                             meetingRow(m)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             } else {
                 emptyNote("أول مواجهة مسجّلة بين الفريقين.")
@@ -463,6 +469,8 @@ struct RoshnMatchCenter: View {
                     eventRow(ev, d: d)
                 }
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -554,7 +562,9 @@ struct RoshnMatchCenter: View {
                     statBar(row)
                 }
             }
-            .padding(.vertical, SabqLayout.space8)
+            .padding(.vertical, SabqLayout.space16)
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -596,10 +606,12 @@ struct RoshnMatchCenter: View {
         if d.lineups.isEmpty {
             emptyState(icon: "person.3", text: "التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة عادةً")
         } else {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(d.lineups.enumerated()), id: \.element.id) { index, lineup in
-                    if index > 0 { SabqSectionBand().padding(.vertical, SabqLayout.space16) }
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                ForEach(d.lineups) { lineup in
                     lineupCard(lineup)
+                        .padding(SabqLayout.space16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .sabqBlockSurface()
                 }
             }
             .padding(.top, SabqLayout.space8)
@@ -689,7 +701,7 @@ struct RoshnMatchCenter: View {
                             ratingBadge(motm.rating)
                         }
                         .padding(SabqLayout.space12)
-                        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                        .sabqBlockSurface()
                         .accessibilityElement(children: .combine)
                     }
 
@@ -724,6 +736,8 @@ struct RoshnMatchCenter: View {
                             .accessibilityElement(children: .combine)
                         }
                     }
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqNewsSurface()
                 }
             }
         } else if let ratingsError {

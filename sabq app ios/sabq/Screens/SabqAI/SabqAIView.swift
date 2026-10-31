@@ -31,7 +31,7 @@ struct SabqAIView: View {
                 SAICharter()
                 SAIFinale()
             }
-            .padding(.bottom, 120)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewport = $0 }
         .environment(\.saiViewport, viewport)

@@ -15,7 +15,6 @@ struct TrendingView: View {
 
                 if !tags.isEmpty {
                     tagsSection
-                    SabqSectionBand()
                 }
 
                 if isLoading {

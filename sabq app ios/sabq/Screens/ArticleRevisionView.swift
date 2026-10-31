@@ -217,10 +217,7 @@ struct ArticleRevisionView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: Form
@@ -358,7 +355,7 @@ struct ArticleRevisionView: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.surfaceMuted)
+                            .fill(SabqTheme.surface)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
@@ -407,10 +404,7 @@ struct ArticleRevisionView: View {
         }
         .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: Success

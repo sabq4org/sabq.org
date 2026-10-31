@@ -167,5 +167,5 @@ private func muqRelativeDate(_ iso: String?) -> String? {
     let plain = ISO8601DateFormatter()
     plain.formatOptions = [.withInternetDateTime]
     guard let date = frac.date(from: iso) ?? plain.date(from: iso) else { return nil }
-    return SabqFormatters.relativeArabic.localizedString(for: date, relativeTo: Date())
+    return SabqFormatters.arabicRelative(date)
 }

@@ -29,6 +29,9 @@ struct KcPlayerSheet: View {
                             factTiles(player)
                             birthLine(player)
                         }
+                        .padding(SabqLayout.space16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .sabqBlockSurface()
                         if let kc = player.seasonStats.first(where: { $0.isKingsCup }) {
                             kcHighlight(kc, isGoalkeeper: isGoalkeeper(player))
                         }
@@ -210,6 +213,8 @@ struct KcPlayerSheet: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
     }
 
     // MARK: القيمة السوقية
@@ -232,6 +237,8 @@ struct KcPlayerSheet: View {
             if m.history.count > 1 { marketChart(m.history) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
     }
 
     private func money(_ v: Double, _ currency: String) -> String {
@@ -274,6 +281,9 @@ struct KcPlayerSheet: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     private func formRow(_ m: KcFormMatch) -> some View {
@@ -349,6 +359,9 @@ struct KcPlayerSheet: View {
                     .padding(.vertical, SabqLayout.space12)
                 }
             }
+            .padding(.top, SabqLayout.space12)
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
         }
     }
 
@@ -375,6 +388,9 @@ struct KcPlayerSheet: View {
                 .padding(.vertical, SabqLayout.space12)
             }
         }
+        .padding(.top, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     private func seasonsRange(_ seasons: [Int]) -> String {
@@ -413,6 +429,9 @@ struct KcPlayerSheet: View {
                 .padding(.vertical, SabqLayout.space12)
             }
         }
+        .padding(.top, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     // MARK: الإصابات
@@ -434,6 +453,9 @@ struct KcPlayerSheet: View {
                 .padding(.vertical, SabqLayout.space12)
             }
         }
+        .padding(.top, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 
     // MARK: الألقاب
@@ -467,5 +489,8 @@ struct KcPlayerSheet: View {
                 .padding(.vertical, SabqLayout.space12)
             }
         }
+        .padding(.top, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
+        .sabqNewsSurface()
     }
 }

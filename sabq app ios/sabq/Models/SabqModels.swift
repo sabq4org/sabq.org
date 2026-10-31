@@ -23,10 +23,55 @@ nonisolated enum SabqFormatters {
         return f
     }()
 
-    static let relativeArabic: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.locale = arabicLatinDigits
-        f.unitsStyle = .short
+    /// «قبل 5 دقائق» / «قبل ساعتين» / «أمس» / «قبل 3 أيام»، وما تجاوز أسبوعًا
+    /// يُعرض تاريخًا («5 يناير»، ومعه السنة إن اختلفت). بديل
+    /// `RelativeDateTimeFormatter` العربي الذي يكتب «خلال 7 أشهر» لخبر مضى
+    /// (صيغة المستقبل) بين 3 و10 أشهر، ويقول «قبل شهر واحد» عن 60 يومًا
+    /// (بلاغ المالك في المحفوظات 2026-10-31).
+    static func arabicRelative(_ date: Date, now: Date = Date()) -> String {
+        let seconds = now.timeIntervalSince(date)
+        if seconds < 60 {
+            // ثوانٍ أو انحراف ساعة بسيط: «الآن». موعد مستقبلي فعلي يُعرض تاريخًا.
+            return seconds > -300 ? "الآن" : arabicCalendarLabel(date, now: now)
+        }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 {
+            return "قبل " + arabicCount(minutes, one: "دقيقة", two: "دقيقتين", few: "دقائق", many: "دقيقة")
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return "قبل " + arabicCount(hours, one: "ساعة", two: "ساعتين", few: "ساعات", many: "ساعة")
+        }
+        if riyadhCalendar.isDateInYesterday(date) { return "أمس" }
+        let days = max(1, hours / 24)
+        if days < 7 {
+            return "قبل " + arabicCount(days, one: "يوم", two: "يومين", few: "أيام", many: "يومًا")
+        }
+        return arabicCalendarLabel(date, now: now)
+    }
+
+    /// «5 يناير» في السنة الجارية، و«5 يناير 2025» لما قبلها أو بعدها.
+    private static func arabicCalendarLabel(_ date: Date, now: Date) -> String {
+        let sameYear = riyadhCalendar.component(.year, from: date) == riyadhCalendar.component(.year, from: now)
+        return (sameYear ? riyadhDayMonth : riyadhDate).string(from: date)
+    }
+
+    /// العدد العربي مع تمييزه: 1 «دقيقة»، 2 «دقيقتين»، 3–10 «5 دقائق»، 11+ «15 دقيقة».
+    private static func arabicCount(_ n: Int, one: String, two: String, few: String, many: String) -> String {
+        switch n {
+        case ...1: return one
+        case 2: return two
+        case 3...10: return "\(n) \(few)"
+        default: return "\(n) \(many)"
+        }
+    }
+
+    static let riyadhDayMonth: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "d MMMM"
         return f
     }()
 
@@ -256,6 +301,10 @@ struct TrendingRoute: Hashable {}
 
 struct AuthorRoute: Hashable {
     let name: String
+    /// صورة الكاتب وصفته من سطر الكاتب في الخبر — يظهر بهما رأس صفحة الكاتب
+    /// فورًا بدل حرف في دائرة حتى يصل رد الخادم.
+    var avatarURL: String? = nil
+    var role: String? = nil
 }
 
 struct LiveCoverageRoute: Hashable {}
@@ -551,7 +600,7 @@ struct Article: Identifiable, Equatable, Hashable {
     }
 
     var relativeDate: String {
-        SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
+        SabqFormatters.arabicRelative(publishDate)
     }
 
     /// نافذة الخبر «الجديد» منذ نشره (10 دقائق): خلالها تظهر شارة «جديد» بدل الوقت،
@@ -853,7 +902,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     }
 
     var relativeDate: String {
-        SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
+        SabqFormatters.arabicRelative(publishDate)
     }
 
     /// Gendered byline label. Returns "الكاتبة" for female authors, "الكاتب"

@@ -79,15 +79,13 @@ struct ContactSheet: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     // Outer column: page header → contact-method blocks →
-                    // grey section band → the unboxed "send a message" form.
+                    // the unboxed "send a message" form (space24 apart).
                     VStack(alignment: .leading, spacing: SabqLayout.space24) {
                         sheetHeading(title: "تواصل معنا", subtitle: "اختر طريقة التواصل الأنسب لك")
 
                         // Two contact-method blocks at the top — matches the
                         // web /contact page. Tapping opens WhatsApp / Mail.
                         contactMethodCards
-
-                        SabqSectionBand()
 
                         if isSent {
                             EmptyStateView(
@@ -249,10 +247,7 @@ struct ContactSheet: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space16)
         .padding(.horizontal, SabqLayout.space12)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
         .contentShape(Rectangle())
     }
 

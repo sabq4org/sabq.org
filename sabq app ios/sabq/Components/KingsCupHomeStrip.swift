@@ -57,7 +57,7 @@ final class KingsCupHomeStore {
 
 // MARK: - شريط كأس الملك في الواجهة الرئيسية
 //
-// بلوك هادئ (surfaceMuted، زوايا 12، بلا حد ولا ظل) بلمسة هوية كأس الملك يعرض عدّاد يوم الجولة (أدوار الدفعة
+// بلوك أبيض (sabqBlockSurface، زوايا 16، حدّ رفيع) بلمسة هوية كأس الملك يعرض عدّاد يوم الجولة (أدوار الدفعة
 // الواحدة) أو المباراة القادمة/الحية أو بطاقة البطل، مع رابط لقسم كأس الملك
 // الكامل. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden) أو غياب
 // البيانات — صفر أثر (مطابق KingsCupHomeSection على الويب).
@@ -233,6 +233,10 @@ struct KingsCupHomeStrip: View {
                 .frame(height: 32)
                 .padding(.horizontal, SabqLayout.space4).padding(.vertical, SabqLayout.space4)
                 .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(.white))
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.75)
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -316,13 +320,13 @@ struct KingsCupHomeStrip: View {
     }
 }
 
-/// سطح شريط الرئيسية: بلوك هادئ بزوايا 12 بلا حد ولا ظل ولا تدرّج.
+/// سطح شريط الرئيسية: البلوك الأبيض القياسي بحدّ رفيع (sabqBlockSurface) كبقية بلوكات الرئيسية.
 private struct KcStripSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space12)
             .frame(minHeight: 72)
-            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .sabqBlockSurface()
             .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 }

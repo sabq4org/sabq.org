@@ -98,10 +98,7 @@ struct PressCardActivationView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
 
         helpSection
     }
@@ -140,10 +137,7 @@ struct PressCardActivationView: View {
         }
         .padding(SabqLayout.space24)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: - Help
@@ -159,7 +153,8 @@ struct PressCardActivationView: View {
             bullet("اعرضها على شاشة القفل بالنقر على زر الجانب مرتين")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, SabqLayout.space8)
+        .padding(SabqLayout.space16)
+        .sabqBlockSurface()
     }
 
     private func bullet(_ text: String) -> some View {
