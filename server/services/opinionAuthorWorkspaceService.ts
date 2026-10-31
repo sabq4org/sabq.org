@@ -1,24 +1,8 @@
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { aiGateway } from "../ai/gateway";
 import { memoryCache } from "../memoryCache";
 import { articles, comments, editorialNotifications, worldDays } from "@shared/schema";
-
-type WriterArticle = {
-  id: string;
-  title: string;
-  content: string;
-  excerpt: string | null;
-  status: string;
-  reviewStatus: string | null;
-  reviewNotes: string | null;
-  views: number;
-  scheduledAt: Date | null;
-  publishedAt: Date | null;
-  reviewedAt: Date | null;
-  updatedAt: Date | null;
-  createdAt: Date;
-};
 
 export type WriterIdea = {
   id: string;
@@ -39,30 +23,35 @@ function parseJson<T>(content: string): T {
   return JSON.parse(cleaned) as T;
 }
 
-async function getWriterArticles(userId: string): Promise<WriterArticle[]> {
-  return db
-    .select({
-      id: articles.id,
-      title: articles.title,
-      content: articles.content,
-      excerpt: articles.excerpt,
-      status: articles.status,
-      reviewStatus: articles.reviewStatus,
-      reviewNotes: articles.reviewNotes,
-      views: articles.views,
-      scheduledAt: articles.scheduledAt,
-      publishedAt: articles.publishedAt,
-      reviewedAt: articles.reviewedAt,
-      updatedAt: articles.updatedAt,
-      createdAt: articles.createdAt,
-    })
-    .from(articles)
-    .where(and(
-      eq(articles.articleType, "opinion"),
-      or(eq(articles.authorId, userId), eq(articles.submitterId, userId)),
-    ))
-    .orderBy(desc(articles.updatedAt));
+// مقالات الرأي التي يملكها الكاتب (كاتبًا أو مُرسِلًا).
+function writerOpinionScope(userId: string) {
+  return and(
+    eq(articles.articleType, "opinion"),
+    or(eq(articles.authorId, userId), eq(articles.submitterId, userId)),
+  );
 }
+
+// نفس أولوية «التتبع» القديمة (كانت تُحسب في الذاكرة) لكن داخل SQL كي يمكن
+// ترقيمها: يحتاج إجراءك ← بانتظار المراجعة ← مجدول ← معتمد ← منشور ← مسودة ← مرفوض/مؤرشف.
+const trackingPriority = sql<number>`CASE
+  WHEN ${articles.reviewStatus} = 'needs_changes' THEN 0
+  WHEN ${articles.reviewStatus} = 'pending_review' THEN 1
+  WHEN ${articles.status} = 'scheduled' THEN 2
+  WHEN ${articles.reviewStatus} = 'approved' THEN 3
+  WHEN ${articles.status} = 'published' THEN 4
+  WHEN ${articles.status} = 'draft' THEN 5
+  WHEN ${articles.reviewStatus} = 'rejected' OR ${articles.status} IN ('archived', 'rejected') THEN 6
+  ELSE 7
+END`;
+const trackingEffectiveTime = sql`COALESCE(${articles.publishedAt}, ${articles.updatedAt}, ${articles.createdAt})`;
+
+export const WRITER_TRACKING_MAX_PAGE = 100;
+
+export type WriterWorkspaceOptions = {
+  /** حجم صفحة «التتبع». غيابه = القائمة كاملة (سلوك العملاء الحاليين). */
+  trackingLimit?: number;
+  trackingOffset?: number;
+};
 
 function nextOccurrence(month: number, day: number): Date {
   const now = new Date();
@@ -71,26 +60,109 @@ function nextOccurrence(month: number, day: number): Date {
   return candidate;
 }
 
-export async function getOpinionAuthorWorkspace(userId: string) {
-  const writerArticles = await getWriterArticles(userId);
-  const articleIds = writerArticles.map((article) => article.id);
+function deskNextAction(status: string, reviewStatus: string | null): string {
+  if (status === "scheduled") return "مجدول للنشر من هيئة التحرير";
+  if (reviewStatus === "needs_changes") return "معالجة ملاحظات التحرير";
+  if (reviewStatus === "pending_review") return "في انتظار مراجعة هيئة التحرير والجدولة";
+  if (reviewStatus === "approved") return "معتمد وفي انتظار الجدولة";
+  return "متابعة الكتابة";
+}
 
-  const [readerComments, calendarRows, recentOpinionRows] = await Promise.all([
-    articleIds.length > 0
-      ? db
-          .select({
-            id: comments.id,
-            content: comments.content,
-            sentiment: comments.currentSentiment,
-            likesCount: comments.likesCount,
-            createdAt: comments.createdAt,
-            articleId: comments.articleId,
-          })
-          .from(comments)
-          .where(and(inArray(comments.articleId, articleIds), eq(comments.status, "approved")))
-          .orderBy(desc(comments.createdAt))
-          .limit(20)
-      : Promise.resolve([]),
+// كل قسم من المساحة باستعلام محدود مستقل بدل جلب كل مقالات الكاتب بنصها الكامل
+// ثم الترتيب في الذاكرة. لا عمود content في أي منها: الاستجابة لا تعيد النص.
+export async function getOpinionAuthorWorkspace(userId: string, options: WriterWorkspaceOptions = {}) {
+  const scope = writerOpinionScope(userId);
+  const trackingLimit = options.trackingLimit === undefined
+    ? null
+    : Math.min(Math.max(Math.trunc(options.trackingLimit), 1), WRITER_TRACKING_MAX_PAGE);
+  const trackingOffset = Math.max(Math.trunc(options.trackingOffset ?? 0), 0);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const trackingQuery = db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      status: articles.status,
+      reviewStatus: articles.reviewStatus,
+      reviewNotes: articles.reviewNotes,
+      scheduledAt: articles.scheduledAt,
+      publishedAt: articles.publishedAt,
+      reviewedAt: articles.reviewedAt,
+      updatedAt: articles.updatedAt,
+      createdAt: articles.createdAt,
+      total: sql<number>`count(*) over()::int`,
+    })
+    .from(articles)
+    .where(scope)
+    .orderBy(trackingPriority, desc(trackingEffectiveTime), desc(articles.updatedAt), desc(articles.id));
+
+  const [
+    trackingRows,
+    deskRows,
+    followUpRows,
+    titleRows,
+    monthlyRows,
+    readerComments,
+    calendarRows,
+    recentOpinionRows,
+  ] = await Promise.all([
+    trackingLimit === null
+      ? trackingQuery.offset(trackingOffset)
+      : trackingQuery.limit(trackingLimit).offset(trackingOffset),
+    db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        status: articles.status,
+        reviewStatus: articles.reviewStatus,
+        reviewNotes: articles.reviewNotes,
+        updatedAt: articles.updatedAt,
+        createdAt: articles.createdAt,
+      })
+      .from(articles)
+      .where(and(
+        scope,
+        or(
+          inArray(articles.status, ["draft", "scheduled"]),
+          inArray(articles.reviewStatus, ["pending_review", "needs_changes"]),
+        ),
+      ))
+      .orderBy(desc(sql`(${articles.reviewStatus} = 'needs_changes') IS TRUE`), desc(articles.updatedAt), desc(articles.id))
+      .limit(6),
+    db
+      .select({ id: articles.id, title: articles.title, views: articles.views })
+      .from(articles)
+      .where(and(scope, eq(articles.status, "published")))
+      .orderBy(desc(articles.views), desc(articles.updatedAt), desc(articles.id))
+      .limit(1),
+    db
+      .select({ title: articles.title })
+      .from(articles)
+      .where(scope)
+      .orderBy(desc(articles.updatedAt), desc(articles.id))
+      .limit(10),
+    db
+      .select({
+        publishedCount: sql<number>`count(*)::int`,
+        views: sql<number>`coalesce(sum(${articles.views}), 0)::bigint`,
+      })
+      .from(articles)
+      .where(and(scope, eq(articles.status, "published"), gte(articles.publishedAt, monthStart))),
+    db
+      .select({
+        id: comments.id,
+        content: comments.content,
+        sentiment: comments.currentSentiment,
+        likesCount: comments.likesCount,
+        createdAt: comments.createdAt,
+        articleTitle: articles.title,
+      })
+      .from(comments)
+      .innerJoin(articles, eq(articles.id, comments.articleId))
+      .where(and(scope, eq(comments.status, "approved")))
+      .orderBy(desc(comments.createdAt))
+      .limit(20),
     db
       .select({ id: worldDays.id, name: worldDays.nameAr, month: worldDays.month, day: worldDays.day, category: worldDays.category })
       .from(worldDays)
@@ -104,79 +176,56 @@ export async function getOpinionAuthorWorkspace(userId: string) {
       .limit(12),
   ]);
 
-  const articleTitleById = new Map(writerArticles.map((article) => [article.id, article.title]));
-  const desk = writerArticles
-    .filter((article) => article.status === "draft" || article.status === "scheduled" || article.reviewStatus === "pending_review" || article.reviewStatus === "needs_changes")
-    .sort((a, b) => Number(b.reviewStatus === "needs_changes") - Number(a.reviewStatus === "needs_changes"))
-    .slice(0, 6)
-    .map((article) => ({
+  let trackingTotal = trackingRows[0]?.total ?? 0;
+  if (trackingRows.length === 0 && trackingOffset > 0) {
+    // صفحة بعد النهاية: count(*) over() لا يعيد صفًا، فنحسب الإجمالي صراحةً.
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(articles).where(scope);
+    trackingTotal = row?.count ?? 0;
+  }
+
+  const desk = deskRows.map((article) => ({
+    id: article.id,
+    title: article.title,
+    status: article.status,
+    reviewStatus: article.reviewStatus,
+    reviewNotes: article.reviewNotes,
+    updatedAt: article.updatedAt || article.createdAt,
+    nextAction: deskNextAction(article.status, article.reviewStatus),
+  }));
+
+  const followUpArticle = followUpRows[0] || null;
+  const positiveCount = readerComments.filter((comment) => comment.sentiment === "positive").length;
+  const mostEngagedComment = [...readerComments].sort((a, b) => b.likesCount - a.likesCount)[0] || null;
+  const publishedThisMonthCount = Number(monthlyRows[0]?.publishedCount ?? 0);
+  const publishedThisMonthViews = Number(monthlyRows[0]?.views ?? 0);
+
+  return {
+    desk,
+    tracking: trackingRows.map((article) => ({
       id: article.id,
       title: article.title,
       status: article.status,
       reviewStatus: article.reviewStatus,
       reviewNotes: article.reviewNotes,
+      scheduledAt: article.scheduledAt,
+      publishedAt: article.publishedAt,
+      reviewedAt: article.reviewedAt,
       updatedAt: article.updatedAt || article.createdAt,
-      nextAction: article.status === "scheduled"
-        ? "مجدول للنشر من هيئة التحرير"
-        : article.reviewStatus === "needs_changes"
-          ? "معالجة ملاحظات التحرير"
-          : article.reviewStatus === "pending_review"
-            ? "في انتظار مراجعة هيئة التحرير والجدولة"
-            : article.reviewStatus === "approved"
-              ? "معتمد وفي انتظار الجدولة"
-              : "متابعة الكتابة",
-    }));
-
-  const published = writerArticles.filter((article) => article.status === "published");
-  const followUpArticle = [...published].sort((a, b) => b.views - a.views)[0] || null;
-  const positiveCount = readerComments.filter((comment) => comment.sentiment === "positive").length;
-  const mostEngagedComment = [...readerComments].sort((a, b) => b.likesCount - a.likesCount)[0] || null;
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const publishedThisMonth = published.filter((article) => article.publishedAt && article.publishedAt >= monthStart);
-
-  const trackingPriority = (article: WriterArticle) => {
-    if (article.reviewStatus === "needs_changes") return 0;
-    if (article.reviewStatus === "pending_review") return 1;
-    if (article.status === "scheduled") return 2;
-    if (article.reviewStatus === "approved") return 3;
-    if (article.status === "published") return 4;
-    if (article.status === "draft") return 5;
-    if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return 6;
-    return 7;
-  };
-
-  const articleEffectiveTime = (art: WriterArticle) => {
-    const d = art.publishedAt || art.updatedAt || art.createdAt;
-    return d ? new Date(d).getTime() : 0;
-  };
-
-  return {
-    desk,
-    tracking: [...writerArticles]
-      .sort((a, b) => {
-        const priorityDifference = trackingPriority(a) - trackingPriority(b);
-        if (priorityDifference !== 0) return priorityDifference;
-        return articleEffectiveTime(b) - articleEffectiveTime(a);
-      })
-      .map((article) => ({
-        id: article.id,
-        title: article.title,
-        status: article.status,
-        reviewStatus: article.reviewStatus,
-        reviewNotes: article.reviewNotes,
-        scheduledAt: article.scheduledAt,
-        publishedAt: article.publishedAt,
-        reviewedAt: article.reviewedAt,
-        updatedAt: article.updatedAt || article.createdAt,
-        createdAt: article.createdAt,
-      })),
+      createdAt: article.createdAt,
+    })),
+    // حقل إضافي اختياري: العملاء الحاليون يتجاهلونه ويستلمون القائمة كاملة.
+    trackingPage: {
+      total: trackingTotal,
+      offset: trackingOffset,
+      limit: trackingLimit,
+      hasMore: trackingOffset + trackingRows.length < trackingTotal,
+    },
     readerPulse: {
       commentsCount: readerComments.length,
       positiveShare: readerComments.length > 0 ? Math.round((positiveCount / readerComments.length) * 100) : 0,
       highlightedComment: mostEngagedComment ? {
         content: mostEngagedComment.content,
-        articleTitle: articleTitleById.get(mostEngagedComment.articleId) || "مقالك",
+        articleTitle: mostEngagedComment.articleTitle || "مقالك",
       } : null,
       message: readerComments.length > 0
         ? "قراؤك لا يكتفون بالمشاهدة؛ تعليقاتهم تحمل بذور مقالات جديدة."
@@ -193,14 +242,14 @@ export async function getOpinionAuthorWorkspace(userId: string) {
       .sort((a, b) => a.date.getTime() - b.date.getTime())
       .slice(0, 4),
     context: {
-      writerTitles: writerArticles.slice(0, 10).map((article) => article.title),
+      writerTitles: titleRows.map((article) => article.title),
       recentOpinion: recentOpinionRows.map((article) => ({ title: article.title, excerpt: article.excerpt })),
     },
     monthlyBrief: {
-      publishedCount: publishedThisMonth.length,
-      views: publishedThisMonth.reduce((sum, article) => sum + article.views, 0),
-      message: publishedThisMonth.length > 0
-        ? `نشرت ${publishedThisMonth.length} ${publishedThisMonth.length === 1 ? "مقال" : "مقالات"} هذا الشهر. أفضل خطوة تالية: متابعة الفكرة التي صنعت أكبر حوار.`
+      publishedCount: publishedThisMonthCount,
+      views: publishedThisMonthViews,
+      message: publishedThisMonthCount > 0
+        ? `نشرت ${publishedThisMonthCount} ${publishedThisMonthCount === 1 ? "مقال" : "مقالات"} هذا الشهر. أفضل خطوة تالية: متابعة الفكرة التي صنعت أكبر حوار.`
         : "هذا الشهر ما زال صفحة بيضاء؛ ابدأ بفكرة صغيرة وساعدنا على تطويرها.",
     },
   };
@@ -298,7 +347,8 @@ function fallbackIdeas(workspace: Awaited<ReturnType<typeof getOpinionAuthorWork
 }
 
 export async function generateWriterIdeas(userId: string): Promise<{ ideas: WriterIdea[]; generatedBy: "ai" | "fallback" }> {
-  const workspace = await getOpinionAuthorWorkspace(userId);
+  // الأفكار لا تحتاج قائمة التتبع؛ صفحة من صف واحد تكفي.
+  const workspace = await getOpinionAuthorWorkspace(userId, { trackingLimit: 1 });
   try {
     const response = await aiGateway.complete({
       feature: "opinion-writer-ideas",
@@ -385,8 +435,7 @@ const STYLE_PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
 const STYLE_PROFILE_FALLBACK_TTL_MS = 15 * 60 * 1000;
 
 export async function getWriterStyleProfile(userId: string) {
-  // استعلام مخصص بدل getWriterArticles: ذاك يجلب محتوى كل مقالات الكاتب كاملة
-  // بينما الملف الأسلوبي يحتاج أحدث 8 منشورة فقط.
+  // الملف الأسلوبي وحده يحتاج النص، وأحدث 8 منشورة فقط.
   const published = await db
     .select({ id: articles.id, title: articles.title, content: articles.content, excerpt: articles.excerpt })
     .from(articles)

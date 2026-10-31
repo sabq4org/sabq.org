@@ -267,19 +267,53 @@ final class WriterWorkspaceViewModel: ObservableObject {
     @Published var reviewTitle = ""
     @Published var reviewError: String?
 
+    /// مؤشرات مستقلة للطلبين الثانويين: لا يحجب أيّهما محتوى المكتب ولا يمسحه.
+    @Published var notificationsLoading = false
+    @Published var notificationsFailed = false
+    @Published var scheduleLoading = false
+    @Published var scheduleFailed = false
+
+    /// الطلبات الثلاثة تبدأ معًا ويُعرض كلٌّ منها فور وصوله. المكتب وحده يرفع
+    /// حالة التحميل الأولى؛ التحديث لاحقًا يُبقي آخر محتوى ظاهرًا ولا يستبدله
+    /// إلا بنتيجة ناجحة.
     func load() async {
-        loadError = nil
-        async let w = APIClient.shared.get(WriterWorkspaceModel.self, path: "/contributor/workspace", ignoreCache: true)
-        async let n = APIClient.shared.fetchEditorialNotifications()
-        async let s = APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
-        do {
-            workspace = try await w
-        } catch {
-            loadError = "تعذر تجهيز مساحة الكاتب"
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadWorkspace() }
+            group.addTask { await self.loadNotifications() }
+            group.addTask { await self.loadSchedule() }
         }
-        notifications = try? await n
-        schedule = try? await s
+    }
+
+    func loadWorkspace() async {
+        loadError = nil
+        do {
+            workspace = try await APIClient.shared.get(WriterWorkspaceModel.self, path: "/contributor/workspace", ignoreCache: true)
+        } catch {
+            if !Task.isCancelled { loadError = "تعذر تجهيز مساحة الكاتب" }
+        }
         isLoading = false
+    }
+
+    func loadNotifications() async {
+        notificationsLoading = true
+        do {
+            notifications = try await APIClient.shared.fetchEditorialNotifications()
+            notificationsFailed = false
+        } catch {
+            if !Task.isCancelled { notificationsFailed = true }
+        }
+        notificationsLoading = false
+    }
+
+    func loadSchedule() async {
+        scheduleLoading = true
+        do {
+            schedule = try await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+            scheduleFailed = false
+        } catch {
+            if !Task.isCancelled { scheduleFailed = true }
+        }
+        scheduleLoading = false
     }
 
     func pickDay(_ weekday: Int) async {
@@ -288,7 +322,7 @@ final class WriterWorkspaceViewModel: ObservableObject {
         struct Body: Encodable { let weekday: Int }
         do {
             _ = try await APIClient.shared.post(WriterSchedulePostResponse.self, path: "/contributor/schedule", body: Body(weekday: weekday))
-            schedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+            await loadSchedule()
         } catch {
             scheduleError = "تعذر حفظ اليوم — حاول مرة أخرى"
         }
@@ -337,7 +371,7 @@ final class WriterWorkspaceViewModel: ObservableObject {
 
     func markAllNotificationsRead() async {
         try? await APIClient.shared.markAllEditorialNotificationsRead()
-        notifications = try? await APIClient.shared.fetchEditorialNotifications()
+        await loadNotifications()
     }
 
     var trackingCounts: (pending: Int, action: Int, scheduled: Int, declined: Int, published: Int) {
@@ -373,8 +407,10 @@ final class WriterWorkspaceViewModel: ObservableObject {
         return nil
     }
 
+    /// الموعد يحمل «المادة النشطة»؛ لا نفتح زر المقال الجديد قبل وصوله أول مرة
+    /// (الخادم يرفض الإرسال المزدوج أيضًا بـ OPINION_PIPELINE_BUSY).
     var canCreateNewArticle: Bool {
-        !isLoading && blockingUnpublishedArticle == nil
+        !isLoading && !(scheduleLoading && schedule == nil) && blockingUnpublishedArticle == nil
     }
 }
 
@@ -583,7 +619,9 @@ struct WriterWorkspaceView: View {
                 if vm.isLoading {
                     ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else {
+                    workspaceErrorRow
                     scheduleCard
+                    notificationsStatusRow
                     if unreadCount > 0 { alertsCard }
                     monthlyBriefCard
                     deskCard
@@ -599,8 +637,65 @@ struct WriterWorkspaceView: View {
         .refreshable { await vm.load() }
     }
 
+    /// فشل المكتب نفسه (أول تحميل أو تحديث). المحتوى السابق، إن وُجد، يبقى تحته.
+    @ViewBuilder
+    private var workspaceErrorRow: some View {
+        if let message = vm.loadError {
+            secondaryStatusRow(text: vm.workspace == nil ? message : "\(message) — يظهر آخر محتوى محفوظ", loading: false) {
+                Task { await vm.loadWorkspace() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var notificationsStatusRow: some View {
+        if vm.notifications == nil {
+            if vm.notificationsLoading {
+                secondaryStatusRow(text: "جارٍ تحميل التنبيهات التحريرية…", loading: true, retry: nil)
+            } else if vm.notificationsFailed {
+                secondaryStatusRow(text: "تعذر تحميل التنبيهات التحريرية", loading: false) {
+                    Task { await vm.loadNotifications() }
+                }
+            }
+        }
+    }
+
+    /// سطر صغير لحالة طلب ثانوي: مؤشر تحميل، أو رسالة فشل مع إعادة المحاولة.
+    private func secondaryStatusRow(text: String, loading: Bool, retry: (() -> Void)?) -> some View {
+        HStack(spacing: SabqLayout.space8) {
+            if loading {
+                ProgressView().controlSize(.small).tint(SabqTheme.textSecondary)
+            } else {
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
+            Spacer(minLength: SabqLayout.space8)
+            if let retry {
+                Button("إعادة المحاولة", action: retry)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder
     private var scheduleCard: some View {
+        if vm.schedule == nil {
+            if vm.scheduleLoading {
+                secondaryStatusRow(text: "جارٍ تحميل موعد النشر…", loading: true, retry: nil)
+            } else if vm.scheduleFailed {
+                secondaryStatusRow(text: "تعذر تحميل موعد النشر", loading: false) {
+                    Task { await vm.loadSchedule() }
+                }
+            }
+        }
         if let sched = vm.schedule {
             if let banner = sched.banner {
                 WriterScheduleBannerCard(banner: banner)
@@ -983,6 +1078,7 @@ struct WriterWorkspaceView: View {
                 if vm.isLoading {
                     ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else {
+                    workspaceErrorRow
                     trackingCountersRow
                     if unreadCount > 0 { alertsCard }
                     if vm.trackingCounts.action > 0 { needsChangesCallout }
