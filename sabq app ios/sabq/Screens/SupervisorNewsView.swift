@@ -8,9 +8,16 @@ struct SupervisorNewsView: View {
     private var showsFullDashboard: Bool { authStore.currentUser?.isPlatformAdmin == true }
 
     @State private var board = EditorialNewsBoard()
-    @State private var filter: EditorialNewsFilter = .all
+    @State private var filter: EditorialNewsFilter
     @State private var loading = true
     @State private var error: EditorialError?
+    /// المحرر بلا دور مراسل أو كاتب: هذه لوحته الوحيدة، فالإنشاء هنا.
+    @State private var showNewChoice = false
+    @State private var submissionKind: ArticleSubmissionKind?
+
+    init(initialFilter: EditorialNewsFilter = .all) {
+        _filter = State(initialValue: initialFilter)
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -19,7 +26,8 @@ struct SupervisorNewsView: View {
                     Text(EditorialText.todayLine())
                         .sabqText(SabqType.meta)
                         .foregroundStyle(SabqTheme.textSecondary)
-                    Text("لوحة التحكم")
+                    // للإدارة الكاملة هذه صفحة فرعية من «لوحة التحكم»؛ للمحرر هي لوحته.
+                    Text(showsFullDashboard ? "بانتظار قرارك" : "لوحة التحكم")
                         .font(SabqType.pageTitle)
                         .foregroundStyle(SabqTheme.textPrimary)
                 }
@@ -48,23 +56,6 @@ struct SupervisorNewsView: View {
                         .sabqNewsSurface()
                     }
 
-                    if showsFullDashboard {
-                        NavigationLink(value: AdminDashboardRoute()) {
-                            HStack {
-                                Text("كل الأخبار والمجدولة والمؤشرات")
-                                    .sabqText(SabqType.rowTitle)
-                                    .foregroundStyle(SabqTheme.textPrimary)
-                                Spacer()
-                                Image(systemName: "chevron.left")
-                                    .foregroundStyle(SabqTheme.textTertiary)
-                                    .accessibilityHidden(true)
-                            }
-                            .frame(minHeight: 52)
-                            .padding(.horizontal, SabqLayout.cardInset)
-                            .sabqNewsSurface()
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
@@ -75,6 +66,25 @@ struct SupervisorNewsView: View {
         .refreshable { await load() }
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !showsFullDashboard {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showNewChoice = true } label: {
+                        Image(systemName: "plus")
+                            .font(SabqFonts.app(size: 17, weight: .semibold))
+                    }
+                    .accessibilityLabel("محتوى جديد")
+                }
+            }
+        }
+        .confirmationDialog("نوع المحتوى", isPresented: $showNewChoice, titleVisibility: .visible) {
+            Button("خبر") { submissionKind = .news }
+            Button("مقال رأي") { submissionKind = .opinion }
+            Button("إلغاء", role: .cancel) {}
+        }
+        .sheet(item: $submissionKind, onDismiss: { Task { await load() } }) { kind in
+            ArticleSubmissionView(kind: kind)
+        }
         .task { await load() }
     }
 
@@ -169,35 +179,24 @@ struct SupervisorNewsView: View {
             .buttonStyle(.plain)
         case .editRequest(let request):
             NavigationLink(value: EditRequestReviewRoute(id: request.id)) {
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                    HStack(spacing: SabqLayout.space8) {
-                        Text("طلب تعديل")
-                            .sabqText(SabqType.tag)
-                            .foregroundStyle(SabqTheme.primary)
-                            .padding(.horizontal, SabqLayout.space8)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.surfaceMuted))
-                        if request.urgent {
-                            Text("عاجل")
-                                .sabqText(SabqType.tag)
-                                .foregroundStyle(SabqTheme.breaking)
-                        }
-                        Text("\(request.onWhat) · \(EditorialText.relative(request.submittedAt))")
-                            .sabqText(SabqType.meta)
-                            .foregroundStyle(SabqTheme.textSecondary)
-                    }
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     Text(request.title)
                         .sabqText(SabqType.rowTitle)
                         .foregroundStyle(SabqTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text([request.requesterName, request.label].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text([request.requesterName, request.onWhat, EditorialText.relative(request.submittedAt)]
+                        .filter { !$0.isEmpty }.joined(separator: " · "))
                         .sabqText(SabqType.meta)
                         .foregroundStyle(SabqTheme.textSecondary)
-                    Text("راجع الطلب")
-                        .sabqText(SabqType.metaEmphasis)
-                        .foregroundStyle(SabqTheme.primary)
-                        .padding(.top, 2)
+                    // نفس ملصق الويب: نابض، وأحمر إن كان عاجلًا.
+                    EditRequestBadge(outcome: .pending, detail: request.label ?? "", urgent: request.urgent)
+                    Text(EditorialStates.reviewRequest)
+                        .sabqText(SabqType.button)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .padding(.horizontal, SabqLayout.space16)
+                        .frame(minHeight: 40)
+                        .background(Capsule().fill(SabqTheme.actionFill))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, SabqLayout.space12)

@@ -564,131 +564,83 @@ struct SettingsView: View {
 
     // MARK: - Editorial & Admin Section
 
+    /// مدخل واحد لكل دور (نموذج 2026-10-31): لوحة التحكم للإدارة، و«أخباري»
+    /// للمراسل، و«لوحة الكاتب» لكاتب الرأي. إرسال خبر أو مقال، وما ينتظر
+    /// التعديل، والإشعارات التحريرية صارت داخل كل لوحة كما في الويب.
     @ViewBuilder
     private func editorialAndAdminSection(for user: APIUser) -> some View {
-        let writerVisible = user.isWriter || user.isAdminLike
-        let reporterVisible = user.isReporter || user.isAdminLike
-        let hasEditorialOrAdmin = writerVisible || reporterVisible || user.isPlatformAdmin
+        let supervisorVisible = user.isPlatformAdmin || user.isAdminLike
+        let reporterVisible = user.isReporter
+        let writerVisible = user.isWriter
+        let waiting = revisionsStore.count
 
-        if hasEditorialOrAdmin {
-            SettingsSection(title: "الأدوات التحريرية والإدارة", subtitle: "إدارة المحتوى والمراسلات التحريرية") {
-                if user.isPlatformAdmin {
-                    NavigationLink(value: AdminDashboardRoute()) {
-                        submissionCardContent(
-                            title: "لوحة التحكم",
-                            subtitle: "إدارة الأخبار والمؤشّرات",
-                            icon: "shield.lefthalf.filled",
-                            tint: SabqTheme.primary
-                        )
+        if supervisorVisible || reporterVisible || writerVisible {
+            SettingsSection(title: "عملي في سبق", subtitle: "لوحاتك بنفس كلمات الويب وأزراره") {
+                if supervisorVisible {
+                    if user.isPlatformAdmin {
+                        NavigationLink(value: AdminDashboardRoute()) {
+                            submissionCardContent(
+                                title: "لوحة التحكم",
+                                subtitle: "ما ينتظر قرارك، والأخبار، والمؤشرات",
+                                icon: "tray.full",
+                                tint: SabqTheme.primary
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        NavigationLink(value: SupervisorNewsRoute()) {
+                            submissionCardContent(
+                                title: "لوحة التحكم",
+                                subtitle: "أخبار المراسلين وطلبات التعديل بانتظار قرارك",
+                                icon: "tray.full",
+                                tint: SabqTheme.primary
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    SettingsRowDivider()
-                }
-
-                if user.isAdminLike {
-                    NavigationLink(value: SupervisorNewsRoute()) {
-                        submissionCardContent(
-                            title: "بانتظار قرارك",
-                            subtitle: "أخبار المراسلين وطلبات التعديل — انشر أو جدول أو أعد",
-                            icon: "tray.full",
-                            tint: SabqTheme.primary
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    SettingsRowDivider()
+                    if reporterVisible || writerVisible { SettingsRowDivider() }
                 }
 
                 if reporterVisible {
                     NavigationLink(value: MyNewsRoute()) {
                         submissionCardContent(
                             title: "أخباري",
-                            subtitle: "حالة أخبارك، ما أُعيد لك، وطلب تعديل على المنشور",
-                            icon: "list.bullet.rectangle.portrait",
-                            tint: SabqTheme.primary
+                            subtitle: "ما يحتاج تعديلك، وحالة أخبارك، وخبر جديد",
+                            icon: "newspaper",
+                            tint: SabqTheme.primary,
+                            badgeCount: writerVisible ? nil : waiting
                         )
                     }
                     .buttonStyle(.plain)
-                    SettingsRowDivider()
+                    if writerVisible { SettingsRowDivider() }
                 }
 
-                // المراسل يرى «أخباري» أعلاه؛ «لوحة الكاتب» لكتّاب الرأي والإدارة.
                 if writerVisible {
                     NavigationLink(value: ContributorDashboardRoute()) {
                         submissionCardContent(
                             title: "لوحة الكاتب",
-                            subtitle: "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
-                            icon: "doc.richtext",
-                            tint: SabqTheme.primary
+                            subtitle: "خطوتك التالية، ومقالاتي، وأدائي",
+                            icon: "square.and.pencil",
+                            tint: SabqTheme.primary,
+                            badgeCount: waiting
                         )
                     }
                     .buttonStyle(.plain)
-                    SettingsRowDivider()
                 }
+            }
+        }
 
-                if reporterVisible {
-                    submissionCard(
-                        title: "إرسال خبر",
-                        subtitle: "أرسل خبرك مع الصور — يصل لغرفة الأخبار",
-                        icon: "newspaper",
+        if user.isPlatformAdmin {
+            SettingsSection(title: "معاينات", subtitle: nil) {
+                NavigationLink(value: SabqPlusRoute()) {
+                    submissionCardContent(
+                        title: "سبق بلس (معاينة)",
+                        subtitle: "محاكاة الاستبدال عبر ولاء ون",
+                        icon: "plus.diamond",
                         tint: SabqTheme.primary
-                    ) {
-                        submissionKind = .news
-                    }
-                    SettingsRowDivider()
+                    )
                 }
-
-                if writerVisible {
-                    submissionCard(
-                        title: "إرسال مقالة للنشر",
-                        subtitle: "اكتب رأيك أو مقالتك وسنراجعها للنشر",
-                        icon: "square.and.pencil",
-                        tint: SabqTheme.primary
-                    ) {
-                        submissionKind = .opinion
-                    }
-                    SettingsRowDivider()
-                }
-
-                if revisionsStore.count > 0 {
-                    NavigationLink(value: ArticleRevisionsRoute()) {
-                        submissionCardContent(
-                            title: "مقالات تنتظر التعديل",
-                            subtitle: "\(revisionsStore.count) مقال بحاجة لإعادة الإرسال",
-                            icon: "pencil.and.list.clipboard",
-                            tint: SabqTheme.warning,
-                            badgeCount: revisionsStore.count
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    SettingsRowDivider()
-                }
-
-                if writerVisible || reporterVisible {
-                    NavigationLink(value: EditorialNotificationsRoute()) {
-                        submissionCardContent(
-                            title: "إشعاراتي التحريرية",
-                            subtitle: "متابعة جدولة ونشر ومراجعة محتواك",
-                            icon: "bell.badge",
-                            tint: SabqTheme.primary
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if user.isPlatformAdmin {
-                    if writerVisible || reporterVisible {
-                        SettingsRowDivider()
-                    }
-                    NavigationLink(value: SabqPlusRoute()) {
-                        submissionCardContent(
-                            title: "سبق بلس (معاينة)",
-                            subtitle: "محاكاة الاستبدال عبر ولاء ون",
-                            icon: "plus.diamond",
-                            tint: SabqTheme.primary
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
+                .buttonStyle(.plain)
             }
         }
     }

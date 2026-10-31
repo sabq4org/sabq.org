@@ -377,7 +377,7 @@ struct ContributorDashboardView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle(embedded ? "لوحة الكاتب" : "لوحة الأداء")
+        .navigationTitle(embedded ? "لوحة الكاتب" : "")
         .navigationBarTitleDisplayMode(.large)
         .task {
             await vm.load()
@@ -391,22 +391,14 @@ struct ContributorDashboardView: View {
 
     // MARK: - Header
 
+    /// داخل «لوحة الكاتب» لا ترويسة (التبويب «أدائي» يكفي). وحدها: عنوان قصير بلا ترحيب.
     @ViewBuilder
     private func headerSection(_ data: ContributorAnalytics) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            HStack(spacing: SabqLayout.space8) {
-                Image(systemName: data.role == "reporter" ? "newspaper" : "pencil.and.outline")
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primary)
-                    .accessibilityHidden(true)
-                Text(data.role == "reporter" ? "لوحة المراسل" : "لوحة كاتب الرأي")
-                    .sabqText(SabqType.leadTitle)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            Text("مرحباً بك في لوحة التحكم الخاصة بك")
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.textSecondary)
+        if !embedded {
+            Text(data.role == "reporter" ? "أداء أخباري" : "أدائي")
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
         }
     }
 
@@ -473,10 +465,10 @@ struct ContributorDashboardView: View {
             HStack(alignment: .top, spacing: SabqLayout.space8) {
                 // Status breakdown
                 VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                    statusDot(label: "منشور", count: data.publishedArticles, color: SabqTheme.success)
-                    statusDot(label: "مسودة", count: data.draftArticles, color: SabqTheme.warning)
-                    statusDot(label: "قيد المراجعة", count: data.pendingArticles, color: SabqTheme.primary)
-                    statusDot(label: "مرفوض", count: data.rejectedArticles, color: SabqTheme.danger)
+                    statusDot(label: EditorialStates.published, count: data.publishedArticles, color: SabqTheme.success)
+                    statusDot(label: EditorialStates.draft, count: data.draftArticles, color: SabqTheme.textSecondary)
+                    statusDot(label: EditorialStates.pending, count: data.pendingArticles, color: SabqTheme.primary)
+                    statusDot(label: EditorialStates.notPublished, count: data.rejectedArticles, color: SabqTheme.danger)
                 }
                 .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -810,17 +802,16 @@ struct ContributorDashboardView: View {
         StatusChip(title: label, tint: color)
     }
 
+    /// نفس شارة الويب (shared/editorialStates.ts): الحالة النهائية قبل المراجعة (#2044).
     private func statusInfo(_ status: String, reviewStatus: String?) -> (String, Color) {
-        // المنشور والمجدول والمؤرشف أولًا: النشر يترك reviewStatus على pending_review (#2044).
-        if status == "draft" && reviewStatus == "needs_changes" { return ("يحتاج تعديل", SabqTheme.warning) }
-        if status == "draft" && reviewStatus == "pending_review" { return ("قيد المراجعة", SabqTheme.primary) }
-        switch status {
-        case "scheduled": return ("مجدول", SabqTheme.primary)
-        case "published": return ("منشور", SabqTheme.success)
-        case "draft": return ("مسودة", SabqTheme.warning)
-        case "rejected": return ("مرفوض", SabqTheme.danger)
-        case "archived": return ("مؤرشف", SabqTheme.danger)
-        default: return (status, SabqTheme.textSecondary)
+        let label = EditorialStates.label(status: status, reviewStatus: reviewStatus)
+        switch EditorialStatePill.tone(for: label) {
+        case .success: return (label, SabqTheme.success)
+        case .scheduled: return (label, SabqTheme.teal)
+        case .warning: return (label, SabqTheme.warning)
+        case .info: return (label, SabqTheme.primary)
+        case .danger: return (label, SabqTheme.danger)
+        case .neutral: return (label, SabqTheme.textSecondary)
         }
     }
 

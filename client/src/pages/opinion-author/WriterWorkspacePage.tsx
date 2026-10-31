@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { EDITORIAL_STATE_LABELS } from "@shared/editorialStates";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format, formatDistanceToNow } from "date-fns";
@@ -944,14 +945,14 @@ function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: 
 }
 
 function trackingState(article: TrackingArticle) {
-  if (article.status === "published") return { label: "تم النشر", description: "المقال متاح الآن للقراء.", icon: CheckCircle2, tone: "success" as const, dateLabel: "نُشر في", date: article.publishedAt };
-  if (article.status === "scheduled") return { label: "مجدول للنشر", description: "اعتمدت هيئة التحرير المقال وحددت موعد جدولته للنشر.", icon: CalendarClock, tone: "info" as const, dateLabel: "موعد النشر المجدول", date: article.scheduledAt };
-  if (article.status === "archived") return { label: "مؤرشف", description: "أُرشف المقال ولم يعد معروضاً للقراء.", icon: Archive, tone: "default" as const, dateLabel: "أُرشف في", date: article.updatedAt };
-  if (article.reviewStatus === "rejected" || article.status === "rejected") return { label: "غير صالح للنشر", description: "أنهى فريق التحرير مراجعة المقال وقرر عدم نشره.", icon: CircleX, tone: "danger" as const, dateLabel: "صدر القرار في", date: article.reviewedAt || article.updatedAt };
-  if (article.reviewStatus === "needs_changes") return { label: "عليه ملاحظات", description: "أعاد فريق التحرير المقال إليك لإجراء تعديلات محددة.", icon: Edit3, tone: "warning" as const, dateLabel: "وصلت الملاحظات في", date: article.reviewedAt || article.updatedAt };
-  if (article.reviewStatus === "pending_review") return { label: "في انتظار المراجعة والجدولة", description: "وصلت المقالة إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.", icon: Clock3, tone: "default" as const, dateLabel: "تاريخ الإرسال", date: article.updatedAt };
-  if (article.reviewStatus === "approved") return { label: "في انتظار الجدولة", description: "اعتمدت هيئة التحرير المقال وهو الآن بانتظار تحديد موعد النشر.", icon: FileCheck2, tone: "success" as const, dateLabel: "تم الاعتماد في", date: article.reviewedAt || article.updatedAt };
-  return { label: "مسودة", description: "المقال محفوظ لديك ولم يُرسل إلى فريق التحرير بعد.", icon: Feather, tone: "default" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
+  if (article.status === "published") return { label: EDITORIAL_STATE_LABELS.published, description: "المقال متاح الآن للقراء.", icon: CheckCircle2, tone: "success" as const, dateLabel: "نُشر في", date: article.publishedAt };
+  if (article.status === "scheduled") return { label: EDITORIAL_STATE_LABELS.scheduled, description: "اعتمدت هيئة التحرير المقال وحددت موعد جدولته للنشر.", icon: CalendarClock, tone: "info" as const, dateLabel: "موعد النشر المجدول", date: article.scheduledAt };
+  if (article.status === "archived") return { label: EDITORIAL_STATE_LABELS.archived, description: "أُرشف المقال ولم يعد معروضاً للقراء.", icon: Archive, tone: "default" as const, dateLabel: "أُرشف في", date: article.updatedAt };
+  if (article.reviewStatus === "rejected" || article.status === "rejected") return { label: EDITORIAL_STATE_LABELS.not_published, description: "أنهى فريق التحرير مراجعة المقال وقرر عدم نشره.", icon: CircleX, tone: "danger" as const, dateLabel: "صدر القرار في", date: article.reviewedAt || article.updatedAt };
+  if (article.reviewStatus === "needs_changes") return { label: EDITORIAL_STATE_LABELS.needs_changes, description: "أعاد فريق التحرير المقال إليك لإجراء تعديلات محددة.", icon: Edit3, tone: "warning" as const, dateLabel: "وصلت الملاحظات في", date: article.reviewedAt || article.updatedAt };
+  if (article.reviewStatus === "pending_review") return { label: EDITORIAL_STATE_LABELS.pending, description: "وصلت المقالة إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.", icon: Clock3, tone: "default" as const, dateLabel: "تاريخ الإرسال", date: article.updatedAt };
+  if (article.reviewStatus === "approved") return { label: EDITORIAL_STATE_LABELS.approved, description: "اعتمدت هيئة التحرير المقال وهو الآن بانتظار تحديد موعد النشر.", icon: FileCheck2, tone: "success" as const, dateLabel: "تم الاعتماد في", date: article.reviewedAt || article.updatedAt };
+  return { label: EDITORIAL_STATE_LABELS.draft, description: "المقال محفوظ لديك ولم يُرسل إلى فريق التحرير بعد.", icon: Feather, tone: "default" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
 }
 
 function WriterTrackingCard({

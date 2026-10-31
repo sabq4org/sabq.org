@@ -1,31 +1,23 @@
-/** Status badge for contributor dashboards (opinion author / reporter). */
+import { EDITORIAL_STATE_LABELS, editorialState } from "@shared/editorialStates";
+
+/**
+ * Status badge for contributor dashboards (opinion author / reporter).
+ * النص من القاموس الموحّد (shared/editorialStates.ts)، فيطابق تطبيق سبق حرفيًا.
+ */
 export function contributorArticleStatusLabel(article: {
   status: string;
   reviewStatus?: string | null;
 }) {
-  // الحالة النهائية أولًا: النشر لا يمسح reviewStatus، فكان المنشور يظهر «أُرسل للمراجعة».
-  if (article.status === "published") {
-    return { label: "منشور", variant: "default" as const };
-  }
-  if (article.status === "scheduled") {
-    return { label: "مجدول", variant: "default" as const };
-  }
-  if (article.reviewStatus === "needs_changes") {
-    return { label: "يحتاج تعديل", variant: "outline" as const };
-  }
-  if (article.reviewStatus === "pending_review") {
-    return { label: "أُرسل للمراجعة", variant: "secondary" as const };
-  }
-  if (article.status === "published") {
-    return { label: "منشور", variant: "default" as const };
-  }
-  if (article.status === "archived") {
-    return { label: "مؤرشف", variant: "destructive" as const };
-  }
-  if (article.status === "rejected") {
-    return { label: "مرفوض", variant: "destructive" as const };
-  }
-  return { label: "مسودة", variant: "secondary" as const };
+  const state = editorialState(article);
+  const variant =
+    state === "published" || state === "scheduled"
+      ? ("default" as const)
+      : state === "needs_changes"
+        ? ("outline" as const)
+        : state === "archived" || state === "not_published"
+          ? ("destructive" as const)
+          : ("secondary" as const);
+  return { label: EDITORIAL_STATE_LABELS[state], variant };
 }
 
 export type ReporterArticleBucket = "fix" | "rev" | "sch" | "pub" | "draft" | "arch";

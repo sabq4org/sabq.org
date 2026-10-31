@@ -500,8 +500,8 @@ private struct SabqDestinations: ViewModifier {
                 ReporterNewsView()
                     .duoContentInsets()
             }
-            .navigationDestination(for: SupervisorNewsRoute.self) { _ in
-                SupervisorNewsView()
+            .navigationDestination(for: SupervisorNewsRoute.self) { route in
+                SupervisorNewsView(initialFilter: route.filter)
                     .duoContentInsets()
             }
             .navigationDestination(for: SupervisorNewsPreviewRoute.self) { route in

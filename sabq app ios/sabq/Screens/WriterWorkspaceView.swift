@@ -417,7 +417,7 @@ struct WriterWorkspaceView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle(isOpinionWriter ? "" : "لوحة الأداء")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .task {
@@ -991,13 +991,13 @@ struct WriterWorkspaceView: View {
         let counts = vm.trackingCounts
         return VStack(spacing: SabqLayout.space8) {
             HStack(spacing: SabqLayout.space8) {
-                trackingCounter(label: "تحت المراجعة", value: counts.pending, tint: SabqTheme.primary)
-                trackingCounter(label: "تحتاج إجراءك", value: counts.action, tint: SabqTheme.warning)
-                trackingCounter(label: "مجدولة", value: counts.scheduled, tint: SabqTheme.teal)
+                trackingCounter(label: EditorialStates.filterPending, value: counts.pending, tint: SabqTheme.primary)
+                trackingCounter(label: EditorialStates.filterNeedsChanges, value: counts.action, tint: SabqTheme.warning)
+                trackingCounter(label: EditorialStates.filterScheduled, value: counts.scheduled, tint: SabqTheme.teal)
             }
             HStack(spacing: SabqLayout.space8) {
-                trackingCounter(label: "غير صالحة للنشر", value: counts.declined, tint: SabqTheme.danger)
-                trackingCounter(label: "منشورة", value: counts.published, tint: SabqTheme.success)
+                trackingCounter(label: EditorialStates.notPublished, value: counts.declined, tint: SabqTheme.danger)
+                trackingCounter(label: EditorialStates.filterPublished, value: counts.published, tint: SabqTheme.success)
             }
         }
     }
@@ -1028,7 +1028,7 @@ struct WriterWorkspaceView: View {
                     .foregroundStyle(SabqTheme.warning)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                    Text("مقالات تحتاج لمستك (\(vm.trackingCounts.action))")
+                    Text("مقالات تحتاج تعديلك (\(vm.trackingCounts.action))")
                         .sabqText(SabqType.rowTitle)
                         .foregroundStyle(SabqTheme.textPrimary)
                     Text("ملاحظات التحرير جاهزة — اضغط للتعديل مباشرة.")
@@ -1115,15 +1115,17 @@ struct WriterWorkspaceView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// نفس شارة الويب (shared/editorialStates.ts): الحالة النهائية قبل المراجعة.
     private func trackingStatusInfo(_ article: WriterTrackingArticle) -> (label: String, tint: Color) {
-        if article.reviewStatus == "needs_changes" { return ("تحتاج إجراءك", SabqTheme.warning) }
-        if article.reviewStatus == "rejected" || article.status == "rejected" || article.status == "archived" {
-            return ("غير صالحة للنشر", SabqTheme.danger)
+        let label = EditorialStates.label(status: article.status, reviewStatus: article.reviewStatus)
+        switch EditorialStatePill.tone(for: label) {
+        case .success: return (label, SabqTheme.success)
+        case .scheduled: return (label, SabqTheme.teal)
+        case .warning: return (label, SabqTheme.warning)
+        case .info: return (label, SabqTheme.primary)
+        case .danger: return (label, SabqTheme.danger)
+        case .neutral: return (label, SabqTheme.textSecondary)
         }
-        if article.status == "published" { return ("منشورة", SabqTheme.success) }
-        if article.status == "scheduled" { return ("مجدولة", SabqTheme.teal) }
-        if article.reviewStatus == "pending_review" { return ("تحت المراجعة", SabqTheme.primary) }
-        return ("مسودة", SabqTheme.textSecondary)
     }
 
     private func trackingDateLine(_ article: WriterTrackingArticle) -> String? {

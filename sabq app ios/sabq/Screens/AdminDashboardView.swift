@@ -175,16 +175,36 @@ struct AdminDashboardView: View {
     @State private var pendingPublish: AdminNewsItem?
     /// Drives the push into the editor in "new article" mode ("news"/"opinion").
     @State private var newArticleType: String?
+    /// ما ينتظر القرار (/editorial/news): الملخّص أعلى اللوحة، وملصق طلب
+    /// التعديل على صف الخبر كما في «الأخبار والمقالات» على الويب. فشله لا يوقف اللوحة.
+    @State private var queue: EditorialNewsBoard?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: SabqLayout.space24) {
-                metricsSection
-                inboxSection
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                if let queue {
+                    decisionSummary(queue)
+                } else {
+                    // تعذّر الملخّص (مثل مصادقة ثنائية غير مفعّلة): المدخل يبقى،
+                    // وصفحة القائمة تشرح السبب ورابط التفعيل.
+                    NavigationLink(value: SupervisorNewsRoute()) {
+                        adminShortcut(
+                            title: "بانتظار قرارك",
+                            subtitle: "أخبار المراسلين وطلبات التعديل",
+                            icon: "tray.full",
+                            tint: SabqTheme.primary
+                        )
+                        .padding(.horizontal, SabqLayout.space16)
+                        .sabqNewsSurface()
+                    }
+                    .buttonStyle(.plain)
+                }
                 AdminSegmentedControl(selected: vm.selectedStatus) { status in
                     Task { await vm.select(status) }
                 }
                 listSection
+                metricsSection
+                inboxSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
@@ -244,9 +264,83 @@ struct AdminDashboardView: View {
                 }
             }
         }
-        .task { await vm.load() }
-        .refreshable { await vm.load() }
+        .task {
+            Task { await loadQueue() }
+            await vm.load()
+        }
+        .refreshable {
+            Task { await loadQueue() }
+            await vm.load()
+        }
         .sabqScreen("AdminDashboard")
+    }
+
+    // MARK: بانتظار قرارك (نفس ملخّص الويب و«مكتب سبق»)
+
+    /// طلبات التعديل المفتوحة لكل خبر، للملصق النابض على صفه.
+    private var openRequests: [String: [EditorialNewsEditRequest]] {
+        var map: [String: [EditorialNewsEditRequest]] = [:]
+        for item in queue?.items ?? [] {
+            if case .editRequest(let request) = item { map[request.articleId, default: []].append(request) }
+        }
+        return map
+    }
+
+    private func loadQueue() async {
+        // بلا مصادقة ثنائية أو صلاحية: تبقى اللوحة كما كانت دون الملخّص.
+        queue = try? await EditorialAPI.newsBoard(filter: .all)
+    }
+
+    private func decisionSummary(_ board: EditorialNewsBoard) -> some View {
+        let requests = openRequests.values.flatMap { $0 }
+        let urgent = requests.filter(\.urgent).count
+        let drafts = board.counts.all - board.counts.editRequests
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            NavigationLink(value: SupervisorNewsRoute()) {
+                HStack(spacing: SabqLayout.space12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+                            Text("\(board.counts.all)")
+                                .font(SabqFonts.app(size: 30, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(SabqTheme.textPrimary)
+                            Text("بانتظار قرارك")
+                                .sabqText(SabqType.rowTitle)
+                                .foregroundStyle(SabqTheme.textSecondary)
+                        }
+                        Text(board.counts.all == 0
+                             ? "لا شيء ينتظر قرارك الآن"
+                             : "\(drafts) من المراسلين والبريد، و\(board.counts.editRequests) طلب تعديل" + (urgent > 0 ? " (\(urgent) عاجل)" : ""))
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                    }
+                    Spacer(minLength: 0)
+                    if let oldest = board.oldestAt, board.counts.all > 0 {
+                        VStack(spacing: 0) {
+                            Text("أقدمها").sabqText(SabqType.timestamp).foregroundStyle(SabqTheme.textSecondary)
+                            Text(EditorialText.relative(oldest)).sabqText(SabqType.metaEmphasis).foregroundStyle(SabqTheme.textPrimary)
+                        }
+                        .padding(.horizontal, SabqLayout.space12)
+                        .padding(.vertical, SabqLayout.space8)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.surface.opacity(0.7)))
+                    }
+                }
+                .padding(SabqLayout.space16)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(LinearGradient(colors: [SabqTheme.primary.opacity(0.12), Color.purple.opacity(0.07)],
+                                             startPoint: .trailing, endPoint: .leading))
+                )
+            }
+            .buttonStyle(.plain)
+
+            if board.counts.editRequests > 0 {
+                NavigationLink(value: SupervisorNewsRoute(filter: .editRequests)) {
+                    EditRequestBadge(outcome: .pending, detail: "", urgent: urgent > 0, count: board.counts.editRequests, title: "عليها طلب تعديل")
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: Admin inbox shortcuts
@@ -260,18 +354,6 @@ struct AdminDashboardView: View {
             HomeSectionHeader(title: "صندوق الإدارة")
 
             VStack(spacing: 0) {
-                NavigationLink(value: SupervisorNewsRoute()) {
-                    adminShortcut(
-                        title: "بانتظار قرارك",
-                        subtitle: "أخبار المراسلين وطلبات التعديل",
-                        icon: "tray.full",
-                        tint: SabqTheme.primary
-                    )
-                }
-                .buttonStyle(.plain)
-
-                SidebarRowDivider()
-
                 NavigationLink(value: AdminContactMessagesRoute()) {
                     adminShortcut(
                         title: "رسائل التواصل",
@@ -386,14 +468,23 @@ struct AdminDashboardView: View {
                         if item.id != vm.items.first?.id {
                             SidebarRowDivider()
                         }
-                        AdminNewsRow(
-                            item: item,
-                            isPublishing: vm.publishingIds.contains(item.id),
-                            onPublish: { pendingPublish = item },
-                            onRequestRevision: { pendingAction = .requestRevision(item) },
-                            onArchive: { pendingAction = .archive(item) },
-                            onPermanentDelete: { pendingAction = .permanentDelete(item) }
-                        )
+                        VStack(alignment: .leading, spacing: 0) {
+                            AdminNewsRow(
+                                item: item,
+                                isPublishing: vm.publishingIds.contains(item.id),
+                                onPublish: { pendingPublish = item },
+                                onRequestRevision: { pendingAction = .requestRevision(item) },
+                                onArchive: { pendingAction = .archive(item) },
+                                onPermanentDelete: { pendingAction = .permanentDelete(item) }
+                            )
+                            if let requests = openRequests[item.id], let first = requests.first(where: \.urgent) ?? requests.first {
+                                NavigationLink(value: EditRequestReviewRoute(id: first.id)) {
+                                    EditRequestBadge(outcome: .pending, detail: first.label ?? "", urgent: first.urgent, count: requests.count)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.bottom, SabqLayout.space12)
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, SabqLayout.space16)
