@@ -414,6 +414,12 @@ export function RequestEditDialog({
                   {uploading === "featured" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                   استبدال البارزة
                 </button>
+                {(data.article.albumImages ?? []).map((url) => (
+                  <div key={`current-${url}`} className="relative">
+                    <Thumb src={url} alt={`صورة حالية في ${noun}`} className="h-20 w-28" />
+                    <span className="absolute right-1.5 top-1.5 rounded-full bg-white/90 px-2 text-[11px] font-bold text-foreground">في {noun}</span>
+                  </div>
+                ))}
                 {album.map((url) => (
                   <div key={url} className="relative">
                     <Thumb src={url} alt="صورة للألبوم" className="h-20 w-28" />

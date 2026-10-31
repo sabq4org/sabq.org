@@ -5,7 +5,7 @@ import { adminScheduledOrder, getAdminPublishedPageIds, getArticleMetricsForUser
 import { getActiveBreakingTicker, getBreakingTickerHeadlines } from "./services/breakingTickerHeadlines";
 import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
-import { coalesceArticleReadOverlay } from "./services/articleReadOverlay";
+import { coalesceArticleReadOverlay, withAlbumMediaAssets } from "./services/articleReadOverlay";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
@@ -13418,11 +13418,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             .map((a: any) => ({ url: a.mediaFile.url, altText: a.altText || "", displayOrder: a.displayOrder ?? 0 })),
         };
       });
-      finalArticle = {
+      finalArticle = withAlbumMediaAssets({
         ...finalArticle,
         ...(overlay.views !== null ? { views: overlay.views } : {}),
         ...(needsMediaAssets && overlay.mediaAssets.length > 0 ? { mediaAssets: overlay.mediaAssets } : {}),
-      };
+      });
 
       if (userId) {
         const articleId = finalArticle.id;

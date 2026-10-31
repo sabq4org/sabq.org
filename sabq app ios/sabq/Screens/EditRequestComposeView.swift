@@ -165,6 +165,16 @@ struct EditRequestComposeView: View {
                 label("صور للألبوم · \(albumURLs.count) من \(Self.albumLimit)")
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: SabqLayout.space8) {
+                        // الصور الموجودة في الخبر الآن (للعلم فقط)، ثم الجديدة.
+                        ForEach(context?.article.albumImages ?? [], id: \.self) { url in
+                            CachedAsyncImage(url: URL(string: url), contentMode: .fill, maxPixelSize: 200) {
+                                SabqTheme.surfaceMuted
+                            }
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                            .opacity(0.75)
+                            .accessibilityLabel("صورة موجودة في الخبر")
+                        }
                         ForEach(Array(albumPreviews.enumerated()), id: \.offset) { _, image in
                             Image(uiImage: image)
                                 .resizable()
