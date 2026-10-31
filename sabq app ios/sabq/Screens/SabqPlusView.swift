@@ -52,7 +52,9 @@ struct SabqPlusView: View {
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
             }
-            .padding(SabqLayout.pageMargin)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.pageMargin)
+            .padding(.bottom, SabqLayout.tabBarClearance)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("سبق بلس")
@@ -108,14 +110,19 @@ struct SabqPlusView: View {
     // MARK: - شريط المعاينة
 
     private var previewNote: some View {
-        Text("⚠ معاينة داخلية — تظهر لمسؤول النظام فقط ولا تمثل إطلاقاً رسمياً")
-            .font(SabqType.metaEmphasis.font)
-            .foregroundStyle(SabqTheme.warning)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SabqLayout.space8)
-            .padding(.horizontal, SabqLayout.space12)
-            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .accessibilityHidden(true)
+            Text("معاينة داخلية — تظهر لمسؤول النظام فقط ولا تمثل إطلاقاً رسمياً")
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .sabqText(SabqType.metaEmphasis)
+        .foregroundStyle(SabqTheme.warning)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space16)
+        .sabqBlockSurface()
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - بطاقة العضوية (v2 — كحلي سبق المعتمد)
@@ -258,32 +265,32 @@ struct SabqPlusView: View {
                 ("book.closed", "قراءة عميقة", "+3"),
                 ("bubble.right", "تعليق", "+1"),
                 ("arrow.turn.down.left", "دخول يومي", "+5 × السلسلة"),
-                ("trophy", "فوز توقّع رياضي", "حسب البركة"),
+                ("trophy", "فوز توقّع رياضي", "حسب جائزة المباراة"),
             ]
             LazyVGrid(columns: SabqGrid.adaptive(spacing: SabqLayout.space8), spacing: SabqLayout.space8) {
                 ForEach(earns, id: \.1) { icon, label, value in
-                    HStack(spacing: SabqLayout.space8) {
-                        Image(systemName: icon)
-                            .font(SabqType.excerpt.font)
-                            .foregroundStyle(SabqTheme.primary)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: SabqLayout.space12) {
+                        SmallSquareBadge(systemImage: icon, tint: SabqTheme.primary)
+                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
                             Text(label)
-                                .font(SabqType.metaEmphasis.font)
+                                .sabqText(SabqType.metaEmphasis)
                                 .foregroundStyle(SabqTheme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(value)
-                                .font(SabqType.tag.font)
+                                .sabqText(SabqType.tag)
                                 .foregroundStyle(SabqTheme.primary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)
                     }
                     .padding(SabqLayout.space12)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .sabqBlockSurface()
                     .accessibilityElement(children: .combine)
                 }
             }
             Text("القيم الحالية للإنتاج — جدول الاكتساب الجديد (المكافئ للريال) قيد الاعتماد.")
-                .font(SabqType.meta.font)
+                .sabqText(SabqType.meta)
                 .foregroundStyle(SabqTheme.textSecondary)
         }
     }
@@ -292,14 +299,19 @@ struct SabqPlusView: View {
 
     private var catalogSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            HStack(spacing: SabqLayout.space8) {
+            HStack(alignment: .center, spacing: SabqLayout.space8) {
                 sectionTitle("استبدل نقاطك")
+                // شارة الشريك على سطح أبيض بحدّ رفيع ونص أساسي كي تُقرأ على الخلفية الرمادية.
                 Text("W بالتعاون مع ولاء ون")
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
+                    .sabqText(SabqType.tag)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.vertical, SabqLayout.space4)
                     .padding(.horizontal, SabqLayout.space8)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .strokeBorder(SabqTheme.outline, lineWidth: 1))
             }
             Text("بعد تأكيد الاستبدال تصدر قسيمتك فوراً برمز QR ويمكن إضافتها إلى Apple Wallet. أسماء الشركاء تجريبية للمحاكاة.")
                 .sabqText(SabqType.excerpt)
@@ -307,13 +319,18 @@ struct SabqPlusView: View {
 
             // صفوف بعرض كامل لا شبكة: عمودان بالعربية على عرض الجوال
             // يشوّهان المحاذاة (ارتفاعات متفاوتة بحسب التفاف نص العرض).
-            VStack(spacing: 0) {
-                ForEach(Array((loader.catalog?.rewards ?? []).enumerated()), id: \.element.id) { index, reward in
-                    if index > 0 {
-                        Rectangle().fill(SabqTheme.separator).frame(height: 1)
+            let rewards = loader.catalog?.rewards ?? []
+            if !rewards.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(rewards.enumerated()), id: \.element.id) { index, reward in
+                        if index > 0 {
+                            SidebarRowDivider()
+                        }
+                        rewardCard(reward)
                     }
-                    rewardCard(reward)
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -326,7 +343,7 @@ struct SabqPlusView: View {
 
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(reward.partnerName)
-                    .font(SabqType.rowTitle.font)
+                    .sabqText(SabqType.rowTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                 Text(reward.offer)
@@ -335,7 +352,7 @@ struct SabqPlusView: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(reward.category + " · ولاء ون")
-                    .font(SabqType.tag.font)
+                    .sabqText(SabqType.tag)
                     .foregroundStyle(SabqTheme.textTertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -357,14 +374,18 @@ struct SabqPlusView: View {
                     agreedToTerms = false
                     confirmReward = reward
                 } label: {
+                    // زر مستطيل بزوايا 16 وارتفاع 48 (لا كبسولة)، ومساحة لمسه كاملة.
                     Text(affordable ? "استبدل" : "لا يكفي")
-                        .font(SabqType.metaEmphasis.font)
+                        .sabqText(SabqType.button)
                         .foregroundStyle(affordable ? SabqTheme.onAction : SabqTheme.disabledInk)
-                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                         .background(
                             affordable ? SabqTheme.actionFill : SabqTheme.disabledFill,
                             in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!affordable || isRedeeming)
@@ -418,12 +439,19 @@ struct SabqPlusView: View {
                 confirmRow("رصيدك بعد الاستبدال", "\(formatPoints(after)) نقطة (≈ \(String(format: "%.2f", Double(after) / 500)) ر.س)")
             }
 
-            Text("⚠ بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.")
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .padding(SabqLayout.space12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SabqTheme.warning)
+                    .accessibilityHidden(true)
+                Text("بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.")
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .sabqText(SabqType.meta)
+            .padding(SabqLayout.space12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sabqBlockSurface()
+            .accessibilityElement(children: .combine)
 
             Toggle(isOn: $agreedToTerms) {
                 Text("أوافق على شروط استخدام سبق بلس وشروط وأحكام ولاء ون")
@@ -617,23 +645,25 @@ struct SabqPlusView: View {
                 }
             }
             if loader.redemptions.isEmpty {
-                Text("لا توجد استبدالات بعد — جرّب استبدال أول قسيمة ✨")
+                Text("لا توجد استبدالات بعد — جرّب استبدال أول قسيمة")
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SabqLayout.space24)
                     .padding(.horizontal, SabqLayout.space16)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                    .sabqBlockSurface()
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(loader.redemptions.enumerated()), id: \.element.id) { index, item in
                         if index > 0 {
-                            Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                            SidebarRowDivider()
                         }
                         redemptionRow(item)
                     }
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .sabqNewsSurface()
             }
         }
     }
@@ -643,7 +673,7 @@ struct SabqPlusView: View {
             partnerBadge(category: item.category ?? "", size: 36, iconSize: 15)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.partnerName ?? "قسيمة")
-                    .font(SabqType.rowTitle.font)
+                    .sabqText(SabqType.rowTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
                 HStack(spacing: SabqLayout.space8) {
                     if let code = item.code {
@@ -722,6 +752,9 @@ struct SabqPlusView: View {
                          "لمشاكل النقاط: دعم سبق خلال 15 يوماً من العملية. لمشاكل استخدام القسيمة لدى الشريك: تُحال لدعم ولاء ون مع رقم المرجع.",
                          isLast: true)
             }
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
+            .padding(.top, SabqLayout.space4)
         }
     }
 
@@ -735,14 +768,14 @@ struct SabqPlusView: View {
                     .padding(.top, SabqLayout.space8)
             } label: {
                 Text(title)
-                    .font(SabqType.rowTitle.font)
+                    .sabqText(SabqType.rowTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
             }
             .padding(.vertical, SabqLayout.space12)
             .frame(minHeight: SabqLayout.touchTarget)
             .tint(SabqTheme.textSecondary)
             if !isLast {
-                Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                SidebarRowDivider()
             }
         }
     }
@@ -843,11 +876,9 @@ struct SabqPlusView: View {
 
     // MARK: - أدوات
 
+    /// رأس القسم الموحّد لشاشات الحساب والاستكشاف (شريط سبق + عنوان 20).
     private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .sabqText(SabqType.sectionHeading)
-            .foregroundStyle(SabqTheme.textPrimary)
-            .accessibilityAddTraits(.isHeader)
+        DiscoverySectionHeading(title: text)
     }
 
     private func formatPoints(_ value: Int) -> String {

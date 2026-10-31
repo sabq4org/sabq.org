@@ -141,15 +141,14 @@ struct ArticleCommentsSection: View {
 
     /// «الأحدث / الأكثر إعجابًا» كما في قسم التعليقات بالويب.
     private var sortPicker: some View {
-        Picker("ترتيب التعليقات", selection: Binding(
-            get: { store.sortOrder },
-            set: { newValue in withAnimation(.snappy(duration: 0.25)) { store.sortOrder = newValue } }
-        )) {
-            ForEach(CommentsStore.SortOrder.allCases) { order in
-                Text(order.rawValue).tag(order)
-            }
-        }
-        .pickerStyle(.segmented)
+        SabqSegmentedPicker(
+            "ترتيب التعليقات",
+            selection: Binding(
+                get: { store.sortOrder },
+                set: { newValue in withAnimation(.snappy(duration: 0.25)) { store.sortOrder = newValue } }
+            ),
+            options: CommentsStore.SortOrder.allCases.map { ($0, $0.rawValue) }
+        )
     }
 
     private func like(_ comment: APIComment) {

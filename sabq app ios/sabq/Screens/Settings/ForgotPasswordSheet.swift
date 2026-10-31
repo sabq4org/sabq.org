@@ -78,7 +78,7 @@ struct ForgotPasswordSheet: View {
 
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel("البريد الإلكتروني")
-            textInput("البريد الإلكتروني", text: $email, keyboard: .emailAddress, capitalize: false)
+            textInput("name@example.com", text: $email, keyboard: .emailAddress, capitalize: false)
         }
 
         inlineError
@@ -129,24 +129,27 @@ struct ForgotPasswordSheet: View {
             }
         }
 
-        textInput(
-            "كلمة المرور الجديدة (٨ أحرف فأكثر)",
-            text: $newPassword,
-            isSecure: true,
-            contentType: .newPassword
-        )
+        // الحقلان مجموعة واحدة بعنوان مثل حقل الرمز، بدل تباعد 24 بين كل حقل.
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            fieldLabel("كلمة المرور الجديدة")
+            textInput(
+                "كلمة المرور الجديدة (٨ أحرف فأكثر)",
+                text: $newPassword,
+                isSecure: true,
+                contentType: .newPassword
+            )
+            textInput(
+                "تأكيد كلمة المرور",
+                text: $confirmPassword,
+                isSecure: true,
+                contentType: .newPassword
+            )
 
-        textInput(
-            "تأكيد كلمة المرور",
-            text: $confirmPassword,
-            isSecure: true,
-            contentType: .newPassword
-        )
-
-        if !confirmPassword.isEmpty && newPassword != confirmPassword {
-            Text("كلمتا المرور غير متطابقتين")
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.danger)
+            if !confirmPassword.isEmpty && newPassword != confirmPassword {
+                Text("كلمتا المرور غير متطابقتين")
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.danger)
+            }
         }
 
         inlineError
@@ -172,9 +175,10 @@ struct ForgotPasswordSheet: View {
                 await authStore.forgotPassword(email: email)
             }
         }
-        .sabqText(SabqType.meta)
+        .buttonStyle(.plain)
+        .sabqText(SabqType.metaEmphasis)
         .foregroundStyle(SabqTheme.primary)
-        .padding(.top, SabqLayout.space4)
+        .frame(minHeight: SabqLayout.touchTarget)
     }
 
     // MARK: Step 3 — done

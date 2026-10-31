@@ -153,10 +153,11 @@ struct LoginSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: SabqLayout.controlHeight)
-                .foregroundStyle(authStore.isLoading ? SabqTheme.disabledInk : SabqTheme.onAction)
-                .background((authStore.isLoading ? SabqTheme.disabledFill : SabqTheme.actionFill), in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .foregroundStyle(twoFactorSubmitEnabled ? SabqTheme.onAction : SabqTheme.disabledInk)
+                .background((twoFactorSubmitEnabled ? SabqTheme.actionFill : SabqTheme.disabledFill), in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
-            .disabled(authStore.isLoading || (useBackupCode ? twoFactorBackupCode.isEmpty : twoFactorCode.count < 6))
+            .buttonStyle(.plain)
+            .disabled(!twoFactorSubmitEnabled)
 
             HStack {
                 Button(useBackupCode ? "استخدام رمز التطبيق" : "استخدام رمز احتياطي") {
@@ -167,6 +168,7 @@ struct LoginSheet: View {
                 }
                 .sabqText(SabqType.metaEmphasis)
                 .foregroundStyle(SabqTheme.primary)
+                .frame(minHeight: SabqLayout.touchTarget)
 
                 Spacer()
 
@@ -178,9 +180,15 @@ struct LoginSheet: View {
                 }
                 .sabqText(SabqType.metaEmphasis)
                 .foregroundStyle(SabqTheme.textSecondary)
+                .frame(minHeight: SabqLayout.touchTarget)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// نفس شرط `.disabled` السابق؛ يُستخدم أيضًا للون التعطيل حتى لا يبدو الزر فعّالًا وهو معطّل.
+    private var twoFactorSubmitEnabled: Bool {
+        !authStore.isLoading && (useBackupCode ? !twoFactorBackupCode.isEmpty : twoFactorCode.count >= 6)
     }
 
     @MainActor
@@ -303,10 +311,12 @@ struct LoginSheet: View {
                 }
             }
         }
+        // مسار أبيض بحدّ رفيع على الورقة الرمادية — نفس لغة `SabqSegmentedPicker`.
         .padding(SabqLayout.space4)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
         )
     }
 
@@ -326,11 +336,13 @@ struct LoginSheet: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                RoundedRectangle(cornerRadius: SabqRadius.small + 2, style: .continuous)
                     .fill(active ? SabqTheme.actionFill : Color.clear)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? [.isSelected] : [])
     }
 
     private var emailFields: some View {
@@ -366,10 +378,7 @@ struct LoginSheet: View {
                 .padding(.horizontal, SabqLayout.space12)
                 .padding(.vertical, SabqLayout.space8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.surfaceMuted)
-                )
+                .sabqBlockSurface()
             }
 
             Button {
@@ -448,7 +457,9 @@ struct LoginSheet: View {
                     .foregroundStyle(SabqTheme.danger)
                     .padding(.horizontal, SabqLayout.space12)
                     .padding(.vertical, SabqLayout.space8)
-                    .background(
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .overlay(
                         RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
                             .stroke(SabqTheme.outline, lineWidth: 1)
                     )
@@ -599,6 +610,7 @@ private struct PhoneLoginFlow: View {
                     .buttonStyle(.plain)
                     .sabqText(SabqType.metaEmphasis)
                     .foregroundStyle(SabqTheme.primary)
+                    .frame(minHeight: SabqLayout.touchTarget)
             }
 
             primaryButton("تحقّق ودخول", enabled: code.count == 6) { Task { await verify() } }

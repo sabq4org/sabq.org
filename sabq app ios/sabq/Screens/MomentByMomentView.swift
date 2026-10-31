@@ -54,26 +54,27 @@ struct MomentByMomentView: View {
                 } else if items.isEmpty {
                     emptyState
                 } else {
-                    // Match the homepage "آخر الأخبار" pattern: SurfaceCard +
-                    // CompactArticleRow with dividers, and an explicit
-                    // "Load More" button at the bottom instead of the
-                    // previous timeline rail + infinite-scroll behaviour.
-                    // قائمة بلا صندوق: صفوف بفواصل رفيعة على الصفحة (النموذج المعتمد).
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            if index > 0 {
-                                SidebarRowDivider()
+                    // صفوف CompactArticleRow بفواصل رفيعة داخل سطح أخبار أبيض
+                    // واحد (قاعدة #2040)، وزر «تحميل المزيد» صريح تحته.
+                    VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                if index > 0 {
+                                    SidebarRowDivider()
+                                }
+                                let article = articleFromUpdate(item)
+                                NavigationLink(value: article) {
+                                    CompactArticleRow(
+                                        article: article,
+                                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                        isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
-                            let article = articleFromUpdate(item)
-                            NavigationLink(value: article) {
-                                CompactArticleRow(
-                                    article: article,
-                                    onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                    isBookmarked: bookmarksStore.isBookmarked(article.id)
-                                )
-                            }
-                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, SabqLayout.space12)
+                        .sabqNewsSurface()
 
                         if nextCursor != nil {
                             Button {
@@ -88,22 +89,25 @@ struct MomentByMomentView: View {
                                         .foregroundStyle(SabqTheme.primary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                                .background(
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .fill(SabqTheme.surface)
+                                )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                        .stroke(SabqTheme.outline, lineWidth: 1)
+                                        .strokeBorder(SabqTheme.outline, lineWidth: 1)
                                 )
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .disabled(isLoadingMore)
-                            .padding(.top, SabqLayout.space16)
                         }
                     }
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space8)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .refreshable {
@@ -129,32 +133,36 @@ struct MomentByMomentView: View {
 
     private var header: some View {
         HStack(spacing: SabqLayout.space12) {
+            // لوحة أيقونة بلون العاجل الخفيف، والحلقة النابضة تبقى فوقها.
             ZStack {
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .fill(SabqTheme.breaking.opacity(0.12))
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(SabqTheme.breaking)
-                Circle()
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
                     .stroke(SabqTheme.breaking.opacity(0.4), lineWidth: 2)
-                    .frame(width: 32, height: 32)
-                    .scaleEffect(pulse ? 1.4 : 1)
+                    .scaleEffect(pulse ? 1.3 : 1)
                     .opacity(pulse ? 0 : 0.8)
             }
-            .frame(width: 32, height: 32)
+            .frame(width: 40, height: 40)
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 HStack(spacing: SabqLayout.space8) {
                     Text("مباشر")
-                        .font(SabqType.tag.font)
+                        .sabqText(SabqType.metaEmphasis)
                         .foregroundStyle(SabqTheme.breaking)
                     Text("\(items.count) خبر")
-                        .font(SabqType.meta.font)
+                        .sabqText(SabqType.meta)
                         .monospacedDigit()
                         .foregroundStyle(SabqTheme.textTertiary)
                 }
+                .accessibilityElement(children: .combine)
                 Text("أحدث الأخبار لحظة بلحظة")
-                    .font(SabqType.excerpt.font)
+                    .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -164,84 +172,41 @@ struct MomentByMomentView: View {
     // MARK: - Filter
 
     private var filterRow: some View {
-        Picker("الأخبار المعروضة", selection: $filter) {
-            ForEach(Filter.allCases) { filter in
-                Text(filter.label).tag(filter)
-            }
-        }
-        .modifier(SabqAdaptivePickerStyle())
+        SabqSegmentedPicker(
+            "الأخبار المعروضة",
+            selection: $filter,
+            options: Filter.allCases.map { ($0, $0.label) }
+        )
     }
 
     // MARK: - Empty / Loading / Error
 
     private var loadingSkeleton: some View {
-        // Match the new CompactArticleRow layout (thumbnail + text column)
-        // so the skeleton doesn't visually jump when real content lands.
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(0..<5, id: \.self) { index in
-                if index > 0 { SidebarRowDivider() }
-                HStack(alignment: .top, spacing: SabqLayout.space12) {
-                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.surfaceMuted).frame(maxWidth: .infinity).frame(height: 16)
-                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.surfaceMuted).frame(width: 200, height: 14)
-                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.surfaceMuted).frame(width: 80, height: 12)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    RoundedRectangle(cornerRadius: SabqRadius.small)
-                        .fill(SabqTheme.surfaceMuted)
-                        .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
-                }
-                .padding(.vertical, SabqLayout.rowPadding)
-            }
-        }
-        .redacted(reason: .placeholder)
+        // بمقاس CompactArticleRow وعلى سطح الأخبار نفسه كي لا تقفز القائمة عند وصولها.
+        DiscoveryListSkeleton()
+            .padding(.horizontal, SabqLayout.space12)
+            .sabqNewsSurface()
+            .accessibilityElement()
+            .accessibilityLabel("جارٍ تحميل الأخبار")
     }
 
     private var emptyState: some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "tray")
-                .font(SabqFonts.app(size: 26, weight: .regular))
-                .foregroundStyle(SabqTheme.textSecondary)
-                .frame(width: 56, height: 56)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
-                .accessibilityHidden(true)
-            Text("لا توجد أخبار حالياً")
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, SabqLayout.space40)
+        EmptyStateView(
+            icon: "tray",
+            tint: SabqTheme.textSecondary,
+            title: "لا توجد أخبار حالياً",
+            subtitle: filter == .breaking
+                ? "لا أخبار عاجلة الآن، وستظهر هنا فور نشرها."
+                : "ستظهر هنا أحدث الأخبار فور نشرها."
+        )
+        .padding(.top, SabqLayout.space16)
     }
 
     private func errorState(message: String) -> some View {
-        VStack(spacing: SabqLayout.space12) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(SabqFonts.app(size: 26, weight: .regular))
-                .foregroundStyle(SabqTheme.textSecondary)
-                .frame(width: 56, height: 56)
-                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
-                .accessibilityHidden(true)
-            Text(message)
-                .sabqText(SabqType.excerpt)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-            Button {
-                Task { await reload() }
-            } label: {
-                Text("إعادة المحاولة")
-                    .font(SabqType.button.font)
-                    .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, SabqLayout.space24)
-                    .frame(minHeight: SabqLayout.controlHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.actionFill)
-                    )
-            }
-            .buttonStyle(.plain)
+        ErrorStateView(message: message) {
+            Task { await reload() }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, SabqLayout.space40)
+        .padding(.top, SabqLayout.space16)
     }
 
     // MARK: - Data

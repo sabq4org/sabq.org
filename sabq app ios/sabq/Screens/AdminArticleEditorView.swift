@@ -1374,11 +1374,11 @@ struct AdminPublishingOptions: View {
             if !vm.isOpinion {
                 VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     fieldLabel("نوع الخبر")
-                    Picker("", selection: $vm.newsType) {
-                        Text("عادي").tag("regular")
-                        Text("عاجل").tag("breaking")
-                    }
-                    .pickerStyle(.segmented)
+                    SabqSegmentedPicker(
+                        "نوع الخبر",
+                        selection: $vm.newsType,
+                        options: [("regular", "عادي"), ("breaking", "عاجل")]
+                    )
                 }
             }
             VStack(spacing: 0) {

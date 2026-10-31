@@ -77,8 +77,10 @@ struct OnboardingView: View {
             Spacer()
 
             ZStack {
+                // سطح أبيض بحدّ رفيع على الخلفية الرمادية (الرمادي الهادئ كان يختفي).
                 Circle()
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
+                    .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
                     .frame(width: 160, height: 160)
                 Image(systemName: slide.icon)
                     .font(SabqFonts.app(size: 64, weight: .light))

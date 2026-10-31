@@ -133,17 +133,31 @@ struct HomeFeedSkeleton: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 0) {
-                FeaturedCardSkeleton()
-                    .padding(.bottom, SabqLayout.space12)
-                ForEach(0..<3, id: \.self) { index in
-                    SidebarRowDivider()
-                    ArticleRowSkeleton()
-                        .padding(.vertical, SabqLayout.space12)
-                        .id(index)
+            // شكل كاروسيل البارزة: صورة بعرض البطاقة، عنوان، ثم شريط الصور الثلاث.
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                Rectangle()
+                    .fill(SabqTheme.outline.opacity(0.5))
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .shimmer(radius: 0)
+                    .padding(.bottom, SabqLayout.space4)
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                    SkeletonBox(width: 72, height: 18, radius: SabqRadius.small)
+                    SkeletonBox(height: 22)
+                    SkeletonBox(width: 240, height: 22)
+                    HStack(spacing: SabqLayout.space8) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.outline.opacity(0.5))
+                                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                                .shimmer(radius: SabqRadius.small)
+                        }
+                    }
+                    .padding(.top, SabqLayout.space8)
                 }
+                .padding(.horizontal, SabqLayout.space12)
+                .padding(.bottom, SabqLayout.space16)
             }
-            .padding(SabqLayout.space12)
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .sabqNewsSurface()
 
             SkeletonBox(height: 56, radius: SabqRadius.medium)
@@ -2264,6 +2278,74 @@ struct FlowLayout: Layout {
             currentX += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+}
+
+/// المبدّل الموحّد (بلاغ المالك 2026-10-31: المبدّل الرمادي الأصلي باهت على
+/// الخلفية الرمادية ولا يشبه بقية التطبيق). مسار واحد، والخيار النشط مملوء بلون
+/// الفعل. على الخلفية الرمادية المسار أبيض بحدّ رفيع، وداخل بطاقة بيضاء
+/// (`onSurface`) رمادي هادئ. مقاسات الإتاحة الكبيرة تتحول إلى قائمة.
+struct SabqSegmentedPicker<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let options: [(value: Value, label: String)]
+    var onSurface: Bool = false
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    init(_ title: String, selection: Binding<Value>, options: [(value: Value, label: String)], onSurface: Bool = false) {
+        self.title = title
+        self._selection = selection
+        self.options = options
+        self.onSurface = onSurface
+    }
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Picker(title, selection: $selection) {
+                ForEach(options.indices, id: \.self) { i in
+                    Text(options[i].label).tag(options[i].value)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            track
+        }
+    }
+
+    private var track: some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        return HStack(spacing: SabqLayout.space4) {
+            ForEach(options.indices, id: \.self) { i in
+                let option = options[i]
+                let isActive = option.value == selection
+                Button {
+                    guard !isActive else { return }
+                    SabqHaptics.light()
+                    withAnimation(.snappy(duration: 0.2)) { selection = option.value }
+                } label: {
+                    Text(option.label)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(isActive ? SabqTheme.onAction : SabqTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget - SabqLayout.space4)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small + 2, style: .continuous)
+                                .fill(isActive ? SabqTheme.actionFill : Color.clear)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+        .padding(SabqLayout.space4)
+        .background(onSurface ? SabqTheme.surfaceMuted : SabqTheme.surface, in: shape)
+        .overlay(shape.strokeBorder(onSurface ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
     }
 }
 

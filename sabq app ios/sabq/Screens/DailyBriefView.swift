@@ -357,7 +357,7 @@ struct DailyBriefView: View {
                     }
                 }
 
-                Text("\(interests.count) تصنيف نختار لك منه أخباراً يومية")
+                Text("\(arabicCategoryCount(interests.count)) نختار لك منها أخبارًا يومية")
                     .font(SabqType.meta.font)
                     .foregroundStyle(SabqTheme.textSecondary)
             }
@@ -632,7 +632,7 @@ struct InterestsPickerSheet: View {
                     .foregroundStyle(SabqTheme.onAction)
                     .frame(minWidth: 40, minHeight: 32)
                     .padding(.horizontal, SabqLayout.space8)
-                    .background(Capsule().fill(SabqTheme.actionFill))
+                    .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
             }
 
             HStack(spacing: SabqLayout.space8) {
@@ -643,11 +643,7 @@ struct InterestsPickerSheet: View {
                     Text("حدد الكل")
                         .font(SabqType.metaEmphasis.font)
                         .foregroundStyle(SabqTheme.textPrimary)
-                        .padding(.horizontal, SabqLayout.space12)
-                        .frame(minHeight: 36)
-                        .background(Capsule().fill(SabqTheme.surfaceMuted))
-                        .frame(minHeight: SabqLayout.touchTarget)
-                        .contentShape(Rectangle())
+                        .modifier(BulkActionSurface())
                 }
                 .buttonStyle(.plain)
 
@@ -657,16 +653,11 @@ struct InterestsPickerSheet: View {
                 } label: {
                     Text("امسح الكل")
                         .font(SabqType.metaEmphasis.font)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .padding(.horizontal, SabqLayout.space12)
-                        .frame(minHeight: 36)
-                        .background(Capsule().fill(SabqTheme.surfaceMuted))
-                        .frame(minHeight: SabqLayout.touchTarget)
-                        .contentShape(Rectangle())
+                        .foregroundStyle(selection.isEmpty ? SabqTheme.disabledInk : SabqTheme.textPrimary)
+                        .modifier(BulkActionSurface())
                 }
                 .buttonStyle(.plain)
                 .disabled(selection.isEmpty)
-                .opacity(selection.isEmpty ? 0.5 : 1.0)
                 Spacer(minLength: 0)
             }
         }
@@ -680,6 +671,19 @@ struct InterestsPickerSheet: View {
                 .frame(height: 1),
             alignment: .bottom
         )
+    }
+
+    /// زر الإجراء الجماعي في الرأس: مستطيل أبيض بحدّ رفيع، بارتفاع لمس 44.
+    private struct BulkActionSurface: ViewModifier {
+        func body(content: Content) -> some View {
+            let shape = RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+            return content
+                .padding(.horizontal, SabqLayout.space12)
+                .frame(minHeight: SabqLayout.touchTarget)
+                .background(SabqTheme.surface, in: shape)
+                .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+                .contentShape(shape)
+        }
     }
 
     // MARK: - Chip grid
@@ -707,11 +711,11 @@ struct InterestsPickerSheet: View {
             HStack(spacing: SabqLayout.space8) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .font(SabqType.articleBody.font)
-                    .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textTertiary)
+                    .foregroundStyle(isOn ? SabqTheme.primary : SabqTheme.textTertiary)
                     .accessibilityHidden(true)
                 Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
                     .font(SabqType.rowTitle.font)
-                    .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textPrimary)
+                    .foregroundStyle(isOn ? SabqTheme.primary : SabqTheme.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -720,10 +724,18 @@ struct InterestsPickerSheet: View {
             .padding(.vertical, SabqLayout.space12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 56)
+            // غير المختار أبيض بحدّ رفيع على الخلفية الرمادية، والمختار مُشبَع
+            // بلون primary خفيف مع حدّ primary.
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(isOn ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
+                    .fill(isOn ? SabqTheme.primary.opacity(0.1) : SabqTheme.surface)
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .strokeBorder(isOn ? SabqTheme.primary : SabqTheme.separator,
+                                  lineWidth: isOn ? 1.5 : 0.75)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -734,9 +746,9 @@ struct InterestsPickerSheet: View {
     private var skeletonGrid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: SabqLayout.space8)], alignment: .leading, spacing: SabqLayout.space8) {
             ForEach(0..<10, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                Color.clear
                     .frame(height: 56)
+                    .sabqBlockSurface()
             }
         }
         .padding(.horizontal, SabqLayout.pageMargin)
@@ -771,7 +783,7 @@ struct InterestsPickerSheet: View {
                     }
                     Text(selection.isEmpty
                          ? "تخطّي الآن"
-                         : "حفظ \(selection.count) تصنيف")
+                         : "حفظ \(arabicCategoryCount(selection.count))")
                         .font(SabqType.button.font)
                 }
                 // «تخطّي» زر ثانوي بحد، و«حفظ» زر أساسي ممتلئ.
@@ -806,5 +818,15 @@ struct InterestsPickerSheet: View {
         await authStore.updateInterests(categoryIds: Array(selection))
         isSaving = false
         dismiss()
+    }
+}
+
+/// «تصنيف واحد / تصنيفان / 5 تصنيفات / 12 تصنيفًا» — كان «حفظ 12 تصنيف».
+fileprivate func arabicCategoryCount(_ n: Int) -> String {
+    switch n {
+    case ...1: return "تصنيف واحد"
+    case 2: return "تصنيفين"
+    case 3...10: return "\(n) تصنيفات"
+    default: return "\(n) تصنيفًا"
     }
 }
