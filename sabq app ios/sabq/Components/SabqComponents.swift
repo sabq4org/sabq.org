@@ -2373,8 +2373,8 @@ struct SabqSegmentedPicker<Value: Hashable>: View {
             }
         }
         .padding(SabqLayout.space4)
-        .background(onSurface ? SabqTheme.surfaceMuted : SabqTheme.surface, in: shape)
-        .overlay(shape.strokeBorder(onSurface ? Color.clear : SabqTheme.separator, lineWidth: 0.75))
+        // مسار رمادي مزرق بلا حدّ كمبدّلات المكتب.
+        .background(onSurface ? SabqTheme.surfaceMuted : SabqTheme.chipFill, in: shape)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
@@ -2402,9 +2402,14 @@ extension View {
     /// `SabqTheme.surfaceMuted` كي يتمايز البلوك عن الصفحة.
     func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-        return background(shape.fill(fill))
-            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
-            .clipShape(shape)
+        // هوية المكتب: الأبيض بظل خفيف بلا حدّ؛ التعبئة الهادئة داخل صفحة بيضاء بلا ظل.
+        let raised = fill == SabqTheme.surface
+        return clipShape(shape)
+            .background(
+                shape.fill(fill)
+                    .shadow(color: raised ? SabqTheme.shadow : .clear,
+                            radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+            )
     }
 
     /// بطاقة تحريرية مميزة بخلفية سماوية سبق هادئة وإطار سماوي ناعم.

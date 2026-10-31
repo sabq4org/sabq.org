@@ -34,31 +34,34 @@ nonisolated enum SabqTheme {
         NationalDayTheme.isActive ? NationalDayTheme.canvas : baseActionFill
     }
     static let onAction = Color.white
-    private static let basePrimary = adaptive(0x0B6FA8, 0x5CC4FF)
-    private static let baseActionFill = adaptive(0x0B6FA8, 0x1A6FA8)
+    private static let basePrimary = adaptive(0x096EBD, 0x5CC4FF)
+    private static let baseActionFill = adaptive(0x096EBD, 0x1A6FA8)
 
     // Text.
 
     static let textPrimary = adaptive(0x1B2B3A, 0xF0F4F8)
     static let textSecondary = adaptive(0x55667A, 0xA6B5C4, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
-    static let textTertiary = adaptive(0x596A7D, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
+    static let textTertiary = adaptive(0x617183, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
 
-    // Neutral canvas and white editorial surfaces. Blue is reserved for accents;
-    // dark mode keeps the same hierarchy with raised charcoal surfaces.
+    // تجربة هوية «مكتب سبق» (طلب المالك 2026-10-31، فرع feat/ios-desk-palette-trial):
+    // صفحة رمادية مزرقّة ناعمة، بطاقات بيضاء بظل خفيف بلا حدّ، وتعبئات هادئة
+    // تميل للسماوي. القيم منسوخة من DeskTheme في «sabq desk ios».
 
-    static let background = adaptive(0xF2F3F5, 0x0B121A)
+    static let background = adaptive(0xF4F7FB, 0x0B121A)
     static let surface = adaptive(0xFFFFFF, 0x141D27)
     /// أشرطة الفصل بين الأقسام والبلوكات الهادئة (الموجز الذكي، الحقول).
-    static let surfaceMuted = adaptive(0xF0F2F5, 0x152230)
-    static let surfaceStrong = adaptive(0xE4E8EE, 0x1F3145)
+    static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
+    static let surfaceStrong = adaptive(0xDFECF7, 0x1F3145)
     /// خلفية البطاقات المميزة بهوية سبق السماوية الهادئة، مثل الموجز الصوتي.
     static let skyTint = adaptive(0xF3F8FD, 0x13202E)
     /// إطار سماوي ناعم للبطاقات التحريرية المميزة.
     static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
     /// خط رفيع بين الأخبار داخل القائمة.
-    static let separator = adaptive(0xDFE4EA, 0x24313F)
+    static let separator = adaptive(0xE2E9F0, 0x24313F)
     /// حدود عناصر التحكم (حقول، أزرار ثانوية).
-    static let outline = adaptive(0xCAD2DC, 0x334354)
+    static let outline = adaptive(0xCFDCE8, 0x334354)
+    /// خلفية الشرائح غير المختارة ومسار المبدّل (chipGrey في المكتب).
+    static let chipFill = adaptive(0xEBF0F6, 0x1F2A36)
 
     // Status.
 
@@ -72,6 +75,9 @@ nonisolated enum SabqTheme {
     static let disabledInk = adaptive(0x55626F, 0xA3B1BF)
 
     static let shadow = Color(red: 27 / 255.0, green: 43 / 255.0, blue: 58 / 255.0).opacity(0.06)
+    /// ظل بطاقة المكتب: يحل محل الحدّ الرفيع حول البطاقات البيضاء.
+    static let cardShadowRadius: CGFloat = 10
+    static let cardShadowY: CGFloat = 3
     static let deepShadow = Color.black.opacity(0.05)
 
     // Legacy names kept so existing screens resolve to the system above;
@@ -248,9 +254,10 @@ extension View {
     /// One quiet surface per editorial group; rows share it without nested cards.
     func sabqNewsSurface() -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-        return background(SabqTheme.surface, in: shape)
-            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-                .allowsHitTesting(false))
+        return background(
+            shape.fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+        )
     }
 
     func sabqText(_ role: SabqTextRole) -> some View {
