@@ -15,6 +15,7 @@ import {
   markWriterEditorialNotificationRead,
   reviewWriterArticle,
   saveWriterMediaLicense,
+  WRITER_TRACKING_MAX_PAGE,
 } from "../services/opinionAuthorWorkspaceService";
 import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
 import { uploadMediaLicenseDocument } from "../services/mediaLicenseUpload";
@@ -44,9 +45,16 @@ router.use("/api/opinion-author", requireAuth, async (req, res, next) => {
   next();
 });
 
+// ترقيم «التتبع» اختياري: بلا trackingLimit تعود القائمة كاملة كما كانت.
+const trackingPageQuery = z.object({
+  trackingLimit: z.coerce.number().int().min(1).max(WRITER_TRACKING_MAX_PAGE).optional().catch(undefined),
+  trackingOffset: z.coerce.number().int().min(0).max(100_000).optional().catch(undefined),
+});
+
 router.get("/api/opinion-author/workspace", async (req, res) => {
   try {
-    res.json(await getOpinionAuthorWorkspace(requestUserId(req)));
+    const page = trackingPageQuery.parse(req.query);
+    res.json(await getOpinionAuthorWorkspace(requestUserId(req), page));
   } catch (error) {
     console.error("[Writer Workspace] load failed:", error);
     res.status(500).json({ message: "تعذر تجهيز مساحة الكاتب" });
