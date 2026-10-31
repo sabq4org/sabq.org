@@ -24,7 +24,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * لوحة المراسل والمشرف (/api/v1/editorial/*). مرآة iOS `EditorialService.swift`:
+ * لوحة المراسل والمشرف (/api/v1/editorial/…). مرآة iOS `EditorialService.swift`:
  * المراسل يرى «أخباري» ويطلب تعديلًا، ومن يملك articles.publish يرى
  * «بانتظار قرارك». نفس خدمات الويب و«مكتب سبق».
  * العقد: docs/systems/editorial/MOBILE_EDITORIAL_API.md
