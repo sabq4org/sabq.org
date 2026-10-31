@@ -705,61 +705,13 @@ struct HomeFeedView: View {
         Array(articlesStore.featuredArticles.prefix(3))
     }
 
-    /// البارزة الثلاثة كاروسيل بشريط صورها (طلب المالك 2026-10-31). مقاسات
-    /// الإتاحة الكبيرة تبقى على التخطيط العمودي: العنوان الطويل لا يتسع لشريحة.
-    @ViewBuilder
+    /// غلاف البارزة: خبر رئيسي وخبران مختصران ظاهران دون تمرير أفقي.
     private var featuredSection: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            featuredRowsSection
-        } else {
-            FeaturedCarousel(
-                articles: heroArticles,
-                isBookmarked: { bookmarksStore.isBookmarked($0.id) },
-                onBookmark: { bookmarksStore.toggle($0.id, article: $0) }
-            )
-        }
-    }
-
-    /// الخبر الرئيسي بصورته وعنوانه الكبير، ثم بقية المميّزة صفوفًا تحته.
-    private var featuredRowsSection: some View {
-        let featured = heroArticles
-        return VStack(alignment: .leading, spacing: 0) {
-            if let lead = featured.first {
-                ArticleLink(article: lead) {
-                    FeaturedArticleCard(
-                        article: lead,
-                        onBookmark: { bookmarksStore.toggle(lead.id, article: lead) },
-                        isBookmarked: bookmarksStore.isBookmarked(lead.id),
-                        bleed: SabqLayout.space12
-                    )
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, SabqLayout.space8)
-            }
-            ForEach(Array(featured.dropFirst().enumerated()), id: \.element.id) { index, article in
-                if index > 0 || featured.first != nil { SidebarRowDivider() }
-                ArticleLink(article: article) {
-                    CompactArticleRow(
-                        article: article,
-                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                        isBookmarked: bookmarksStore.isBookmarked(article.id)
-                    )
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button {
-                        bookmarksStore.toggle(article.id, article: article)
-                    } label: {
-                        Label(
-                            bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ المقال",
-                            systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark"
-                        )
-                    }
-                }
-            }
-        }
-        .padding(SabqLayout.space12)
-        .sabqNewsSurface()
+        FeaturedNewsCover(
+            articles: heroArticles,
+            isBookmarked: { bookmarksStore.isBookmarked($0.id) },
+            onBookmark: { bookmarksStore.toggle($0.id, article: $0) }
+        )
     }
 
     // MARK: - Duo Spread (open, landscape)
@@ -981,13 +933,17 @@ struct HomeFeedView: View {
 
     /// «آخر الأخبار» بلا خبر العاجل المعروض فوقها، وبلا مقالات الهيرو/الرأي: بعض
     /// مصادر القائمة لا ترسل نوع المقال فيتسرّب الرأي إليها، فنستبعده بمعرّفه.
-    private var latestTimelineArticles: [Article] {
+    private var latestTimelineExcludedIDs: Set<String> {
         let skip = displayedBreakingArticle?.id
         let opinionIDs = Set(articlesStore.opinions.map(\.id))
         let heroIDs = articlesStore.selectedCategory == nil ? Set(heroArticles.map(\.id)) : []
-        return articlesStore.filteredArticles.filter {
-            $0.id != skip && !opinionIDs.contains($0.id) && !heroIDs.contains($0.id)
-        }
+        var excludedIDs = opinionIDs.union(heroIDs)
+        if let skip { excludedIDs.insert(skip) }
+        return excludedIDs
+    }
+
+    private var latestTimelineArticles: [Article] {
+        articlesStore.homeTimelineArticles(excluding: latestTimelineExcludedIDs)
     }
 
     private var latestArticlesSection: some View {
@@ -1035,7 +991,7 @@ struct HomeFeedView: View {
             }
 
             // «تحميل المزيد» خارج سطح القائمة الأبيض.
-            if articlesStore.hasMore && articlesStore.selectedCategory == nil {
+            if articlesStore.hasMoreHomeTimeline(excluding: latestTimelineExcludedIDs) && articlesStore.selectedCategory == nil {
                 VStack(spacing: 6) {
                     // فشل شبكي أثناء "تحميل المزيد": رسالة صريحة بدل
                     // إخفاء الزر بصمت كأن القائمة انتهت (تدقيق err-1).
@@ -1046,7 +1002,7 @@ struct HomeFeedView: View {
                             .padding(.top, 4)
                     }
                     Button {
-                        Task { await articlesStore.loadMore() }
+                        Task { await articlesStore.loadMore(excluding: latestTimelineExcludedIDs) }
                     } label: {
                         HStack(spacing: 8) {
                             if articlesStore.isLoading {
@@ -1072,6 +1028,10 @@ struct HomeFeedView: View {
                     .disabled(articlesStore.isLoading)
                 }
             }
+        }
+        .task(id: "\(articlesStore.homeTimelineRevision):\(latestTimelineExcludedIDs.sorted().joined(separator: ","))") {
+            guard articlesStore.selectedCategory == nil else { return }
+            await articlesStore.ensureHomeTimeline(excluding: latestTimelineExcludedIDs)
         }
     }
 

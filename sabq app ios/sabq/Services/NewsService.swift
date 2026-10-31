@@ -1,6 +1,14 @@
 import Foundation
 
 enum NewsService {
+    enum HomeFeedSource: Sendable, Equatable { case news, articles }
+
+    struct HomeFeedCursor: Sendable {
+        var source: HomeFeedSource
+        var nextPage: Int
+        var hasMore: Bool
+    }
+
     // MARK: - API Calls
 
     private static func nonOpinionArticles(from apiArticles: [APIArticle]) -> [Article] {
@@ -18,29 +26,32 @@ enum NewsService {
     /// `nil` يعني فشل المسارين معًا (الرئيسية والاحتياطي) — شبكة/خادم لا
     /// «محتوى فارغ»؛ يميّزه المخزن ليعرض حالة خطأ قابلة لإعادة المحاولة
     /// بدل skeleton أبدي صامت.
-    static func fetchHomepage(ignoreCache: Bool = false) async -> (
-        featured: [Article],
-        latest: [Article],
-        breaking: [Article],
-        stories: [APIStory],
-        trending: [String]
-    )? {
+    typealias HomepageResult = (
+        featured: [Article], latest: [Article], breaking: [Article],
+        stories: [APIStory], trending: [String], cursor: HomeFeedCursor
+    )
+    typealias HomeFeedPage = (articles: [Article], hasMore: Bool)
+
+    static func fetchHomepage(ignoreCache: Bool = false) async -> HomepageResult? {
         do {
             let response: APIHomepageResponse
             let paginatedArticles: [Article]
+            let cursor: HomeFeedCursor
 
             if ignoreCache {
                 async let homeTask = APIClient.shared.fetchHomepage(ignoreCache: true)
-                async let paginatedTask = APIClient.shared.fetchPaginatedNews(page: 1, ignoreCache: true)
+                async let paginatedTask = APIClient.shared.fetchPaginatedNews(page: 1, perPage: 50, ignoreCache: true)
                 response = try await homeTask
                 let paginated = try? await paginatedTask
                 paginatedArticles = nonOpinionArticles(from: paginated?.items ?? [])
+                cursor = HomeFeedCursor(source: .news, nextPage: paginated == nil ? 1 : 2, hasMore: paginated?.hasMore ?? true)
             } else {
                 async let homeTask = APIClient.shared.fetchHomepage()
-                async let paginatedTask = APIClient.shared.fetchPaginatedNews(page: 1)
+                async let paginatedTask = APIClient.shared.fetchPaginatedNews(page: 1, perPage: 50)
                 response = try await homeTask
                 let paginated = try? await paginatedTask
                 paginatedArticles = nonOpinionArticles(from: paginated?.items ?? [])
+                cursor = HomeFeedCursor(source: .news, nextPage: paginated == nil ? 1 : 2, hasMore: paginated?.hasMore ?? true)
             }
 
             let hero = nonOpinionArticles(from: response.hero)
@@ -52,13 +63,14 @@ enum NewsService {
             let featured = hero.isEmpty ? editorPicks : hero
 
             let cutoff = Date().addingTimeInterval(-3 * 24 * 3600)
+            let paginatedIDs = Set(paginatedArticles.map(\.id))
             var latestIDs = Set<String>()
             var latest = [Article]()
 
             let allSources = paginatedArticles + forYou + editorPicks + hero
             for art in allSources.sorted(by: { $0.publishDate > $1.publishDate }) {
                 guard latestIDs.insert(art.id).inserted else { continue }
-                if art.publishDate > cutoff || latest.count < 5 {
+                if paginatedIDs.contains(art.id) || art.publishDate > cutoff || latest.count < 5 {
                     latest.append(art)
                 }
             }
@@ -67,18 +79,33 @@ enum NewsService {
                 $0.isBreaking
             }.sorted { $0.publishDate > $1.publishDate }
 
-            return (featured, latest, recentBreaking, stories, trendingTopics)
+            return (featured, latest, recentBreaking, stories, trendingTopics, cursor)
         } catch {
             do {
-                let articles = try await APIClient.shared.fetchArticles(page: 1, perPage: 30)
+                let articles = try await APIClient.shared.fetchArticles(page: 1, perPage: 50)
                 let all = nonOpinionArticles(from: articles.items)
                     .sorted { $0.publishDate > $1.publishDate }
                 let featured = all.filter(\.isFeatured)
                 let breaking = all.filter(\.isBreaking)
-                return (featured.isEmpty ? Array(all.prefix(3)) : featured, all, breaking, [], [])
+                return (featured.isEmpty ? Array(all.prefix(3)) : featured, all, breaking, [], [],
+                        HomeFeedCursor(source: .articles, nextPage: 2, hasMore: articles.hasMore))
             } catch {
                 return nil
             }
+        }
+    }
+
+    /// Continue the exact feed used by the initial batch; the two endpoints
+    /// deliberately have different editorial filters and cannot share offsets.
+    static func fetchHomeFeedPage(cursor: HomeFeedCursor, perPage: Int = 50) async -> (articles: [Article], hasMore: Bool)? {
+        switch cursor.source {
+        case .news:
+            do {
+                let result = try await APIClient.shared.fetchPaginatedNews(page: cursor.nextPage, perPage: perPage)
+                return (nonOpinionArticles(from: result.items), result.hasMore)
+            } catch { return nil }
+        case .articles:
+            return await fetchArticles(page: cursor.nextPage, perPage: perPage)
         }
     }
 

@@ -644,7 +644,11 @@
         "client/src/pages/dashboard/DashboardMuqtarab.tsx",
         "client/src/pages/dashboard/MuqtarabReview.tsx",
         "docs/MUQTARAB.md",
-        "docs/MUQTARAB_IOS_PLAN.md"
+        "docs/MUQTARAB_IOS_PLAN.md",
+        "sabq app ios/sabq/Screens/MuqtarabView.swift",
+        "sabq app ios/sabq/Components/MuqAngleIdentity.swift",
+        "sabq app ios/sabq/Services/MuqtarabModels.swift",
+        "sabq app ios/sabqTests/MuqAngleIdentityTests.swift"
       ],
       "aiFeatureKeys": [
         "muqtarab-ai"
@@ -653,7 +657,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-14"
+      "lastReviewed": "2026-10-31"
     },
     {
       "id": "radar",

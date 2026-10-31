@@ -658,9 +658,10 @@ actor APIClient {
 
     // MARK: - Paginated News
 
-    func fetchPaginatedNews(page: Int = 1, ignoreCache: Bool = false) async throws -> APIPaginatedList<APIArticle> {
+    func fetchPaginatedNews(page: Int = 1, perPage: Int = 20, ignoreCache: Bool = false) async throws -> APIPaginatedList<APIArticle> {
         try await get(APIPaginatedList<APIArticle>.self, path: "/news/paginated", query: [
-            "page": "\(page)"
+            "page": "\(page)",
+            "limit": "\(perPage)"
         ], ignoreCache: ignoreCache)
     }
 

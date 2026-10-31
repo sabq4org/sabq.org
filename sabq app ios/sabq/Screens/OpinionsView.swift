@@ -152,30 +152,18 @@ struct OpinionsView: View {
         }
     }
 
-    /// صف بشكل `CompactArticleRow`: العنوان وسطر البيانات، والمصغّرة 112×63 في طرف السطر.
+    /// العنوان، ثم الكاتب وصورته، ثم المشاهدات والوقت؛ المصغّرة في اليسار.
     private func opinionRow(_ opinion: OpinionArticle) -> some View {
         HStack(alignment: .top, spacing: SabqLayout.space12) {
             VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Text(opinion.title)
                     .sabqText(SabqType.rowTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
-                    .lineLimit(3)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: SabqLayout.space4) {
-                    Text("رأي")
-                        .font(SabqType.metaEmphasis.font)
-                        .foregroundStyle(SabqTheme.primary)
-                    Text("·")
-                        .font(SabqType.meta.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
-                    Text(opinion.relativeDate)
-                        .font(SabqType.timestamp.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
-                        .lineLimit(1)
-                }
-
-                authorPill(opinion)
+                authorByline(opinion)
+                opinionMetadata(opinion)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -200,28 +188,40 @@ struct OpinionsView: View {
         .contentShape(Rectangle())
     }
 
-    private func authorPill(_ opinion: OpinionArticle) -> some View {
-        HStack(spacing: SabqLayout.space8) {
+    private func authorByline(_ opinion: OpinionArticle) -> some View {
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
             OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 24)
 
             Text(opinion.authorName)
                 .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(SabqTheme.primary)
-                .lineLimit(1)
-
-            Spacer(minLength: 0)
-
-            // عدد المشاهدات في طرف الصف بدل «اقرأ المقال» — بطاقة أرشيف الرأي في الويب (#1605)
-            HStack(spacing: SabqLayout.space4) {
-                Image(systemName: "eye")
-                    .font(SabqType.tag.font)
-                Text(opinion.viewsLabel)
-                    .monospacedDigit()
-            }
-            .font(SabqType.meta.font)
-            .foregroundStyle(SabqTheme.textTertiary)
-            .lineLimit(1)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func opinionMetadata(_ opinion: OpinionArticle) -> some View {
+        let views = Label(SabqFormatters.groupedLatin(opinion.viewsCount), systemImage: "eye")
+            .monospacedDigit()
+            .accessibilityLabel(opinion.viewsLabel)
+        let time = Text(opinion.relativeDate)
+
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: SabqLayout.space12) {
+                views
+                time
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                views
+                time
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(SabqType.timestamp.font)
+        .foregroundStyle(SabqTheme.textTertiary)
     }
 
     // MARK: - Loading / Error

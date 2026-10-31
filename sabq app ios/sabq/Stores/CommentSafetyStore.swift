@@ -13,9 +13,16 @@ final class CommentSafetyStore {
     private(set) var blockedUsers: [APIBlockedUser] = []
     private(set) var blockedIds: Set<String> = []
     private(set) var reportedCommentIds: Set<String> = []
+    private var activeUserId: String?
     private var loadedForUserId: String?
+    private var requestGeneration = 0
+    private let fetchBlockedUsers: @MainActor () async throws -> [APIBlockedUser]
 
-    private init() {}
+    init(fetchBlockedUsers: @escaping @MainActor () async throws -> [APIBlockedUser] = {
+        try await APIClient.shared.fetchBlockedUsers()
+    }) {
+        self.fetchBlockedUsers = fetchBlockedUsers
+    }
 
     enum ReportReason: String, CaseIterable, Identifiable {
         case offensive, harassment, spam, misinformation, other
@@ -37,19 +44,35 @@ final class CommentSafetyStore {
             clear()
             return
         }
+        if activeUserId != userId {
+            clear()
+            activeUserId = userId
+        }
         guard loadedForUserId != userId else { return }
-        loadedForUserId = userId
-        reportedCommentIds = []
         await reloadBlocked()
     }
 
     func reloadBlocked() async {
-        guard let users = try? await APIClient.shared.fetchBlockedUsers() else { return }
-        blockedUsers = users
-        blockedIds = Set(users.map(\.id))
+        requestGeneration += 1
+        let generation = requestGeneration
+        let userId = activeUserId
+        do {
+            let users = try await fetchBlockedUsers()
+            // الخروج أو تبديل الحساب أو جلب أحدث يلغي صلاحية هذا الرد.
+            guard generation == requestGeneration, activeUserId == userId else { return }
+            blockedUsers = users
+            blockedIds = Set(users.map(\.id))
+            loadedForUserId = userId
+        } catch {
+            guard generation == requestGeneration, activeUserId == userId else { return }
+            // لا نعتبر الطلب الفاشل تحميلًا ناجحًا؛ فتح التعليقات مجددًا يعيد المحاولة.
+            loadedForUserId = nil
+        }
     }
 
     func clear() {
+        requestGeneration += 1
+        activeUserId = nil
         loadedForUserId = nil
         blockedUsers = []
         blockedIds = []

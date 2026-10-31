@@ -27,12 +27,12 @@ struct MuqtarabWriterRoute: Hashable {
 struct MuqTheme {
     let ui: UIColor
     init(_ hex: String?) {
-        ui = UIColor(muqHex: hex ?? "") ?? UIColor(SabqTheme.primary)
+        ui = UIColor(muqHex: hex ?? "") ?? UIColor(red: 99 / 255, green: 102 / 255, blue: 241 / 255, alpha: 1)
     }
     var color: Color { Color(ui) }
     var soft: Color { Color(ui).opacity(0.12) }
     var softer: Color { Color(ui).opacity(0.06) }
-    var border: Color { Color(ui).opacity(0.30) }
+    var border: Color { Color(ui).opacity(0.28) }
 }
 
 func muqColor(_ hex: String?) -> Color { MuqTheme(hex).color }
@@ -64,7 +64,7 @@ func muqSymbol(_ iconKey: String?) -> String {
         "brain": "brain.head.profile", "globe": "globe", "newspaper": "newspaper.fill",
         "trendingup": "chart.line.uptrend.xyaxis", "heart": "heart.fill",
         "camera": "camera.fill", "mic": "mic.fill", "music": "music.note",
-        "film": "film.fill", "coffee": "cup.and.saucer.fill", "compass": "safari.fill",
+        "radio": "radio", "film": "film.fill", "coffee": "cup.and.saucer.fill", "compass": "safari.fill",
         "flag": "flag.fill", "zap": "bolt.fill", "eye": "eye.fill",
         "messagecircle": "message.fill", "users": "person.2.fill", "user": "person.fill",
         "award": "rosette", "target": "target", "bookmark": "bookmark.fill",
@@ -251,12 +251,18 @@ struct MuqtarabLandingView: View {
 
 private struct MuqSectionHeading: View {
     let title: String
+    var tint: Color? = nil
 
     var body: some View {
-        Text(title)
-            .sabqText(SabqType.sectionHeading)
-            .foregroundStyle(SabqTheme.textPrimary)
-            .accessibilityAddTraits(.isHeader)
+        HStack(spacing: SabqLayout.space8) {
+            if let tint {
+                Capsule().fill(tint).frame(width: 4, height: 18).accessibilityHidden(true)
+            }
+            Text(title)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+        }
     }
 }
 
@@ -409,7 +415,7 @@ struct MuqWriterByline: View {
                         .foregroundStyle(SabqTheme.textPrimary)
                     Text(angleName.map { "كاتب زاوية \($0)" } ?? "كاتب الزاوية")
                         .font(SabqType.meta.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
+                        .foregroundStyle(theme.ink)
                 }
             }
             .frame(minHeight: SabqLayout.touchTarget)
@@ -438,7 +444,7 @@ struct MuqWriterByline: View {
         }
         .frame(width: 44, height: 44)
         .clipShape(Circle())
-        .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        .overlay(Circle().strokeBorder(theme.border, lineWidth: 1.5))
         .accessibilityHidden(true)
     }
 }
@@ -455,6 +461,8 @@ struct MuqtarabAngleView: View {
     @State private var topics: [MuqTopic] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+
+    private var theme: MuqTheme { MuqTheme(angle?.colorHex ?? initialColorHex) }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -480,7 +488,7 @@ struct MuqtarabAngleView: View {
                     )
                 } else {
                     VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                        MuqSectionHeading(title: "المواضيع")
+                        MuqSectionHeading(title: "المواضيع", tint: theme.color)
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
                                 if index > 0 { MuqRowSeparator() }
@@ -502,6 +510,7 @@ struct MuqtarabAngleView: View {
             .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.background)
+        .tint(theme.ink)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(angle?.nameAr ?? initialName ?? "زاوية")
@@ -509,71 +518,12 @@ struct MuqtarabAngleView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            if let raw = angle?.coverImageUrl, let url = URL(string: URLConstants.absolutize(raw)) {
-                Color.clear
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .overlay(
-                        CachedAsyncImage(url: url, contentMode: .fill) { SabqImagePlaceholder() }
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-                    .accessibilityHidden(true)
-            }
-
-            Text(angle?.nameAr ?? initialName ?? "زاوية")
-                .sabqText(SabqType.articleTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-
-            if let writer, let name = writer.name, !name.isEmpty {
-                HStack(spacing: SabqLayout.space12) {
-                    writerAvatar(writer, name: name)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name).font(SabqType.rowTitle.font).foregroundStyle(SabqTheme.textPrimary)
-                        Text("كاتب الزاوية").font(SabqType.meta.font).foregroundStyle(SabqTheme.textTertiary)
-                    }
-                }
-            }
-
-            if let desc = angle?.shortDesc, !desc.isEmpty {
-                Text(desc)
-                    .sabqText(SabqType.excerpt)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: SabqLayout.space16) {
-                Text("\(topics.count) موضوع")
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
-                Button { shareAngle() } label: {
-                    Label("مشاركة", systemImage: "square.and.arrow.up")
-                        .font(SabqType.metaEmphasis.font)
-                        .foregroundStyle(SabqTheme.primary)
-                        .frame(minHeight: SabqLayout.touchTarget)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func writerAvatar(_ writer: MuqWriter, name: String) -> some View {
-        ZStack {
-            Circle().fill(SabqTheme.surface)
-            if let raw = writer.avatar, let url = URL(string: URLConstants.absolutize(raw)) {
-                CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 200) { SabqTheme.surface }
-            } else {
-                Text(String(name.prefix(1))).font(SabqType.button.font).foregroundStyle(SabqTheme.textSecondary)
-            }
-        }
-        .frame(width: 40, height: 40)
-        .clipShape(Circle())
-        .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
-        .accessibilityHidden(true)
+        MuqAngleHeader(
+            angle: angle, writer: writer,
+            fallbackName: initialName, fallbackColor: initialColorHex,
+            topicCount: angle?.topicCount ?? topics.count,
+            onShare: shareAngle
+        )
     }
 
     private func load() async {
@@ -643,6 +593,7 @@ struct MuqtarabTopicView: View {
             .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.surface)
+        .tint(theme.ink)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle("مُقترب")
@@ -659,13 +610,15 @@ struct MuqtarabTopicView: View {
 
     @ViewBuilder
     private func detailContent(_ t: MuqTopic) -> some View {
-        // اسم الزاوية بلون الروابط (كاسم القسم في صفحة الخبر)
+        // اسم الزاوية وأيقونتها بالهوية نفسها في صفحة الزاوية والويب
         NavigationLink(value: MuqtarabAngleRoute(slug: angleSlug, name: angle?.nameAr, colorHex: angle?.colorHex)) {
-            Text("زاوية \(angle?.nameAr ?? "مُقترب")")
+            Label("زاوية \(angle?.nameAr ?? "مُقترب")", systemImage: muqSymbol(angle?.iconKey))
                 .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(SabqTheme.primary)
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, SabqLayout.space12)
                 .frame(minHeight: SabqLayout.touchTarget, alignment: .leading)
-                .contentShape(Rectangle())
+                .background(theme.soft, in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .padding(.bottom, -SabqLayout.space12)
@@ -743,7 +696,7 @@ struct MuqtarabTopicView: View {
                     .padding(.horizontal, SabqLayout.space4)
                     .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
             }
-            .foregroundStyle(SabqTheme.primary)
+            .foregroundStyle(theme.ink)
 
             Text(excerpt)
                 .sabqText(SabqType.excerpt)
@@ -753,8 +706,8 @@ struct MuqtarabTopicView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // صفحة القراءة بيضاء كصفحة الخبر؛ الموجز ببطاقة السماء نفسها في الخبر.
-        .sabqSkyCardSurface()
+        .background(theme.softer, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
+        .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium).strokeBorder(theme.border, lineWidth: 0.75))
     }
 
     @ViewBuilder
@@ -791,8 +744,8 @@ struct MuqtarabTopicView: View {
                     Text("#\(tag)")
                         .font(SabqType.tag.font)
                         .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .background(Capsule().fill(SabqTheme.chipFill))
+                        .foregroundStyle(theme.ink)
+                        .background(Capsule().fill(theme.soft))
                 }
             }
         }
@@ -801,9 +754,9 @@ struct MuqtarabTopicView: View {
 
     private func signatureCard(_ sig: String) -> some View {
         HStack(alignment: .top, spacing: SabqLayout.space12) {
-            SmallSquareBadge(systemImage: "person", tint: SabqTheme.textSecondary)
+            SmallSquareBadge(systemImage: "person", tint: theme.ink)
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                Text("توقيع الكاتب").font(SabqType.tag.font).foregroundStyle(SabqTheme.primary)
+                Text("توقيع الكاتب").font(SabqType.tag.font).foregroundStyle(theme.ink)
                 Text(sig)
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textPrimary)
@@ -813,12 +766,12 @@ struct MuqtarabTopicView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sabqBlockSurface(SabqTheme.surfaceMuted)
+        .sabqBlockSurface(theme.softer)
     }
 
     private var relatedSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            MuqSectionHeading(title: "المزيد من \(angle?.nameAr ?? "الزاوية")")
+            MuqSectionHeading(title: "المزيد من \(angle?.nameAr ?? "الزاوية")", tint: theme.color)
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(related.enumerated()), id: \.element.id) { index, topic in
                     if index > 0 { MuqRowSeparator() }

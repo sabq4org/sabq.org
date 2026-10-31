@@ -37,6 +37,24 @@ nonisolated struct APICalendarEvent: Decodable, Sendable, Identifiable {
 
 nonisolated struct APICalendarEventsResponse: Decodable, Sendable {
     let events: [APICalendarEvent]
+
+    private enum CodingKeys: String, CodingKey { case events }
+
+    init(from decoder: Decoder) throws {
+        // /calendar/upcoming returns an array; /calendar returns { events, ... }.
+        // Do not turn malformed/null responses into a successful empty calendar.
+        if let array = try? decoder.unkeyedContainer() {
+            var container = array
+            var decoded: [APICalendarEvent] = []
+            while !container.isAtEnd {
+                decoded.append(try container.decode(APICalendarEvent.self))
+            }
+            events = decoded
+        } else {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            events = try container.decode([APICalendarEvent].self, forKey: .events)
+        }
+    }
 }
 
 // MARK: - OMQ (Deep Analyses)

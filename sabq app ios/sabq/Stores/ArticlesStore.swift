@@ -1,5 +1,33 @@
 import SwiftUI
 
+/// Pagination counts visible rows, while the cursor tracks the original remote
+/// batch independently of hero/breaking exclusions and duplicate article IDs.
+struct HomeTimelinePaging {
+    var articles: [Article] = []
+    var displayedCount = 25
+    var cursor = NewsService.HomeFeedCursor(source: .news, nextPage: 1, hasMore: true)
+
+    func visible(excluding ids: Set<String>) -> [Article] {
+        articles.filter { !ids.contains($0.id) }
+    }
+
+    func needsRemote(target: Int, excluding ids: Set<String>) -> Bool {
+        cursor.hasMore && visible(excluding: ids).count < target
+    }
+
+    func hasMore(excluding ids: Set<String>) -> Bool {
+        visible(excluding: ids).count > displayedCount || cursor.hasMore
+    }
+
+    mutating func append(_ page: [Article], hasMore: Bool) {
+        var seen = Set(articles.map(\.id))
+        articles.append(contentsOf: page.filter { seen.insert($0.id).inserted })
+        articles.sort { $0.publishDate > $1.publishDate }
+        cursor.nextPage += 1
+        cursor.hasMore = hasMore
+    }
+}
+
 @Observable
 final class ArticlesStore {
     private(set) var allArticles: [Article] = []
@@ -32,11 +60,10 @@ final class ArticlesStore {
 
     func isRecentlyAdded(_ id: String) -> Bool { recentlyAddedIDs.contains(id) }
 
-    private var allFetchedArticles: [Article] = []
-    private var displayedCount = 0
-    private var nextArticlesPage = 1
-    private var hasMoreFromAPI = true
-    private let pageSize = 15
+    private var pagination = HomeTimelinePaging()
+    private var pendingTimelineTarget: Int?
+    private(set) var homeTimelineRevision: UInt = 0
+    private let pageSize = 25
     private let remotePageSize = 50
     /// يزداد مع كل استدعاء `loadArticles` — الطلبات المتداخلة (إقلاع +
     /// سحب تحديث) لا تُطبّق نتيجتها إلا إذا كانت الأحدث، وإلا يكتب الطلب
@@ -46,8 +73,19 @@ final class ArticlesStore {
     /// يتغيّر عند تغيّر قائمة الكاروسيل — يُجبر TabView على إعادة البناء.
     private(set) var featuredCarouselRevision: UInt = 0
 
-    // لا آثار جانبية في init (انظر التعليق المقابل في AuthStore):
-    // ContentView.task يستدعي loadArticles مرة واحدة لكل هوية واجهة.
+    private let homepageLoader: (Bool) async -> NewsService.HomepageResult?
+    private let pageLoader: (NewsService.HomeFeedCursor, Int) async -> NewsService.HomeFeedPage?
+    private let loadsSupplementalData: Bool
+
+    init(
+        homepageLoader: @escaping (Bool) async -> NewsService.HomepageResult? = { await NewsService.fetchHomepage(ignoreCache: $0) },
+        pageLoader: @escaping (NewsService.HomeFeedCursor, Int) async -> NewsService.HomeFeedPage? = { await NewsService.fetchHomeFeedPage(cursor: $0, perPage: $1) },
+        loadsSupplementalData: Bool = true
+    ) {
+        self.homepageLoader = homepageLoader
+        self.pageLoader = pageLoader
+        self.loadsSupplementalData = loadsSupplementalData
+    }
 
     private func applyFeaturedCarousel(_ featured: [Article]) {
         let changed = featured.map(\.id) != featuredArticles.map(\.id)
@@ -65,10 +103,10 @@ final class ArticlesStore {
 
         // ابدأ الثانوية مع الرئيسية في الإقلاع فقط؛ سحب التحديث يجلب الرئيسية
         // وحدها ثم يكمل الثانوية في الخلفية حتى لا يعلق مؤشر .refreshable.
-        async let homepageTask = NewsService.fetchHomepage(ignoreCache: ignoreCache)
-        let trendingTask = ignoreCache ? nil : Task { await NewsService.fetchTrendingArticles() }
-        let liveTask = ignoreCache ? nil : Task { await NewsService.fetchLivePreview() }
-        let opinionsTask = ignoreCache ? nil : Task { await NewsService.fetchOpinions() }
+        async let homepageTask = homepageLoader(ignoreCache)
+        let trendingTask = (ignoreCache || !loadsSupplementalData) ? nil : Task { await NewsService.fetchTrendingArticles() }
+        let liveTask = (ignoreCache || !loadsSupplementalData) ? nil : Task { await NewsService.fetchLivePreview() }
+        let opinionsTask = (ignoreCache || !loadsSupplementalData) ? nil : Task { await NewsService.fetchOpinions() }
 
         let homepageResult = await homepageTask
         guard generation == loadGeneration else {
@@ -91,19 +129,19 @@ final class ArticlesStore {
             if !result.trending.isEmpty { trendingKeywords = result.trending }
         }
 
-        if !result.latest.isEmpty {
-            let previousIDs = Set(allFetchedArticles.map(\.id))
-            allFetchedArticles = result.latest
+        if !result.latest.isEmpty || pagination.articles.isEmpty {
+            let previousIDs = Set(pagination.articles.map(\.id))
+            pagination.articles = result.latest
             applyFeaturedCarousel(result.featured)
             breakingNews = result.breaking
             stories = result.stories
             trendingKeywords = result.trending
-            nextArticlesPage = 1
-            hasMoreFromAPI = true
+            pagination.cursor = result.cursor
+            pendingTimelineTarget = nil
             loadMoreFailed = false
-            displayedCount = min(pageSize, allFetchedArticles.count)
-            allArticles = Array(allFetchedArticles.prefix(displayedCount))
-            hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
+            pagination.displayedCount = pageSize
+            allArticles = Array(pagination.articles.prefix(pagination.displayedCount))
+            hasMore = pagination.displayedCount < pagination.articles.count || pagination.cursor.hasMore
             pendingNewArticles.removeAll()
             if !previousIDs.isEmpty {
                 recentlyAddedIDs = Set(result.latest.map(\.id)).subtracting(previousIDs)
@@ -133,8 +171,9 @@ final class ArticlesStore {
             return
         }
         isLoading = false
+        homeTimelineRevision &+= 1
 
-        if ignoreCache {
+        if ignoreCache && loadsSupplementalData {
             Task { @MainActor in
                 async let trendingFetch = NewsService.fetchTrendingArticles()
                 async let liveFetch = NewsService.fetchLivePreview()
@@ -183,7 +222,7 @@ final class ArticlesStore {
         }
 
         // المعرفات المعروضة حالياً + المنتظرة (لتفادي العدّ المكرر)
-        let knownIDs = Set(allFetchedArticles.map(\.id))
+        let knownIDs = Set(pagination.articles.map(\.id))
             .union(pendingNewArticles.map(\.id))
 
         let fresh = result.latest.filter { !knownIDs.contains($0.id) }
@@ -200,16 +239,16 @@ final class ArticlesStore {
     func applyPendingArticles() {
         guard !pendingNewArticles.isEmpty else { return }
 
-        let existingIDs = Set(allFetchedArticles.map(\.id))
+        let existingIDs = Set(pagination.articles.map(\.id))
         let toInsert = pendingNewArticles.filter { !existingIDs.contains($0.id) }
 
-        allFetchedArticles.insert(contentsOf: toInsert, at: 0)
-        allFetchedArticles.sort { $0.publishDate > $1.publishDate }
+        pagination.articles.insert(contentsOf: toInsert, at: 0)
+        pagination.articles.sort { $0.publishDate > $1.publishDate }
 
         // نوسّع نافذة العرض لتشمل الأخبار الجديدة في الأعلى
-        displayedCount = min(max(displayedCount + toInsert.count, pageSize), allFetchedArticles.count)
-        allArticles = Array(allFetchedArticles.prefix(displayedCount))
-        hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
+        pagination.displayedCount = min(max(pagination.displayedCount + toInsert.count, pageSize), pagination.articles.count)
+        allArticles = Array(pagination.articles.prefix(pagination.displayedCount))
+        hasMore = pagination.displayedCount < pagination.articles.count || pagination.cursor.hasMore
 
         // علّم الأخبار المُدرجة للتو حتى تظهر عليها شارة "جديد" الخضراء
         recentlyAddedIDs = Set(toInsert.map(\.id))
@@ -218,46 +257,58 @@ final class ArticlesStore {
     }
 
     @MainActor
-    func loadMore() async {
-        guard hasMore, !isLoading else { return }
-        isLoading = true
+    func loadMore(excluding excludedIDs: Set<String> = []) async {
+        guard pagination.hasMore(excluding: excludedIDs), !isLoading else { return }
+        let visibleCount = min(pagination.displayedCount, pagination.visible(excluding: excludedIDs).count)
+        let target = pendingTimelineTarget ?? (visibleCount + pageSize)
+        await fillTimeline(to: target, excluding: excludedIDs)
+    }
 
-        if displayedCount < allFetchedArticles.count {
-            let end = min(displayedCount + pageSize, allFetchedArticles.count)
-            displayedCount = end
-            allArticles = Array(allFetchedArticles.prefix(displayedCount))
-            hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
-        } else if hasMoreFromAPI {
-            let page = nextArticlesPage
-            guard let result = await NewsService.fetchArticles(page: page, perPage: remotePageSize) else {
-                // فشل شبكة/خادم — يبقى hasMore صحيحاً حتى يرى المستخدم زر
-                // "إعادة المحاولة" بدل أن يُقرأ الفشل الصامت كنهاية القائمة
-                // (تدقيق الديون err-1، 2026-09-23). لا نزيد nextArticlesPage
-                // حتى تُعاد نفس الصفحة الفاشلة عند إعادة المحاولة.
+    /// Homepage blocks can exclude rows after loading (hero/ticker/opinions).
+    /// Fill the initial visible quota without requiring a first "load more" tap.
+    @MainActor
+    func ensureHomeTimeline(excluding excludedIDs: Set<String>) async {
+        guard homeTimelineRevision > 0, !isLoading, !loadMoreFailed,
+              pagination.needsRemote(target: pagination.displayedCount, excluding: excludedIDs) else { return }
+        await fillTimeline(to: pagination.displayedCount, excluding: excludedIDs)
+    }
+
+    func hasMoreHomeTimeline(excluding excludedIDs: Set<String>) -> Bool {
+        pagination.hasMore(excluding: excludedIDs)
+    }
+
+    @MainActor
+    private func fillTimeline(to target: Int, excluding excludedIDs: Set<String>) async {
+        let generation = loadGeneration
+        isLoading = true
+        pendingTimelineTarget = target
+        defer { if generation == loadGeneration { isLoading = false } }
+
+        // A duplicate-only page is consumed in the same tap. The bound protects
+        // against a faulty server that says hasMore forever; retry keeps cursor.
+        var requests = 0
+        while pagination.needsRemote(target: target, excluding: excludedIDs) {
+            guard !Task.isCancelled else { return }
+            guard requests < 20 else {
                 loadMoreFailed = true
-                isLoading = false
                 return
             }
-            loadMoreFailed = false
-            nextArticlesPage += 1
-            hasMoreFromAPI = result.hasMore
-            let existingIDs = Set(allFetchedArticles.map(\.id))
-            let newArticles = result.articles.filter { !existingIDs.contains($0.id) }
-            if !newArticles.isEmpty {
-                allFetchedArticles.append(contentsOf: newArticles)
-                allFetchedArticles.sort { $0.publishDate > $1.publishDate }
+            requests += 1
+            let cursor = pagination.cursor
+            let result = await pageLoader(cursor, remotePageSize)
+            guard generation == loadGeneration, !Task.isCancelled else { return }
+            guard let result else {
+                loadMoreFailed = true
+                return
             }
-            if displayedCount < allFetchedArticles.count {
-                let end = min(displayedCount + pageSize, allFetchedArticles.count)
-                displayedCount = end
-                allArticles = Array(allFetchedArticles.prefix(displayedCount))
-            }
-            hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
-        } else {
-            hasMore = false
+            pagination.append(result.articles, hasMore: result.hasMore)
         }
-
-        isLoading = false
+        guard generation == loadGeneration, !Task.isCancelled else { return }
+        pagination.displayedCount = target
+        pendingTimelineTarget = nil
+        loadMoreFailed = false
+        allArticles = Array(pagination.articles.prefix(pagination.displayedCount))
+        hasMore = pagination.hasMore(excluding: excludedIDs)
     }
 
     @MainActor
@@ -290,6 +341,13 @@ final class ArticlesStore {
             return articles(for: category)
         }
         return allArticles
+    }
+
+    /// نحسب حصة «آخر الأخبار» بعد استبعاد الغلاف والرأي والعاجل، حتى لا
+    /// تنقص الأخبار الظاهرة عن 25 مع توفرها في الدفعة المحمّلة.
+    func homeTimelineArticles(excluding excludedIDs: Set<String>) -> [Article] {
+        let source = selectedCategory == nil ? pagination.articles : filteredArticles
+        return Array(source.filter { !excludedIDs.contains($0.id) }.prefix(pagination.displayedCount))
     }
 
 }

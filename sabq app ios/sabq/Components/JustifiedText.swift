@@ -21,9 +21,9 @@ nonisolated struct JustifiedTextStyle: Equatable {
     /// فئة حجم النص في النظام (Dynamic Type) — تغييرها من الإعدادات يجب أن
     /// يعيد بناء الفقرة بحجم مقيس.
     var sizeCategory: UIContentSizeCategory
-    /// ضبط الفقرة من الطرفين؛ `false` = محاذاة لليمين (صفحة الخبر — الضبط
-    /// يمدّ الحروف بالكشيدة على عرض الجوال الضيق، قرار المالك 2026-10-09).
-    var justified: Bool = true
+    /// المحاذاة لليمين افتراضيًا في الأخبار والرأي، دون تمديد الكلمات
+    /// لضبط الطرفين (طلب المالك 2026-10-31).
+    var justified: Bool = false
 
     /// النص العريض في إعدادات إمكانية الوصول يجب أن يغيّر مفتاح الكاش والرسم معًا.
     nonisolated static func legibleWeight(_ weight: UIFont.Weight, boldText: Bool) -> UIFont.Weight {
@@ -72,9 +72,8 @@ private extension EnvironmentValues {
 }
 
 extension EnvironmentValues {
-    /// فقرات القارئ مضبوطة من الطرفين افتراضيًا (صفحة الرأي كالويب)؛ صفحة
-    /// الخبر تطفئه لتصير المحاذاة لليمين.
-    @Entry var sabqJustifiesBody: Bool = true
+    /// الأخبار ومقالات الرأي بمحاذاة اليمين ومسافات طبيعية بين الكلمات.
+    @Entry var sabqJustifiesBody: Bool = false
 }
 
 private func makeReaderTextView() -> UITextView {
@@ -100,7 +99,7 @@ private func makeReaderTextView() -> UITextView {
     return tv
 }
 
-private func justifiedParagraphStyle(lineSpacing: CGFloat, justified: Bool = true) -> NSParagraphStyle {
+private func justifiedParagraphStyle(lineSpacing: CGFloat, justified: Bool = false) -> NSParagraphStyle {
     let ps = NSMutableParagraphStyle()
     ps.alignment = justified ? .justified : .right
     ps.lineSpacing = lineSpacing
@@ -119,9 +118,8 @@ private func readerFont(size: CGFloat, weight: UIFont.Weight, serif: Bool) -> UI
 
 // MARK: - فقرة نصية بسيطة
 
-/// Renders body paragraphs with `NSTextAlignment.justified` so Arabic
-/// text fills the column to both edges — SwiftUI's `Text` only supports
-/// leading/center/trailing, so we drop down to `UITextView` for this.
+/// Renders selectable Arabic body paragraphs with right alignment by
+/// default. The environment can explicitly opt in to full justification.
 ///
 /// Used inside the article + opinion detail readers; not appropriate
 /// for headings (which want leading alignment) or short labels.
@@ -198,7 +196,7 @@ struct JustifiedText: UIViewRepresentable {
 /// Same UITextView wrapper for the rich-HTML pipeline (ArticleContentView):
 /// takes the parsed `InlineRun`s plus the reader style and builds the
 /// attributed string itself, so inline bold/italic/link runs survive and
-/// the paragraph is still justified.
+/// the paragraph keeps the reader's alignment.
 ///
 /// Performance: the attributed string is built **only** when the runs or
 /// any style input changes (font size, serif toggle, colour, Dynamic Type
@@ -253,7 +251,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
             useSerifReader: useSerifReader,
             textColor: textColor
         ))
-        // Apply justified paragraph style across the whole string
+        // Apply the reader's paragraph alignment across the whole string
         // without clobbering the inline font/colour runs.
         let fullRange = NSRange(location: 0, length: m.length)
         m.addAttribute(.paragraphStyle, value: justifiedParagraphStyle(lineSpacing: lineSpacing, justified: key.style.justified), range: fullRange)
@@ -283,7 +281,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
 
 /// Helper for the rich-HTML pipeline: collapses an array of `InlineRun`s
 /// into an `NSAttributedString` with bold/italic/colour/link/underline
-/// attributes preserved. The justified paragraph style is layered on
+/// attributes preserved. The reader's paragraph style is layered on
 /// top of this by `JustifiedAttributedText`.
 enum InlineRunAttributing {
     static func attributedString(

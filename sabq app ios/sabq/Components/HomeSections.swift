@@ -296,7 +296,7 @@ struct LatestTimelineRow: View {
 
 // MARK: - صف الرأي
 
-/// صف رأي يقوده الكاتب: صورته، ثم اسمه الكامل والوقت، ثم العنوان في سطرين.
+/// صف رأي: العنوان ثم الاسم والوقت يمينًا، وصورة الكاتب الدائرية يسارًا.
 /// كل الصفوف متساوية بلا مقال بارز (قرار المالك 2026-10-09).
 struct OpinionWriterRow: View {
     @Environment(\.homeSideColumn) private var compactType
@@ -305,15 +305,7 @@ struct OpinionWriterRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: compactType ? 44 : 52)
-                .overlay(Circle().stroke(SabqTheme.surface, lineWidth: 2))
-
             VStack(alignment: .leading, spacing: 3) {
-                if !compactType {
-                    Text("\(nameText)\(timeText)")
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                }
-
                 SabqRTLText(
                     opinion.title,
                     uiFont: SabqType.rowTitle.scaled(compactType).uiFont,
@@ -322,6 +314,12 @@ struct OpinionWriterRow: View {
                     lineSpacing: SabqType.rowTitle.scaled(compactType).lineSpacing,
                     textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                 )
+
+                if !compactType {
+                    Text("\(nameText)\(timeText)")
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .padding(.top, SabqLayout.space4)
+                }
 
                 if compactType {
                     // عمود الأقسام: ترتيب مُقترب نفسه — العنوان، فالاسم، فالزمن بخط صغير
@@ -334,6 +332,9 @@ struct OpinionWriterRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: compactType ? 44 : 52)
+                .overlay(Circle().stroke(SabqTheme.surface, lineWidth: 2))
         }
         .padding(.vertical, SabqLayout.rowPadding)
         .contentShape(Rectangle())
