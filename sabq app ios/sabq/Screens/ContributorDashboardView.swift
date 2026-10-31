@@ -321,6 +321,8 @@ final class ContributorDashboardViewModel: ObservableObject {
 
 // MARK: - View
 
+/// النسخة القديمة من صفحة الأداء. منذ 2026-10-31 تعرض WriterWorkspaceView
+/// صفحة PerformanceView (طلب واحد)، وتبقى هذه وبطاقات الجدولة أدناه للرجوع.
 struct ContributorDashboardView: View {
     /// true عندما تُعرض كتبويب «أدائي» داخل WriterWorkspaceView — تُخفى
     /// بطاقات الجدولة والاستطلاعات (انتقلت لتبويب «اليوم») ويتغير العنوان.

@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   caps: { canReport: true, canNews: false } as Record<string, unknown>,
   board: vi.fn(),
   createEditRequest: vi.fn(),
+  performance: vi.fn(),
 }));
 
 vi.mock("../../server/services/memberSessionService", () => ({ verifyMemberBearer: async () => state.session }));
@@ -25,6 +26,7 @@ vi.mock("../../server/services/staffAppService", () => ({
   resolveStaffCapabilitiesAndRoles: async () => ({ roles: [], capabilities: state.caps }),
 }));
 vi.mock("../../server/services/mobileEditorialService", () => ({ getMyNewsBoard: state.board }));
+vi.mock("../../server/services/contributorPerformanceService", () => ({ getContributorPerformance: state.performance }));
 vi.mock("../../server/services/articleEditRequestsService", () => ({
   createEditRequest: state.createEditRequest,
   cancelEditRequest: vi.fn(),
@@ -82,6 +84,7 @@ describe("/api/v1/editorial", () => {
     state.caps = { canReport: true, canNews: false };
     state.board.mockReset().mockResolvedValue({ counts: {}, editRequestsReady: true, items: [] });
     state.createEditRequest.mockReset();
+    state.performance.mockReset().mockResolvedValue({ views: 1128 });
   });
 
   const get = (path: string, token = "member-token") =>
@@ -128,5 +131,28 @@ describe("/api/v1/editorial", () => {
     });
     expect(res.status).toBe(201);
     expect(state.createEditRequest).toHaveBeenCalledWith(expect.objectContaining({ articleId: "a1" }), "u1");
+  });
+
+  it("serves performance in one call, as writer for opinion authors", async () => {
+    const res = await get("/performance?period=7");
+    expect(res.status).toBe(200);
+    expect((await res.json()).views).toBe(1128);
+    expect(state.performance).toHaveBeenCalledWith({ userId: "u1", role: "reporter", period: "7" });
+    state.caps = { canReport: false, canNews: false, canWrite: true };
+    expect((await get("/performance")).status).toBe(200);
+    expect(state.performance).toHaveBeenLastCalledWith({ userId: "u1", role: "writer", period: "30" });
+    expect((await get("/performance?period=90")).status).toBe(400);
+  });
+
+  it("lets opinion writers open the edit-request form but not the reporter board", async () => {
+    state.caps = { canReport: false, canNews: false, canWrite: true };
+    expect((await get("/my-news")).status).toBe(403);
+    state.createEditRequest.mockResolvedValue({ ok: true, request: { id: "r2" } });
+    const res = await fetch(`${base}/edit-requests`, {
+      method: "POST",
+      headers: { Authorization: "Bearer member-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ articleId: "a2", note: "تصحيح اسم", proposed: { title: "عنوان مصحح" } }),
+    });
+    expect(res.status).toBe(201);
   });
 });

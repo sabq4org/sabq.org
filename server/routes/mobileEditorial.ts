@@ -18,6 +18,8 @@ import type { StaffAppErrorBody } from "@shared/staffApp";
 import { logActivity } from "../rbac";
 import { verifyMemberBearer } from "../services/memberSessionService";
 import { getMyNewsBoard } from "../services/mobileEditorialService";
+import { getContributorPerformance } from "../services/contributorPerformanceService";
+import { performanceQuerySchema } from "@shared/contributorPerformance";
 import {
   getStaffUserAccount,
   resolveStaffCapabilitiesAndRoles,
@@ -53,7 +55,7 @@ async function requireEditorialAuth(req: EditorialRequest, res: Response, next: 
     const user = session?.userId ? await getStaffUserAccount(session.userId) : null;
     if (!user) return sendError(res, 401, { code: "unauthorized", message: "جلسة غير صالحة أو منتهية" });
     // المصادقة الثنائية اختيارية في تطبيق «سبق» لكل الأدوار (قرار المالك 2026-10-31)،
-    // مثل لوحة الويب. تطبيق «مكتب سبق» (/api/v1/staff) ما زال يشترطها.
+    // مثل لوحة الويب و«مكتب سبق».
     const { roles, capabilities } = await resolveStaffCapabilitiesAndRoles(user.id, user.role);
     req.staffAuth = { user, roles, capabilities };
     return next();
@@ -67,6 +69,15 @@ const requireReporter = (req: EditorialRequest, res: Response, next: NextFunctio
   const caps = req.staffAuth?.capabilities;
   if (!caps?.canReport && !caps?.canNews) {
     return sendError(res, 403, { code: "forbidden", message: "لوحة المراسل لأصحاب الأخبار" });
+  }
+  return next();
+};
+
+/** طلب التعديل لصاحب المادة: المراسل أو المحرر، وكاتب الرأي على مقاله (2026-10-31). */
+const requireContentOwner = (req: EditorialRequest, res: Response, next: NextFunction) => {
+  const caps = req.staffAuth?.capabilities;
+  if (!caps?.canReport && !caps?.canNews && !caps?.canWrite) {
+    return sendError(res, 403, { code: "forbidden", message: "طلب التعديل لأصحاب الأخبار والمقالات" });
   }
   return next();
 };
@@ -125,6 +136,7 @@ const requireId = (param: string) => (req: Request, res: Response, next: NextFun
 const router = Router();
 const auth = requireEditorialAuth as unknown as RequestHandler;
 const reporter = requireReporter as unknown as RequestHandler;
+const owner = requireContentOwner as unknown as RequestHandler;
 
 router.get("/me", auth, (req: EditorialRequest, res) => {
   const ctx = req.staffAuth!;
@@ -140,6 +152,20 @@ router.get("/me", auth, (req: EditorialRequest, res) => {
 
 // ── المراسل ────────────────────────────────────────────────────────────
 
+// «أداء أخباري» / «أدائي»: كل الأرقام في طلب واحد (2026-10-31).
+router.get("/performance", auth, owner, async (req: EditorialRequest, res) => {
+  const parsed = performanceQuerySchema.safeParse(req.query);
+  if (!parsed.success) return sendError(res, 400, { code: "validation_error", message: "فترة غير معروفة" });
+  const caps = req.staffAuth!.capabilities;
+  const role = caps.canWrite && !caps.canReport && !caps.canNews ? "writer" : "reporter";
+  try {
+    res.json(await getContributorPerformance({ userId: req.staffAuth!.user.id, role, period: parsed.data.period }));
+  } catch (error) {
+    console.error("[MobileEditorial] performance failed:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر تحميل الأداء" });
+  }
+});
+
 router.get("/my-news", auth, reporter, async (req: EditorialRequest, res) => {
   const parsed = myNewsQuerySchema.safeParse(req.query);
   if (!parsed.success) return sendError(res, 400, { code: "validation_error", message: "فلتر غير معروف" });
@@ -151,7 +177,7 @@ router.get("/my-news", auth, reporter, async (req: EditorialRequest, res) => {
   }
 });
 
-router.get("/edit-requests/context/:articleId", auth, reporter, requireId("articleId"), async (req: EditorialRequest, res) => {
+router.get("/edit-requests/context/:articleId", auth, owner, requireId("articleId"), async (req: EditorialRequest, res) => {
   try {
     const result = await (await editRequests()).getEditRequestContext(req.params.articleId, req.staffAuth!.user.id);
     if (!result.ok) return sendError(res, result.status, { code: failCode(result.status), message: result.message });
@@ -162,7 +188,7 @@ router.get("/edit-requests/context/:articleId", auth, reporter, requireId("artic
   }
 });
 
-router.post("/edit-requests", auth, reporter, writeLimiter, async (req: EditorialRequest, res) => {
+router.post("/edit-requests", auth, owner, writeLimiter, async (req: EditorialRequest, res) => {
   const parsed = parseEditRequestInput(req.body);
   if (!parsed.ok) return sendError(res, 400, { code: "validation_error", message: parsed.message });
   try {
@@ -181,7 +207,7 @@ router.post("/edit-requests", auth, reporter, writeLimiter, async (req: Editoria
   }
 });
 
-router.post("/edit-requests/:id/cancel", auth, reporter, requireId("id"), writeLimiter, async (req: EditorialRequest, res) => {
+router.post("/edit-requests/:id/cancel", auth, owner, requireId("id"), writeLimiter, async (req: EditorialRequest, res) => {
   try {
     const result = await (await editRequests()).cancelEditRequest(req.params.id, req.staffAuth!.user.id);
     if (!result.ok) return sendError(res, result.status, { code: failCode(result.status), message: result.message });

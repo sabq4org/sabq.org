@@ -1,6 +1,6 @@
 # Sabq Desk Staff Mobile API — واجهة تطبيق الديسك للمنسوبين (`/api/v1/staff/*`)
 
-> آخر مراجعة: 2026-10-31 | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
+> آخر مراجعة: 2026-10-31 (2FA اختيارية) | المالك: editorial + social-publishing + auth-rbac + push-notifications | الحزمة: `com.sabq.desk` | الحالة: نشط؛ جدول واحد إضافي منذ 2026-10-29 (`staff_desk_events`، §2-12).
 
 ## الملخص
 
@@ -32,25 +32,15 @@ Content-Type: application/json
 - **رفض توكنات البوت (`botpub_*`):** لا يُسمح إطلاقاً باستخدام توكنات `botpub_*` على مسارات `/api/v1/staff/*`؛ أي طلب يحمل توكن `botpub_*` يُرفض فوراً بـ `401 Unauthorized` (`code: "unauthorized"`).
 - **عدم التخزين المؤقت:** ترسل جميع مسارات `/api/v1/staff/*` الترويسة `Cache-Control: private, no-store`.
 
-### ب) بوابة المصادقة الثنائية الإلزامية (Mandatory 2FA Gate)
-يشترط تطبيق الديسك تفعيل المصادقة الثنائية (`users.twoFactorEnabled === true`) على حساب الموظف. إذا كان الحساب لا يملك 2FA مفعلاً، ترد جميع مسارات `/api/v1/staff/*` بـ:
-
-```http
-HTTP/1.1 403 Forbidden
-Content-Type: application/json
-
-{
-  "code": "two_factor_required",
-  "message": "يلزم تفعيل المصادقة الثنائية (2FA) للوصول إلى تطبيق الديسك"
-}
-```
+### ب) المصادقة الثنائية اختيارية (منذ 2026-10-31)
+كانت إلزامية حتى 2026-10-31، ثم صارت اختيارية بقرار المالك، مثل لوحة الويب وتطبيق «سبق» (`/api/v1/editorial`). السيرفر لم يعد يرد بـ `403 two_factor_required`، و`/me` يعيد قيمة `twoFactorEnabled` الفعلية. ما زال التطبيق يعرض `TwoFactorRequiredView` إن وصله هذا الرد، فلا يلزمه بناء جديد.
 
 ### ج) الصلاحيات الحية لكل طلب (Live RBAC per Request)
 يُبطل الخادم كاش الصلاحيات المحلي ويعيد تقييم صلاحيات المستخدم الفعلية في كل طلب:
 
 | المجال | المسارات | قاعدة الصلاحية (مطابقة للويب وBot Desk) |
 |--------|----------|-----------------------------------------|
-| **الهوية** | `GET /api/v1/staff/me` | جلسة عضو صالحة + 2FA مفعل (يعيد مصفوفة `capabilities`) |
+| **الهوية** | `GET /api/v1/staff/me` | جلسة عضو صالحة (يعيد مصفوفة `capabilities`) |
 | **الصندوق والعدادات** | `GET /api/v1/staff/inbox`، `GET /api/v1/staff/unread-counts` | `canTickets` (عند `type=ticket`) أو `social_publish.view_log` (عند `type=social`) أو أحدهما على الأقل (عند `type=all`) |
 | **التذاكر** | `GET /tickets/:id`، `POST /tickets/:id/reply`، `PATCH /tickets/:id/status` | `canUserViewOpinionDesk` / `isOpinionDeskViewer` (المحررون `editor` والمسؤولون `SUPERUSER_ROLE_NAMES`) |
 | **عرض المقترح الاجتماعي** | `GET /social/:id` | `social_publish.view_log` |
@@ -405,7 +395,7 @@ Content-Type: application/json
 | الكود (`code`) | HTTP Status | المعنى |
 |----------------|-------------|--------|
 | `unauthorized` | `401` | جلسة مفقودة أو منتهية أو محاولة استخدام توكن `botpub_*` |
-| `two_factor_required` | `403` | الحساب لا يملك مصادقة ثنائية (2FA) مفعّلة |
+| `two_factor_required` | `403` | لم يعد يُرسل منذ 2026-10-31 (2FA اختيارية)، ويبقى للنسخ القديمة |
 | `forbidden` | `403` | الحساب لا يملك صلاحية RBAC المطلوبة للمسار |
 | `not_found` | `404` | التذكرة أو المنشور الاجتماعي غير موجود |
 | `validation_error` | `400` | خطأ في معاملات الاستعلام أو الجسم أو وقت جدولة في الماضي |

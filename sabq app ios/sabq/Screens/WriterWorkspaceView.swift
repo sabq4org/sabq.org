@@ -393,6 +393,8 @@ struct WriterWorkspaceView: View {
     @State private var tab: WorkspaceTab = .today
     @State private var showReviewSheet = false
     @State private var showNewOpinionSheet = false
+    /// «طلب تعديل» على مقال منشور: نفس نموذج المراسل وقرار المحرر (2026-10-31).
+    @State private var editRequestTarget: WriterTrackingArticle?
 
     /// مساحة العمل الكاملة لكاتب الرأي فقط؛ غيره (مراسل/إداري) يرى الأداء كما كان
     private var isOpinionWriter: Bool { authStore.currentUser?.isWriter == true }
@@ -408,11 +410,11 @@ struct WriterWorkspaceView: View {
                     case .today: todaySegment
                     case .ideas: ideasSegment
                     case .articles: articlesSegment
-                    case .performance: ContributorDashboardView(embedded: true)
+                    case .performance: PerformanceView(embedded: true)
                     }
                 }
             } else {
-                ContributorDashboardView()
+                PerformanceView()
             }
         }
         .background(SabqTheme.background)
@@ -425,6 +427,13 @@ struct WriterWorkspaceView: View {
             await vm.load()
         }
         .sheet(isPresented: $showReviewSheet) { reviewSheet }
+        .sheet(item: $editRequestTarget, onDismiss: { Task { await vm.load() } }) { article in
+            EditRequestComposeView(
+                articleId: article.id,
+                articleTitle: article.title,
+                stateLabel: EditorialStates.label(status: article.status, reviewStatus: article.reviewStatus)
+            )
+        }
         .sheet(isPresented: $showNewOpinionSheet, onDismiss: {
             Task { await vm.load() }
         }) {
@@ -1094,6 +1103,14 @@ struct WriterWorkspaceView: View {
                 if article.reviewStatus == "needs_changes" {
                     NavigationLink(value: ArticleRevisionsRoute()) {
                         actionLabel(icon: "pencil", text: "عدّل حسب الملاحظات", tint: SabqTheme.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if article.status == "published" {
+                    Button {
+                        editRequestTarget = article
+                    } label: {
+                        actionLabel(icon: "pencil", text: EditorialStates.requestEdit, tint: SabqTheme.primary)
                     }
                     .buttonStyle(.plain)
                 }
