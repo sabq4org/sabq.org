@@ -18,20 +18,14 @@
  */
 
 import { db } from "../db";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   editorialNotifications,
   editorialNotificationPrefs,
-  pushDevices,
   socialPosts,
   articles,
 } from "@shared/schema";
-import {
-  sendPushNotification,
-  createCustomNotificationPayload,
-  isApnsConfigured,
-} from "./apnsService";
-import { SABQ_READER_BUNDLE_ID } from "./deviceRegistrationPolicy";
+import { sendPushToSabqReaderApps } from "./userAppPushService";
 import {
   isNonHumanAccount,
   resolveArticleStakeholderIds,
@@ -331,85 +325,37 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
         .catch((err) => console.warn("[editorialNotifications] supersede scheduled failed:", err));
     }
 
-    // Find iOS devices registered for the reader app (com.sabq.sabqorg) so
-    // desk-app devices (com.sabq.desk) or other app bundles on the same
-    // user account never receive reader-topic editorial pushes.
-    const devices = await db
-      .select({
-        token: pushDevices.deviceToken,
-        provider: pushDevices.tokenProvider,
-        bundleId: pushDevices.bundleId,
-      })
-      .from(pushDevices)
-      .where(and(
-        eq(pushDevices.userId, args.userId),
-        eq(pushDevices.platform, "ios"),
-        inArray(pushDevices.bundleId, [SABQ_READER_BUNDLE_ID]),
-        eq(pushDevices.isActive, true),
-      ));
-
-    // Only APNs tokens for the reader app are sent through apnsService.
-    const apnsTokens = Array.from(
-      new Set(
-        devices
-          .filter(
-            (d) =>
-              d.provider === "apns" &&
-              (d.bundleId === undefined || d.bundleId === SABQ_READER_BUNDLE_ID),
-          )
-          .map((d) => d.token),
-      ),
-    );
-
-    if (apnsTokens.length === 0) {
-      await db.update(editorialNotifications)
-        .set({ deliveryStatus: "no_device" })
-        .where(eq(editorialNotifications.id, logRow.id));
-      return;
-    }
-
-    if (!isApnsConfigured()) {
-      await db.update(editorialNotifications)
-        .set({ deliveryStatus: "failed", deliveryError: "APNS_NOT_CONFIGURED" })
-        .where(eq(editorialNotifications.id, logRow.id));
-      return;
-    }
-
-    // Send to each device. We deliberately use the existing per-token sender
-    // here (not the campaign batch) because each device gets identical
-    // payload + we don't want the result mingled with campaign analytics.
-    const results = await Promise.all(apnsTokens.map(t =>
-      sendPushNotification(
-        t,
-        createCustomNotificationPayload(title, body, {
-          deeplink: deepLink,
-          articleId: args.article.id,
-          type: `editorial.${args.event}`,
-          // "active" = banner + sound, "time-sensitive" = bypasses focus modes
-          // when relevant. Rejected/revision are time-sensitive so the author
-          // sees them in their next focus window.
-          priority: (args.event === "rejected" || args.event === "needs_revision" || args.event === "archived")
-            ? "time-sensitive"
-            : "active",
-          category: `EDITORIAL_${args.event.toUpperCase()}`,
-        }),
-        { priority: "10", pushType: "alert", topic: SABQ_READER_BUNDLE_ID }
-      )
-    ));
-
-    const anySuccess = results.some(r => r.success);
-    const errors = results.filter(r => !r.success).map(r => r.reason || "unknown").join("; ");
+    // Reader app only (iOS com.sabq.sabqorg + Android com.sabqorg.sabq):
+    // desk-app devices (com.sabq.desk) or other bundles on the same account
+    // never receive reader-topic editorial pushes.
+    const push = await sendPushToSabqReaderApps(args.userId, {
+      title,
+      body,
+      deeplink: deepLink,
+      articleId: args.article.id,
+      type: `editorial.${args.event}`,
+      // "active" = banner + sound, "time-sensitive" = bypasses focus modes
+      // when relevant. Rejected/revision are time-sensitive so the author
+      // sees them in their next focus window.
+      interruptionLevel: (args.event === "rejected" || args.event === "needs_revision" || args.event === "archived")
+        ? "time-sensitive"
+        : "active",
+      category: `EDITORIAL_${args.event.toUpperCase()}`,
+      data: args.event === "published" && args.article.slug ? { article_slug: args.article.slug } : undefined,
+    });
 
     await db.update(editorialNotifications)
-      .set({
-        deliveryStatus: anySuccess ? "sent" : "failed",
-        deliveryError: anySuccess ? null : errors,
-      })
+      .set(push.attempted === 0
+        ? { deliveryStatus: "no_device" }
+        : {
+          deliveryStatus: push.sent > 0 ? "sent" : "failed",
+          deliveryError: push.sent > 0 ? null : (push.errors.join("; ") || "unknown"),
+        })
       .where(eq(editorialNotifications.id, logRow.id));
 
     console.log(
       `[Editorial Notify] event=${args.event} user=${args.userId} ` +
-      `devices=${apnsTokens.length} sent=${results.filter(r => r.success).length}`
+      `devices=${push.attempted} sent=${push.sent}`
     );
   } catch (err) {
     // Never throw — editorial workflow continues even if notifications fail.

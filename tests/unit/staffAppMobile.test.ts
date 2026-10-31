@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   sendEmailNotification: vi.fn(),
   createNotification: vi.fn(),
   sendPushToUserApp: vi.fn(),
+  sendPushToSabqReaderApps: vi.fn(),
   sendPushNotification: vi.fn(),
   isApnsConfigured: vi.fn(),
   listOpinionDeskRecipients: vi.fn(),
@@ -121,6 +122,7 @@ vi.mock("../../server/services/userAppPushService", async () => {
   return {
     ...actual,
     sendPushToUserApp: (...args: unknown[]) => mocks.sendPushToUserApp(...args),
+    sendPushToSabqReaderApps: (...args: unknown[]) => mocks.sendPushToSabqReaderApps(...args),
   };
 });
 
@@ -1391,9 +1393,8 @@ describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("notifyEditorialEvent filters iOS devices by reader bundleId (com.sabq.sabqorg) so com.sabq.desk devices do not get reader pushes", async () => {
-    mocks.isApnsConfigured.mockReturnValue(true);
-    mocks.sendPushNotification.mockResolvedValue({ success: true });
+  it("notifyEditorialEvent sends through the reader-app sender (iOS + Android reader bundles, never the desk)", async () => {
+    mocks.sendPushToSabqReaderApps.mockResolvedValue({ attempted: 1, sent: 1, failed: 0, errors: [] });
 
     // 1) fetchUserPrefs
     mocks.dbSelect.mockReturnValueOnce({
@@ -1418,31 +1419,9 @@ describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
       }),
     });
 
-    // 4) select pushDevices — simulate returning both a reader device and a desk device
-    mocks.dbSelect.mockReturnValueOnce({
-      from: () => ({
-        where: () =>
-          Promise.resolve([
-            {
-              token: "reader-apns-token-1",
-              provider: "apns",
-              bundleId: READER_APP_BUNDLE_ID,
-            },
-            {
-              token: "desk-apns-token-2",
-              provider: "apns",
-              bundleId: STAFF_APP_BUNDLE_ID,
-            },
-          ]),
-      }),
-    });
-
-    // 5) update editorialNotifications deliveryStatus
-    mocks.dbUpdate.mockReturnValueOnce({
-      set: () => ({
-        where: () => Promise.resolve(),
-      }),
-    });
+    // 4) update editorialNotifications deliveryStatus
+    const statusSet = vi.fn(() => ({ where: () => Promise.resolve() }));
+    mocks.dbUpdate.mockReturnValueOnce({ set: statusSet });
 
     await notifyEditorialEvent({
       userId: "writer-with-both-apps",
@@ -1455,14 +1434,18 @@ describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
       },
     });
 
-    expect(mocks.sendPushNotification).toHaveBeenCalledTimes(1);
-    expect(mocks.sendPushNotification).toHaveBeenCalledWith(
-      "reader-apns-token-1",
-      expect.any(Object),
+    expect(mocks.sendPushToSabqReaderApps).toHaveBeenCalledTimes(1);
+    expect(mocks.sendPushToSabqReaderApps).toHaveBeenCalledWith(
+      "writer-with-both-apps",
       expect.objectContaining({
-        topic: READER_APP_BUNDLE_ID,
+        type: "editorial.published",
+        deeplink: "sabq://opinion/published-op",
+        category: "EDITORIAL_PUBLISHED",
+        data: { article_slug: "published-op" },
       }),
     );
+    expect(mocks.sendPushNotification).not.toHaveBeenCalled();
+    expect(statusSet).toHaveBeenCalledWith(expect.objectContaining({ deliveryStatus: "sent" }));
   });
 
   it("POST /api/v1/members/push-token accepts com.sabq.desk and rejects unknown bundleIds", async () => {

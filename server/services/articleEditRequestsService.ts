@@ -10,7 +10,6 @@ import {
   editorialNotificationPrefs,
   editorialNotifications,
   notificationsInbox,
-  pushDevices,
   users,
   type Article,
 } from "@shared/schema";
@@ -39,8 +38,7 @@ import { recordArticleSave } from "./articleHistoryService";
 import { logArticleEvent } from "./articleEventsService";
 import { sendDraftSubmittedNotification } from "../notificationService";
 import { notificationBus } from "../notificationBus";
-import { createCustomNotificationPayload, isApnsConfigured, sendPushNotification } from "./apnsService";
-import { SABQ_READER_BUNDLE_ID } from "./deviceRegistrationPolicy";
+import { sendPushToSabqReaderApps } from "./userAppPushService";
 import { isNonHumanAccount } from "./editorialStakeholderIds";
 
 type Fail = { ok: false; status: number; message: string; code?: string; missing?: string[] };
@@ -384,7 +382,7 @@ async function notifyRequester(input: DecisionNotice) {
   await deliverEditorialDecision(input, title, body);
 }
 
-/** نفس قواعد notifyEditorialEvent: تفضيل «طلب تعديل» (revisionEnabled)، ودفع iOS لحزمة القارئ فقط. */
+/** نفس قواعد notifyEditorialEvent: تفضيل «طلب تعديل» (revisionEnabled)، ودفع لتطبيق القارئ على iOS وأندرويد. */
 async function deliverEditorialDecision(input: DecisionNotice, title: string, body: string) {
   const userId = input.requesterId;
   if (!userId || isNonHumanAccount(userId)) return;
@@ -425,43 +423,23 @@ async function deliverEditorialDecision(input: DecisionNotice, title: string, bo
       })
       .returning({ id: editorialNotifications.id });
 
-    const devices = await db
-      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider })
-      .from(pushDevices)
-      .where(and(
-        eq(pushDevices.userId, userId),
-        eq(pushDevices.platform, "ios"),
-        eq(pushDevices.bundleId, SABQ_READER_BUNDLE_ID),
-        eq(pushDevices.isActive, true),
-      ));
-    const tokens = Array.from(new Set(devices.filter((d) => d.provider === "apns").map((d) => d.token)));
-    if (tokens.length === 0) {
-      await db.update(editorialNotifications).set({ deliveryStatus: "no_device" }).where(eq(editorialNotifications.id, logRow.id));
-      return;
-    }
-    if (!isApnsConfigured()) {
-      await db.update(editorialNotifications)
-        .set({ deliveryStatus: "failed", deliveryError: "APNS_NOT_CONFIGURED" })
-        .where(eq(editorialNotifications.id, logRow.id));
-      return;
-    }
-    const results = await Promise.all(tokens.map((token) => sendPushNotification(
-      token,
-      createCustomNotificationPayload(title, body, {
-        deeplink: deepLink,
-        articleId: input.articleId,
-        type: `editorial.${type}`,
-        priority: input.approved ? "active" : "time-sensitive",
-        category: "EDITORIAL_EDIT_REQUEST",
-      }),
-      { priority: "10", pushType: "alert", topic: SABQ_READER_BUNDLE_ID },
-    )));
-    const anySuccess = results.some((r) => r.success);
+    const push = await sendPushToSabqReaderApps(userId, {
+      title,
+      body,
+      deeplink: deepLink,
+      articleId: input.articleId,
+      type: `editorial.${type}`,
+      interruptionLevel: input.approved ? "active" : "time-sensitive",
+      category: "EDITORIAL_EDIT_REQUEST",
+      data: input.articleSlug && input.articleStatus === "published" ? { article_slug: input.articleSlug } : undefined,
+    });
     await db.update(editorialNotifications)
-      .set({
-        deliveryStatus: anySuccess ? "sent" : "failed",
-        deliveryError: anySuccess ? null : results.map((r) => r.reason || "unknown").join("; "),
-      })
+      .set(push.attempted === 0
+        ? { deliveryStatus: "no_device" }
+        : {
+          deliveryStatus: push.sent > 0 ? "sent" : "failed",
+          deliveryError: push.sent > 0 ? null : (push.errors.join("; ") || "unknown"),
+        })
       .where(eq(editorialNotifications.id, logRow.id));
   } catch (error) {
     console.error("[edit-requests] editorial decision notify failed", error);

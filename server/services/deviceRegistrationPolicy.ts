@@ -143,3 +143,87 @@ export function sanitizeDeviceRegistrationBody(body: unknown): void {
     delete b.platform;
   }
 }
+
+/** Android bundles of the Sabq reader app (Play id + debug + legacy namespace). */
+const ANDROID_READER_BUNDLE_IDS = new Set([
+  "com.sabqorg.sabq",
+  "com.sabqorg.sabq.dev",
+  "com.sabq.smart",
+  "com.sabq.smart.dev",
+]);
+
+export interface PushTransportInput {
+  token?: unknown;
+  bundleId?: unknown;
+  platform?: unknown;
+  provider?: unknown;
+}
+
+export interface PushTransport {
+  platform: "ios" | "android";
+  provider: "apns" | "fcm";
+}
+
+/**
+ * Decides platform + provider when the client did not say.
+ *
+ * The Android app serialises with kotlinx `encodeDefaults = false`, so its
+ * DTO defaults (`platform = "android"`, `provider = "fcm"`) never reach the
+ * server. Both routes then defaulted to iOS/APNs, Apple rejected the FCM
+ * token and the device went inactive. An Android bundle id always means FCM;
+ * otherwise only fill missing fields from the token shape (APNs = 64 hex,
+ * FCM = long `<instance>:<payload>`). Returns null to keep the route default.
+ */
+export function inferPushTransport(input: PushTransportInput): PushTransport | null {
+  const bundleId = typeof input.bundleId === "string" ? input.bundleId.trim() : "";
+  if (ANDROID_READER_BUNDLE_IDS.has(bundleId)) return { platform: "android", provider: "fcm" };
+
+  const hasPlatform = typeof input.platform === "string" && input.platform.length > 0;
+  const hasProvider = typeof input.provider === "string" && input.provider.length > 0;
+  if (hasPlatform && hasProvider) return null;
+  if (hasPlatform) {
+    return input.platform === "android"
+      ? { platform: "android", provider: "fcm" }
+      : input.platform === "ios" ? { platform: "ios", provider: "apns" } : null;
+  }
+  if (hasProvider) {
+    return input.provider === "fcm"
+      ? { platform: "android", provider: "fcm" }
+      : input.provider === "apns" ? { platform: "ios", provider: "apns" } : null;
+  }
+
+  const token = typeof input.token === "string" ? input.token.trim() : "";
+  if (/^[0-9a-f]{64}$/i.test(token)) return { platform: "ios", provider: "apns" };
+  if (token.length >= 100 && token.includes(":")) return { platform: "android", provider: "fcm" };
+  return null;
+}
+
+/** Fills `platform` + `tokenProvider` on a `/devices/register` body in place. */
+export function applyInferredDeviceTransport(body: unknown): void {
+  if (!body || typeof body !== "object") return;
+  const b = body as Record<string, unknown>;
+  const inferred = inferPushTransport({
+    token: b.deviceToken ?? b.token,
+    bundleId: b.bundleId,
+    platform: b.platform,
+    provider: b.tokenProvider,
+  });
+  if (!inferred) return;
+  b.platform = inferred.platform;
+  b.tokenProvider = inferred.provider;
+}
+
+/** Fills `platform` + `provider` on a `/members/push-token` body in place. */
+export function applyInferredMemberPushTransport(body: unknown): void {
+  if (!body || typeof body !== "object") return;
+  const b = body as Record<string, unknown>;
+  const inferred = inferPushTransport({
+    token: b.token,
+    bundleId: b.bundleId,
+    platform: b.platform,
+    provider: b.provider,
+  });
+  if (!inferred) return;
+  b.platform = inferred.platform;
+  b.provider = inferred.provider;
+}
