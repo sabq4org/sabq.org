@@ -338,8 +338,9 @@ export async function sendDraftSubmittedNotification(
   reporterName: string,
   reporterId: string,
   /** نص مخصص (مقالات الرأي: «مقال رأي جديد: <الكاتب>» مع الموعد الثابت). */
-  override?: { title?: string; body?: string; metadata?: Record<string, unknown> }
+  override?: { title?: string; body?: string; metadata?: Record<string, unknown>; type?: string; deeplink?: string }
 ): Promise<void> {
+  const noticeType = override?.type || "DraftSubmitted";
   const noticeTitle = override?.title || "📝 مسودة جديدة من مراسل";
   const noticeBody = override?.body || `أرسل ${reporterName} خبراً جديداً: ${article.title}`;
   try {
@@ -392,10 +393,10 @@ export async function sendDraftSubmittedNotification(
       try {
         await db.insert(notificationsInbox).values({
           userId: editor.userId,
-          type: "DraftSubmitted",
+          type: noticeType,
           title: noticeTitle,
           body: noticeBody,
-          deeplink: `/dashboard/articles?status=draft&id=${article.id}`,
+          deeplink: override?.deeplink || `/dashboard/articles?status=draft&id=${article.id}`,
           read: false,
           metadata: {
             ...(override?.metadata ?? {}),
@@ -409,7 +410,7 @@ export async function sendDraftSubmittedNotification(
         // Emit real-time notification via SSE
         notificationBus.emit('new-notification', {
           userId: editor.userId,
-          type: "DraftSubmitted",
+          type: noticeType,
           title: noticeTitle,
           body: noticeBody,
         });

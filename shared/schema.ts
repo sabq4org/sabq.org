@@ -1233,6 +1233,31 @@ export const articleVersions = pgTable("article_versions", {
 
 export type ArticleVersion = typeof articleVersions.$inferSelect;
 
+// «طلب تعديل» من المراسل على خبره (منشور أو مسودة) يعتمده المحرر أو يرفضه.
+// المقترح في proposed (shared/articleEditRequests.ts)، والقيم وقت الطلب في base_snapshot.
+export const articleEditRequests = pgTable("article_edit_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  requesterId: varchar("requester_id").references(() => users.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected | cancelled
+  urgent: boolean("urgent").notNull().default(false),
+  note: text("note").notNull().default(""),
+  proposed: jsonb("proposed").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  baseSnapshot: jsonb("base_snapshot").$type<Record<string, unknown>>(),
+  appliedFields: jsonb("applied_fields").$type<string[]>(),
+  decidedBy: varchar("decided_by").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at"),
+  decisionNote: text("decision_note"),
+  appliedVersionId: varchar("applied_version_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_edit_requests_article_status").on(table.articleId, table.status),
+  index("idx_article_edit_requests_status_created").on(table.status, table.createdAt.desc()),
+]);
+
+export type ArticleEditRequest = typeof articleEditRequests.$inferSelect;
+
 // تجاوز مسؤول لبوابة الحساسية. قابل للاستعلام ويُعرض في تاريخ المقال.
 export const articlePublishOverrides = pgTable("article_publish_overrides", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
