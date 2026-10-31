@@ -7391,7 +7391,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
         const rowsPromise = status === "published"
           ? (async () => {
-              const ids = await getAdminPublishedPageIds(and(...whereConditions), limitNum, offset);
+              const ids = await getAdminPublishedPageIds(and(...whereConditions), limitNum, offset, shouldFilterByUser);
               if (!ids.length) return [];
               const rows = await query.where(and(...whereConditions, inArray(articles.id, ids)));
               const position = new Map(ids.map((id, index) => [id, index]));

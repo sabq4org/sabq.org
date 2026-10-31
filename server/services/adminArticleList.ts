@@ -8,9 +8,21 @@ import { db } from "../db";
  * indexes instead of sorting the entire published archive by an expression.
  * All permission/search filters must be applied inside BOTH candidate scans.
  */
-export function adminPublishedPageSql(filter: SQL | undefined, limit: number, offset: number) {
+export function adminPublishedPageSql(filter: SQL | undefined, limit: number, offset: number, scoped = false) {
   const where = and(eq(articles.status, "published"), filter);
   const end = offset + limit;
+  if (scoped) {
+    // قائمة صاحب المحتوى (المراسل/الكاتب): صفوفه قليلة، فتُقرأ بفهارس author_id/reporter_id
+    // ثم تُرتب. مسح المرشحين بفهرس الترتيب العام يمرّ على أرشيف المنشور كله بحثًا عن
+    // صفوفه، فيتجاوز statement_timeout ويعلق «جاري التحميل» (2026-10-31).
+    return sql`
+      SELECT id FROM ${articles}
+      WHERE ${where}
+      ORDER BY GREATEST(display_order, FLOOR(EXTRACT(EPOCH FROM published_at))) DESC,
+               published_at DESC NULLS LAST, created_at DESC, id DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  }
   return sql`
     WITH candidates AS (
       (SELECT id, display_order, published_at, created_at FROM ${articles}
@@ -30,8 +42,8 @@ export function adminPublishedPageSql(filter: SQL | undefined, limit: number, of
   `;
 }
 
-export async function getAdminPublishedPageIds(filter: SQL | undefined, limit: number, offset: number): Promise<string[]> {
-  const result = await db.execute<{ id: string }>(adminPublishedPageSql(filter, limit, offset));
+export async function getAdminPublishedPageIds(filter: SQL | undefined, limit: number, offset: number, scoped = false): Promise<string[]> {
+  const result = await db.execute<{ id: string }>(adminPublishedPageSql(filter, limit, offset, scoped));
   return result.rows.map(row => row.id);
 }
 
