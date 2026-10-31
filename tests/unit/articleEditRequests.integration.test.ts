@@ -4,7 +4,7 @@
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { getTableConfig, PgDialect, type PgTable } from "drizzle-orm/pg-core";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   articleEditRequests,
   articles,
@@ -68,7 +68,7 @@ import {
 const url = process.env.SESSION_REVOCATION_TEST_URL;
 if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) throw new Error("Local database only");
 
-const SCHEMA = "edit_request_audit";
+const SCHEMA_PREFIX = "edit_request_audit";
 const dialect = new PgDialect();
 
 /** جدول من تعريف drizzle نفسه (كل الأعمدة، بقيمها الافتراضية) حتى يعمل select() الكامل. */
@@ -95,21 +95,25 @@ const proposed = { title: "عنوان مصحح" };
 describe.skipIf(!url)("article edit requests against PostgreSQL", () => {
   let pool: Pool;
 
-  beforeAll(async () => {
-    pool = new Pool({ connectionString: url, options: `-c search_path=${SCHEMA}`, max: 10 });
-    await pool.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
-    await pool.query(`CREATE SCHEMA ${SCHEMA}`);
+  // كل اختبار في مخطط جديد باسم فريد: لا صفوف مشتركة بين الاختبارات، ولا
+  // حذف ولا تفريغ لأي جدول أو مخطط (AGENTS.md). المخططات تبقى بعد التشغيل عمدًا؛
+  // لذلك يجب أن يشير SESSION_REVOCATION_TEST_URL إلى قاعدة محلية مؤقتة
+  // (في CI حاوية Postgres تُرمى بعد كل تشغيل، فلا يتراكم شيء).
+  beforeEach(async () => {
+    const schema = `${SCHEMA_PREFIX}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const admin = new Pool({ connectionString: url, max: 1 });
+    try {
+      await admin.query(`CREATE SCHEMA ${schema}`);
+    } finally {
+      await admin.end();
+    }
+    pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: 10 });
     for (const table of [users, articles, articleEditRequests, notificationsInbox, editorialNotifications, editorialNotificationPrefs, pushDevices]) {
       await pool.query(ddlFor(table));
     }
     await pool.query(`CREATE TABLE article_edit_locks (article_id varchar PRIMARY KEY, user_id varchar NOT NULL,
       user_name text NOT NULL, acquired_at timestamp, expires_at timestamp NOT NULL, last_heartbeat timestamp)`);
     state.db = drizzle(pool);
-  });
-
-  beforeEach(async () => {
-    await pool.query("TRUNCATE users, articles, article_edit_requests, notifications_inbox, editorial_notifications, editorial_notification_prefs, push_devices, article_edit_locks");
-    await pool.query("DROP INDEX IF EXISTS idx_article_edit_requests_one_pending");
     await pool.query(`INSERT INTO users (id, email, first_name) VALUES ('${REPORTER}', 'r@test.local', 'مراسل'), ('${EDITOR}', 'e@test.local', 'محرر')`);
     await pool.query(`INSERT INTO articles (id, title, slug, content, status, article_type, reporter_id, author_id, updated_at)
       VALUES ('a1', 'العنوان الأصلي', 'a1-slug', '<p>نص</p>', 'published', 'news', '${REPORTER}', '${EDITOR}', '2026-10-31T10:00:00.123456')`);
@@ -121,11 +125,10 @@ describe.skipIf(!url)("article edit requests against PostgreSQL", () => {
     state.historySaves = 0;
   });
 
-  afterAll(async () => {
-    if (pool) {
-      await pool.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
-      await pool.end();
-    }
+  afterEach(async () => {
+    // الإشعارات تعمل بعد الرد؛ مهلة قصيرة كي لا تكتب على مجمّع مغلق.
+    await new Promise((r) => setTimeout(r, 50));
+    if (pool) await pool.end();
   });
 
   const create = () => createEditRequest({ articleId: "a1", urgent: false, note: "خطأ في العنوان", proposed } as any, REPORTER);
@@ -238,7 +241,7 @@ describe.skipIf(!url)("article edit requests against PostgreSQL", () => {
     // محرر حفظ المادة بعد قراءة الخدمة لها: نغيّر النسخة بين القراءة والمعاملة.
     const realTransaction = state.db.transaction.bind(state.db);
     state.db.transaction = async (fn: any) => {
-      await pool.query("UPDATE articles SET updated_at = now(), title = 'حفظ محرر آخر'");
+      await pool.query("UPDATE articles SET updated_at = now(), title = 'حفظ محرر آخر' WHERE id = 'a1'");
       return realTransaction(fn);
     };
     try {
@@ -248,7 +251,7 @@ describe.skipIf(!url)("article edit requests against PostgreSQL", () => {
       state.db.transaction = realTransaction;
     }
     expect(await pendingCount()).toBe(1);
-    expect((await pool.query("SELECT title FROM articles")).rows[0].title).toBe("حفظ محرر آخر");
+    expect((await pool.query("SELECT title FROM articles WHERE id = 'a1'")).rows[0].title).toBe("حفظ محرر آخر");
     expect(state.busEmits).toHaveLength(0);
   });
 
