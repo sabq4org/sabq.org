@@ -33,6 +33,11 @@ import {
 } from "../services/opinionWritersService";
 import { scheduleOpinionResubmitNotification } from "../services/opinionResubmitNotify";
 import {
+  isOwnSubmissionImageUrl,
+  loadMobileSubmitter,
+  scheduleNewsDraftNotification,
+} from "../services/mobileSubmissionService";
+import {
   coachWriterIdea,
   generateWriterIdeas,
   getOpinionAuthorWorkspace,
@@ -4657,15 +4662,16 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب لإرسال المحتوى" });
     }
 
-    const { articles, users: usersTable, userRoles: userRolesTable, roles: rolesTable } = await import("@shared/schema");
+    const { articles } = await import("@shared/schema");
     const { z } = await import("zod");
 
     const schema = z.object({
       title: z.string().trim().min(3, "العنوان قصير جداً"),
       content: z.string().trim().min(20, "النص قصير جداً"),
-      // base64 data URIs ("data:image/jpeg;base64,..."). Optional for the
-      // writer flow because some opinion pieces ship without a hero image —
-      // editorial picks one during review.
+      // base64 data URIs ("data:image/jpeg;base64,...") OR https URLs that
+      // POST /api/v1/articles/images returned (Sabq image origins only).
+      // Optional for the writer flow because some opinion pieces ship
+      // without a hero image — editorial picks one during review.
       images: z.array(z.string()).max(10).optional().default([]),
       // Optional override: lets admins/editors pick the article type.
       // For writer/reporter roles we derive it from their RBAC roles.
@@ -4674,62 +4680,13 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
 
     const data = schema.parse(req.body);
 
-    // Load user (for fallback legacy `users.role`) + RBAC role names.
-    const [user] = await db
-      .select({
-        id: usersTable.id,
-        firstName: usersTable.firstName,
-        lastName: usersTable.lastName,
-        email: usersTable.email,
-        legacyRole: usersTable.role,
-      })
-      .from(usersTable)
-      .where(eq(usersTable.id, session.userId))
-      .limit(1);
-
-    if (!user) {
+    // User + RBAC roles (+ legacy `users.role`): shared with
+    // POST /articles/images via server/services/mobileSubmissionService.ts.
+    const submitter = await loadMobileSubmitter(session.userId);
+    if (!submitter) {
       return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
     }
-
-    const rbacRoles = await db
-      .select({ name: rolesTable.name })
-      .from(userRolesTable)
-      .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
-      .where(eq(userRolesTable.userId, session.userId));
-
-    const roleNames = new Set<string>([
-      ...rbacRoles.map(r => (r.name || "").toLowerCase()),
-      (user.legacyRole || "").toLowerCase(),
-    ]);
-
-    const WRITER_ROLES = new Set([
-      "opinion_author",
-      "columnist",
-      "article_author",
-      "article_writer",
-      "writer",
-      "author",
-    ]);
-    const REPORTER_ROLES = new Set([
-      "reporter",
-      "correspondent",
-      "journalist",
-    ]);
-    const ADMIN_LIKE_ROLES = new Set([
-      "admin",
-      "system_admin",
-      "superadmin",
-      "editor",
-      "editor_in_chief",
-      "senior_editor",
-      "managing_editor",
-      "editorial_manager",
-      "content_manager",
-    ]);
-
-    const isWriter = [...roleNames].some(r => WRITER_ROLES.has(r));
-    const isReporter = [...roleNames].some(r => REPORTER_ROLES.has(r));
-    const isAdminLike = [...roleNames].some(r => ADMIN_LIKE_ROLES.has(r));
+    const { user, roleNames, isWriter, isReporter, isAdminLike } = submitter;
 
     if (!isWriter && !isReporter && !isAdminLike) {
       return res.status(403).json({
@@ -4823,9 +4780,16 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
 
       // 1) Validate + decode every image up front so we fail fast with a
       //    precise error before spending time on any upload.
-      const decoded: { buffer: Buffer; mimeType: string; ext: string }[] = [];
+      const decoded: ({ buffer: Buffer; mimeType: string; ext: string } | { url: string })[] = [];
       for (let i = 0; i < imagePayload.length; i++) {
         const src = imagePayload[i];
+        if (src.startsWith("https://")) {
+          if (!isOwnSubmissionImageUrl(src)) {
+            return res.status(400).json({ success: false, message: `رابط الصورة ${i + 1} غير مقبول` });
+          }
+          decoded.push({ url: src });
+          continue;
+        }
         const matches = src.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
         if (!matches) {
           return res.status(400).json({
@@ -4852,7 +4816,9 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       const batchStamp = Date.now();
       const results = await Promise.all(
         decoded.map((img, i) =>
-          newsImageStorageService.upload({
+          "url" in img
+            ? Promise.resolve({ success: true, deliveryUrl: img.url, error: undefined as string | undefined })
+            : newsImageStorageService.upload({
             buffer: img.buffer,
             filename: `submission-${session.userId}-${batchStamp}-${i}.${img.ext}`,
             mimeType: img.mimeType,
@@ -4964,6 +4930,8 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
     if (kind === "opinion" && created?.id) {
       setImmediate(() => { void notifyOpinionArticleSubmittedForReview(created); });
     }
+    // خبر المراسل: نفس تنبيه «مسودة جديدة من مراسل» في إرسال الويب.
+    if (created?.id) scheduleNewsDraftNotification(null, created);
 
     // Fire-and-forget AI enrichment: summary, bullets, SEO meta,
     // keywords, newsletter fields, suggested category, quality check.
@@ -5324,6 +5292,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
         reviewStatus: articles.reviewStatus,
         articleType: articles.articleType,
         authorId: articles.authorId,
+        reporterId: articles.reporterId,
       });
 
     console.log(`[Mobile API] /articles/${articleId}/resubmit by ${session.userId}`);
@@ -5332,6 +5301,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
     // (الكاتب + المحررون + push الديسك + بريد بوت «مكتب سبق»)، في الخلفية.
     if (updated) {
       scheduleOpinionResubmitNotification(existing.reviewStatus, updated);
+      scheduleNewsDraftNotification(existing.reviewStatus, updated);
     }
 
     // Shape the response so the iOS `ArticleSubmissionResponse`
