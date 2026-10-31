@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // «أداء أخباري» / «أدائي» (2026-10-31، النموذج المعتمد):
 // طلب واحد GET /api/v1/editorial/performance، والصفحة تفتح فورًا بآخر
