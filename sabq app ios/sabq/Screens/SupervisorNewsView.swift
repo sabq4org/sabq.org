@@ -63,6 +63,25 @@ struct SupervisorNewsView: View {
         .refreshable { await load() }
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !showsFullDashboard {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showNewChoice = true } label: {
+                        Image(systemName: "plus")
+                            .font(SabqFonts.app(size: 17, weight: .semibold))
+                    }
+                    .accessibilityLabel("محتوى جديد")
+                }
+            }
+        }
+        .confirmationDialog("نوع المحتوى", isPresented: $showNewChoice, titleVisibility: .visible) {
+            Button("خبر") { submissionKind = .news }
+            Button("مقال رأي") { submissionKind = .opinion }
+            Button("إلغاء", role: .cancel) {}
+        }
+        .sheet(item: $submissionKind, onDismiss: { Task { await load() } }) { kind in
+            ArticleSubmissionView(kind: kind)
+        }
         .task { await load() }
     }
 

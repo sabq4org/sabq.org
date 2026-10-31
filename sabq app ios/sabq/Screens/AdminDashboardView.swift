@@ -184,6 +184,20 @@ struct AdminDashboardView: View {
             VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 if let queue {
                     decisionSummary(queue)
+                } else {
+                    // تعذّر الملخّص (مثل مصادقة ثنائية غير مفعّلة): المدخل يبقى،
+                    // وصفحة القائمة تشرح السبب ورابط التفعيل.
+                    NavigationLink(value: SupervisorNewsRoute()) {
+                        adminShortcut(
+                            title: "بانتظار قرارك",
+                            subtitle: "أخبار المراسلين وطلبات التعديل",
+                            icon: "tray.full",
+                            tint: SabqTheme.primary
+                        )
+                        .padding(.horizontal, SabqLayout.space16)
+                        .sabqNewsSurface()
+                    }
+                    .buttonStyle(.plain)
                 }
                 AdminSegmentedControl(selected: vm.selectedStatus) { status in
                     Task { await vm.select(status) }
