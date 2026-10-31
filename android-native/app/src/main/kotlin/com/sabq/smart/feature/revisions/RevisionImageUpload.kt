@@ -28,9 +28,12 @@ object RevisionImageUpload {
         // قراءة الأبعاد فقط أولاً — لتقرير inSampleSize قبل فك الترميز
         // الكامل (صورة 12MP خام = ~48MB بيتماب بدون ذلك).
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        runCatching {
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        }.getOrNull() ?: return null
+        // decodeStream تعيد null دائمًا مع inJustDecodeBounds، فالحكم على
+        // outWidth/outHeight فقط، لا على القيمة المعادة.
+        val opened = runCatching {
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds); true }
+        }.getOrNull() ?: false
+        if (!opened) return null
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         var sample = 1
