@@ -327,9 +327,6 @@ struct MomentByMomentView: View {
         // so the editorial team's Latin-digit convention is honoured here
         // too.
         guard let date = SabqFormatters.parseISO8601(raw) else { return raw }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        formatter.locale = Locale(identifier: "ar-u-nu-latn")
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 }

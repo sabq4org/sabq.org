@@ -1927,7 +1927,7 @@ struct CompactArticleRow: View {
                 if showNew {
                     newPill
                 } else {
-                    Text(SabqFormatters.relativeArabic.localizedString(for: article.publishDate, relativeTo: context.date))
+                    Text(SabqFormatters.arabicRelative(article.publishDate, now: context.date))
                         .font(SabqType.timestamp.font)
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(SabqTheme.tertiaryInk)

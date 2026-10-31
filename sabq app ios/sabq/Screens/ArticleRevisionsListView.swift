@@ -184,9 +184,6 @@ struct ArticleRevisionsListView: View {
 
     private func relativeDate(_ iso: String?) -> String? {
         guard let iso, let date = SabqFormatters.parseISO8601(iso) else { return nil }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ar")
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 }

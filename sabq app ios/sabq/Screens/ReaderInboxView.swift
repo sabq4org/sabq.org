@@ -202,7 +202,7 @@ struct ReaderInboxView: View {
         else { return "" }
         // فرق ساعة الجهاز عن الخادم قد يجعل الإشعار «في المستقبل»
         if date > Date() { return "الآن" }
-        return SabqFormatters.relativeArabic.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 
     // MARK: - Actions

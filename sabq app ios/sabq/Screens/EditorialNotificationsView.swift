@@ -336,10 +336,7 @@ struct EditorialNotificationsView: View {
     // the editorial team's standard across the rest of the product.
     private func relativeDate(from iso: String) -> String {
         guard let date = SabqFormatters.parseISO8601(iso) else { return iso }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "ar-u-nu-latn")
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 
     @MainActor
@@ -762,10 +759,7 @@ struct EditorialNotificationDetailView: View {
 
     private func relativeArabic(_ iso: String) -> String {
         guard let date = SabqFormatters.parseISO8601(iso) else { return iso }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "ar-u-nu-latn")
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 }
 

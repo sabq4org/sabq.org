@@ -92,7 +92,7 @@ struct ArticleLiteView: View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             // شارة التصنيف حُذفت من سبق لايت كما في الويب (#1614) — يبقى الوقت.
             HStack(spacing: 8) {
-                Text(SabqFormatters.relativeArabic.localizedString(for: displayArticle.publishDate, relativeTo: Date()))
+                Text(SabqFormatters.arabicRelative(displayArticle.publishDate))
                     .font(SabqType.timestamp.font)
                     .foregroundStyle(SabqTheme.textTertiary)
             }

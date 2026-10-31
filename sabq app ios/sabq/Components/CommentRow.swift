@@ -268,10 +268,7 @@ struct CommentRow: View {
     /// parsing fails so we never silently render an empty timestamp.
     private static func relativeTime(_ raw: String) -> String {
         guard let date = Self.parseISO(raw) else { return raw }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "ar")
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return SabqFormatters.arabicRelative(date)
     }
 
     private static let isoFormatters: [ISO8601DateFormatter] = {

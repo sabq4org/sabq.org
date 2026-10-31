@@ -263,9 +263,6 @@ struct LoyaltyHistoryView: View {
     }
 
     private func relativeTime(_ date: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ar")
-        f.unitsStyle = .full
-        return f.localizedString(for: date, relativeTo: Date())
+        SabqFormatters.arabicRelative(date)
     }
 }

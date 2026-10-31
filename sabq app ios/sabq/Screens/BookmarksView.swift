@@ -84,14 +84,6 @@ struct BookmarksView: View {
                     tint: SabqTheme.primary
                 )
 
-                let totalMinutes = bookmarkedArticles.reduce(0) { $0 + $1.readingMinutes }
-                statTile(
-                    title: "وقت القراءة",
-                    value: "\(totalMinutes) د",
-                    icon: "clock",
-                    tint: SabqTheme.primary
-                )
-
                 let categories = Set(bookmarkedArticles.map(\.category)).count
                 statTile(
                     title: "أقسام",
