@@ -20,6 +20,10 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case balance(provider: String)
     /// The notifications center behind the bell.
     case notifications
+    /// A news draft on «الأخبار» (`sabqdesk://news/<articleId>`).
+    case news(id: String)
+    /// An edit request on «الأخبار» (`sabqdesk://news/edit-request/<id>`).
+    case editRequest(id: String)
 
     public static let scheme = "sabqdesk"
 
@@ -33,6 +37,8 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case .balances: return URL(string: "\(Self.scheme)://balances")!
         case .balance(let provider): return URL(string: "\(Self.scheme)://balances/\(provider)")!
         case .notifications: return URL(string: "\(Self.scheme)://notifications")!
+        case .news(let id): return URL(string: "\(Self.scheme)://news/\(id)")!
+        case .editRequest(let id): return URL(string: "\(Self.scheme)://news/edit-request/\(id)")!
         }
     }
 
@@ -59,6 +65,11 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
             }
             return
         }
+        if kind == "news", segments.count == 2, segments[0] == "edit-request" {
+            guard Self.isValidID(segments[1]) else { return nil }
+            self = .editRequest(id: segments[1])
+            return
+        }
         guard segments.count == 1, let id = segments.first, Self.isValidID(id) else { return nil }
         if kind == "balances" {
             let provider = id.lowercased()
@@ -70,6 +81,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case "ticket": self = .ticket(id: id)
         case "social": self = .social(id: id)
         case "opinion": self = .opinion(id: id)
+        case "news": self = .news(id: id)
         default: return nil
         }
     }
@@ -92,6 +104,16 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case "desk.publisher_news":
             self = .notifications
             return
+        case "desk.news_draft":
+            if let id = userInfo["articleId"] as? String, Self.isValidID(id) {
+                self = .news(id: id)
+                return
+            }
+        case "desk.edit_request":
+            if let id = userInfo["editRequestId"] as? String, Self.isValidID(id) {
+                self = .editRequest(id: id)
+                return
+            }
         case "desk.opinion_draft":
             // Server: notifyStaffDeskOfOpinionDraft sends data.articleId.
             if let id = userInfo["articleId"] as? String, Self.isValidID(id) {
