@@ -1512,14 +1512,232 @@ struct FeaturedArticleCard: View {
         .accessibilityAction(named: isBookmarked ? "إزالة من المحفوظات" : "حفظ الخبر", onBookmark)
     }
 
+    private var heroWhen: String { article.heroWhenLabel }
+}
+
+extension Article {
     /// «قبل 40 دقيقة» لخبر اليوم، و«أمس 4:35 م» لخبر الأمس، والتاريخ لما قبله.
-    private var heroWhen: String {
+    var heroWhenLabel: String {
         let cal = SabqFormatters.riyadhCalendar
-        let date = article.publishDate
-        if cal.isDateInToday(date) { return article.relativeDate }
+        let date = publishDate
+        if cal.isDateInToday(date) { return relativeDate }
         let clock = "\(SabqFormatters.riyadhHourMinute.string(from: date)) \(SabqFormatters.riyadhPeriod.string(from: date))"
         if cal.isDateInYesterday(date) { return "أمس \(clock)" }
-        return article.dateFormatted
+        return dateFormatted
+    }
+}
+
+// MARK: - Featured Carousel
+
+/// البارزة الثلاثة في بطاقة واحدة (طلب المالك 2026-10-31): شريحة تُقلَّب أفقيًا
+/// بصورة تملأ رأس البطاقة وعنوان كبير، وتحتها شريط الصور الثلاث يعمل
+/// فهرسًا — تحت النشطة خط يمتلئ كالقصص ثم ينتقل العرض للتالي. اللمس أو
+/// السحب يعيد العدّ، و«تقليل الحركة» يوقف التقليب التلقائي.
+struct FeaturedCarousel: View {
+    let articles: [Article]
+    let isBookmarked: (Article) -> Bool
+    let onBookmark: (Article) -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selection: String?
+    @State private var progress: CGFloat = 0
+
+    /// مدة بقاء الشريحة قبل الانتقال التلقائي.
+    private static let dwell: Double = 6
+
+    private var activeID: String? { selection ?? articles.first?.id }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(articles) { article in
+                        ArticleLink(article: article) { slide(article) }
+                            .buttonStyle(.plain)
+                            .containerRelativeFrame(.horizontal)
+                            .id(article.id)
+                            .contextMenu { bookmarkButton(article) }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $selection)
+
+            if articles.count > 1 {
+                thumbStrip
+                    .padding(.horizontal, SabqLayout.space12)
+                    .padding(.top, SabqLayout.space16)
+                    .padding(.bottom, SabqLayout.space12)
+            } else {
+                Color.clear.frame(height: SabqLayout.space12)
+            }
+        }
+        .clipShape(shape)
+        .sabqNewsSurface()
+        .task(id: activeID) { await runDwell() }
+    }
+
+    // MARK: Slide
+
+    private func slide(_ article: Article) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .overlay {
+                    if let urlString = article.imageURL, let url = URL(string: urlString) {
+                        FocalCachedAsyncImage(
+                            url: url,
+                            focalPoint: article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30)
+                        ) {
+                            SabqImagePlaceholder()
+                        }
+                    } else {
+                        SabqImagePlaceholder()
+                            .environment(\.sabqImageLoadFailed, true)
+                    }
+                }
+                .clipped()
+                .aiImageBadgeOverlay(
+                    isVisible: article.isAiGeneratedImage,
+                    model: article.aiImageModel,
+                    inset: 10
+                )
+                .padding(.bottom, SabqLayout.space4)
+
+            HStack(spacing: SabqLayout.space8) {
+                Text(article.categoryTitle)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .padding(.vertical, 2.5)
+                    .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                if article.isFreshlyPublished {
+                    Text("جديد")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.success)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.success.opacity(0.08)))
+                } else {
+                    Text(article.heroWhenLabel)
+                        .font(SabqType.timestamp.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .monospacedDigit()
+                }
+            }
+            .lineLimit(1)
+            .padding(.horizontal, SabqLayout.space12)
+
+            SabqRTLText(
+                article.title,
+                uiFont: SabqType.leadTitle.uiFont,
+                color: SabqTheme.textPrimary,
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                lineSpacing: SabqType.leadTitle.lineSpacing,
+                textStyle: SabqType.leadTitle.uiTextStyle
+            )
+            .padding(.horizontal, SabqLayout.space12)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Thumbnail index
+
+    private var thumbStrip: some View {
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
+            ForEach(articles) { article in
+                let isActive = article.id == activeID
+                Button {
+                    SabqHaptics.light()
+                    withAnimation(.snappy(duration: 0.35)) { selection = article.id }
+                } label: {
+                    VStack(spacing: SabqLayout.space8) {
+                        thumb(article, isActive: isActive)
+                        progressLine(isActive: isActive)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(article.title)
+                .accessibilityHint("يعرض الخبر في البطاقة")
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+    }
+
+    private func thumb(_ article: Article, isActive: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+        return Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16.0 / 10.0, contentMode: .fit)
+            .overlay {
+                if let urlString = article.imageURL, let url = URL(string: urlString) {
+                    FocalCachedAsyncImage(
+                        url: url,
+                        focalPoint: article.imageFocalPoint ?? ImageFocalPoint(x: 50, y: 30),
+                        maxPixelSize: 360
+                    ) {
+                        SabqImagePlaceholder()
+                    }
+                } else {
+                    SabqImagePlaceholder()
+                        .environment(\.sabqImageLoadFailed, true)
+                }
+            }
+            .clipShape(shape)
+            .overlay(
+                shape.strokeBorder(isActive ? SabqTheme.primary : SabqTheme.separator,
+                                   lineWidth: isActive ? 2 : 0.75)
+            )
+            .opacity(isActive ? 1 : 0.55)
+            .scaleEffect(isActive ? 1 : 0.96)
+            .animation(.snappy(duration: 0.3), value: isActive)
+    }
+
+    private func progressLine(isActive: Bool) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(SabqTheme.separator)
+                Capsule()
+                    .fill(SabqTheme.primary)
+                    .frame(width: isActive ? proxy.size.width * (reduceMotion ? 1 : progress) : 0)
+            }
+        }
+        .frame(height: 3)
+        .accessibilityHidden(true)
+    }
+
+    // MARK: Auto-advance
+
+    /// يملأ خط النشطة خلال `dwell` ثم ينتقل للتالي. يُلغى ويعاد من الصفر كلما
+    /// تغيّرت الشريحة (سحب أو لمس صورة)، ويتوقف حين تغادر البطاقة الشاشة.
+    private func runDwell() async {
+        progress = 0
+        guard !reduceMotion, articles.count > 1 else { return }
+        // انتظار قصير حتى يستقر التمرير قبل بدء العدّ.
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { return }
+        withAnimation(.linear(duration: Self.dwell)) { progress = 1 }
+        try? await Task.sleep(for: .seconds(Self.dwell))
+        guard !Task.isCancelled,
+              let current = activeID,
+              let index = articles.firstIndex(where: { $0.id == current }) else { return }
+        let next = articles[(index + 1) % articles.count].id
+        withAnimation(.snappy(duration: 0.5)) { selection = next }
+    }
+
+    private func bookmarkButton(_ article: Article) -> some View {
+        Button { onBookmark(article) } label: {
+            Label(
+                isBookmarked(article) ? "إزالة من المحفوظات" : "حفظ المقال",
+                systemImage: isBookmarked(article) ? "bookmark.slash" : "bookmark"
+            )
+        }
     }
 }
 

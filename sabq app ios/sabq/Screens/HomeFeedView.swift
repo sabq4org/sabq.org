@@ -706,8 +706,23 @@ struct HomeFeedView: View {
         Array(articlesStore.featuredArticles.prefix(3))
     }
 
-    /// الخبر الرئيسي بصورته وعنوانه الكبير، ثم بقية المميّزة صفوفًا تحته.
+    /// البارزة الثلاثة كاروسيل بشريط صورها (طلب المالك 2026-10-31). مقاسات
+    /// الإتاحة الكبيرة تبقى على التخطيط العمودي: العنوان الطويل لا يتسع لشريحة.
+    @ViewBuilder
     private var featuredSection: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            featuredRowsSection
+        } else {
+            FeaturedCarousel(
+                articles: heroArticles,
+                isBookmarked: { bookmarksStore.isBookmarked($0.id) },
+                onBookmark: { bookmarksStore.toggle($0.id, article: $0) }
+            )
+        }
+    }
+
+    /// الخبر الرئيسي بصورته وعنوانه الكبير، ثم بقية المميّزة صفوفًا تحته.
+    private var featuredRowsSection: some View {
         let featured = heroArticles
         return VStack(alignment: .leading, spacing: 0) {
             if let lead = featured.first {
