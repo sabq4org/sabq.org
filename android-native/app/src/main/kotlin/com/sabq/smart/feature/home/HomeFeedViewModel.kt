@@ -169,10 +169,8 @@ class HomeFeedViewModel @Inject constructor(
                     _state.update { c ->
                         if (c !is HomeFeedUiState.Loaded) return@update c
                         c.copy(
-                            featured = featured.items,
-                            articles = articles.items.filterNot { f ->
-                                featured.items.any { it.id == f.id }
-                            },
+                            featured = HomeHero.shown(featured.items),
+                            articles = HomeHero.latestExcludingShown(articles.items, featured.items),
                             selectedSlug = slug,
                             currentPage = articles.page,
                             hasMore = articles.hasMore,
@@ -228,10 +226,8 @@ class HomeFeedViewModel @Inject constructor(
                 .onSuccess { (featured, articles, sections) ->
                     _state.value = HomeFeedUiState.Loaded(
                         sections = sections.take(10),
-                        featured = featured.items,
-                        articles = articles.items.filterNot { f ->
-                            featured.items.any { it.id == f.id }
-                        },
+                        featured = HomeHero.shown(featured.items),
+                        articles = HomeHero.latestExcludingShown(articles.items, featured.items),
                         selectedSlug = null,
                         currentPage = articles.page,
                         hasMore = articles.hasMore,
