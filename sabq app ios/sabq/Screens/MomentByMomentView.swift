@@ -12,8 +12,6 @@ struct MomentByMomentView: View {
     @State private var isLoadingMore = false
     @State private var loadError: String? = nil
     @State private var filter: Filter = .all
-    @State private var pulse = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Filter: String, CaseIterable, Identifiable {
         case all
@@ -59,18 +57,24 @@ struct MomentByMomentView: View {
                     VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                if index > 0 {
-                                    SidebarRowDivider()
+                                // One lazy child per article, including its divider.
+                                // Separate children destabilize height estimates near
+                                // the end of the feed and when another page is appended.
+                                VStack(alignment: .leading, spacing: 0) {
+                                    if index > 0 {
+                                        SidebarRowDivider()
+                                    }
+                                    let article = articleFromUpdate(item)
+                                    NavigationLink(value: article) {
+                                        CompactArticleRow(
+                                            article: article,
+                                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                            isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("moments.article.\(item.id)")
                                 }
-                                let article = articleFromUpdate(item)
-                                NavigationLink(value: article) {
-                                    CompactArticleRow(
-                                        article: article,
-                                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                        isBookmarked: bookmarksStore.isBookmarked(article.id)
-                                    )
-                                }
-                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, SabqLayout.space12)
@@ -101,6 +105,7 @@ struct MomentByMomentView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(isLoadingMore)
+                            .accessibilityIdentifier("moments.loadMore")
                         }
                     }
                 }
@@ -110,6 +115,7 @@ struct MomentByMomentView: View {
             .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityIdentifier("moments.feed")
         .refreshable {
             SabqHaptics.medium()
             await reload()
@@ -120,9 +126,6 @@ struct MomentByMomentView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await reload()
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
-                pulse = true
-            }
         }
         .onChange(of: filter) { _, _ in
             Task { await reload() }
@@ -133,20 +136,7 @@ struct MomentByMomentView: View {
 
     private var header: some View {
         HStack(spacing: SabqLayout.space12) {
-            // لوحة أيقونة بلون العاجل الخفيف، والحلقة النابضة تبقى فوقها.
-            ZStack {
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.breaking.opacity(0.12))
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(SabqTheme.breaking)
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .stroke(SabqTheme.breaking.opacity(0.4), lineWidth: 2)
-                    .scaleEffect(pulse ? 1.3 : 1)
-                    .opacity(pulse ? 0 : 0.8)
-            }
-            .frame(width: 40, height: 40)
-            .accessibilityHidden(true)
+            MomentByMomentLiveIndicator()
 
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 HStack(spacing: SabqLayout.space8) {
@@ -159,6 +149,7 @@ struct MomentByMomentView: View {
                         .foregroundStyle(SabqTheme.textTertiary)
                 }
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("moments.count")
                 Text("أحدث الأخبار لحظة بلحظة")
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
@@ -293,5 +284,33 @@ struct MomentByMomentView: View {
         // too.
         guard let date = SabqFormatters.parseISO8601(raw) else { return raw }
         return SabqFormatters.arabicRelative(date)
+    }
+}
+
+/// Keep the repeating animation local to the ring. Starting it in the feed's
+/// reload task can animate the lazy stack's height and pagination footer forever.
+private struct MomentByMomentLiveIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .fill(SabqTheme.breaking.opacity(0.12))
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(SabqFonts.app(size: 18, weight: .semibold))
+                .foregroundStyle(SabqTheme.breaking)
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .stroke(SabqTheme.breaking.opacity(0.4), lineWidth: 2)
+                .scaleEffect(pulse ? 1.3 : 1)
+                .opacity(pulse ? 0 : 0.8)
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 1.4).repeatForever(autoreverses: false),
+                    value: pulse
+                )
+        }
+        .frame(width: 40, height: 40)
+        .accessibilityHidden(true)
+        .onAppear { pulse = true }
     }
 }
