@@ -342,7 +342,7 @@ private fun MatchContent(
             item { TvStrip(tv.channels) }
         }
         if (showMatchAlerts) item { MatchAlertsButton(state.isFollowingMatch, state.followBusy, onToggleMatchAlerts) }
-        if (showLiveFollow) item { LiveFollowButton(f) }
+        if (showLiveFollow && LiveMatchFollow.ENABLED) item { LiveFollowButton(f) }
     }
 
     when (mode) {

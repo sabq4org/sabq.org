@@ -11,6 +11,13 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 object LiveMatchFollow {
 
+    /**
+     * موقوف مؤقتًا في 10.11.1: الخدمة غير معلنة في AndroidManifest حتى نقدّم
+     * تصريح specialUse في Play مع فيديو لمباراة حيّة. لا تفعّله دون إعادة
+     * عنصر الخدمة والإذنين في الـ manifest، وإلا تعطّل التطبيق عند النقر.
+     */
+    const val ENABLED: Boolean = false
+
     /** أكواد توقّف الساعة (استراحة/فاصل/ركلات ترجيح/إيقاف) — تجمّد العدّاد. */
     private val PAUSED_CODES = setOf("HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP", "HALF_TIME")
 

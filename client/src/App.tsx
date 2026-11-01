@@ -163,6 +163,7 @@ const Register = lazy(() => retryImport(() => import("@/pages/Register")));
 // Static pages - lazy loaded
 const AboutPage = lazy(() => retryImport(() => import("@/pages/AboutPage")));
 const PrivacyPage = lazy(() => retryImport(() => import("@/pages/PrivacyPage")));
+const DeleteAccountPage = lazy(() => retryImport(() => import("@/pages/DeleteAccountPage")));
 const TermsPage = lazy(() => retryImport(() => import("@/pages/TermsPage")));
 const ContactPage = lazy(() => retryImport(() => import("@/pages/ContactPage")));
 const AccessibilityStatement = lazy(() => retryImport(() => import("@/pages/AccessibilityStatement")));
@@ -753,6 +754,11 @@ function Router() {
         <Route path="/privacy">{() => <LazyRoute component={PrivacyPage} />}</Route>
         <Route path="/ar/privacy">{() => <LazyRoute component={PrivacyPage} />}</Route>
         <Route path="/en/privacy">{() => <LazyRoute component={EnglishPrivacyPage} />}</Route>
+        <Route path="/delete-account">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
+        <Route path="/ar/delete-account">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
+        <Route path="/en/delete-account">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
+        {/* الرابط المسجَّل قديمًا في Google Play (أمان البيانات) */}
+        <Route path="/privacy-terms-of-service">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
         
         <Route path="/accessibility-statement">{() => <LazyRoute component={AccessibilityStatement} />}</Route>
         <Route path="/ar/accessibility-statement">{() => <LazyRoute component={AccessibilityStatement} />}</Route>

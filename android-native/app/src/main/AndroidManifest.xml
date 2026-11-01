@@ -5,9 +5,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- إشعار «المباراة الجارية» (خدمة أمامية تحدّث النتيجة كل ثوانٍ). -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
     <!-- Compose Downloadable Fonts uses the Google fonts content
@@ -107,18 +104,12 @@
                 android:resource="@xml/gc_share_paths" />
         </provider>
 
-        <!-- إشعار «المباراة الجارية» — نظير النشاط المباشر في iOS. يبدأ فقط
-             بنقرة المستخدم من مركز المباراة، ويتوقف بصافرة النهاية أو زر
-             الإيقاف. specialUse: لا نوع خدمة أمامية قياسي يطابق نتيجة مباراة
-             حيّة يطلبها المستخدم صراحة. -->
-        <service
-            android:name="com.sabq.smart.feature.worldcup.LiveMatchService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-started live match score: shows the score, match clock and last key event of one match the user chose to follow, until the final whistle or the user stops it." />
-        </service>
+        <!-- إشعار «المباراة الجارية» (LiveMatchService) موقوف مؤقتًا منذ 10.11.1:
+             Play يطلب تصريح specialUse مع فيديو لمباراة حيّة، ولا مباريات قبل
+             كأس آسيا (7 يناير 2027). لإعادته: أعد إذني FOREGROUND_SERVICE و
+             FOREGROUND_SERVICE_SPECIAL_USE وعنصر <service> هذا (انظر #2071)،
+             واجعل LiveMatchFollow.ENABLED = true. -->
+
 
         <!-- FCM entry point. Receives editorial push messages + token
              rotations. Routes incoming pushes to the system notification
