@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import com.sabq.smart.ui.components.sabqNewsSurface
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -234,10 +235,17 @@ fun EconomyHomeBlock(snapshot: EconomySnapshot?, onClick: () -> Unit) {
 
 @Composable
 private fun EconomyTeaser(title: String, figure: String, caption: String, badge: String?, cta: String, onClick: () -> Unit) {
-    EconomyAccentCard(tone = SabqTheme.colors.primaryEnd, radius = 16.dp, modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // سطح الرئيسية الأبيض بظل خفيف بلا حدّ ولا شريط علوي (iOS EconomyHomeBlock).
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth()
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .clickable { onClick() },
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = SabqTheme.colors.ink, modifier = Modifier.weight(1f))
+                Text(title, style = SabqTheme.typography.compactCardTitle, color = SabqTheme.colors.ink, modifier = Modifier.weight(1f))
                 if (badge != null) EconomyNewBadge(badge)
             }
             Text(figure, fontSize = 32.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.primaryEnd, maxLines = 1, overflow = TextOverflow.Ellipsis)

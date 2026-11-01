@@ -1,41 +1,38 @@
 package com.sabq.smart.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sabq.smart.data.Article
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * iOS [CompactArticleRow] (SabqComponents.swift line 1288-1479).
- * Classic variant only — the spacious 16:10 variant is opt-in via the
- * DataStore `"homeCardStyle"` pref and was rolled back as default
- * (too vertically heavy for dense feeds). Spacious lands later.
+ * iOS [CompactArticleRow] classic layout (SabqComponents.swift,
+ * `NewsRowStyle`): العنوان 16 متوسط في ثلاثة أسطر وتحته شارة القسم ووقت
+ * النشر على الطرف القائد، والمصغّرة 104×78 بزوايا 8 وإطار رفيع على الطرف
+ * الآخر. الحفظ بالضغط المطوّل كقائمة السياق في iOS.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CompactArticleRow(
     article: Article,
@@ -48,30 +45,31 @@ fun CompactArticleRow(
 ) {
     val haptics = rememberSabqHaptics()
     val thumbShape = RoundedCornerShape(SabqTheme.dimens.thumbnailRadius)
+    val bookmarkLabel = if (isBookmarked) "إزالة من المحفوظات" else "حفظ المقال"
 
     Row(
         modifier = modifier
-            .clickable { onClick() }
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        // Text column on the LEADING edge (right in RTL, matching iOS
-        // HStack iteration order under .sabqRTL()).
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (showsCategory) StatusChip(
-                    title = article.categoryLabel.ifBlank { article.category.title },
-                    tint = article.category.tint(),
-                    compact = true,
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    haptics.light()
+                    onBookmark()
+                },
+                onLongClickLabel = bookmarkLabel,
+            )
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction(bookmarkLabel) { onBookmark(); true },
                 )
-                if (article.isBreaking) BreakingPill()
-                if (article.isReading) ReadingPill()
             }
-
+            .padding(vertical = 16.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
                 text = article.title,
                 style = SabqTheme.typography.compactCardTitle,
@@ -80,25 +78,29 @@ fun CompactArticleRow(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            metadataRow(article = article, isBookmarked = isBookmarked) {
-                haptics.light()
-                onBookmark()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (showsCategory) {
+                    SabqCategoryPill(title = article.categoryLabel.ifBlank { article.category.title })
+                }
+                if (article.isBreaking) BreakingPill()
+                Text(
+                    text = article.dateFormatted,
+                    style = SabqTheme.typography.metaSmall,
+                    color = SabqTheme.colors.tertiaryInk,
+                    maxLines = 1,
+                )
             }
         }
 
-        // Thumbnail on the trailing edge (left in RTL).
         Box(
             modifier = Modifier
-                .size(SabqTheme.dimens.thumbnailSize)
+                .size(width = SabqTheme.dimens.rowThumbWidth, height = SabqTheme.dimens.rowThumbHeight)
                 .clip(thumbShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            article.category.tint().copy(alpha = 0.12f),
-                            article.category.tint().copy(alpha = 0.04f),
-                        ),
-                    ),
-                ),
+                .background(SabqTheme.colors.paleFill)
+                .border(0.75.dp, SabqTheme.colors.separator, thumbShape),
         ) {
             if (!article.imageUrl.isNullOrBlank()) {
                 FocalCachedAsyncImage(
@@ -110,15 +112,13 @@ fun CompactArticleRow(
                 Icon(
                     imageVector = article.category.icon,
                     contentDescription = null,
-                    tint = article.category.tint().copy(alpha = 0.6f),
+                    tint = SabqTheme.colors.tertiaryInk.copy(alpha = 0.5f),
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(26.dp)
                         .align(Alignment.Center),
                 )
             }
 
-            // AI-generated image disclosure — small inset, 65 % size to
-            // fit the 84 dp thumbnail. Mirrors iOS line 1337-1342.
             if (article.isAiGeneratedImage) {
                 AIImageBadge(
                     model = article.aiImageModel,
@@ -131,63 +131,3 @@ fun CompactArticleRow(
         }
     }
 }
-
-@Composable
-private fun metadataRow(
-    article: Article,
-    isBookmarked: Boolean,
-    onBookmark: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Icon(
-                imageVector = Icons.Outlined.Schedule,
-                contentDescription = null,
-                tint = SabqTheme.colors.tertiaryInk,
-                modifier = Modifier.size(11.dp),
-            )
-            Text(
-                text = article.readingTime,
-                style = SabqTheme.typography.metaSmall,
-                color = SabqTheme.colors.tertiaryInk,
-            )
-        }
-        Text(
-            text = article.dateFormatted,
-            style = SabqTheme.typography.metaSmall,
-            color = SabqTheme.colors.tertiaryInk,
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // 32 dp invisible-padding tap target wrapping the 16 dp glyph.
-        // The raw icon was only 16 dp clickable — well below the 48 dp
-        // Material guideline. The wrapper keeps the visual unchanged
-        // while giving thumbs a fair tap zone, and circular-clips the
-        // ripple so feedback hugs the glyph.
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable { onBookmark() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                contentDescription = if (isBookmarked) "إزالة من المحفوظات" else "حفظ المقال",
-                tint = if (isBookmarked) SabqTheme.colors.primaryEnd else SabqTheme.colors.tertiaryInk,
-                modifier = Modifier.size(16.dp),
-            )
-        }
-    }
-}
-
-@Suppress("unused")
-private val _iconMarker = Icons.Filled.CalendarMonth
-@Suppress("unused")
-private val _spacerMarker: @Composable () -> Unit = { Spacer(Modifier.width(0.dp)) }
-@Suppress("unused")
-private val _contentScaleMarker = ContentScale.Crop

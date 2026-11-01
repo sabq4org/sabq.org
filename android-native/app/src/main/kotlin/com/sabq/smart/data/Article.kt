@@ -37,6 +37,8 @@ data class Article(
     /** «آخر تحديث» — من `seoMetadata.editorialModifiedAt` فقط؛ null بلا تعديل تحريري. */
     val editorialModifiedAtIso: String? = null,
     val body: String? = null,
+    /** العنوان الفرعي (`subtitle`) — يظهر تحت العنوان في صفحة الخبر كما في iOS والويب. */
+    val subtitle: String? = null,
     val articleType: String? = null,
     val authorGender: String? = null,
     /** AI-generated summary string. Kept separate from [excerpt] so the

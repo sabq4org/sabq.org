@@ -69,6 +69,15 @@ data class SabqColors(
     /** أزرق سبق العميق #0E76B8 للنصوص التفاعلية؛ سماوي في الداكن. */
     val brandBlue: Color,
 
+    // هوية «مكتب سبق» (iOS SabqDesignSystem.swift، #2039–#2041): فواصل الصفوف،
+    // تعبئة الشرائح، والسطح السماوي الهادئ، وأحمر العاجل وأخضر «جديد».
+    val separator: Color,
+    val chipFill: Color,
+    val skyTint: Color,
+    val skyOutline: Color,
+    val breaking: Color,
+    val success: Color,
+
     // Resolved accent for the user's appAccent preference.
     val primaryStart: Color,
     val primaryEnd: Color,
@@ -87,75 +96,83 @@ object SabqColorPalette {
      * into Color() with the 0-1 range so rounding stays identical.
      */
     fun light(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        // Strict iOS parity (owner directive 2026-07-13): values are the
-        // exact SabqTheme components from SabqComponents.swift — no
-        // Android-side tuning.
-        background  = Color(0.95f, 0.97f, 0.99f, 1f),   // iOS #F2F7FC
+        // هوية «مكتب سبق» — القيم الفاتحة من SabqTheme في
+        // `sabq app ios/sabq/Components/SabqDesignSystem.swift` (#2039–#2041).
+        background  = Color(0xFFF4F7FB),
         surface     = Color.White,
-        ink         = Color(0.10f, 0.10f, 0.14f, 1f),
-        secondaryInk = Color(0.38f, 0.40f, 0.46f, 1f),
-        tertiaryInk = Color(0.56f, 0.58f, 0.64f, 1f),
-        outline     = Color(0.88f, 0.90f, 0.93f, 1f),   // iOS #E0E6ED
-        shadow      = Color(0f, 0f, 0f, 0.05f),          // iOS alpha 0.05
-        deepShadow  = Color(0f, 0f, 0f, 0.08f),          // iOS alpha 0.08
-        paleFill    = Color(0.94f, 0.97f, 0.99f, 1f),   // iOS #F0F7FC
-        softFill    = Color(0.92f, 0.95f, 0.98f, 1f),   // iOS #EBF2FA
-        warmGlow    = Color(0.95f, 0.97f, 0.99f, 1f),   // iOS #F2F7FC
-        teal        = Color(0.16f, 0.65f, 0.55f, 1f),
-        sky         = Color(0.22f, 0.52f, 0.95f, 1f),
-        gold        = Color(0.92f, 0.68f, 0.20f, 1f),
-        coral       = Color(0.90f, 0.35f, 0.32f, 1f),
-        leaf        = Color(0.40f, 0.73f, 0.22f, 1f),
+        ink         = Color(0xFF1B2B3A),
+        secondaryInk = Color(0xFF55667A),
+        tertiaryInk = Color(0xFF617183),
+        outline     = Color(0xFFCFDCE8),
+        shadow      = Color(0x0F1B2B3A),                 // #1B2B3A بشفافية 6%
+        deepShadow  = Color(0x0D000000),                 // أسود 5%
+        paleFill    = Color(0xFFEFF6FC),                 // surfaceMuted
+        softFill    = Color(0xFFDFECF7),                 // surfaceStrong
+        warmGlow    = Color(0xFFEFF6FC),
+        teal        = Color(0xFF08785F),
+        sky         = Color(0xFF096EBD),
+        gold        = Color(0xFF946000),
+        coral       = Color(0xFFBF3038),
+        leaf        = Color(0xFF13734E),
         dawnTint    = Color(0.96f, 0.72f, 0.18f, 1f),
         noonTint    = Color(0.93f, 0.58f, 0.22f, 1f),
         duskTint    = Color(0.95f, 0.45f, 0.20f, 1f),
         nightTint   = Color(0.46f, 0.52f, 0.95f, 1f),
-        // iOS flame uses system orange (#FF9500) — no invented accent.
         trendingAccent = Color(1.00f, 0.58f, 0.00f, 1f),
         mediaScrim  = Color(0.04f, 0.04f, 0.06f, 0.55f),
         journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
-        sectionCard      = Color(0.86f, 0.95f, 1.00f, 1f),   // iOS sectionCard light #DCF1FE
-        publicSurface    = Color(0xFFF4F8FB),
-        sectionSeparator = Color(0.72f, 0.84f, 0.92f, 1f),
-        brandSky         = Color(0.30f, 0.74f, 0.99f, 1f),   // #4CBCFD
-        brandBlue        = Color(0.05f, 0.46f, 0.72f, 1f),   // #0E76B8
+        sectionCard      = Color(0xFFF3F8FD),             // skyTint
+        publicSurface    = Color(0xFFEFF6FC),
+        sectionSeparator = Color(0xFFE2E9F0),
+        brandSky         = Color(0xFF4CBCFD),
+        brandBlue        = Color(0xFF096EBD),
+        separator        = Color(0xFFE2E9F0),
+        chipFill         = Color(0xFFEBF0F6),
+        skyTint          = Color(0xFFF3F8FD),
+        skyOutline       = Color(0xFFDCEAF7),
+        breaking         = Color(0xFFC8102E),
+        success          = Color(0xFF13734E),
         primaryStart = accent.light,
         primaryEnd   = accent.light,
         isDark      = false,
     )
 
     fun dark(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        // Strict iOS parity — exact SabqTheme dark components.
-        background  = Color(0.07f, 0.07f, 0.09f, 1f),   // iOS #121217
-        surface     = Color(0.12f, 0.12f, 0.14f, 1f),   // iOS #1F1F24
-        ink         = Color(0.95f, 0.95f, 0.97f, 1f),
-        secondaryInk = Color(0.68f, 0.68f, 0.72f, 1f),
-        tertiaryInk = Color(0.50f, 0.50f, 0.55f, 1f),
-        outline     = Color(0.20f, 0.20f, 0.23f, 1f),   // iOS #33333B
-        shadow      = Color(0f, 0f, 0f, 0.30f),          // iOS alpha 0.30
-        deepShadow  = Color(0f, 0f, 0f, 0.40f),          // iOS alpha 0.40
-        paleFill    = Color(0.14f, 0.14f, 0.16f, 1f),
-        softFill    = Color(0.16f, 0.16f, 0.18f, 1f),
-        warmGlow    = Color(0.12f, 0.12f, 0.14f, 1f),
-        teal        = Color(0.16f, 0.65f, 0.55f, 1f),
-        sky         = Color(0.22f, 0.52f, 0.95f, 1f),
-        gold        = Color(0.92f, 0.68f, 0.20f, 1f),
-        coral       = Color(0.90f, 0.35f, 0.32f, 1f),
-        leaf        = Color(0.40f, 0.73f, 0.22f, 1f),
+        // القيم الداكنة من SabqTheme في iOS (SabqDesignSystem.swift).
+        background  = Color(0xFF0B121A),
+        surface     = Color(0xFF141D27),
+        ink         = Color(0xFFF0F4F8),
+        secondaryInk = Color(0xFFA6B5C4),
+        tertiaryInk = Color(0xFF8E9EAE),
+        outline     = Color(0xFF334354),
+        shadow      = Color(0x0F1B2B3A),
+        deepShadow  = Color(0x0D000000),
+        paleFill    = Color(0xFF152230),
+        softFill    = Color(0xFF1F3145),
+        warmGlow    = Color(0xFF152230),
+        teal        = Color(0xFF70DCC0),
+        sky         = Color(0xFF5CC4FF),
+        gold        = Color(0xFFF2C76D),
+        coral       = Color(0xFFFF9297),
+        leaf        = Color(0xFF73D9A9),
         dawnTint    = Color(0.96f, 0.72f, 0.18f, 1f),
         noonTint    = Color(0.93f, 0.58f, 0.22f, 1f),
         duskTint    = Color(0.95f, 0.45f, 0.20f, 1f),
-        // iOS greeting nightTint is a single value with no dark variant.
         nightTint   = Color(0.46f, 0.52f, 0.95f, 1f),
-        // iOS system orange, dark variant #FF9F0A.
         trendingAccent = Color(1.00f, 0.62f, 0.04f, 1f),
         mediaScrim  = Color(0.00f, 0.00f, 0.02f, 0.65f),
         journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
-        sectionCard      = Color(0.11f, 0.15f, 0.21f, 1f),   // iOS sectionCard dark
-        publicSurface    = Color(0xFF172330),
-        sectionSeparator = Color(0.20f, 0.26f, 0.33f, 1f),
-        brandSky         = Color(0.30f, 0.74f, 0.99f, 1f),   // #4CBCFD ثابت
-        brandBlue        = Color(0.30f, 0.74f, 0.99f, 1f),   // سماوي في الداكن للتباين
+        sectionCard      = Color(0xFF13202E),
+        publicSurface    = Color(0xFF152230),
+        sectionSeparator = Color(0xFF24313F),
+        brandSky         = Color(0xFF4CBCFD),
+        brandBlue        = Color(0xFF5CC4FF),
+        separator        = Color(0xFF24313F),
+        chipFill         = Color(0xFF1F2A36),
+        skyTint          = Color(0xFF13202E),
+        skyOutline       = Color(0xFF22364A),
+        breaking         = Color(0xFFFF6B6B),
+        success          = Color(0xFF73D9A9),
         primaryStart = accent.dark,
         primaryEnd   = accent.dark,
         isDark      = true,
@@ -173,7 +190,7 @@ enum class SabqAccent(
     val light: Color,
     val dark: Color,
 ) {
-    Blue(   "blue",   "أزرق",    Color(0.36f, 0.74f, 0.91f, 1f), Color(0.45f, 0.80f, 0.96f, 1f)),
+    Blue(   "blue",   "أزرق",    Color(0xFF096EBD), Color(0xFF5CC4FF)),
     Teal(   "teal",   "أخضر",    Color(0.16f, 0.65f, 0.55f, 1f), Color(0.25f, 0.78f, 0.65f, 1f)),
     Purple( "purple", "بنفسجي", Color(0.55f, 0.35f, 0.85f, 1f), Color(0.68f, 0.50f, 0.95f, 1f)),
     Rose(   "rose",   "وردي",   Color(0.88f, 0.34f, 0.46f, 1f), Color(0.95f, 0.48f, 0.58f, 1f)),
