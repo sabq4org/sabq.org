@@ -28,9 +28,7 @@ import com.sabq.smart.R
  *      while the font downloaded. Bundling kills both failure modes for
  *      ~700KB of APK, matching the iOS decision exactly.
  *
- * Since iOS adopted the system font (#2039) the app text uses
- * [SabqTextFamily]; this bundled family stays for the tournament strips
- * that reference it directly.
+ * The app text uses it through [SabqTextFamily].
  *
  * iOS counterpart: `Services/FontRegistration.swift::SabqFonts`.
  */
@@ -41,11 +39,11 @@ val IbmPlexSansArabic: FontFamily = FontFamily(
 )
 
 /**
- * خط النصوص في التطبيق: خط النظام العربي، نظير SF Arabic الذي اعتمده iOS
- * مع هوية «مكتب سبق» (#2039: `SabqFonts.editorial` يعيد `Font.system`).
- * ملفات IBM Plex تبقى لأشرطة البطولات التي تطلبها صراحة.
+ * خط النصوص في التطبيق: IBM Plex Sans Arabic (اعتماد المالك 2026-11-01)،
+ * مع أدوار الأحجام والأوزان من iOS. الملفات المضمّنة ثلاثة أوزان فقط،
+ * فيُرسم «المتوسط» بأقرب وزن متاح.
  */
-val SabqTextFamily: FontFamily = FontFamily.Default
+val SabqTextFamily: FontFamily = IbmPlexSansArabic
 
 /**
  * Sabq text styles. Sizes match the iOS table:
