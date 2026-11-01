@@ -757,6 +757,8 @@ function Router() {
         <Route path="/delete-account">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
         <Route path="/ar/delete-account">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
         <Route path="/en/delete-account">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
+        {/* الرابط المسجَّل قديمًا في Google Play (أمان البيانات) */}
+        <Route path="/privacy-terms-of-service">{() => <LazyRoute component={DeleteAccountPage} />}</Route>
         
         <Route path="/accessibility-statement">{() => <LazyRoute component={AccessibilityStatement} />}</Route>
         <Route path="/ar/accessibility-statement">{() => <LazyRoute component={AccessibilityStatement} />}</Route>

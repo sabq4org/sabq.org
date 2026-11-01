@@ -1,5 +1,6 @@
 /**
  * حذف الحساب — /delete-account و /ar/delete-account و /en/delete-account
+ * و /privacy-terms-of-service (الرابط المسجَّل قديمًا في Google Play)
  *
  * صفحة عامة يطلبها Google Play (قسم «أمان البيانات»): تشرح لمستخدمي تطبيق
  * سبق كيف يحذفون حسابهم من داخل التطبيق أو بطلب بالبريد دون التطبيق، وما
@@ -52,7 +53,7 @@ export default function DeleteAccountPage() {
             <Smartphone className="w-5 h-5 text-primary mt-1 shrink-0" aria-hidden="true" />
             <ol className="list-decimal pr-5 space-y-1.5">
               <li>افتح تطبيق سبق وسجّل الدخول.</li>
-              <li>اذهب إلى «الإعدادات» ثم «حذف الحساب».</li>
+              <li>اذهب إلى «الإعدادات» ثم «منطقة الخطر» ثم «حذف الحساب».</li>
               <li>أكّد الحذف (ويُطلب منك كلمة المرور إن كان لحسابك كلمة مرور).</li>
             </ol>
           </div>
@@ -102,7 +103,7 @@ export default function DeleteAccountPage() {
           <h2 className="text-xl font-extrabold mb-4">Delete your Sabq account</h2>
           <div className="text-[15px] text-muted-foreground leading-relaxed space-y-3">
             <p>
-              <strong>In the app:</strong> open the Sabq app, sign in, go to Settings → Delete account and
+              <strong>In the app:</strong> open the Sabq app, sign in, go to Settings → Danger zone → Delete account and
               confirm. Deletion is immediate and signs you out on all devices.
             </p>
             <p>
