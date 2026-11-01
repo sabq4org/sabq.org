@@ -37,21 +37,7 @@ fun SurfaceCard(
             .sabqNewsSurface(shape)
             .background(SabqTheme.colors.surface, shape),
     ) {
-        if (accent != null) {
-            // Decorative tinted circle in the corner — equivalent to
-            // iOS's `.overlay(alignment: .topTrailing)`. RTL flips
-            // topTrailing → topLeading, which matches iOS behaviour
-            // when its outer scope is in RTL (the iOS `.sabqRTL()` on
-            // SurfaceCard) so we keep alignment as TopEnd here.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 40.dp, y = (-40).dp)
-                    .size(120.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.08f)),
-            )
-        }
+        // هوية «مكتب سبق»: لا دائرة زخرفية في الزاوية؛ [accent] محفوظ للتوافق مع النداءات القائمة.
         Column(
             modifier = Modifier.padding(SabqTheme.dimens.cardPadding),
             verticalArrangement = Arrangement.spacedBy(16.dp),
