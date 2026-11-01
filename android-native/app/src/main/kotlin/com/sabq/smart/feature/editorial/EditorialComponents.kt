@@ -1,5 +1,7 @@
 package com.sabq.smart.feature.editorial
 
+import com.sabq.smart.ui.components.sabqNewsSurface
+
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -178,12 +180,13 @@ internal fun EditorialStatusView(error: EditorialError?, loading: Boolean, onRet
 
 @Composable
 internal fun EditorialThumbnail(url: String?, size: Dp = 64.dp, dimmed: Boolean = false) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(8.dp)
     Box(
         Modifier
             .size(size)
             .clip(shape)
             .background(SabqTheme.colors.softFill, shape)
+            .border(BorderStroke(0.75.dp, SabqTheme.colors.separator), shape)
             .alpha(if (dimmed) 0.5f else 1f),
     ) {
         if (url != null) {
@@ -204,13 +207,13 @@ internal fun EditorialSurface(
     padding: Dp = 16.dp,
     content: @Composable () -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    // هوية «مكتب سبق»: أبيض بظل خفيف بلا حدّ.
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
     Box(
         modifier
             .fillMaxWidth()
-            .clip(shape)
+            .sabqNewsSurface(shape)
             .background(SabqTheme.colors.surface, shape)
-            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline), shape)
             .padding(padding),
     ) { content() }
 }

@@ -296,9 +296,9 @@ fun AdminDashboardScreen(
             SectionTitle("صندوق الإدارة")
             EditorialSurface(padding = 0.dp) {
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    ShortcutRow("رسائل التواصل", "عرض الرسائل الواردة والرد عليها", Icons.Outlined.Email, colors.leaf, onOpenContactMessages)
+                    ShortcutRow("رسائل التواصل", "عرض الرسائل الواردة والرد عليها", Icons.Outlined.Email, colors.primaryEnd, onOpenContactMessages)
                     HorizontalDivider(color = colors.outline)
-                    ShortcutRow("استفسارات كتّاب الرأي", "متابعة المحادثات مع الكتّاب", Icons.Outlined.Forum, colors.gold, onOpenTickets)
+                    ShortcutRow("استفسارات كتّاب الرأي", "متابعة المحادثات مع الكتّاب", Icons.Outlined.Forum, colors.primaryEnd, onOpenTickets)
                 }
             }
         }
