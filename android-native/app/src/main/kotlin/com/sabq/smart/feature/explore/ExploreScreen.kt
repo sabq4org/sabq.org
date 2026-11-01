@@ -58,6 +58,7 @@ import com.sabq.smart.data.RecentSearchesStore
 import com.sabq.smart.data.Section
 import com.sabq.smart.ui.components.CompactArticleRow
 import com.sabq.smart.ui.components.CompactScreenHeader
+import com.sabq.smart.ui.components.sabqNewsSurface
 import com.sabq.smart.ui.components.SabqSearchBar
 import com.sabq.smart.ui.components.SmallSquareBadge
 import com.sabq.smart.ui.components.SurfaceCard
@@ -227,11 +228,7 @@ private fun KeywordPill(keyword: String, onClick: () -> Unit) {
 @Composable
 private fun SectionsGridSection(sections: List<Section>, onCategoryClick: (Section) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle(
-            icon = Icons.Outlined.GridView,
-            title = "تصفّح حسب التصنيف",
-            tint = SabqTheme.colors.primaryEnd,
-        )
+        com.sabq.smart.ui.components.HomeSectionHeader(title = "التصنيفات")
         if (sections.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -288,44 +285,31 @@ private fun SectionsGridSection(sections: List<Section>, onCategoryClick: (Secti
  */
 @Composable
 private fun ExploreTile(section: Section, onClick: () -> Unit = {}, modifier: Modifier = Modifier) {
+    // iOS CategoryTile (هوية «مكتب سبق»): بطاقة بيضاء بظل خفيف بلا حدّ ولا سهم،
+    // مربع أيقونة بلون الأساس، ثم اسم القسم ووصفه.
     val visual = ArticleCategory.fromSlug(section.slug)
-    val tint = visual.tint()
     val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = 6.dp,
-                shape = shape,
-                ambientColor = Color.Transparent,
-                spotColor = SabqTheme.colors.shadow,
-            )
-            .clip(shape)
-            // Solid white surface — user requested clean white cards
-            // instead of the tinted gradient that made tiles hard to read.
+            .sabqNewsSurface(shape)
             .background(color = SabqTheme.colors.surface, shape = shape)
-            .border(width = 0.6.dp, color = tint.copy(alpha = 0.18f), shape = shape)
             .clickable { onClick() }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(SabqTheme.colors.softFill),
+            contentAlignment = Alignment.Center,
         ) {
-            SmallSquareBadge(icon = visual.icon, tint = tint)
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
-            // iOS uses `chevron.left` because content is always RTL.
-            // Compose's AutoMirrored.KeyboardArrowLeft flips with layout
-            // direction — in RTL it visually becomes a left chevron,
-            // matching iOS exactly.
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                imageVector = visual.icon,
                 contentDescription = null,
-                tint = tint.copy(alpha = 0.6f),
-                modifier = Modifier
-                    .padding(top = 6.dp)
-                    .size(14.dp),
+                tint = SabqTheme.colors.primaryEnd,
+                modifier = Modifier.size(20.dp),
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -336,9 +320,8 @@ private fun ExploreTile(section: Section, onClick: () -> Unit = {}, modifier: Mo
             )
             Text(
                 text = visual.subtitle,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.tertiaryInk,
+                style = SabqTheme.typography.excerpt,
+                color = SabqTheme.colors.secondaryInk,
                 maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )

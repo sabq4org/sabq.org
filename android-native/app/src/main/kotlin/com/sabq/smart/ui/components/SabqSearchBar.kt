@@ -44,21 +44,22 @@ import com.sabq.smart.ui.theme.SabqTheme
 fun SabqSearchBar(
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String = "ابحث في أخبار سبق...",
+    placeholder: String = "ابحث عن خبر أو موضوع...",
     modifier: Modifier = Modifier,
     onSubmit: () -> Unit = {},
 ) {
     val haptics = rememberSabqHaptics()
-    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+    // iOS SabqSearchBar: كبسولة على سطح أبيض بحدّ رفيع.
+    val shape = RoundedCornerShape(50)
     val isEmpty = value.isEmpty()
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(SabqTheme.colors.paleFill.copy(alpha = 0.85f), shape)
+            .background(SabqTheme.colors.surface, shape)
             .border(
-                BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.40f)),
+                BorderStroke(0.75.dp, SabqTheme.colors.outline),
                 shape,
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -84,7 +85,7 @@ fun SabqSearchBar(
             if (isEmpty) {
                 Text(
                     text = placeholder,
-                    style = SabqTheme.typography.chipLabel,
+                    style = SabqTheme.typography.searchBarText,
                     color = SabqTheme.colors.tertiaryInk,
                 )
             }
@@ -92,7 +93,7 @@ fun SabqSearchBar(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = SabqTheme.typography.chipLabel.copy(
+                textStyle = SabqTheme.typography.searchBarText.copy(
                     color = SabqTheme.colors.ink,
                 ),
                 cursorBrush = SolidColor(SabqTheme.colors.primaryEnd),

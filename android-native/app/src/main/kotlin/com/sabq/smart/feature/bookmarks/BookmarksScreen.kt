@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.data.Article
 import com.sabq.smart.ui.components.CompactArticleRow
 import com.sabq.smart.ui.components.CompactScreenHeader
+import com.sabq.smart.ui.components.sabqNewsSurface
 import com.sabq.smart.ui.components.SurfaceCard
 import com.sabq.smart.ui.theme.SabqTheme
 
@@ -100,7 +101,7 @@ private fun Loaded(
     ) {
         item {
             CompactScreenHeader(
-                title = "المحفوظات",
+                title = "محفوظاتي",
                 subtitle = "الأخبار التي حفظتها للقراءة لاحقاً",
             )
         }
@@ -108,15 +109,18 @@ private fun Loaded(
         item { StatsRow(items = items) }
 
         item {
-            SurfaceCard {
+            // iOS: الصفوف على سطح أبيض واحد بفواصل رفيعة.
+            val listShape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .sabqNewsSurface(listShape)
+                    .background(SabqTheme.colors.surface, listShape)
+                    .padding(horizontal = 12.dp),
+            ) {
                 items.forEachIndexed { index, article ->
                     key(article.id) {
-                        if (index > 0) {
-                            HorizontalDivider(
-                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                                thickness = 0.5.dp,
-                            )
-                        }
+                        if (index > 0) com.sabq.smart.ui.components.SabqRowDivider()
                         CompactArticleRow(
                             article = article,
                             isBookmarked = true,
@@ -136,95 +140,35 @@ private fun Loaded(
 
 @Composable
 private fun StatsRow(items: List<Article>) {
-    val totalMinutes = items.sumOf { it.readingMinutesInt ?: 0 }
+    // iOS BookmarksView: بطاقة واحدة بإحصاءين متجاورين (العدد والأقسام).
     val uniqueCategories = items.map { it.category }.toSet().size
-
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatTile(
-            title = "محفوظة",
-            value = items.size.toString(),
-            icon = Icons.Filled.Bookmark,
-            tint = SabqTheme.colors.primaryEnd,
-            modifier = Modifier.weight(1f),
-        )
-        StatTile(
-            title = "وقت القراءة",
-            value = "$totalMinutes د",
-            icon = Icons.Outlined.Schedule,
-            tint = SabqTheme.colors.teal,
-            modifier = Modifier.weight(1f),
-        )
-        StatTile(
-            title = "أقسام",
-            value = uniqueCategories.toString(),
-            icon = Icons.Filled.GridView,
-            tint = SabqTheme.colors.gold,
-            modifier = Modifier.weight(1f),
-        )
+        StatCell(title = "محفوظة", value = items.size.toString(), icon = Icons.Filled.Bookmark, modifier = Modifier.weight(1f))
+        StatCell(title = "أقسام", value = uniqueCategories.toString(), icon = Icons.Filled.GridView, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun StatTile(
+private fun StatCell(
     title: String,
     value: String,
     icon: ImageVector,
-    tint: Color,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
-    Column(
-        modifier = modifier
-            // Tint-aware glow — iOS `shadow(tint.opacity(0.08), radius:12, y:4)`.
-            // Each tile picks up a tiny halo in its own tint (primaryEnd
-            // for count, teal for reading-time, gold for categories) which
-            // is the visual move that makes the three tiles read as a
-            // colour-coded set instead of three flat boxes.
-            .shadow(
-                elevation = 6.dp,
-                shape = shape,
-                ambientColor = Color.Transparent,
-                spotColor = tint.copy(alpha = 0.08f),
-            )
-            .clip(shape)
-            .background(SabqTheme.colors.surface, shape)
-            .background(tint.copy(alpha = 0.04f), shape)
-            .border(width = 0.5.dp, color = tint.copy(alpha = 0.18f), shape = shape)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(tint.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(14.dp),
-            )
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(text = value, style = SabqTheme.typography.statValue.copy(fontSize = 20.sp), color = SabqTheme.colors.ink)
+            Icon(imageVector = icon, contentDescription = null, tint = SabqTheme.colors.primaryEnd, modifier = Modifier.size(16.dp))
         }
-        Text(
-            text = value,
-            style = SabqTheme.typography.statValue,
-            color = SabqTheme.colors.ink,
-        )
-        // iOS uses `.system(size: 12, weight: .medium)` for the label
-        // (BookmarksView.swift:96-97). Closest existing token is `meta`
-        // (13/Medium) but the 1-sp shrink matters here — keeping it
-        // inline rather than nudging the token's global size.
-        Text(
-            text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = SabqTheme.colors.tertiaryInk,
-        )
+        Text(text = title, style = SabqTheme.typography.meta, color = SabqTheme.colors.tertiaryInk)
     }
 }
 

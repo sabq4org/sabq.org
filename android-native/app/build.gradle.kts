@@ -66,7 +66,7 @@ android {
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 36
-        versionCode = 164
+        versionCode = 165
         versionName = "10.12.0"
 
         // Locks the rendering locale to Arabic. We still honour the

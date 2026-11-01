@@ -149,6 +149,12 @@ class HomeFeedViewModel @Inject constructor(
 
     fun refresh(silent: Boolean = false) {
         val current = _state.value
+        // بعد فشل التحميل الأول لا توجد حالة Loaded يحدّثها التحديث العادي،
+        // فكان زر «إعادة المحاولة» لا يفعل شيئًا: نعيد التحميل الأول كاملًا.
+        if (current !is HomeFeedUiState.Loaded) {
+            if (current !is HomeFeedUiState.Loading) initialLoad()
+            return
+        }
         val slug = if (current is HomeFeedUiState.Loaded) current.selectedSlug else null
         viewModelScope.launch {
             if (!silent) _state.update { c ->

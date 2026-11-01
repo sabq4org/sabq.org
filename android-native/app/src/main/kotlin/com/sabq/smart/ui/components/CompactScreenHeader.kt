@@ -12,17 +12,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * Shared screen header — title 30 sp bold + subtitle 15 sp secondary,
- * optional `SmallActionButton` on the trailing edge. 1:1 port of iOS
- * `CompactScreenHeader` (`Components/SabqComponents.swift:870-904`).
- *
- * Used by every full-screen surface that needs a calm hero strip:
- * Explore, Opinions, Bookmarks, etc. Keeping the title sizing,
- * spacing, and ink tones consistent across screens is the whole
- * point of factoring this out.
+ * رأس الشاشة بنمط iOS: عنوان التنقّل في الوسط (17 شبه عريض، كالعنوان
+ * المضمَّن في شريط iOS)، ثم سطر وصف قصير بلون ثانوي، وزر إجراء اختياري.
+ * يُستخدم في استكشف والمحفوظات والرأي وغيرها.
  */
 @Composable
 fun CompactScreenHeader(
@@ -34,37 +31,38 @@ fun CompactScreenHeader(
     actionTint: androidx.compose.ui.graphics.Color = SabqTheme.colors.primaryEnd,
     onAction: (() -> Unit)? = null,
 ) {
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+        Text(
+            text = title,
+            style = SabqTheme.typography.compactCardTitle.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            color = SabqTheme.colors.ink,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { heading() },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = title,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.ink,
-            )
-            Text(
                 text = subtitle,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Normal,
+                style = SabqTheme.typography.excerpt,
                 color = SabqTheme.colors.secondaryInk,
-                lineHeight = 20.sp,
+                modifier = Modifier.weight(1f),
             )
-        }
-
-        if (actionTitle != null && actionIcon != null && onAction != null) {
-            SmallActionButton(
-                title = actionTitle,
-                icon = actionIcon,
-                tint = actionTint,
-                onClick = onAction,
-            )
+            if (actionTitle != null && actionIcon != null && onAction != null) {
+                SmallActionButton(
+                    title = actionTitle,
+                    icon = actionIcon,
+                    tint = actionTint,
+                    onClick = onAction,
+                )
+            }
         }
     }
 }

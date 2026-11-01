@@ -2110,7 +2110,7 @@ private fun RelatedSection(related: List<Article>, onClick: (Article) -> Unit) {
     // الحاوية الموحدة (نقل #1610): تسمية الويب (4ad1892) — القائمة آخر ما
     // نُشر في القسم لا تشابهًا.
     ArticleSidebarModule(
-        title = "اقرأ أيضاً",
+        title = "اقرأ أيضًا",
         description = "آخر ما نُشر في القسم",
         icon = Icons.Outlined.Link,
         modifier = Modifier.padding(horizontal = 20.dp),
