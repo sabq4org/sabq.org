@@ -1,5 +1,11 @@
 package com.sabq.smart.feature.settings
 
+import androidx.compose.ui.semantics.Role
+
+import androidx.compose.foundation.selection.selectableGroup
+
+import androidx.compose.foundation.selection.selectable
+
 import com.sabq.smart.ui.components.sabqNewsSurface
 
 import androidx.compose.material.icons.filled.Diamond
@@ -717,7 +723,7 @@ private fun AccountActionsRow(onChangePasswordClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = SabqTheme.colors.tertiaryInk,
                 modifier = Modifier.size(12.dp),
@@ -1275,6 +1281,7 @@ private fun SabqSegmented(options: List<String>, selected: Int, onSelect: (Int) 
             .fillMaxWidth()
             .clip(track)
             .background(SabqTheme.colors.paleFill, track)
+            .selectableGroup()
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -1286,7 +1293,8 @@ private fun SabqSegmented(options: List<String>, selected: Int, onSelect: (Int) 
                     .weight(1f)
                     .clip(pill)
                     .background(if (isOn) SabqTheme.colors.primaryEnd else Color.Transparent, pill)
-                    .clickable { onSelect(i) }
+                    // يعلن TalkBack الخيار المحدد كما يفعل iOS بـ .isSelected.
+                    .selectable(selected = isOn, role = Role.RadioButton, onClick = { onSelect(i) })
                     .heightIn(min = 40.dp)
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center,
