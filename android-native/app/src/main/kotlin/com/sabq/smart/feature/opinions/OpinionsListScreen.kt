@@ -1,5 +1,9 @@
 package com.sabq.smart.feature.opinions
 
+import com.sabq.smart.ui.components.sabqNewsSurface
+
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -263,17 +267,17 @@ private fun OpinionsTopBar(onBack: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
+                .size(44.dp)
+                .sabqNewsSurface(CircleShape)
                 .background(SabqTheme.colors.surface.copy(alpha = 0.92f))
                 .clickable { onBack() },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                 contentDescription = "رجوع",
                 tint = SabqTheme.colors.ink,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(28.dp),
             )
         }
     }
@@ -321,17 +325,9 @@ private fun MostViewedCard(rank: Int, article: Article, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .width(240.dp)
-                .height(140.dp)
+                .height(135.dp)
                 .clip(shape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            SabqTheme.colors.primaryEnd.copy(alpha = 0.18f),
-                            SabqTheme.colors.coral.copy(alpha = 0.10f),
-                        ),
-                    ),
-                    shape,
-                ),
+                .background(SabqTheme.colors.paleFill, shape),
         ) {
             if (!article.imageUrl.isNullOrBlank()) {
                 FocalCachedAsyncImage(
@@ -349,39 +345,29 @@ private fun MostViewedCard(rank: Int, article: Article, onClick: () -> Unit) {
                         .size(48.dp),
                 )
             }
-            // Rank badge — top-leading corner (visual top-right in RTL).
+            // iOS mostViewedCard: رقم الترتيب في مربع أبيض بحدّ رفيع أعلى الصورة.
+            val badge = RoundedCornerShape(8.dp)
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(10.dp)
-                    .shadow(
-                        elevation = 6.dp,
-                        shape = CircleShape,
-                        spotColor = SabqTheme.colors.coral,
-                    )
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(SabqTheme.colors.coral, SabqTheme.colors.primaryEnd),
-                        ),
-                        CircleShape,
-                    )
-                    .border(width = 2.dp, color = Color.White.copy(alpha = 0.9f), shape = CircleShape),
+                    .padding(8.dp)
+                    .size(28.dp)
+                    .clip(badge)
+                    .background(SabqTheme.colors.surface, badge)
+                    .border(width = 0.75.dp, color = SabqTheme.colors.separator, shape = badge),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = rank.toString(),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
+                    style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+                    color = SabqTheme.colors.primaryEnd,
                 )
             }
         }
 
         Text(
             text = article.title,
-            style = SabqTheme.typography.mostViewedCardTitle,
+            style = SabqTheme.typography.compactCardTitle,
             color = SabqTheme.colors.ink,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
@@ -394,12 +380,11 @@ private fun MostViewedCard(rank: Int, article: Article, onClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AuthorAvatar(name = name, size = 22.dp)
+                AuthorAvatar(name = name, size = 24.dp)
                 Text(
                     text = name,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SabqTheme.colors.secondaryInk,
+                    style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+                    color = SabqTheme.colors.primaryEnd,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -421,11 +406,16 @@ private fun LatestSection(items: List<Article>, onArticleClick: (Article) -> Uni
             iconTint = SabqTheme.colors.primaryEnd,
             icon = Icons.Filled.FormatQuote,
         )
-        SurfaceCard {
+        val listShape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .sabqNewsSurface(listShape)
+                .background(SabqTheme.colors.surface, listShape)
+                .padding(horizontal = 12.dp),
+        ) {
             items.forEachIndexed { idx, article ->
-                if (idx > 0) {
-                    HorizontalDivider(color = SabqTheme.colors.outline)
-                }
+                if (idx > 0) com.sabq.smart.ui.components.SabqRowDivider()
                 OpinionLatestRow(
                     article = article,
                     onClick = { onArticleClick(article) },
@@ -437,20 +427,69 @@ private fun LatestSection(items: List<Article>, onArticleClick: (Article) -> Uni
 
 @Composable
 private fun OpinionLatestRow(article: Article, onClick: () -> Unit) {
+    // iOS opinionRow: العنوان، ثم «رأي · الوقت»، ثم الكاتب والمشاهدات،
+    // والصورة 104×78 على الطرف الآخر (يسارًا).
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 4.dp),
+            .padding(vertical = 16.dp),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // 88×88 image on the leading edge (visual right in RTL).
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = article.title,
+                style = SabqTheme.typography.compactCardTitle,
+                color = SabqTheme.colors.ink,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("رأي", style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold), color = SabqTheme.colors.primaryEnd)
+                Text("·", style = SabqTheme.typography.meta, color = SabqTheme.colors.tertiaryInk)
+                Text(article.dateFormatted, style = SabqTheme.typography.metaSmall, color = SabqTheme.colors.tertiaryInk, maxLines = 1)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                article.authorName?.takeIf { it.isNotBlank() }?.let { name ->
+                    AuthorAvatar(name = name, size = 24.dp)
+                    Text(
+                        text = name,
+                        style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+                        color = SabqTheme.colors.primaryEnd,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                // عدد المشاهدات بأرقام لاتينية مجمّعة (نقل الويب #1605)
+                article.viewsCount?.let { views ->
+                    Text(
+                        text = "${java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(views)} مشاهدة",
+                        style = SabqTheme.typography.meta,
+                        color = SabqTheme.colors.tertiaryInk,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        val thumb = RoundedCornerShape(8.dp)
         Box(
             modifier = Modifier
-                .size(88.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.08f)),
+                .size(width = 104.dp, height = 78.dp)
+                .clip(thumb)
+                .background(SabqTheme.colors.paleFill)
+                .border(0.75.dp, SabqTheme.colors.separator, thumb),
             contentAlignment = Alignment.Center,
         ) {
             if (!article.imageUrl.isNullOrBlank()) {
@@ -463,63 +502,9 @@ private fun OpinionLatestRow(article: Article, onClick: () -> Unit) {
                 Icon(
                     imageVector = Icons.Filled.FormatQuote,
                     contentDescription = null,
-                    tint = SabqTheme.colors.primaryEnd.copy(alpha = 0.45f),
+                    tint = SabqTheme.colors.tertiaryInk.copy(alpha = 0.5f),
                     modifier = Modifier.size(24.dp),
                 )
-            }
-        }
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                StatusChip(title = "رأي", tint = SabqTheme.colors.primaryEnd)
-                Text(
-                    text = article.dateFormatted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SabqTheme.colors.tertiaryInk,
-                    modifier = Modifier.weight(1f),
-                )
-                // عدد المشاهدات بأرقام لاتينية مجمّعة في طرف الصف (نقل الويب #1605)
-                article.viewsCount?.let { views ->
-                    Text(
-                        text = "${java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(views)} مشاهدة",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = SabqTheme.colors.tertiaryInk,
-                        maxLines = 1,
-                    )
-                }
-            }
-            Text(
-                text = article.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.ink,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 22.sp,
-            )
-            article.authorName?.takeIf { it.isNotBlank() }?.let { name ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    AuthorAvatar(name = name, size = 26.dp)
-                    Text(
-                        text = name,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SabqTheme.colors.secondaryInk,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
         }
     }
@@ -533,49 +518,11 @@ private fun OpinionLatestRow(article: Article, onClick: () -> Unit) {
 private fun SectionHeader(
     title: String,
     subtitle: String,
-    iconTint: Color,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    @Suppress("UNUSED_PARAMETER") iconTint: Color,
+    @Suppress("UNUSED_PARAMETER") icon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                text = title,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.ink,
-            )
-            Text(
-                text = subtitle,
-                fontSize = 14.sp,
-                color = SabqTheme.colors.secondaryInk,
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(13.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(iconTint.copy(alpha = 0.12f), iconTint.copy(alpha = 0.06f)),
-                    ),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-    }
+    // الرأس الموحّد (شريط أزرق + عنوان 20 + سياق قصير) بدل مربع الأيقونة.
+    com.sabq.smart.ui.components.HomeSectionHeader(title = title, context = subtitle)
 }
 
 @Composable
