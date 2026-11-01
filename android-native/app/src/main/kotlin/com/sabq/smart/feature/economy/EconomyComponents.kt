@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import com.sabq.smart.ui.components.sabqNewsSurface
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -220,16 +221,90 @@ fun EconomyHomeBlock(snapshot: EconomySnapshot?, onClick: () -> Unit) {
         }
         EconomyFormat.HomeMode.Weekly -> {
             val weekly = snapshot?.weekly ?: return
-            EconomyTeaser(
-                title = "أين أنفق السعوديون؟",
-                figure = "${EconomyFormat.fmtSar(weekly.totalValue)} ريال",
-                caption = "إنفاق نقاط البيع · ${weekly.weekLabelAr}",
-                badge = if (EconomyFormat.isFresh(weekly.ingestedAt)) "أرقام جديدة" else null,
-                cta = "أين صُرفت؟",
-                onClick = onClick,
-            )
+            EconomyWeeklyHomeCard(weekly = weekly, isFresh = EconomyFormat.isFresh(weekly.ingestedAt), onClick = onClick)
         }
         EconomyFormat.HomeMode.Hidden -> Unit
+    }
+}
+
+/**
+ * «أين أنفق السعوديون؟» — iOS EconomyWeeklyHomeCard: العنوان والأسبوع، ثم الرقم
+ * بالريال وتغيّره عن الأسبوع السابق، وبجانبه أعمدة آخر الأسابيع (الأخير بلون
+ * الأساس). اللمس يفتح صفحة الاقتصاد.
+ */
+@Composable
+private fun EconomyWeeklyHomeCard(weekly: EconomyWeeklySummary, isFresh: Boolean, onClick: () -> Unit) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    val series = weekly.kpis.firstOrNull { it.key == "total" }?.series.orEmpty()
+    val parts = EconomyFormat.fmtSar(weekly.totalValue).split(" ", limit = 2)
+    val number = parts.firstOrNull().orEmpty()
+    val unit = (if (parts.size > 1) parts[1] + " " else "") + "ريال"
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .clickable { onClick() }
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("أين أنفق السعوديون؟", style = SabqTheme.typography.compactCardTitle, color = SabqTheme.colors.ink, maxLines = 1)
+            if (isFresh) EconomyNewBadge("جديد")
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            Text(weekly.weekLabelAr, style = SabqTheme.typography.statusChip, color = SabqTheme.colors.tertiaryInk, maxLines = 1)
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = null,
+                tint = SabqTheme.colors.primaryEnd,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(number, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = SabqTheme.colors.ink, maxLines = 1)
+                    Text(unit, style = SabqTheme.typography.excerpt, color = SabqTheme.colors.secondaryInk, maxLines = 1, modifier = Modifier.padding(bottom = 5.dp))
+                }
+                val pct = weekly.totalChangePct
+                val up = pct >= 0
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
+                    ) {
+                        Text(
+                            "${if (up) "▲" else "▼"} ${EconomyFormat.fmtPct(pct)}",
+                            style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (up) SabqTheme.colors.success else SabqTheme.colors.coral,
+                        )
+                    }
+                    Text("عن الأسبوع السابق", style = SabqTheme.typography.meta, color = SabqTheme.colors.tertiaryInk)
+                }
+            }
+            if (series.size > 1) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val maxV = maxOf(series.maxOrNull() ?: 1.0, 1.0)
+                    Row(
+                        Modifier.size(width = 92.dp, height = 54.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        series.forEachIndexed { i, v ->
+                            androidx.compose.foundation.layout.Box(
+                                Modifier
+                                    .weight(1f)
+                                    .height(maxOf(10.0, 54.0 * (v / maxV)).dp)
+                                    .background(
+                                        if (i == series.lastIndex) SabqTheme.colors.primaryEnd
+                                        else SabqTheme.colors.primaryEnd.copy(alpha = 0.25f),
+                                    ),
+                            )
+                        }
+                    }
+                    Text("آخر ${series.size} أسابيع", style = SabqTheme.typography.statusChip, color = SabqTheme.colors.tertiaryInk)
+                }
+            }
+        }
     }
 }
 

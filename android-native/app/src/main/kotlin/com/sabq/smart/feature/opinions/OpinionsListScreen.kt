@@ -468,10 +468,9 @@ private fun OpinionLatestRow(article: Article, onClick: () -> Unit) {
                         color = SabqTheme.colors.primaryEnd,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.weight(1f),
                     )
-                }
-                Spacer(Modifier.weight(1f))
+                } ?: Spacer(Modifier.weight(1f))
                 // عدد المشاهدات بأرقام لاتينية مجمّعة (نقل الويب #1605)
                 article.viewsCount?.let { views ->
                     Text(
