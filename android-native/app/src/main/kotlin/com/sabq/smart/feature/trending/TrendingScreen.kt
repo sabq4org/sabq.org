@@ -1,5 +1,11 @@
 package com.sabq.smart.feature.trending
 
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+
+import com.sabq.smart.ui.components.sabqNewsSurface
+
+import androidx.compose.foundation.border
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -115,72 +121,46 @@ private fun TopBar(onBack: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
+                .size(44.dp)
+                .sabqNewsSurface(CircleShape)
                 .background(SabqTheme.colors.surface.copy(alpha = 0.92f))
                 .clickable { onBack() },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                 contentDescription = "رجوع",
                 tint = SabqTheme.colors.ink,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(28.dp),
             )
         }
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = "الأكثر تداولاً",
-            style = SabqTheme.typography.cardTitle.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold),
+            style = SabqTheme.typography.cardTitle.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
             color = SabqTheme.colors.ink,
         )
         Spacer(modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.size(40.dp))
+        Spacer(modifier = Modifier.size(44.dp))
     }
 }
 
 @Composable
 private fun HeroSection() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.LocalFireDepartment,
-            contentDescription = null,
-            tint = SabqTheme.colors.trendingAccent,
-            modifier = Modifier.size(28.dp),
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = "الأكثر تداولاً",
-                style = SabqTheme.typography.statValue,
-                color = SabqTheme.colors.ink,
-            )
-            Text(
-                text = "الأخبار الأكثر مشاهدة في آخر 48 ساعة",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Normal,
-                color = SabqTheme.colors.secondaryInk,
-                lineHeight = 18.sp,
-            )
-        }
-    }
+    // iOS SabqPageIntro: سطر تعريف واحد تحت عنوان التنقّل.
+    Text(
+        text = "الأخبار الأكثر مشاهدة في آخر 48 ساعة",
+        style = SabqTheme.typography.excerpt,
+        color = SabqTheme.colors.secondaryInk,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagsSection(tags: List<String>, onTagClick: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = "الوسوم الرائجة",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = SabqTheme.colors.ink,
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        com.sabq.smart.ui.components.HomeSectionHeader(title = "الوسوم الرائجة")
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -194,29 +174,37 @@ private fun TagsSection(tags: List<String>, onTagClick: (String) -> Unit) {
 
 @Composable
 private fun TagPill(tag: String, onClick: () -> Unit) {
+    // iOS DiscoveryChip: كبسولة بيضاء بحدّ رفيع.
+    val capsule = RoundedCornerShape(50)
     Box(
         modifier = Modifier
-            .clip(CircleShape)
-            .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.08f))
+            .clip(capsule)
+            .background(SabqTheme.colors.surface)
+            .border(0.75.dp, SabqTheme.colors.outline, capsule)
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Text(
             text = tag,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.primaryEnd,
+            style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+            color = SabqTheme.colors.ink,
         )
     }
 }
 
 @Composable
 private fun ArticlesCard(articles: List<Article>, onClick: (Article) -> Unit) {
-    SurfaceCard {
+    // iOS articlesSection: الصفوف على سطح أبيض واحد بفواصل رفيعة.
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .padding(horizontal = 12.dp),
+    ) {
         articles.forEachIndexed { index, article ->
-            if (index > 0) {
-                HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.3f))
-            }
+            if (index > 0) com.sabq.smart.ui.components.SabqRowDivider()
             TrendingRow(index = index, article = article, onClick = { onClick(article) })
         }
     }
@@ -224,80 +212,74 @@ private fun ArticlesCard(articles: List<Article>, onClick: (Article) -> Unit) {
 
 @Composable
 private fun TrendingRow(index: Int, article: Article, onClick: () -> Unit) {
+    // iOS rankedRow: رقم الترتيب في مربع أزرق هادئ، ثم صف بمقاس
+    // CompactArticleRow (العنوان، شارة القسم والوقت، والصورة 104×78 يسارًا).
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 16.dp),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = "${index + 1}",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Black,
-            color = rankColor(index),
-            modifier = Modifier.width(36.dp),
-            textAlign = TextAlign.Center,
-        )
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "${index + 1}",
+                style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+                color = SabqTheme.colors.primaryEnd,
+            )
+        }
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = article.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = SabqTheme.typography.compactCardTitle,
                 color = SabqTheme.colors.ink,
-                maxLines = 2,
-                lineHeight = 20.sp,
+                maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                com.sabq.smart.ui.components.SabqCategoryPill(title = article.categoryLabel.ifBlank { article.category.title })
                 Text(
-                    text = article.categoryLabel.ifBlank { article.category.title },
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SabqTheme.colors.primaryEnd,
+                    text = article.dateFormatted,
+                    style = SabqTheme.typography.metaSmall,
+                    color = SabqTheme.colors.tertiaryInk,
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AccessTime,
-                        contentDescription = null,
-                        tint = SabqTheme.colors.tertiaryInk,
-                        modifier = Modifier.size(10.dp),
-                    )
-                    Text(
-                        text = article.dateFormatted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = SabqTheme.colors.tertiaryInk,
-                    )
-                }
             }
         }
-        if (!article.imageUrl.isNullOrBlank()) {
-            Box {
+        val thumb = RoundedCornerShape(8.dp)
+        Box(
+            Modifier
+                .size(width = 104.dp, height = 78.dp)
+                .clip(thumb)
+                .background(SabqTheme.colors.paleFill)
+                .border(0.75.dp, SabqTheme.colors.separator, thumb),
+        ) {
+            if (!article.imageUrl.isNullOrBlank()) {
                 FocalCachedAsyncImage(
                     url = article.imageUrl,
                     focalPoint = article.focalPoint,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-                com.sabq.smart.ui.components.BoxScopedAIImageBadgeOverlay(
-                    isVisible = article.isAiGeneratedImage,
-                    model = article.aiImageModel,
-                    inset = 3.dp,
-                    sizeScale = 0.55f,
-                    modifier = Modifier.align(Alignment.TopEnd),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+            com.sabq.smart.ui.components.BoxScopedAIImageBadgeOverlay(
+                isVisible = article.isAiGeneratedImage,
+                model = article.aiImageModel,
+                inset = 4.dp,
+                sizeScale = 0.65f,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
         }
     }
 }

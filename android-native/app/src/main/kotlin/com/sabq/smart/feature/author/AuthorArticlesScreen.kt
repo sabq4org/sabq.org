@@ -243,7 +243,7 @@ private fun AuthorFeed(
                     onClick = { onArticleClick(article) }
                 )
             }
-            HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.4f))
+            com.sabq.smart.ui.components.SabqRowDivider()
         }
 
         // Load More Button / Indicator

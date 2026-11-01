@@ -49,6 +49,7 @@ import com.sabq.smart.ui.components.CompactScreenHeader
 import com.sabq.smart.ui.components.EmptyStateView
 import com.sabq.smart.ui.components.SabqSearchBar
 import com.sabq.smart.ui.components.SurfaceCard
+import com.sabq.smart.ui.components.sabqNewsSurface
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
@@ -335,18 +336,20 @@ private fun SearchResultsBlock(
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
                     text = "${state.total.coerceAtLeast(state.items.size)} نتيجة",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
                     color = SabqTheme.colors.tertiaryInk,
                 )
-                SurfaceCard {
+                // iOS: النتائج على سطح أبيض واحد بفواصل رفيعة.
+                val listShape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.cardRadius)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .sabqNewsSurface(listShape)
+                        .background(SabqTheme.colors.surface, listShape)
+                        .padding(horizontal = 12.dp),
+                ) {
                     state.items.forEachIndexed { index, article ->
-                        if (index > 0) {
-                            HorizontalDivider(
-                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                                thickness = 0.5.dp,
-                            )
-                        }
+                        if (index > 0) com.sabq.smart.ui.components.SabqRowDivider()
                         CompactArticleRow(
                             article = article,
                             isBookmarked = false,

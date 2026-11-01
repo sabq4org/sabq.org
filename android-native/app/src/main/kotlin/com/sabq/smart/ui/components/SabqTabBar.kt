@@ -32,10 +32,8 @@ import com.sabq.smart.nav.AppTab
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * iOS [SabqTabBar] (SabqComponents.swift line 1654-1735). Floating
- * capsule with 4 tabs in `ultraThinMaterial`. Selected tab keeps its
- * label visible; idle tabs collapse to icon-only so the bar feels
- * light.
+ * شريط التبويبات العائم بنمط iOS: كبسولة بأربعة تبويبات متساوية
+ * (الرئيسية، استكشف، محفوظاتي، حسابي)، لكل تبويب أيقونة واسمه.
  *
  * Differences from iOS:
  *   - SwiftUI's `.ultraThinMaterial` isn't supported on Android until
@@ -69,7 +67,7 @@ fun SabqTabBar(
             .clip(capsule)
             .background(SabqTheme.colors.surface.copy(alpha = 0.95f), capsule)
             .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.30f)), capsule)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -79,10 +77,7 @@ fun SabqTabBar(
                 tab = tab,
                 isSelected = isSelected,
                 onClick = { onSelect(tab) },
-                // Selected tab gets ~1.7x the base width so its
-                // label has room — iOS uses
-                // `matchedGeometryEffect` for the same morph.
-                modifier = Modifier.weight(if (isSelected) 1.8f else 1f),
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -95,47 +90,42 @@ private fun TabBarItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // iOS TabView (ContentView.swift): كل تبويب أيقونة فوقها اسمه، والمحدد
+    // بلون الأساس على كبسولة رمادية هادئة.
     val haptics = rememberSabqHaptics()
-    val tint = SabqTheme.colors.primaryEnd
+    val tint = if (isSelected) SabqTheme.colors.primaryEnd else SabqTheme.colors.ink
     val capsule = CircleShape
-    val pillBg = if (isSelected) tint.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent
     val interactionSource = remember { MutableInteractionSource() }
+    val title = androidx.compose.ui.res.stringResource(tab.titleResId)
 
-    Row(
+    androidx.compose.foundation.layout.Column(
         modifier = modifier
             .clip(capsule)
-            .background(pillBg, capsule)
+            .background(if (isSelected) SabqTheme.colors.chipFill else androidx.compose.ui.graphics.Color.Transparent, capsule)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = androidx.compose.ui.semantics.Role.Tab,
+                onClickLabel = title,
             ) {
                 haptics.light()
                 onClick()
             }
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Icon(
             imageVector = if (isSelected) tab.filledIcon else tab.outlinedIcon,
             contentDescription = null,
-            tint = if (isSelected) tint else SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(20.dp),
+            tint = tint,
+            modifier = Modifier.size(24.dp),
         )
-
-        AnimatedVisibility(
-            visible = isSelected,
-            enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
-            exit = fadeOut() + shrinkHorizontally(),
-        ) {
-            Text(
-                text = androidx.compose.ui.res.stringResource(tab.titleResId),
-                style = SabqTheme.typography.tabLabel,
-                color = tint,
-                maxLines = 1,
-            )
-        }
+        Text(
+            text = title,
+            style = SabqTheme.typography.tabLabel,
+            color = tint,
+            maxLines = 1,
+        )
     }
 }
-

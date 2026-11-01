@@ -1,6 +1,11 @@
 package com.sabq.smart.nav
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.TravelExplore
+import androidx.compose.material.icons.filled.TravelExplore
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -28,17 +33,17 @@ enum class AppTab(
     ),
     Explore(
         titleResId = com.sabq.smart.R.string.tab_explore,
-        outlinedIcon = Icons.Outlined.Search,
-        filledIcon = Icons.Filled.Search,
+        outlinedIcon = Icons.Outlined.TravelExplore,
+        filledIcon = Icons.Filled.TravelExplore,
     ),
     Bookmarks(
         titleResId = com.sabq.smart.R.string.tab_bookmarks,
-        outlinedIcon = Icons.Outlined.Bookmark,
+        outlinedIcon = Icons.Outlined.BookmarkBorder,
         filledIcon = Icons.Filled.Bookmark,
     ),
     Profile(
         titleResId = com.sabq.smart.R.string.tab_profile,
-        outlinedIcon = Icons.Outlined.MoreHoriz,
-        filledIcon = Icons.Filled.MoreHoriz,
+        outlinedIcon = Icons.Outlined.AccountCircle,
+        filledIcon = Icons.Filled.AccountCircle,
     ),
 }

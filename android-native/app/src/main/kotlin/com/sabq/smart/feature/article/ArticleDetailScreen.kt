@@ -2110,7 +2110,7 @@ private fun RelatedSection(related: List<Article>, onClick: (Article) -> Unit) {
     // الحاوية الموحدة (نقل #1610): تسمية الويب (4ad1892) — القائمة آخر ما
     // نُشر في القسم لا تشابهًا.
     ArticleSidebarModule(
-        title = "اقرأ أيضاً",
+        title = "اقرأ أيضًا",
         description = "آخر ما نُشر في القسم",
         icon = Icons.Outlined.Link,
         modifier = Modifier.padding(horizontal = 20.dp),
@@ -2592,12 +2592,8 @@ private fun CommentsSectionHeader(state: CommentsViewModel.UiState) {
         CommentsViewModel.LoadState.Loaded ->
             if (state.totalCount == 0) "كن أول من يعلّق" else "${state.totalCount} تعليق"
     }
-    SectionHeaderRow(
-        title = "التعليقات",
-        subtitle = subtitle,
-        icon = Icons.Outlined.ChatBubbleOutline,
-        tint = SabqTheme.colors.teal,
-    )
+    // الرأس الموحّد (شريط أزرق + عنوان 20 + سياق) كبقية أقسام iOS.
+    com.sabq.smart.ui.components.HomeSectionHeader(title = "التعليقات", context = subtitle)
 }
 
 @Composable
@@ -2643,7 +2639,8 @@ private fun SignInPromptCard(onLoginClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(SabqTheme.colors.paleFill, cardShape)
+            .background(SabqTheme.colors.skyTint, cardShape)
+            .border(0.75.dp, SabqTheme.colors.skyOutline.copy(alpha = 0.85f), cardShape)
             .padding(vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
