@@ -95,6 +95,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         id = id.ifBlank { slug ?: "anon-${hashCode()}" },
         title = resolvedTitle,
         excerpt = resolvedExcerpt,
+        subtitle = subtitle?.trim()?.takeIf { it.isNotEmpty() },
         category = resolvedCategory,
         categoryLabel = resolvedCategoryLabel,
         imageUrl = absoluteImageUrl,

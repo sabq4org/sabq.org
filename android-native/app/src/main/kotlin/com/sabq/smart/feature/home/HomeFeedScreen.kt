@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -52,6 +53,13 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Podcasts
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Search
+import com.sabq.smart.ui.components.HomeSectionHeader
+import com.sabq.smart.ui.components.SabqCategoryPill
+import com.sabq.smart.ui.components.SabqRowDivider
+import com.sabq.smart.ui.components.sabqNewsSurface
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -86,6 +94,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.R
@@ -285,7 +296,6 @@ private fun LoadedFeed(
     val uriHandler = LocalUriHandler.current
     // «المزيد اليوم» — الكتل الثانوية خلف زر إفصاح واحد، مطوي افتراضيًا
     // (iOS HomeFeedView.swift:690 moreTodaySection + showMoreToday).
-    var showMoreToday by rememberSaveable { mutableStateOf(false) }
 
     // Re-tap on the bottom Home tab → smooth-scroll to top + refresh.
     // Wired via [TabReselectBus] which fires only when the user taps
@@ -339,13 +349,23 @@ private fun LoadedFeed(
             )
         }
 
-        // Time-aware Arabic greeting block — ports iOS
-        // `HomeFeedView.greetingBlock` (lines 878-1001).
-        sectionItem { GreetingBlock(onClick = onGreetingClick) }
+        // بطاقة التحية أُزيلت من رئيسية iOS مع النموذج المعتمد (#1913)؛
+        // الترتيب الآن: الرأس ← النشرة ← العاجل ← البارزة.
 
         // «نشرة سَبْق» الصوتية — شريط مدمج أعلى الرئيسية يظهر فقط عند توفر
         // نشرة معتمدة (iOS HomeFeedView.swift:171 AudioBulletinBar).
-        sectionItem(key = "audio-bulletin") { com.sabq.smart.feature.audio.AudioBulletinSection() }
+        // بلا نشرة معتمدة نسقط إلى آخر نشرة صوتية سابقة كما في iOS
+        // (HomeFeedView.swift: compactLegacyNewsletterTopBar)، فتبقى قائمة
+        // «النشرات الصوتية» قابلة للوصول من الرئيسية.
+        sectionItem(key = "audio-bulletin") {
+            com.sabq.smart.feature.audio.AudioBulletinSection(
+                fallback = {
+                    state.audioNewsletter?.let { newsletter ->
+                        AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick)
+                    }
+                },
+            )
+        }
 
         // عاجل — الشريط الوحيد المسموح فوق الهيرو (iOS HomeFeedView.swift:
         // 157-164): شريط لوحة التحكم الدوّار أولًا، وعند غيابه نسقط
@@ -394,6 +414,7 @@ private fun LoadedFeed(
         if (state.featured.isNotEmpty()) {
             sectionItem {
                 FeaturedCarousel(
+                    // أول ثلاث بارزة (HomeHero.shown).
                     articles = state.featured,
                     bookmarkedIds = state.bookmarkedIds,
                     onBookmark = onBookmark,
@@ -467,87 +488,29 @@ private fun LoadedFeed(
 
         // Latest list — header + list inside SurfaceCard + explicit
         // "تحميل المزيد" button (ports iOS HomeFeedView.swift:834-883).
+        // «آخر الأخبار» — iOS HomeSectionCard: الرأس الموحّد على خلفية الصفحة،
+        // ثم الصفوف على سطح أبيض واحد بظل خفيف وفواصل رفيعة. كل صف عنصر
+        // كسول مستقل، فيُرسم السطح شرائح: الأولى بتقويس علوي والأخيرة بسفلي.
         item(key = "latest-header", contentType = "header") {
-            Box(Modifier.padding(bottom = 10.dp)) { LatestNewsHeader() }
+            HomeSectionHeader(
+                title = "آخر الأخبار",
+                modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+            )
         }
-        // كسولة حقيقية: كانت القائمة كلها داخل item{} واحد فتُركّب وتُرسم
-        // كل الصفوف وصورها دفعة واحدة وتتضخم مع «تحميل المزيد» (تدقيق
-        // الأداء 2026-08-02). الآن كل صف عنصر lazy مستقل بمفتاح ثابت،
-        // وشكل «البطاقة الواحدة» يُحاكى بتقويس الطرفين الأول والأخير —
-        // مقايضة مقصودة: يسقط ظل/إطار SurfaceCard الخارجي عن هذه الكتلة.
         itemsIndexed(
             items = state.articles,
             key = { _, article -> "latest-${article.id}" },
             contentType = { _, _ -> "latest-row" },
         ) { index, article ->
-            // كتلة واحدة متصلة (طلب المالك 2026-08-02): تباعد القائمة صفر،
-            // فالصفوف تتلاصق — الأول بتقويس علوي والأخير بتقويس سفلي
-            // وفاصل رفيع داخلي، مع بقاء كل صف عنصر lazy مستقلًا. الشريحة
-            // تستعيد كسوة SurfaceCard كاملة (خلفية + إطار + حشوة) — نسخة
-            // أولى أسقطت الإطار والحشوة فبدت الكتلة عارية على خلفية الصفحة.
             val isFirst = index == 0
             val isLast = index == state.articles.lastIndex
-            val radius = SabqTheme.dimens.cardRadius
-            val pad = SabqTheme.dimens.cardPadding
-            val shape = when {
-                isFirst && isLast -> RoundedCornerShape(radius)
-                isFirst -> RoundedCornerShape(topStart = radius, topEnd = radius)
-                isLast -> RoundedCornerShape(bottomStart = radius, bottomEnd = radius)
-                else -> RectangleShape
-            }
-            val frameColor = SabqTheme.colors.outline
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .background(SabqTheme.colors.surface)
-                    // إطار SurfaceCard (0.5dp) مرسوم يدويًا لكل شريحة مع
-                    // إسقاط الحافة المشتركة بين الشرائح كي لا تظهر خطوط
-                    // أفقية داخل الكتلة. العرض المرئي داخل القص ≈ 0.5dp.
-                    .drawBehind {
-                        val stroke = 1.dp.toPx()
-                        val outline = shape.createOutline(size, layoutDirection, this)
-                        when {
-                            isFirst && isLast -> drawOutline(
-                                outline, frameColor, style = Stroke(stroke),
-                            )
-                            isFirst -> clipRect(bottom = size.height - stroke) {
-                                drawOutline(outline, frameColor, style = Stroke(stroke))
-                            }
-                            isLast -> clipRect(top = stroke) {
-                                drawOutline(outline, frameColor, style = Stroke(stroke))
-                            }
-                            else -> {
-                                drawLine(
-                                    frameColor, Offset(0f, 0f),
-                                    Offset(0f, size.height), stroke,
-                                )
-                                drawLine(
-                                    frameColor, Offset(size.width, 0f),
-                                    Offset(size.width, size.height), stroke,
-                                )
-                            }
-                        }
-                    },
-            ) {
-                if (!isFirst) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = pad),
-                        color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                        thickness = 0.5.dp,
-                    )
-                }
+            LatestSurfaceSlice(isFirst = isFirst, isLast = isLast) {
+                if (!isFirst) SabqRowDivider()
                 CompactArticleRow(
                     article = article,
                     isBookmarked = article.bookmarkKey in state.bookmarkedIds,
                     onBookmark = { onBookmark(article.bookmarkKey) },
                     onClick = { onArticleClick(article) },
-                    modifier = Modifier.padding(
-                        start = pad,
-                        end = pad,
-                        top = if (isFirst) pad else 10.dp,
-                        bottom = if (isLast) pad else 10.dp,
-                    ),
                 )
             }
         }
@@ -604,56 +567,30 @@ private fun LoadedFeed(
             }
         }
 
-        // «المزيد اليوم» — إفصاح مطوي افتراضيًا يضم الكتل الثانوية
-        // (iOS moreTodaySection, HomeFeedView.swift:690-746). كل كتلة
-        // تحتفظ بشرط ظهورها الأصلي.
-        sectionItem {
-            MoreTodayToggle(
-                expanded = showMoreToday,
-                onToggle = { showMoreToday = !showMoreToday },
-            )
+        // «الأكثر تداولًا» ظاهر مباشرة كما في iOS، ثم البلوكات الاختيارية
+        // حين تتوفر لها بيانات فقط (لا إفصاح «المزيد اليوم»).
+        if (state.trending.isNotEmpty()) {
+            sectionItem {
+                TrendingPreviewBlock(
+                    trending = state.trending,
+                    onArticleClick = onArticleClick,
+                    onSeeAllClick = onTrendingAllClick,
+                )
+            }
         }
-        if (showMoreToday) {
-            // Stories rail — circular bubbles. Each bubble opens the
-            // dedicated StoryDetailScreen via the parent's onStoryClick.
-            if (state.stories.isNotEmpty()) {
-                sectionItem { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
+        if (state.stories.isNotEmpty()) {
+            sectionItem { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
+        }
+        state.hajjBlock?.let { hajj ->
+            sectionItem {
+                HajjBlockSection(
+                    block = hajj,
+                    onArticleClick = onHajjArticleClick,
+                )
             }
-
-            // "صدى الحج" — seasonal block, hidden when out of season /
-            // disabled / no articles (the repo returns null in those
-            // cases, matching iOS `HajjBlockView` parity).
-            state.hajjBlock?.let { hajj ->
-                sectionItem {
-                    HajjBlockSection(
-                        block = hajj,
-                        onArticleClick = onHajjArticleClick,
-                    )
-                }
-            }
-
-            // Today's calendar events.
-            if (state.calendar.isNotEmpty()) {
-                sectionItem { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
-            }
-
-            // Audio newsletter card. Tap navigates to the dedicated
-            // "النشرات الصوتية" list. iOS opens the same destination
-            // from ContentView.swift:78 via the navigation stack.
-            state.audioNewsletter?.let { newsletter ->
-                sectionItem { AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick) }
-            }
-
-            // Trending preview — top-3 list inside a SurfaceCard.
-            if (state.trending.isNotEmpty()) {
-                sectionItem {
-                    TrendingPreviewBlock(
-                        trending = state.trending,
-                        onArticleClick = onArticleClick,
-                        onSeeAllClick = onTrendingAllClick,
-                    )
-                }
-            }
+        }
+        if (state.calendar.isNotEmpty()) {
+            sectionItem { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
         }
     }
     }  // close PullToRefreshBox
@@ -715,42 +652,121 @@ private fun FeaturedCarousel(
     onBookmark: (String) -> Unit,
     onClick: (Article) -> Unit,
 ) {
+    // iOS FeaturedCarousel: الشرائح والنقاط داخل سطح أبيض واحد؛ صورة 16:9 ثم
+    // شارة القسم (أو «عاجل») والوقت، ثم العنوان 21 عريضًا. الحفظ بالضغط المطوّل.
     val pagerState = rememberPagerState(pageCount = { articles.size })
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        HorizontalPager(
-            state = pagerState,
-            pageSpacing = SabqTheme.dimens.pageSpacing,
-        ) { page ->
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape),
+    ) {
+        HorizontalPager(state = pagerState, verticalAlignment = Alignment.Top) { page ->
             val article = articles[page]
-            FeaturedArticleCard(
+            FeaturedSlide(
                 article = article,
                 isBookmarked = article.bookmarkKey in bookmarkedIds,
                 onBookmark = { onBookmark(article.bookmarkKey) },
                 onClick = { onClick(article) },
             )
         }
-        // Compact page dots — neutral when idle, brand-tinted on the
-        // current page. iOS uses `.tabViewStyle(.page)` for the same
-        // affordance.
         if (articles.size > 1) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
             ) {
                 repeat(articles.size) { i ->
                     val isActive = i == pagerState.currentPage
+                    val width by androidx.compose.animation.core.animateDpAsState(
+                        targetValue = if (isActive) 16.dp else 6.dp,
+                        animationSpec = androidx.compose.animation.core.tween(250),
+                        label = "hero-dot",
+                    )
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
+                            .size(width = width, height = 6.dp)
+                            .clip(RoundedCornerShape(50))
                             .background(
                                 if (isActive) SabqTheme.colors.primaryEnd
-                                else SabqTheme.colors.ink.copy(alpha = 0.30f),
+                                else SabqTheme.colors.tertiaryInk.copy(alpha = 0.3f),
                             ),
                     )
                 }
             }
+        } else {
+            Spacer(Modifier.height(12.dp))
         }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun FeaturedSlide(
+    article: Article,
+    isBookmarked: Boolean,
+    onBookmark: () -> Unit,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onBookmark,
+                onLongClickLabel = if (isBookmarked) "إزالة من المحفوظات" else "حفظ المقال",
+            ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(SabqTheme.colors.paleFill),
+        ) {
+            if (!article.imageUrl.isNullOrBlank()) {
+                com.sabq.smart.ui.components.FocalCachedAsyncImage(
+                    url = article.imageUrl,
+                    focalPoint = article.focalPoint,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (article.isAiGeneratedImage) {
+                com.sabq.smart.ui.components.AIImageBadge(
+                    model = article.aiImageModel,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (article.isBreaking) {
+                SabqCategoryPill(title = "عاجل", tint = SabqTheme.colors.breaking, fillAlpha = 0.1f)
+            } else {
+                SabqCategoryPill(title = article.categoryLabel.ifBlank { article.category.title })
+            }
+            Text(
+                text = article.dateFormatted,
+                style = SabqTheme.typography.metaSmall,
+                color = SabqTheme.colors.tertiaryInk,
+                maxLines = 1,
+            )
+        }
+        Text(
+            text = article.title,
+            style = SabqTheme.typography.featuredCardTitle,
+            color = SabqTheme.colors.ink,
+            maxLines = 3,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
     }
 }
 
@@ -859,7 +875,7 @@ private fun HomeHeaderBar(
 ) {
     // تصغير الشعار عند التمرير (نقل الويب #1600): 48 → 40 خلال 180ms.
     val logoHeight by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (compact) 40.dp else 48.dp,
+        targetValue = if (compact) 36.dp else 40.dp,
         animationSpec = androidx.compose.animation.core.tween(180),
         label = "home-logo",
     )
@@ -875,20 +891,13 @@ private fun HomeHeaderBar(
             modifier = Modifier.height(logoHeight),
         )
         Spacer(modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // ترتيب iOS headerSection: المظهر، مواعيدك، لحظة بلحظة، الجرس، البحث.
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             HeaderIcon(
-                icon = Icons.Filled.Search,
-                contentDescription = "بحث",
-                onClick = onSearchClick,
+                icon = Icons.Outlined.Contrast,
+                contentDescription = if (isDarkMode) "الوضع الفاتح" else "الوضع الداكن",
+                onClick = onToggleDarkMode,
             )
-            if (showNotificationsBell) {
-                HeaderIcon(
-                    icon = Icons.Filled.Notifications,
-                    contentDescription = "الإشعارات",
-                    onClick = onNotificationsClick,
-                    badge = notificationsUnreadCount > 0,
-                )
-            }
             // «مواعيدك» — الرواتب والدعم والإجازات (iOS headerIcon("calendar")).
             HeaderIcon(
                 icon = Icons.Outlined.CalendarMonth,
@@ -900,24 +909,26 @@ private fun HomeHeaderBar(
                 contentDescription = "لحظة بلحظة",
                 onClick = onMomentByMomentClick,
             )
+            if (showNotificationsBell) {
+                HeaderIcon(
+                    icon = Icons.Outlined.Notifications,
+                    contentDescription = "الإشعارات",
+                    onClick = onNotificationsClick,
+                    badge = notificationsUnreadCount > 0,
+                )
+            }
             HeaderIcon(
-                icon = if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                contentDescription = if (isDarkMode) "الوضع الفاتح" else "الوضع الداكن",
-                onClick = onToggleDarkMode,
+                icon = Icons.Outlined.Search,
+                contentDescription = "بحث",
+                onClick = onSearchClick,
             )
         }
     }
 }
 
 /**
- * 44 dp gradient-tinted circular icon button — matches iOS
- * `headerIcon(_:)` at [HomeFeedView.swift:429-444]. Fill is the brand
- * gradient at 10% → 5% opacity; icon is `primaryEnd` at 18 sp weight
- * semibold.
- *
- * When [badge] is true, a 10 dp coral unread dot is overlaid in the
- * top-right corner with a 2 dp background stroke so it reads cleanly
- * over the brand-tinted backdrop (matches iOS bell-unread treatment).
+ * أيقونة رأس الرئيسية — iOS `headerIcon(_:)`: رمز بلون النص الأساسي بلا
+ * خلفية، في مساحة لمس 44. النقطة الحمراء = إشعارات غير مقروءة.
  */
 @Composable
 private fun HeaderIcon(
@@ -928,41 +939,29 @@ private fun HeaderIcon(
 ) {
     val colors = SabqTheme.colors
     Box(
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            colors.primaryStart.copy(alpha = 0.10f),
-                            colors.primaryEnd.copy(alpha = 0.05f),
-                        ),
-                    ),
-                )
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = colors.primaryEnd,
-                modifier = Modifier.size(18.dp),
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = colors.ink,
+            modifier = Modifier.size(24.dp),
+        )
         if (badge) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .padding(9.dp)
                     .size(10.dp)
                     .clip(CircleShape)
                     .background(colors.background)
                     .padding(2.dp)
                     .clip(CircleShape)
-                    .background(colors.coral),
+                    .background(colors.breaking),
             )
         }
     }
@@ -1240,48 +1239,96 @@ private fun OpinionsPreviewRail(
     onArticleClick: (Article) -> Unit,
     onSeeAllClick: () -> Unit = {},
 ) {
-    // «آراء تستحق القراءة» — الحاوية الموحدة نفسها (بلوك تفاصيل الخبر) بقرار
-    // المالك: ست بطاقات متماثلة في شبكة عمودين بلا تمييز لمقال عن البقية،
-    // والحاوية بيضاء فوق خلفية الرئيسية والبطاقات بالدرجة الزرقاء (عكس صفحة الخبر).
-    com.sabq.smart.ui.components.ArticleSidebarModule(
+    // «آراء تستحق القراءة» — iOS opinionsPreviewSection: خمسة صفوف متساوية
+    // يقودها الكاتب (صورته، اسمه والوقت، ثم العنوان في سطرين) على سطح واحد.
+    HomeSectionCard(
         title = "آراء تستحق القراءة",
-        description = "أحدث ما كتبه كتّاب سبق",
-        icon = Icons.Filled.FormatQuote,
-        fill = SabqTheme.colors.surface,
-        action = {
-            Row(
-                modifier = Modifier.clickable { onSeeAllClick() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text("المزيد", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = SabqTheme.colors.primaryEnd)
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    tint = SabqTheme.colors.primaryEnd,
-                    modifier = Modifier.size(12.dp),
-                )
-            }
-        },
+        modifier = Modifier.padding(top = 8.dp),
+        link = { HomeSectionLink(onClick = onSeeAllClick) },
     ) {
-        Spacer(Modifier.height(12.dp))
-        val items = opinions.take(6)
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            var i = 0
-            while (i < items.size) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Max),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Box(Modifier.weight(1f).fillMaxSize()) { OpinionMiniTile(items[i], onClick = { onArticleClick(items[i]) }) }
-                    if (i + 1 < items.size) {
-                        Box(Modifier.weight(1f).fillMaxSize()) { OpinionMiniTile(items[i + 1], onClick = { onArticleClick(items[i + 1]) }) }
-                    } else Spacer(Modifier.weight(1f))
-                }
-                i += 2
-            }
+        opinions.take(5).forEachIndexed { index, opinion ->
+            if (index > 0) SabqRowDivider()
+            OpinionListRow(opinion = opinion, onClick = { onArticleClick(opinion) })
         }
     }
+}
+
+/** حاوية أقسام الرئيسية — iOS `HomeSectionCard`. */
+@Composable
+private fun HomeSectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    context: String? = null,
+    link: (@Composable () -> Unit)? = null,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Column(modifier = modifier.fillMaxWidth()) {
+        HomeSectionHeader(
+            title = title,
+            context = context,
+            link = link,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .sabqNewsSurface(shape)
+                .background(SabqTheme.colors.surface, shape)
+                .padding(horizontal = 12.dp),
+            content = content,
+        )
+    }
+}
+
+/** رابط «عرض الكل ‹» في رأس القسم — iOS `HomeSectionLinkLabel`. */
+@Composable
+private fun HomeSectionLink(title: String = "عرض الكل", onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .heightIn(min = 44.dp)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(text = title, style = SabqTheme.typography.statusChip, color = SabqTheme.colors.primaryEnd)
+        androidx.compose.material3.Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = SabqTheme.colors.primaryEnd,
+            modifier = Modifier.size(12.dp),
+        )
+    }
+}
+
+/**
+ * شريحة من سطح «آخر الأخبار»: كل صف عنصر كسول، فالسطح الأبيض يُرسم
+ * شرائح متلاصقة — الأولى بتقويس علوي والأخيرة بسفلي — والظل على الطرفين
+ * فقط كي لا تظهر حواف ظل بين الصفوف.
+ */
+@Composable
+private fun LatestSurfaceSlice(
+    isFirst: Boolean,
+    isLast: Boolean,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val radius = SabqTheme.dimens.cardRadius
+    val shape = when {
+        isFirst && isLast -> RoundedCornerShape(radius)
+        isFirst -> RoundedCornerShape(topStart = radius, topEnd = radius)
+        isLast -> RoundedCornerShape(bottomStart = radius, bottomEnd = radius)
+        else -> RectangleShape
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isFirst || isLast) Modifier.sabqNewsSurface(shape) else Modifier.clip(shape))
+            .background(SabqTheme.colors.surface, shape)
+            .padding(horizontal = 12.dp),
+        content = content,
+    )
 }
 
 @Composable
@@ -1328,63 +1375,47 @@ private fun OpinionMiniTile(opinion: Article, onClick: () -> Unit) {
 
 @Composable
 private fun OpinionListRow(opinion: Article, onClick: () -> Unit) {
+    // «الاسم · الوقت» ثم العنوان في سطرين، وصورة الكاتب 52 على الطرف الآخر.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(vertical = 16.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        OpinionAuthorAvatar(opinion = opinion, size = 52.dp)
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
+            val name = opinion.authorName?.takeIf { it.isNotBlank() }
+            val time = com.sabq.smart.util.formatRelativeDateAr(opinion.publishedAtIso).ifBlank { opinion.dateFormatted }
             Text(
-                text = opinion.title,
-                style = SabqTheme.typography.cardTitle.copy(
-                    fontSize = 16.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    color = SabqTheme.colors.ink,
-                ),
+                text = androidx.compose.ui.text.buildAnnotatedString {
+                    if (name != null) {
+                        pushStyle(SabqTheme.typography.meta.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = SabqTheme.colors.primaryEnd).toSpanStyle())
+                        append(name)
+                        pop()
+                    }
+                    if (time.isNotBlank()) {
+                        pushStyle(SabqTheme.typography.metaSmall.copy(color = SabqTheme.colors.tertiaryInk).toSpanStyle())
+                        append(if (name != null) " · $time" else time)
+                        pop()
+                    }
+                },
                 maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                lineHeight = 23.sp,
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                opinion.authorName?.takeIf { it.isNotBlank() }?.let { name ->
-                    Text(
-                        text = name,
-                        style = SabqTheme.typography.metaSmall.copy(
-                            fontSize = 13.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                            color = SabqTheme.colors.brandBlue,
-                        ),
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = "•",
-                        style = SabqTheme.typography.metaSmall.copy(
-                            fontSize = 10.sp,
-                            color = SabqTheme.colors.tertiaryInk,
-                        ),
-                    )
-                }
-                Text(
-                    text = opinion.dateFormatted,
-                    style = SabqTheme.typography.metaSmall.copy(
-                        fontSize = 13.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                        color = SabqTheme.colors.tertiaryInk,
-                    ),
-                    maxLines = 1,
-                )
-            }
+            Text(
+                text = opinion.title,
+                style = SabqTheme.typography.compactCardTitle,
+                color = SabqTheme.colors.ink,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
+        // صورة الكاتب يسارًا — ملاحظة المالك 2026-11-01.
+        OpinionAuthorAvatar(opinion = opinion, size = 52.dp)
     }
 }
 
@@ -1440,115 +1471,50 @@ private fun TrendingPreviewBlock(
     onArticleClick: (Article) -> Unit,
     onSeeAllClick: () -> Unit = {},
 ) {
-    val orange = SabqTheme.colors.trendingAccent
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.Filled.LocalFireDepartment,
-                    contentDescription = null,
-                    tint = orange,
+    // iOS trendingPreviewSection: ثلاثة صفوف مرقّمة في مربعات سماوية هادئة.
+    HomeSectionCard(
+        title = "الأكثر تداولًا",
+        context = "آخر 48 ساعة",
+        link = { HomeSectionLink(onClick = onSeeAllClick) },
+    ) {
+        trending
+            .filter { it.title.isNotBlank() }
+            .take(3)
+            .forEachIndexed { idx, article ->
+                if (idx > 0) SabqRowDivider()
+                Row(
                     modifier = Modifier
-                        .padding(top = 2.dp)
-                        .size(16.dp),
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "الأكثر تداولاً",
-                        style = SabqTheme.typography.cardTitle.copy(
-                            fontSize = 17.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            color = SabqTheme.colors.ink,
-                        ),
-                    )
-                    Text(
-                        text = "خلال آخر 48 ساعة",
-                        style = SabqTheme.typography.metaSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                            color = SabqTheme.colors.tertiaryInk,
-                        ),
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.clickable { onSeeAllClick() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = "الكل",
-                    style = SabqTheme.typography.metaSmall.copy(
-                        fontSize = 12.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                        color = orange,
-                    ),
-                )
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    tint = orange,
-                    modifier = Modifier.size(11.dp),
-                )
-            }
-        }
-        SurfaceCard {
-            // iOS emits one ForEach iteration per item — SwiftUI then applies
-            // its VStack spacing between iteration boundaries, not between the
-            // `(Divider, Row)` pair *inside* one iteration. Compose's
-            // `forEachIndexed` would otherwise hand SurfaceCard's inner
-            // `spacedBy(18.dp)` Column FIVE children (Row, Divider, Row,
-            // Divider, Row) and add 4×18dp gaps. Wrapping each iteration in
-            // its own Column collapses it back to 3 children = 2×18dp gaps,
-            // matching iOS.
-            trending
-                .filter { it.title.isNotBlank() }
-                .forEachIndexed { idx, article ->
-                    Column {
-                        if (idx > 0) {
-                            HorizontalDivider(
-                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                                thickness = 0.5.dp,
-                            )
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onArticleClick(article) }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(
-                                text = "${idx + 1}",
-                                style = SabqTheme.typography.cardTitle.copy(
-                                    fontSize = 18.sp,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                                    color = if (idx < 3) orange else SabqTheme.colors.tertiaryInk,
-                                ),
-                                modifier = Modifier.width(28.dp),
-                            )
-                            Text(
-                                text = article.title,
-                                style = SabqTheme.typography.cardTitle.copy(
-                                    fontSize = 14.sp,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                    color = SabqTheme.colors.ink,
-                                ),
-                                maxLines = 2,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                        .fillMaxWidth()
+                        .clickable { onArticleClick(article) }
+                        .padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val square = RoundedCornerShape(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(square)
+                            .background(SabqTheme.colors.skyTint)
+                            .border(0.75.dp, SabqTheme.colors.skyOutline, square),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "${idx + 1}",
+                            style = SabqTheme.typography.meta.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                            color = SabqTheme.colors.primaryEnd,
+                        )
                     }
+                    Text(
+                        text = article.title,
+                        style = SabqTheme.typography.compactCardTitle,
+                        color = SabqTheme.colors.ink,
+                        maxLines = 3,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-        }
+            }
     }
 }
 
@@ -1758,16 +1724,15 @@ private fun AudioNewsletterCard(
     newsletter: com.sabq.smart.data.AudioNewsletter,
     onClick: () -> Unit,
 ) {
-    val coral = SabqTheme.colors.coral
+    // شريط مدمج على سطح الرئيسية الأبيض — نظير compactLegacyNewsletterTopBar في iOS.
+    val coral = SabqTheme.colors.primaryEnd
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionRow(title = "النشرات الصوتية", icon = Icons.Filled.GraphicEq, tint = coral)
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.tileRadius)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
+                .sabqNewsSurface(shape)
                 .background(SabqTheme.colors.surface, shape)
-                .border(width = 0.5.dp, color = coral.copy(alpha = 0.18f), shape = shape)
                 .clickable { onClick() }
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1775,19 +1740,15 @@ private fun AudioNewsletterCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(54.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                    .background(
-                        androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(coral.copy(alpha = 0.30f), SabqTheme.colors.primaryEnd.copy(alpha = 0.18f)),
-                        ),
-                    ),
+                    .size(44.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .background(SabqTheme.colors.softFill),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(
                     imageVector = Icons.Filled.GraphicEq,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
+                    tint = coral,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -1797,11 +1758,8 @@ private fun AudioNewsletterCard(
             ) {
                 Text(
                     text = newsletter.title,
-                    style = SabqTheme.typography.cardTitle.copy(
-                        fontSize = 14.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                        color = SabqTheme.colors.ink,
-                    ),
+                    style = SabqTheme.typography.compactCardTitle,
+                    color = SabqTheme.colors.ink,
                     maxLines = 2,
                 )
                 newsletter.durationSeconds?.let { sec ->

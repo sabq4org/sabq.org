@@ -163,13 +163,20 @@ class AudioBulletinViewModel @Inject constructor(
 
 /** الشريط نفسه — لا يرسم شيئًا إن لم تتوفر نشرة. */
 @Composable
-fun AudioBulletinSection(viewModel: AudioBulletinViewModel = hiltViewModel()) {
+fun AudioBulletinSection(
+    viewModel: AudioBulletinViewModel = hiltViewModel(),
+    /** يُعرض حين لا توجد نشرة معتمدة — iOS يسقط إلى شريط النشرة الصوتية السابقة. */
+    fallback: @Composable () -> Unit = {},
+) {
     LifecycleResumeEffect(viewModel) {
         viewModel.refreshIfStale()
         onPauseOrDispose { }
     }
     val bulletin by viewModel.bulletin.collectAsStateWithLifecycle()
-    val b = bulletin ?: return
+    val b = bulletin ?: run {
+        fallback()
+        return
+    }
     val playerState by viewModel.player.state.collectAsStateWithLifecycle()
     val isCurrent = playerState.playingSlug == b.playerKey
     val isPlaying = isCurrent && playerState.isPlaying

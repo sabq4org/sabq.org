@@ -28,9 +28,7 @@ import com.sabq.smart.R
  *      while the font downloaded. Bundling kills both failure modes for
  *      ~700KB of APK, matching the iOS decision exactly.
  *
- * Only Regular/SemiBold/Bold ship — identical to the iOS bundle; the
- * [SabqTypography.iosWeight] softening policy maps every nominal weight
- * onto these three.
+ * The app text uses it through [SabqTextFamily].
  *
  * iOS counterpart: `Services/FontRegistration.swift::SabqFonts`.
  */
@@ -39,6 +37,13 @@ val IbmPlexSansArabic: FontFamily = FontFamily(
     Font(R.font.ibm_plex_sans_arabic_semibold, weight = FontWeight.SemiBold, style = FontStyle.Normal),
     Font(R.font.ibm_plex_sans_arabic_bold, weight = FontWeight.Bold, style = FontStyle.Normal),
 )
+
+/**
+ * خط النصوص في التطبيق: IBM Plex Sans Arabic (اعتماد المالك 2026-11-01)،
+ * مع أدوار الأحجام والأوزان من iOS. الملفات المضمّنة ثلاثة أوزان فقط،
+ * فيُرسم «المتوسط» بأقرب وزن متاح.
+ */
+val SabqTextFamily: FontFamily = IbmPlexSansArabic
 
 /**
  * Sabq text styles. Sizes match the iOS table:
@@ -100,26 +105,6 @@ data class SabqTypography(
 ) {
     companion object {
         /**
-         * iOS weight-softening policy — an exact port of
-         * `FontRegistration.swift::SabqFonts.app(size:weight:)`:
-         * only Regular/SemiBold/Bold ship on iOS, so
-         *   - any size ≤ 13pt renders Regular (captions),
-         *   - Medium always renders Regular,
-         *   - Bold at > 13pt softens to SemiBold,
-         *   - Heavy/Black soften to Bold.
-         * Android must apply the SAME mapping or every title renders one
-         * weight heavier than iOS (strict-parity audit 2026-07-13).
-         */
-        private fun iosWeight(size: Float, nominal: FontWeight): FontWeight {
-            if (size <= 13f) return FontWeight.Normal
-            return when {
-                nominal.weight >= FontWeight.ExtraBold.weight -> FontWeight.Bold
-                nominal.weight >= FontWeight.SemiBold.weight -> FontWeight.SemiBold
-                else -> FontWeight.Normal // Regular + Medium
-            }
-        }
-
-        /**
          * Build typography keyed off the user's articleFontSize preference.
          *
          * [deviceScale] is the width-adaptive factor computed in [SabqTheme]
@@ -137,14 +122,14 @@ data class SabqTypography(
             // Strict iOS parity: zero letter-spacing everywhere (iOS uses
             // no kerning/tracking anywhere in SabqComponents.swift). Sizes
             // and nominal weights below are the iOS call-site values; the
-            // effective weight comes from [iosWeight].
+            // weights follow the iOS SabqType roles.
             fun base(
                 nominal: FontWeight,
                 size: Float,
                 lh: Float = size * 1.35f,
             ) = TextStyle(
-                fontFamily = IbmPlexSansArabic,
-                fontWeight = iosWeight(size, nominal),
+                fontFamily = SabqTextFamily,
+                fontWeight = nominal,
                 fontSize = (size * deviceScale).sp,
                 lineHeight = (lh * deviceScale).sp,
                 lineHeightStyle = lineHeight,
@@ -152,31 +137,36 @@ data class SabqTypography(
                 textAlign = TextAlign.Start,
             )
             return SabqTypography(
-                screenTitle        = base(FontWeight.Bold, 30f),
-                sectionHeader      = base(FontWeight.Bold, 19f),
+                screenTitle        = base(FontWeight.Bold, 26f),
+                // iOS SabqType.sectionHeading 20 bold.
+                sectionHeader      = base(FontWeight.Bold, 20f, lh = 26f),
                 cardTitle          = base(FontWeight.Bold, 19f),
-                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f),
-                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f),
-                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f),
-                excerpt            = base(FontWeight.Normal, 15f, lh = 22f),
-                // iOS body: lineSpacing(8) is ADDITIVE over the font's
-                // natural line height (~1.35×size for Plex Arabic).
-                body               = base(FontWeight.Normal, articleFontSize, lh = articleFontSize * 1.35f + 8f),
+                // iOS articleTitle 23 bold = حجم القراءة الافتراضي (17) + 6.
+                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f, lh = (articleFontSize + 6f) * 1.3f + 3f),
+                // iOS leadTitle 21 bold — عنوان شريحة البارزة.
+                featuredCardTitle  = base(FontWeight.Bold, 21f, lh = 29f),
+                // iOS rowTitle 16 medium، تباعد سطري 2.
+                compactCardTitle   = base(FontWeight.Medium, 16f, lh = 23f),
+                excerpt            = base(FontWeight.Normal, 15f, lh = 21f),
+                // iOS articleBody 18 regular بتباعد 5 فوق الارتفاع الطبيعي؛
+                // القارئ يغيّر الحجم بالقدر نفسه (الافتراضي 17 + 1 = 18).
+                body               = base(FontWeight.Normal, articleFontSize + 1f, lh = (articleFontSize + 1f) * 1.45f + 5f),
                 chipLabel          = base(FontWeight.SemiBold, 14f),
-                statusChip         = base(FontWeight.SemiBold, 11f),
-                meta               = base(FontWeight.Medium, 13f),
-                metaSmall          = base(FontWeight.Medium, 11f),
+                // iOS tag 12 semibold — شارة القسم و«جديد».
+                statusChip         = base(FontWeight.SemiBold, 12f, lh = 16f),
+                meta               = base(FontWeight.Normal, 13f),
+                // iOS timestamp 11 regular — توقيت النشر في كل التطبيق.
+                metaSmall          = base(FontWeight.Normal, 11f),
                 breakingPill       = base(FontWeight.Bold, 10f),
-                ctaButton          = base(FontWeight.Bold, 17f),
-                tabLabel           = base(FontWeight.Bold, 12.5f),
+                ctaButton          = base(FontWeight.SemiBold, 16f),
+                tabLabel           = base(FontWeight.SemiBold, 12f),
                 statValue          = base(FontWeight.SemiBold, 22f),
-                tileTitle          = base(FontWeight.SemiBold, 17f),
-                // iOS nominal .heavy → renders Bold under the softening policy.
-                greetingHeadline   = base(FontWeight.Black, 15f),
-                mostViewedCardTitle = base(FontWeight.SemiBold, 14.5f, lh = 20f),
-                microMeta          = base(FontWeight.Medium, 10f),
-                smallActionButton  = base(FontWeight.SemiBold, 13f),
-                searchBarText      = base(FontWeight.Medium, 16f),
+                tileTitle          = base(FontWeight.SemiBold, 16f),
+                greetingHeadline   = base(FontWeight.Bold, 15f),
+                mostViewedCardTitle = base(FontWeight.Medium, 15f, lh = 21f),
+                microMeta          = base(FontWeight.Normal, 10f),
+                smallActionButton  = base(FontWeight.SemiBold, 12f),
+                searchBarText      = base(FontWeight.Normal, 16f),
             )
         }
     }

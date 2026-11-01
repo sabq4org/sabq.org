@@ -66,6 +66,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.sabq.smart.R
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
+import com.sabq.smart.ui.theme.SabqTheme
+import com.sabq.smart.ui.components.sabqNewsSurface
+import androidx.compose.foundation.layout.heightIn
 
 // مركز دوري روشن السعودي — port ‏1:1 لشاشة iOS `RoshnView.swift` بهوية
 // «أخضر الملعب» (2026-08-01): هيرو زمردي صلب، قماشة فستقية، بطاقات بلا
@@ -216,89 +219,94 @@ fun RoshnHomeStrip(onClick: () -> Unit, viewModel: RoshnStripViewModel = hiltVie
     val cardFixture = h.live.firstOrNull() ?: h.nextMatch ?: h.outlook.openers.firstOrNull()
     if (offSeasonChampion == null && cardFixture == null && !matchdayMode) return
 
-    ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(11.dp),
-            modifier = Modifier.fillMaxWidth()
-                .shadow(4.dp, RoundedCornerShape(22.dp), spotColor = RoshnColors.cardShadow, ambientColor = RoshnColors.cardShadow)
-                .clip(RoundedCornerShape(22.dp))
-                .background(RoshnColors.sky)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 14.dp, vertical = 13.dp),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.roshn_league_logo),
-                contentDescription = null, contentScale = ContentScale.Fit,
-                modifier = Modifier.size(40.dp)
-                    .clip(RoundedCornerShape(11.dp)).background(Color.White).padding(4.dp),
-            )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("دوري روشن", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                val subtitle = when {
-                    offSeasonChampion != null -> "اكتمل الموسم"
-                    h.preSeason && !h.inSeason && cardFixture != null && !cardFixture.started -> "الموسم الجديد"
-                    matchdayMode && h.matchday != null ->
-                        "${h.matchday.round ?: "جولة الدوري"} · ${h.matchday.count} ${if (h.matchday.count == 2) "مباراتان" else "مباريات"}"
-                    cardFixture != null && cardFixture.status.live -> "${cardFixture.home.name} × ${cardFixture.away.name}"
-                    cardFixture != null -> "${cardFixture.home.name} × ${cardFixture.away.name} · ${RsFormat.time(cardFixture)}"
-                    else -> "تغطية حية بتوقيت الرياض"
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(subtitle, color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (offSeasonChampion == null && h.preSeason && !h.inSeason && cardFixture != null && !cardFixture.started) {
-                        RsLtrText(
-                            RsFormat.seasonLabel(h.outlook.nextSeason ?: h.outlook.season),
-                            Color.White.copy(alpha = 0.85f), 10, FontWeight.Normal,
-                        )
-                    }
-                }
+    // بطاقة هادئة على سطح الرئيسية الأبيض (iOS RoshnHomeStrip.banner منذ
+    // 2026-10-17): الهوية الخضراء في شعار الدوري وشارة «مباشر» فقط.
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        val logoShape = RoundedCornerShape(8.dp)
+        Image(
+            painter = painterResource(R.drawable.roshn_league_logo),
+            contentDescription = null, contentScale = ContentScale.Fit,
+            modifier = Modifier.size(40.dp)
+                .clip(logoShape).background(SabqTheme.colors.surface)
+                .border(0.75.dp, SabqTheme.colors.outline.copy(alpha = 0.6f), logoShape)
+                .padding(4.dp),
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("دوري روشن", style = SabqTheme.typography.compactCardTitle, color = SabqTheme.colors.ink, maxLines = 1)
+            val subtitle = when {
+                offSeasonChampion != null -> "اكتمل الموسم"
+                h.preSeason && !h.inSeason && cardFixture != null && !cardFixture.started -> "الموسم الجديد"
+                matchdayMode && h.matchday != null ->
+                    "${h.matchday.round ?: "جولة الدوري"} · ${h.matchday.count} ${if (h.matchday.count == 2) "مباراتان" else "مباريات"}"
+                cardFixture != null && cardFixture.status.live -> "${cardFixture.home.name} × ${cardFixture.away.name}"
+                cardFixture != null -> "${cardFixture.home.name} × ${cardFixture.away.name} · ${RsFormat.time(cardFixture)}"
+                else -> "المباريات والترتيب والنتائج"
             }
-
-            when {
-                offSeasonChampion != null -> RsBannerChip(RoshnColors.gold) {
-                    Text("🏆 ${offSeasonChampion.name}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                }
-                matchdayMode && h.matchday != null && h.matchday.liveCount > 0 -> RsBannerChip(RoshnColors.liveRed) {
-                    Box(Modifier.size(5.dp).clip(CircleShape).background(Color.White))
-                    Text(
-                        if (h.matchday.liveCount == 1) "مباشر" else "${h.matchday.liveCount} مباشر",
-                        color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(subtitle, style = SabqTheme.typography.meta, color = SabqTheme.colors.secondaryInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (offSeasonChampion == null && h.preSeason && !h.inSeason && cardFixture != null && !cardFixture.started) {
+                    RsLtrText(
+                        RsFormat.seasonLabel(h.outlook.nextSeason ?: h.outlook.season),
+                        SabqTheme.colors.secondaryInk, 13, FontWeight.Normal,
                     )
                 }
-                matchdayMode && h.matchday?.nextKickoffTs != null ->
-                    RsCountdownChip("تنطلق بعد", h.matchday.nextKickoffTs)
-                cardFixture != null && cardFixture.status.live -> RsBannerChip(RoshnColors.liveRed) {
-                    Box(Modifier.size(5.dp).clip(CircleShape).background(Color.White))
-                    RsLtrText("${cardFixture.goals.away ?: 0} - ${cardFixture.goals.home ?: 0}", Color.White, 13)
-                    rsLiveMinute(cardFixture.status)?.let { RsLtrText(it, Color.White, 11, FontWeight.Medium) }
-                }
-                cardFixture != null && !cardFixture.started -> {
-                    val ts = if (h.preSeason && !h.inSeason) h.outlook.firstKickoffTs ?: cardFixture.timestamp else cardFixture.timestamp
-                    if (ts > 0) RsCountdownChip(if (h.preSeason) "ينطلق بعد" else "تنطلق بعد", ts)
-                }
-            }
-
-            Box(
-                Modifier.size(22.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowLeft, null,
-                    tint = Color.White, modifier = Modifier.size(15.dp),
-                )
             }
         }
+
+        when {
+            offSeasonChampion != null -> RsBannerChip(RoshnColors.gold) {
+                Text("🏆 ${offSeasonChampion.name}", color = RoshnColors.ink, style = SabqTheme.typography.statusChip, maxLines = 1)
+            }
+            matchdayMode && h.matchday != null && h.matchday.liveCount > 0 -> RsBannerChip(RoshnColors.liveRed) {
+                Box(Modifier.size(5.dp).clip(CircleShape).background(Color.White))
+                Text(
+                    if (h.matchday.liveCount == 1) "مباشر" else "${h.matchday.liveCount} مباشر",
+                    color = Color.White, style = SabqTheme.typography.statusChip,
+                )
+            }
+            matchdayMode && h.matchday?.nextKickoffTs != null ->
+                RsCountdownChip("تنطلق بعد", h.matchday.nextKickoffTs)
+            cardFixture != null && cardFixture.status.live -> RsBannerChip(RoshnColors.liveRed) {
+                Box(Modifier.size(5.dp).clip(CircleShape).background(Color.White))
+                RsLtrText("${cardFixture.goals.away ?: 0} - ${cardFixture.goals.home ?: 0}", Color.White, 13)
+                rsLiveMinute(cardFixture.status)?.let { RsLtrText(it, Color.White, 11, FontWeight.Medium) }
+            }
+            cardFixture != null && !cardFixture.started -> {
+                val ts = if (h.preSeason && !h.inSeason) h.outlook.firstKickoffTs ?: cardFixture.timestamp else cardFixture.timestamp
+                if (ts > 0) RsCountdownChip(if (h.preSeason) "ينطلق بعد" else "تنطلق بعد", ts)
+            }
+        }
+
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowLeft, null,
+            tint = SabqTheme.colors.tertiaryInk, modifier = Modifier.size(18.dp),
+        )
     }
 }
 
+/** شارة حالة: تعبئة مسطّحة، أو كبسولة بيضاء بحدّ رفيع حين [background] فارغ. */
 @Composable
-private fun RsBannerChip(background: Color, content: @Composable RowScope.() -> Unit) {
+private fun RsBannerChip(background: Color?, content: @Composable RowScope.() -> Unit) {
+    val capsule = RoundedCornerShape(50)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        modifier = Modifier.clip(RoundedCornerShape(50)).background(background)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.clip(capsule)
+            .then(
+                if (background != null) Modifier.background(background)
+                else Modifier.background(SabqTheme.colors.surface).border(0.75.dp, SabqTheme.colors.outline, capsule),
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         content = content,
     )
 }
@@ -306,10 +314,10 @@ private fun RsBannerChip(background: Color, content: @Composable RowScope.() -> 
 @Composable
 private fun RsCountdownChip(prefix: String, timestamp: Int) {
     val now = rememberRsSecondTicker()
-    RsBannerChip(Color.White.copy(alpha = 0.16f)) {
+    RsBannerChip(null) {
         Text(
             "$prefix ${RsFormat.countdown(timestamp, now)}",
-            color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            color = SabqTheme.colors.ink, style = SabqTheme.typography.statusChip, maxLines = 1,
         )
     }
 }

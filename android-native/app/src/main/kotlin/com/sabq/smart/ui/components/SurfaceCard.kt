@@ -1,8 +1,6 @@
 package com.sabq.smart.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,25 +14,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * Ports iOS `SurfaceCard` (SabqComponents.swift line 829-866). White
- * (or dark) rounded surface with a soft+hard double shadow, a thin
- * outline stroke, and an optional accent-tinted decorative circle
- * peeking from the top-right corner.
- *
- * iOS stacks two shadows on the same path:
- *   `.shadow(SabqTheme.shadow, radius: 16, y: 6)`  — soft halo
- *   `.shadow(SabqTheme.deepShadow, radius: 1, y: 1)` — tight rim
- *
- * Compose's `Modifier.shadow` chains the same way — the first call
- * renders the wide soft glow, the second adds the tight under-rim.
- * Earlier this file approximated both with a single `elevation=10dp`
- * which the user flagged as "ظلال ثقيلة"; this is the corrected pass.
+ * Ports iOS `SurfaceCard`: a white rounded surface with the soft
+ * «مكتب سبق» shadow ([sabqNewsSurface]) and no outline, plus an optional
+ * accent-tinted decorative circle peeking from the top-right corner.
  */
 @Composable
 fun SurfaceCard(
@@ -43,36 +30,12 @@ fun SurfaceCard(
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    // Strict iOS parity (owner directive 2026-07-13, supersedes the
-    // 2026-05-24 opaque-frame divergence): iOS strokes `outline` at
-    // 0.5pt in both modes; light/dark difference comes from the theme
-    // shadow alphas (0.05 / 0.30), not from branched elevation.
-    val frameColor = SabqTheme.colors.outline
-
-    val softElevation = 10.dp
-    val rimElevation = 1.dp
-
+    // هوية «مكتب سبق» (iOS #2039–#2041): بطاقة بيضاء بظل خفيف بلا حدّ.
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // Soft outer halo — iOS `radius: 16, y: 6`. Spot-only so the
-            // shadow sits below the card, ambient is transparent.
-            .shadow(
-                elevation = softElevation,
-                shape = shape,
-                ambientColor = Color.Transparent,
-                spotColor = SabqTheme.colors.shadow,
-            )
-            // Tight under-rim — iOS `radius: 1, y: 1`.
-            .shadow(
-                elevation = rimElevation,
-                shape = shape,
-                ambientColor = Color.Transparent,
-                spotColor = SabqTheme.colors.deepShadow,
-            )
-            .clip(shape)
-            .background(SabqTheme.colors.surface, shape)
-            .border(BorderStroke(0.5.dp, frameColor), shape),
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape),
     ) {
         if (accent != null) {
             // Decorative tinted circle in the corner — equivalent to
@@ -91,7 +54,7 @@ fun SurfaceCard(
         }
         Column(
             modifier = Modifier.padding(SabqTheme.dimens.cardPadding),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             content()
         }

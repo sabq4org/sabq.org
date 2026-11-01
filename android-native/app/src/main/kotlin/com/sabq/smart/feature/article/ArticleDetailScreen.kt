@@ -95,6 +95,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.sabq.smart.util.ImageAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.foundation.layout.heightIn
+import com.sabq.smart.ui.components.sabqNewsSurface
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -971,9 +974,17 @@ private fun LabelsRow(
         if (article.isOpinion) {
             OpinionMarkerPill()
         } else {
-            StatusChip(title = article.categoryLabel.ifBlank { article.category.title }, tint = article.category.tint())
-            if (article.isReading) ReadingPill(compact = false)
-            if (article.isBreaking) BreakingPill()
+            // iOS DetailLabelPill: القسم سياق لا خطورة — كبسولة بلون الأساس.
+            com.sabq.smart.ui.components.SabqCategoryPill(
+                title = article.categoryLabel.ifBlank { article.category.title },
+                fillAlpha = 0.08f,
+            )
+            if (article.isReading) {
+                com.sabq.smart.ui.components.SabqCategoryPill(title = "قراءة", tint = SabqTheme.colors.success, fillAlpha = 0.08f)
+            }
+            if (article.isBreaking) {
+                com.sabq.smart.ui.components.SabqCategoryPill(title = "عاجل", tint = SabqTheme.colors.breaking, fillAlpha = 0.08f)
+            }
         }
 
         // Sentiment pill — only renders when the backend returned a
@@ -1067,17 +1078,34 @@ private fun sentimentMapping(raw: String?): SentimentMapping? {
 
 @Composable
 private fun ArticleTitle(article: Article, fontSize: Float, useSerif: Boolean) {
-    Text(
-        text = article.title,
-        fontSize = (fontSize + 8).sp,
-        fontWeight = FontWeight.Bold,
-        color = SabqTheme.colors.ink,
-        fontFamily = if (useSerif) FontFamily.Serif else IbmPlexSansArabic,
-        lineHeight = (fontSize + 8 + 4).sp,
+    // iOS SabqType.articleTitle: 23 عريض عند حجم القراءة الافتراضي، ويتبع
+    // إعداد «حجم الخط» بالقدر نفسه.
+    val size = fontSize + 6
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
-    )
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = article.title,
+            fontSize = size.sp,
+            fontWeight = FontWeight.Bold,
+            color = SabqTheme.colors.ink,
+            fontFamily = if (useSerif) FontFamily.Serif else com.sabq.smart.ui.theme.SabqTextFamily,
+            lineHeight = (size * 1.3f + 3).sp,
+        )
+        // العنوان الفرعي: 14 عند الحجم الافتراضي بلون ثانوي (iOS articleSubtitle).
+        article.subtitle?.let { subtitle ->
+            Text(
+                text = subtitle,
+                fontSize = (fontSize - 3).sp,
+                color = SabqTheme.colors.secondaryInk,
+                fontFamily = com.sabq.smart.ui.theme.SabqTextFamily,
+                lineHeight = ((fontSize - 3) * 1.4f + 3).sp,
+            )
+        }
+    }
 }
 
 // ============================================================
@@ -1109,65 +1137,60 @@ private fun NewsBylineRow(article: Article, reporterTitle: String?, onAuthorClic
         ?: article.body?.takeIf { it.isNotBlank() }?.let { maxOf(1, it.length / 800) }
     val reading = com.sabq.smart.data.ArticleByline.readingLabel(readingMinutes)
     val updated = com.sabq.smart.data.ArticleByline.lastUpdatedLabel(article.editorialModifiedAtIso)
+    // iOS articleMeta: صورة 40، ثم الاسم (13 شبه عريض) وشارة التوثيق، وتحته
+    // «التاريخ · الوقت · مدة القراءة» بخط التوقيت 11. السطر كله رابط الكاتب.
+    val publication = listOfNotNull(date, clock, reading).joinToString(" · ")
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 20.dp)
+            .clickable { onAuthorClick(name) }
+            .heightIn(min = 44.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = listOfNotNull(name, role, publication, updated?.let { "آخر تحديث $it" }).joinToString("، ")
+            },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BylineAvatar(name = name, imageUrl = article.authorImageUrl, size = 34.dp)
+        BylineAvatar(name = name, imageUrl = article.authorImageUrl, size = 40.dp)
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .clickable { onAuthorClick(name) },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Text(
-                        text = name,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SabqTheme.colors.ink,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (article.isAuthorVerified) {
-                        Icon(
-                            imageVector = Icons.Filled.Verified,
-                            contentDescription = "موثّق",
-                            tint = SabqTheme.colors.primaryEnd,
-                            modifier = Modifier.size(12.dp),
-                        )
-                    }
-                }
-                Text("·", fontSize = 11.sp, color = SabqTheme.colors.secondaryInk)
                 Text(
-                    text = role,
-                    fontSize = 11.sp,
-                    color = SabqTheme.colors.secondaryInk,
+                    text = name,
+                    style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
+                    color = SabqTheme.colors.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (article.isAuthorVerified) {
+                    Icon(
+                        imageVector = Icons.Filled.Verified,
+                        contentDescription = null,
+                        tint = SabqTheme.colors.primaryEnd,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (date != null) BylineItem(text = date, icon = Icons.Outlined.CalendarMonth)
-                if (clock != null) BylineItem(text = clock, icon = Icons.Outlined.Schedule)
-                BylineItem(text = reading, icon = Icons.Outlined.AutoStories)
-            }
+            Text(
+                // U+200F: التاريخ يبدأ برقم فيُقرأ السطر من اليسار بلا علامة اتجاه عربية.
+                text = "\u200F$publication",
+                style = SabqTheme.typography.metaSmall,
+                color = SabqTheme.colors.tertiaryInk,
+                maxLines = 2,
+            )
             if (updated != null) {
-                BylineItem(text = "آخر تحديث: $updated", icon = Icons.Outlined.Refresh)
+                Text(
+                    text = "آخر تحديث: $updated",
+                    style = SabqTheme.typography.metaSmall,
+                    color = SabqTheme.colors.tertiaryInk,
+                    maxLines = 2,
+                )
             }
         }
     }
@@ -1253,17 +1276,18 @@ private fun SmartSummaryCard(article: Article) {
 
     var isExpanded by remember(article.id) { mutableStateOf(false) }
     val needsToggle = body.length > 120
-    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
 
+    // iOS sabqSkyCardSurface: خلفية سماوية هادئة وإطار سماوي ناعم.
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clip(shape)
-            .background(SabqTheme.colors.softFill, shape)
-            .border(width = 1.dp, color = SabqTheme.colors.outline, shape = shape)
+            .background(SabqTheme.colors.skyTint, shape)
+            .border(width = 0.75.dp, color = SabqTheme.colors.skyOutline.copy(alpha = 0.85f), shape = shape)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1273,13 +1297,13 @@ private fun SmartSummaryCard(article: Article) {
                 imageVector = Icons.Filled.AutoAwesome,
                 contentDescription = null,
                 tint = SabqTheme.colors.primaryEnd,
-                modifier = Modifier.size(12.dp),
+                modifier = Modifier.size(14.dp),
             )
             Text(
                 text = "الموجز الذكي",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black,
-                color = SabqTheme.colors.ink,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = SabqTheme.colors.primaryEnd,
             )
             Spacer(modifier = Modifier.weight(1f))
             // Listen pill — streams the AI-generated MP3 summary via
@@ -1293,10 +1317,8 @@ private fun SmartSummaryCard(article: Article) {
 
         Text(
             text = body,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
+            style = SabqTheme.typography.excerpt,
             color = SabqTheme.colors.secondaryInk,
-            lineHeight = 22.sp,
             maxLines = if (isExpanded) Int.MAX_VALUE else 3,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1308,17 +1330,10 @@ private fun SmartSummaryCard(article: Article) {
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = if (isExpanded) "طيّ" else "عرض المزيد",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text = if (isExpanded) "إخفاء التفاصيل" else "قراءة الموجز كاملًا",
+                    style = SabqTheme.typography.meta.copy(fontWeight = FontWeight.SemiBold),
                     color = SabqTheme.colors.primaryEnd,
-                )
-                Icon(
-                    imageVector = if (isExpanded) Icons.AutoMirrored.Filled.KeyboardArrowLeft
-                        else Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = SabqTheme.colors.primaryEnd,
-                    modifier = Modifier.size(10.dp),
+                    modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
         }
@@ -2275,36 +2290,52 @@ private fun TopToolbar(
         // visually inconsistent with the rest of the app's TopBars
         // and with iOS's `.cancellationAction` placement. Reported
         // 2026-05-24.
-        ToolbarIcon(
-            icon = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = "رجوع",
-            tint = SabqTheme.colors.ink,
-            onClick = onBack,
-        )
+        // iOS: زر الرجوع دائرة زجاجية مستقلة، والإجراءات الثلاثة في كبسولة
+        // واحدة على الطرف الآخر (يمينًا لليسار: حفظ، مشاركة، إعجاب).
+        val glass = SabqTheme.colors.surface.copy(alpha = 0.92f)
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .sabqNewsSurface(CircleShape)
+                .background(glass, CircleShape)
+                .clickable { onBack() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = "رجوع",
+                tint = SabqTheme.colors.ink,
+                modifier = Modifier.size(28.dp),
+            )
+        }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Actions cluster on the trailing edge (visual LEFT in RTL).
-        // Code order is Like → Bookmark → Share to match iOS layering
-        // (Like is the inner-most icon next to the article body).
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ToolbarIcon(
-                icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = if (isLiked) "إلغاء الإعجاب" else "إعجاب",
-                tint = if (isLiked) Color(0xFFF24D5C) else SabqTheme.colors.secondaryInk,
-                onClick = if (isLikeBusy) ({}) else onLike,
-            )
+        val capsule = RoundedCornerShape(50)
+        Row(
+            modifier = Modifier
+                .sabqNewsSurface(capsule)
+                .background(glass, capsule)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             ToolbarIcon(
                 icon = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                 contentDescription = if (isBookmarked) "إزالة الحفظ" else "حفظ",
-                tint = if (isBookmarked) SabqTheme.colors.primaryEnd else SabqTheme.colors.secondaryInk,
+                tint = SabqTheme.colors.primaryEnd,
                 onClick = onBookmark,
             )
             ToolbarIcon(
-                icon = Icons.Filled.Share,
+                icon = Icons.Outlined.IosShare,
                 contentDescription = "مشاركة",
-                tint = SabqTheme.colors.secondaryInk,
+                tint = SabqTheme.colors.primaryEnd,
                 onClick = onShare,
+            )
+            ToolbarIcon(
+                icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = if (isLiked) "إلغاء الإعجاب" else "إعجاب",
+                tint = if (isLiked) SabqTheme.colors.breaking else SabqTheme.colors.ink,
+                onClick = if (isLikeBusy) ({}) else onLike,
             )
         }
     }
@@ -2319,9 +2350,8 @@ private fun ToolbarIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(44.dp)
             .clip(CircleShape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.85f), CircleShape)
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
@@ -2329,7 +2359,7 @@ private fun ToolbarIcon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.size(14.dp),
+            modifier = Modifier.size(22.dp),
         )
     }
 }
