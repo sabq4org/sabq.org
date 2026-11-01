@@ -59,18 +59,24 @@ struct MomentByMomentView: View {
                     VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                if index > 0 {
-                                    SidebarRowDivider()
+                                // One lazy child per article, including its divider.
+                                // Separate children destabilize height estimates near
+                                // the end of the feed and when another page is appended.
+                                VStack(alignment: .leading, spacing: 0) {
+                                    if index > 0 {
+                                        SidebarRowDivider()
+                                    }
+                                    let article = articleFromUpdate(item)
+                                    NavigationLink(value: article) {
+                                        CompactArticleRow(
+                                            article: article,
+                                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                            isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("moments.article.\(item.id)")
                                 }
-                                let article = articleFromUpdate(item)
-                                NavigationLink(value: article) {
-                                    CompactArticleRow(
-                                        article: article,
-                                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                        isBookmarked: bookmarksStore.isBookmarked(article.id)
-                                    )
-                                }
-                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, SabqLayout.space12)
@@ -101,6 +107,7 @@ struct MomentByMomentView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(isLoadingMore)
+                            .accessibilityIdentifier("moments.loadMore")
                         }
                     }
                 }
@@ -110,6 +117,7 @@ struct MomentByMomentView: View {
             .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityIdentifier("moments.feed")
         .refreshable {
             SabqHaptics.medium()
             await reload()
@@ -159,6 +167,7 @@ struct MomentByMomentView: View {
                         .foregroundStyle(SabqTheme.textTertiary)
                 }
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("moments.count")
                 Text("أحدث الأخبار لحظة بلحظة")
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
