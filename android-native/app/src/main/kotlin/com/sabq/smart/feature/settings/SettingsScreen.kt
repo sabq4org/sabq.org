@@ -1,5 +1,9 @@
 package com.sabq.smart.feature.settings
 
+import com.sabq.smart.ui.components.sabqNewsSurface
+
+import androidx.compose.material.icons.filled.Diamond
+
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -773,64 +777,11 @@ private fun SubmissionCard(
     title: String,
     subtitle: String,
     icon: ImageVector,
-    tint: Color,
+    @Suppress("UNUSED_PARAMETER") tint: Color,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(tint.copy(alpha = 0.05f), shape)
-            .border(BorderStroke(0.5.dp, tint.copy(alpha = 0.20f)), shape)
-            .clickable { onClick() }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(tint.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Text(
-                text = title,
-                style = SabqTheme.typography.cardTitle.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
-            Text(
-                text = subtitle,
-                style = SabqTheme.typography.metaSmall.copy(
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SabqTheme.colors.secondaryInk,
-                ),
-                maxLines = 2,
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = null,
-            tint = SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(13.dp),
-        )
-    }
+    // داخل بطاقة الملف: صف بلا خلفية ملوّنة، أيقونة زرقاء فقط (هوية «مكتب سبق»).
+    ProfileEntryContent(title = title, subtitle = subtitle, icon = icon, onClick = onClick)
 }
 
 @Composable
@@ -1079,62 +1030,57 @@ private fun ProfileCompletionCTA(
 @Composable
 private fun DashboardEntryRow(
     title: String = "لوحة الكاتب",
-    subtitle: String = "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
+    subtitle: String = "خطوتك التالية، ومقالاتي، وأدائي",
     icon: ImageVector = Icons.Filled.BarChart,
     onClick: () -> Unit,
 ) {
-    val accentGreen = Color(red = 0.30f, green = 0.69f, blue = 0.31f)
+    ProfileEntryRow(title = title, subtitle = subtitle, icon = icon, onClick = onClick)
+}
+
+/** مدخل على سطح أبيض بظل خفيف — صفوف «حسابي» بنمط iOS. */
+@Composable
+private fun ProfileEntryRow(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .sabqNewsSurface(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .padding(horizontal = 16.dp),
+    ) {
+        ProfileEntryContent(title = title, subtitle = subtitle, icon = icon, onClick = onClick)
+    }
+}
+
+/** محتوى الصف: مربع أيقونة أزرق هادئ، العنوان والوصف، وسهم يشير لليسار. */
+@Composable
+private fun ProfileEntryContent(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
-            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
             .clickable { onClick() }
-            .padding(14.dp),
+            .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(accentGreen.copy(alpha = 0.14f)),
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = accentGreen,
-                modifier = Modifier.size(19.dp),
-            )
+            Icon(imageVector = icon, contentDescription = null, tint = SabqTheme.colors.primaryEnd, modifier = Modifier.size(18.dp))
         }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = title,
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
-            Text(
-                text = subtitle,
-                style = SabqTheme.typography.metaSmall.copy(
-                    fontSize = 12.sp,
-                    color = SabqTheme.colors.secondaryInk,
-                ),
-            )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = SabqTheme.typography.compactCardTitle.copy(fontWeight = FontWeight.SemiBold), color = SabqTheme.colors.ink)
+            Text(subtitle, style = SabqTheme.typography.meta, color = SabqTheme.colors.secondaryInk, maxLines = 2)
         }
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
-            tint = SabqTheme.colors.secondaryInk,
-            modifier = Modifier.size(13.dp),
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -1143,181 +1089,19 @@ private fun DashboardEntryRow(
 
 @Composable
 private fun LoyaltyEntryRow(onClick: () -> Unit) {
-    val trophyGold = Color(red = 0.96f, green = 0.62f, blue = 0.04f)
-    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
-            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
-            .clickable { onClick() }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(trophyGold.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.EmojiEvents,
-                contentDescription = null,
-                tint = trophyGold,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "نقاطي والمكافآت",
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
-            Text(
-                text = "تابع مستواك واستبدل نقاطك",
-                style = SabqTheme.typography.metaSmall.copy(
-                    fontSize = 12.sp,
-                    color = SabqTheme.colors.secondaryInk,
-                ),
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = null,
-            tint = SabqTheme.colors.secondaryInk,
-            modifier = Modifier.size(13.dp),
-        )
-    }
+    ProfileEntryRow(title = "نقاطي والمكافآت", subtitle = "تابع مستواك واستبدل نقاطك", icon = Icons.Filled.EmojiEvents, onClick = onClick)
 }
 
-// مدخل البطاقة الصحفية — نفس بنية LoyaltyEntryRow؛ التصريح يحسمه الخادم
 @Composable
 private fun PressCardEntryRow(onClick: () -> Unit) {
-    val pressBlue = Color(red = 0.11f, green = 0.64f, blue = 0.94f)
-    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
-            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
-            .clickable { onClick() }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(pressBlue.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Badge,
-                contentDescription = null,
-                tint = pressBlue,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "بطاقتي الصحفية",
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
-            Text(
-                text = "أصدر بطاقتك الرسمية من سبق",
-                style = SabqTheme.typography.metaSmall.copy(
-                    fontSize = 12.sp,
-                    color = SabqTheme.colors.secondaryInk,
-                ),
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = null,
-            tint = SabqTheme.colors.secondaryInk,
-            modifier = Modifier.size(13.dp),
-        )
-    }
+    ProfileEntryRow(title = "بطاقتي الصحفية", subtitle = "أصدر بطاقتك الرسمية من سبق", icon = Icons.Filled.Badge, onClick = onClick)
 }
 
-// مدخل «سبق بلس» — معاينة داخلية، بوابته isPlatformAdmin
 @Composable
 private fun SabqPlusEntryRow(onClick: () -> Unit) {
-    val plusNavy = Color(red = 0.09f, green = 0.58f, blue = 0.91f)
-    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
-            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
-            .clickable { onClick() }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(plusNavy.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Stars,
-                contentDescription = null,
-                tint = plusNavy,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "سبق بلس (معاينة)",
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
-            Text(
-                text = "معاينة داخلية — نقاطك بالريال وقسائم الشركاء",
-                style = SabqTheme.typography.metaSmall.copy(
-                    fontSize = 12.sp,
-                    color = SabqTheme.colors.secondaryInk,
-                ),
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = null,
-            tint = SabqTheme.colors.secondaryInk,
-            modifier = Modifier.size(13.dp),
-        )
-    }
+    ProfileEntryRow(title = "سبق بلس (معاينة)", subtitle = "معاينة داخلية — نقاطك بالريال وقسائم الشركاء", icon = Icons.Filled.Diamond, onClick = onClick)
 }
 
-// بطاقة «مقالات تنتظر التعديل» — شارة عددية كهرمانية، تظهر عند count > 0
 @Composable
 private fun RevisionsBadgeCard(count: Int, onClick: () -> Unit) {
     val amber = Color(0xFFF29E33)
@@ -1394,59 +1178,7 @@ private fun RevisionsBadgeCard(count: Int, onClick: () -> Unit) {
 // مدخل مركز التوقّعات — نفس بنية LoyaltyEntryRow
 @Composable
 private fun PredictionsEntryRow(onClick: () -> Unit) {
-    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
-            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
-            .clickable { onClick() }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(SabqTheme.colors.primaryStart.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.SportsSoccer,
-                contentDescription = null,
-                tint = SabqTheme.colors.primaryStart,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "توقّعات البطولات",
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
-            Text(
-                text = "توقّع نتائج المباريات وتنافس على النقاط والجوائز",
-                style = SabqTheme.typography.metaSmall.copy(
-                    fontSize = 12.sp,
-                    color = SabqTheme.colors.secondaryInk,
-                ),
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = null,
-            tint = SabqTheme.colors.secondaryInk,
-            modifier = Modifier.size(13.dp),
-        )
-    }
+    ProfileEntryRow(title = "توقّعات البطولات", subtitle = "توقّع نتائج المباريات وتنافس على النقاط والجوائز", icon = Icons.Filled.SportsSoccer, onClick = onClick)
 }
 
 // MARK: - Display
