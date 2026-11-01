@@ -354,7 +354,18 @@ private fun LoadedFeed(
 
         // «نشرة سَبْق» الصوتية — شريط مدمج أعلى الرئيسية يظهر فقط عند توفر
         // نشرة معتمدة (iOS HomeFeedView.swift:171 AudioBulletinBar).
-        sectionItem(key = "audio-bulletin") { com.sabq.smart.feature.audio.AudioBulletinSection() }
+        // بلا نشرة معتمدة نسقط إلى آخر نشرة صوتية سابقة كما في iOS
+        // (HomeFeedView.swift: compactLegacyNewsletterTopBar)، فتبقى قائمة
+        // «النشرات الصوتية» قابلة للوصول من الرئيسية.
+        sectionItem(key = "audio-bulletin") {
+            com.sabq.smart.feature.audio.AudioBulletinSection(
+                fallback = {
+                    state.audioNewsletter?.let { newsletter ->
+                        AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick)
+                    }
+                },
+            )
+        }
 
         // عاجل — الشريط الوحيد المسموح فوق الهيرو (iOS HomeFeedView.swift:
         // 157-164): شريط لوحة التحكم الدوّار أولًا، وعند غيابه نسقط
@@ -403,8 +414,8 @@ private fun LoadedFeed(
         if (state.featured.isNotEmpty()) {
             sectionItem {
                 FeaturedCarousel(
-                    // iOS heroArticles: أول ثلاث بارزة.
-                    articles = state.featured.take(3),
+                    // أول ثلاث بارزة (HomeHero.shown).
+                    articles = state.featured,
                     bookmarkedIds = state.bookmarkedIds,
                     onBookmark = onBookmark,
                     onClick = onArticleClick,
@@ -1713,16 +1724,15 @@ private fun AudioNewsletterCard(
     newsletter: com.sabq.smart.data.AudioNewsletter,
     onClick: () -> Unit,
 ) {
-    val coral = SabqTheme.colors.coral
+    // شريط مدمج على سطح الرئيسية الأبيض — نظير compactLegacyNewsletterTopBar في iOS.
+    val coral = SabqTheme.colors.primaryEnd
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionRow(title = "النشرات الصوتية", icon = Icons.Filled.GraphicEq, tint = coral)
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.tileRadius)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
+                .sabqNewsSurface(shape)
                 .background(SabqTheme.colors.surface, shape)
-                .border(width = 0.5.dp, color = coral.copy(alpha = 0.18f), shape = shape)
                 .clickable { onClick() }
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1730,19 +1740,15 @@ private fun AudioNewsletterCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(54.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                    .background(
-                        androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(coral.copy(alpha = 0.30f), SabqTheme.colors.primaryEnd.copy(alpha = 0.18f)),
-                        ),
-                    ),
+                    .size(44.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .background(SabqTheme.colors.softFill),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(
                     imageVector = Icons.Filled.GraphicEq,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
+                    tint = coral,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -1752,11 +1758,8 @@ private fun AudioNewsletterCard(
             ) {
                 Text(
                     text = newsletter.title,
-                    style = SabqTheme.typography.cardTitle.copy(
-                        fontSize = 14.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                        color = SabqTheme.colors.ink,
-                    ),
+                    style = SabqTheme.typography.compactCardTitle,
+                    color = SabqTheme.colors.ink,
                     maxLines = 2,
                 )
                 newsletter.durationSeconds?.let { sec ->
