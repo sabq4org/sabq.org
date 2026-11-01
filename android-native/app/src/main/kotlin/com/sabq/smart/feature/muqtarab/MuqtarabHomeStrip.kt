@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.Icon
@@ -40,7 +41,7 @@ fun MuqtarabHomeStrip(
 
     ArticleSidebarModule(
         title = "مُقترب",
-        description = "زوايا كتّاب سبق — رأي يقترب من الحدث",
+        description = "زوايا كتّاب سبق",
         icon = Icons.Filled.Layers,
         fill = SabqTheme.colors.surface,
         action = {
@@ -49,9 +50,9 @@ fun MuqtarabHomeStrip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("كل الزوايا", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = SabqTheme.colors.primaryEnd)
+                Text("كل الزوايا", style = SabqTheme.typography.statusChip, color = SabqTheme.colors.primaryEnd)
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = SabqTheme.colors.primaryEnd,
                     modifier = Modifier.size(12.dp),
@@ -67,7 +68,7 @@ fun MuqtarabHomeStrip(
                 // الموضوع بلا صورة يعرض صورة الكاتب داخل الإطار نفسه (ملاحظة المالك: «الصور لا تظهر»)
                 imageUrl = muqAbsolutize(topic.heroImageUrl) ?: writerAvatar,
                 byline = topic.writer?.name?.takeIf { it.isNotBlank() } ?: topic.angle?.name,
-                bylineAvatarUrl = writerAvatar,
+                // iOS MuqtarabHomeRow: اسم الكاتب بلا صورة صغيرة؛ صورته في الإطار عند غياب صورة الموضوع.
                 date = formatRelativeDate(parseDate(topic.publishedAt)).takeIf { it.isNotBlank() },
                 placeholderIcon = Icons.Filled.Layers,
                 onClick = { onTopicClick(topic.angle!!.slug!!, topic.slug) },

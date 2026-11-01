@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -1283,7 +1284,7 @@ private fun HomeSectionLink(title: String = "عرض الكل", onClick: () -> Un
     ) {
         Text(text = title, style = SabqTheme.typography.statusChip, color = SabqTheme.colors.primaryEnd)
         androidx.compose.material3.Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = SabqTheme.colors.primaryEnd,
             modifier = Modifier.size(12.dp),
@@ -1363,7 +1364,7 @@ private fun OpinionMiniTile(opinion: Article, onClick: () -> Unit) {
 
 @Composable
 private fun OpinionListRow(opinion: Article, onClick: () -> Unit) {
-    // iOS OpinionWriterRow: صورة 52، ثم «الاسم · الوقت» ثم العنوان في سطرين.
+    // «الاسم · الوقت» ثم العنوان في سطرين، وصورة الكاتب 52 على الطرف الآخر.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1372,7 +1373,6 @@ private fun OpinionListRow(opinion: Article, onClick: () -> Unit) {
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        OpinionAuthorAvatar(opinion = opinion, size = 52.dp)
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -1403,6 +1403,8 @@ private fun OpinionListRow(opinion: Article, onClick: () -> Unit) {
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
+        // صورة الكاتب يسارًا — ملاحظة المالك 2026-11-01.
+        OpinionAuthorAvatar(opinion = opinion, size = 52.dp)
     }
 }
 
