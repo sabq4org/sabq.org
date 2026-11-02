@@ -13,6 +13,7 @@
 import { randomUUID } from "crypto";
 import { and, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db";
+import { draftLockMessageFor } from "./draftLockService";
 import { articleEditLocks, articles, categories, systemSettings, users, type Article } from "@shared/schema";
 import {
   STAFF_APP_BUNDLE_ID,
@@ -151,6 +152,8 @@ export async function startOpinionPrep(input: {
   if (stripHtmlToText(article.content || "").length < MIN_TEXT_CHARS) {
     throw new StaffOpinionDeskError(409, "conflict", "نص المقال قصير جداً للتجهيز");
   }
+  const draftLock = await draftLockMessageFor(article.id, input.actorId);
+  if (draftLock) throw new StaffOpinionDeskError(409, "conflict", draftLock);
   const holder = await lockHeldByOther(article.id, input.actorId);
   if (holder) {
     throw new StaffOpinionDeskError(409, "conflict", `المقال مفتوح للتحرير عند ${holder} الآن`);

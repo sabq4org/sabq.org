@@ -7183,7 +7183,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/admin/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
       const { search, status, articleType, categoryId, authorId, featured, includeAI, page = '1', limit = '30' } = req.query;
-      
       // Auto-filter for reporters: they should only see their own articles
       // The permission middleware has already populated the effective RBAC cache.
       // Reuse it instead of querying users/roles/permissions again on every list load.
@@ -7246,6 +7245,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (featured !== undefined) {
         whereConditions.push(eq(articles.isFeatured, featured === "true"));
       }
+      if (req.query.draftLocked === "true") whereConditions.push(isNotNull(articles.draftLockedBy), eq(articles.status, "draft")); // «قفل المسودات»
 
       // IMPORTANT: Include AI articles by default in admin panel
       const shouldIncludeAI = includeAI !== 'false'; // Only exclude if explicitly set to 'false'

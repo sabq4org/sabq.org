@@ -10,6 +10,7 @@
 
 import crypto from "node:crypto";
 import { and, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { draftLockBlocksUser, draftLockedMessage } from "@shared/draftLock";
 import { db } from "../db";
 import { articleEditLocks, articlePublishOperations, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
@@ -951,7 +952,19 @@ async function findBotArticle(articleId: string, bot?: BotIdentity): Promise<Art
   return row ?? null;
 }
 
-async function findActiveEditLock(articleId: string): Promise<{ userName: string; expiresAt: Date } | null> {
+/**
+ * قفل يمنع البوت: قفل التحرير المؤقت لأي محرر، أو «قفل المسودات» الدائم
+ * إلا إن كان صاحب القفل هو صاحب التوكن الشخصي نفسه.
+ */
+async function findActiveEditLock(
+  articleId: string,
+  bot?: BotIdentity,
+  row?: Pick<ArticleRow, "status" | "draftLockedBy" | "draftLockedByName"> | null,
+): Promise<{ userName: string; expiresAt: Date | null; draftLock?: true } | null> {
+  // «قفل المسودات»: من صف المادة المحمّل أصلًا، فلا استعلام إضافي
+  if (row && draftLockBlocksUser(row, bot?.personal?.userId)) {
+    return { userName: row.draftLockedByName || "محرر", expiresAt: null, draftLock: true };
+  }
   const [lock] = await db
     .select({ userName: articleEditLocks.userName, expiresAt: articleEditLocks.expiresAt })
     .from(articleEditLocks)
@@ -1359,7 +1372,7 @@ export async function updateBotDraft(
       );
     }
   }
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
   const category = await resolveCategory(input);
   if (existing.status === "published") {
     return updatePublishedArticle(bot, existing, input, ctx, category, guard);
@@ -1594,7 +1607,7 @@ export async function regenerateBotDraftExtras(
     );
   }
   // قبل نداء الذكاء: لا ندفع كلفة توليد لن يُحفظ.
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
 
   const content = existing.content ?? "";
   if (plainTextOf(content).length < BOT_DRAFT_EXTRAS_MIN_CONTENT_CHARS) {
@@ -1683,13 +1696,8 @@ export async function markBotDraftReady(
       status: existing.status,
     });
   }
-  const lock = await findActiveEditLock(articleId);
-  if (lock) {
-    throw new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن — أعد المحاولة لاحقاً", {
-      editor: lock.userName,
-      lockExpiresAt: lock.expiresAt.toISOString(),
-    });
-  }
+  const lock = await findActiveEditLock(articleId, bot, existing);
+  if (lock) throw editLockError(lock);
 
   const [row] = await db
     .update(articles)
@@ -1723,13 +1731,26 @@ function throwIfNotReleasable(row: ArticleRow | null): asserts row is ArticleRow
   }
 }
 
-async function throwIfEditLocked(articleId: string): Promise<void> {
-  const lock = await findActiveEditLock(articleId);
-  if (!lock) return;
-  throw new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن — أعد المحاولة لاحقاً", {
+function editLockError(lock: { userName: string; expiresAt: Date | null; draftLock?: true }): BotDraftError {
+  if (lock.draftLock) {
+    return new BotDraftError(409, "locked_by_editor", draftLockedMessage(lock.userName), {
+      editor: lock.userName,
+      draftLock: true,
+    });
+  }
+  return new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن — أعد المحاولة لاحقاً", {
     editor: lock.userName,
-    lockExpiresAt: lock.expiresAt.toISOString(),
+    lockExpiresAt: lock.expiresAt?.toISOString() ?? null,
   });
+}
+
+async function throwIfEditLocked(
+  articleId: string,
+  bot?: BotIdentity,
+  row?: Pick<ArticleRow, "status" | "draftLockedBy" | "draftLockedByName"> | null,
+): Promise<void> {
+  const lock = await findActiveEditLock(articleId, bot, row);
+  if (lock) throw editLockError(lock);
 }
 
 /**
@@ -1809,7 +1830,7 @@ export async function publishBotDraft(
   let transactionCommitted = false;
   try {
   throwIfNotReleasable(existing);
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
   await assertBotDraftBylineMayPublish(bot, existing);
   const now = new Date();
   let row: ArticleRow;
@@ -1841,7 +1862,7 @@ export async function publishBotDraft(
     if (!lockedArticle) {
       throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
     }
-    await throwIfEditLocked(articleId);
+    await throwIfEditLocked(articleId, bot, lockedArticle);
     await assertBotDraftBylineMayPublish(bot, lockedArticle);
     // Check only the writes this operation will perform, after the row lock.
     // This preserves legacy calls before the receipt migration.
@@ -1976,7 +1997,7 @@ export async function scheduleBotDraft(
 
   const existing = await findBotArticle(articleId, bot);
   throwIfNotReleasable(existing);
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
   await assertBotDraftBylineMayPublish(bot, existing);
 
   const now = new Date();
@@ -2031,7 +2052,7 @@ export async function archiveBotDraft(
   const existing = await findBotArticle(articleId, bot);
   const archivable = bot.personal && existing && ["draft", "ready_to_publish", "scheduled", "published"].includes(existing.status);
   if (!archivable) throwLifecycleBlock(botDraftPublishedBlock(existing));
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
 
   const now = new Date();
   const patch = buildBotDraftArchiveUpdate(now, input.reason);
@@ -2086,7 +2107,7 @@ export async function rescheduleBotDraft(
 
   const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftScheduledBlock(existing));
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
   await assertBotDraftBylineMayPublish(bot, existing!);
 
   const now = new Date();
@@ -2133,7 +2154,7 @@ export async function unscheduleBotDraft(
   assertPersonalCapability(bot, "cancelSchedule");
   const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftScheduledBlock(existing));
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
 
   const now = new Date();
   const patch = buildBotDraftUnscheduleUpdate(now);
@@ -2179,7 +2200,7 @@ export async function updateBotDraftVisibility(
   if (input.hideFromHomepage !== undefined) assertPersonalCapability(bot, input.hideFromHomepage ? "hide" : "show");
   const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftPublishedBlock(existing));
-  await throwIfEditLocked(articleId);
+  await throwIfEditLocked(articleId, bot, existing);
 
   const now = new Date();
   const patch = buildBotDraftVisibilityUpdate(input, now);

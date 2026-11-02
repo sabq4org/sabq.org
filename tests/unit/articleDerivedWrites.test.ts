@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ setArgs: [] as unknown[], lockRows: [] as Array<{ user_name?: string }> }));
+const state = vi.hoisted(() => ({
+  setArgs: [] as unknown[],
+  draftRows: [] as Array<{ draft_locked_by_name?: string | null }>,
+  lockRows: [] as Array<{ user_name?: string }>,
+  calls: 0,
+}));
 vi.mock("../../server/db", () => ({
   db: {
     update: () => ({ set: (fields: unknown) => { state.setArgs.push(fields); return { where: async () => undefined }; } }),
-    execute: async () => ({ rows: state.lockRows }),
+    // أول استعلام: قفل المسودة، والثاني: قفل التحرير المؤقت
+    execute: async () => ({ rows: state.calls++ === 0 ? state.draftRows : state.lockRows }),
   },
 }));
 vi.mock("../../server/services/imageOptimizationService", () => ({ generateLiteOptimizedImage: async () => "https://lite.example/a.webp" }));
@@ -12,7 +18,7 @@ vi.mock("../../server/services/imageOptimizationService", () => ({ generateLiteO
 import { articleWriteConflict, refreshArticleLiteImage, setArticleDerivedFields } from "../../server/services/articleDerivedWrites";
 
 describe("article derived writes keep the editor's save version", () => {
-  beforeEach(() => { state.setArgs = []; state.lockRows = []; });
+  beforeEach(() => { state.setArgs = []; state.lockRows = []; state.draftRows = []; state.calls = 0; });
 
   it("writes only the derived columns, never updatedAt", async () => {
     await setArticleDerivedFields("a", { aiBullets: ["x"], aiBulletsGeneratedAt: new Date() });
@@ -31,6 +37,14 @@ describe("article derived writes keep the editor's save version", () => {
     state.lockRows = [{ user_name: "سارة" }];
     expect(await articleWriteConflict("a", "me")).toMatchObject({ code: "ARTICLE_LOCKED" });
     state.lockRows = [];
+    state.calls = 0;
     expect(await articleWriteConflict("a", "me")).toMatchObject({ code: "ARTICLE_VERSION_CONFLICT" });
+  });
+
+  it("names a colleague's draft lock first", async () => {
+    state.draftRows = [{ draft_locked_by_name: "خالد" }];
+    const conflict = await articleWriteConflict("a", "me");
+    expect(conflict).toMatchObject({ code: "ARTICLE_LOCKED", draftLock: true });
+    expect(conflict.message).toContain("خالد");
   });
 });

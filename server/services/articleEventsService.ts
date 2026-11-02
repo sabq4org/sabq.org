@@ -4,7 +4,7 @@ import { eq, desc } from 'drizzle-orm';
 
 interface LogArticleEventParams {
   articleId: string;
-  eventType: 'created' | 'updated' | 'published' | 'unpublished' | 'archived' | 'deleted' | 'restored' | 'approved' | 'rejected';
+  eventType: 'created' | 'updated' | 'published' | 'unpublished' | 'archived' | 'deleted' | 'restored' | 'approved' | 'rejected' | 'draft_locked' | 'draft_unlocked';
   actorId?: string | null;
   summary: string;
   metadata?: Record<string, any>;

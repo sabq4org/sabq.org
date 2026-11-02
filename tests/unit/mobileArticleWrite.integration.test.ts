@@ -30,8 +30,8 @@ describe.skipIf(!url)("mobile article write guards", () => {
     await client.query("BEGIN");
     await client.query("CREATE TEMP TABLE article_edit_locks(article_id varchar, user_id varchar, user_name text, expires_at timestamp)");
     await client.query(`CREATE TEMP TABLE articles (id varchar PRIMARY KEY, title text, status text, review_status text,
-      updated_at timestamp NOT NULL)`);
-    await client.query(`INSERT INTO articles VALUES ('a', 'original', 'draft', 'needs_changes', '2026-10-31T09:00:00.123456')`);
+      updated_at timestamp NOT NULL, draft_locked_by varchar)`);
+    await client.query(`INSERT INTO articles (id, title, status, review_status, updated_at) VALUES ('a', 'original', 'draft', 'needs_changes', '2026-10-31T09:00:00.123456')`);
   });
   afterEach(async () => {
     await client.query("ROLLBACK");

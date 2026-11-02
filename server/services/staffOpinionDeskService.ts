@@ -4,6 +4,8 @@
 // ونفس إشعارات /api/dashboard/opinion/:id/publish و request-revision.
 import { and, desc, eq, gte, inArray, lt, ne, or } from "drizzle-orm";
 import { db } from "../db";
+import { draftLockMessageFor } from "./draftLockService";
+import { draftLockAllowsWriter } from "./articleWriteVersion";
 import { articles, categories, opinionWriterSchedules, users } from "@shared/schema";
 import {
   resolveStaffOpinionArticleStatus,
@@ -357,6 +359,12 @@ export async function checkOpinionSlotClashes(
 
 export type StaffOpinionScheduleRequest = { mode: "fixed_slot" } | { scheduledAt: string };
 
+/** «قفل المسودات»: مسودة مقفلة عند زميل لا تُجدول ولا تُنشر ولا تُعاد من المكتب. */
+async function assertNoDraftLock(articleId: string, actorId: string): Promise<void> {
+  const message = await draftLockMessageFor(articleId, actorId);
+  if (message) throw new StaffOpinionDeskError(409, "conflict", message);
+}
+
 export async function scheduleOpinionFromDesk(input: {
   articleId: string;
   actorId: string;
@@ -368,6 +376,7 @@ export async function scheduleOpinionFromDesk(input: {
   warnings: StaffOpinionWarning[];
 }> {
   const existing = await loadOpinionArticle(input.articleId);
+  await assertNoDraftLock(existing.id, input.actorId);
   let scheduledAt: Date;
   if ("mode" in input.request) {
     if (!existing.authorId) {
@@ -441,6 +450,7 @@ export async function publishOpinionFromDesk(input: {
   if (existing.status === "published") {
     throw new StaffOpinionDeskError(409, "conflict", "هذا المقال منشور بالفعل");
   }
+  await assertNoDraftLock(existing.id, input.actorId);
   const status = resolveStaffOpinionArticleStatus(existing);
   if (status !== "new_draft" && status !== "in_prep" && status !== "scheduled") {
     throw new StaffOpinionDeskError(409, "conflict", "هذا المقال لم يعد بانتظار المكتب");
@@ -457,7 +467,7 @@ export async function publishOpinionFromDesk(input: {
       reviewedAt: now,
       updatedAt: now,
     })
-    .where(and(eq(articles.id, existing.id), ne(articles.status, "published")))
+    .where(and(eq(articles.id, existing.id), ne(articles.status, "published"), draftLockAllowsWriter(input.actorId)))
     .returning();
   if (!updated) {
     throw new StaffOpinionDeskError(409, "conflict", "هذا المقال منشور بالفعل");
@@ -529,6 +539,7 @@ export async function returnOpinionToWriterFromDesk(input: {
   if (existing.status === "published") {
     throw new StaffOpinionDeskError(409, "conflict", "لا يمكن إعادة مقال منشور إلى الكاتب");
   }
+  await assertNoDraftLock(existing.id, input.actorId);
   const now = new Date();
   const [updated] = await db
     .update(articles)
@@ -540,7 +551,7 @@ export async function returnOpinionToWriterFromDesk(input: {
       status: "draft",
       updatedAt: now,
     })
-    .where(and(eq(articles.id, existing.id), ne(articles.status, "published")))
+    .where(and(eq(articles.id, existing.id), ne(articles.status, "published"), draftLockAllowsWriter(input.actorId)))
     .returning();
   if (!updated) {
     throw new StaffOpinionDeskError(409, "conflict", "لا يمكن إعادة مقال منشور إلى الكاتب");

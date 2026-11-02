@@ -30,6 +30,8 @@ interface UseArticleEditLockArgs {
   /** Current user — lock acquisition waits for auth to resolve. */
   user: unknown;
   isUserLoading: boolean;
+  /** «قفل المسودات»: مسودة مقفلة عند زميل تُقرأ فقط، فلا يُطلب قفل تحرير. */
+  skipAcquire?: boolean;
 }
 
 // إعادة فحص القفل كل 20 ثانية ما دامت المقالة مقفلة من زميل
@@ -40,6 +42,7 @@ export function useArticleEditLock({
   isNewArticle,
   user,
   isUserLoading,
+  skipAcquire = false,
 }: UseArticleEditLockArgs) {
   const { toast } = useToast();
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
@@ -197,6 +200,9 @@ export function useArticleEditLock({
     // Need user to be logged in
     if (!user) return;
 
+    // مسودة مقفلة عند زميل: قراءة فقط
+    if (skipAcquire) return;
+
     // Process initial lock status once it's loaded
     if (initialLockStatus !== undefined) {
       if (initialLockStatus.locked && !initialLockStatus.isOwner) {
@@ -218,7 +224,7 @@ export function useArticleEditLock({
       }
     }
     // deps preserved verbatim from the original inline effect
-  }, [isNewArticle, id, user, isUserLoading, initialLockStatus]);
+  }, [isNewArticle, id, user, isUserLoading, initialLockStatus, skipAcquire]);
 
   // Setup heartbeat interval (every 45 seconds)
   useEffect(() => {

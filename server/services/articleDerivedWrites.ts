@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles } from "@shared/schema";
 import { generateLiteOptimizedImage } from "./imageOptimizationService";
+import { draftLockedMessage } from "@shared/draftLock";
 
 /**
  * Write derived/cache columns (lite image, parsed bullets…) WITHOUT bumping updatedAt.
@@ -30,7 +31,13 @@ export async function refreshArticleLiteImage(articleId: string, imageUrl: strin
 }
 
 /** 409 body for a rejected guarded write: another user's live lock, else a real version change. */
-export async function articleWriteConflict(articleId: string, userId: string) {
+export async function articleWriteConflict(articleId: string, userId: string): Promise<{ code: string; message: string; draftLock?: true }> {
+  const draft = await db.execute(sql`select draft_locked_by_name from articles
+    where id = ${articleId} and status = 'draft' and draft_locked_by is not null and draft_locked_by <> ${userId} limit 1`);
+  const draftRow = (draft as unknown as { rows?: Array<{ draft_locked_by_name?: string | null }> }).rows?.[0];
+  if (draftRow) {
+    return { code: "ARTICLE_LOCKED", message: draftLockedMessage(draftRow.draft_locked_by_name), draftLock: true };
+  }
   const result = await db.execute(sql`select user_name from article_edit_locks
     where article_id = ${articleId} and user_id <> ${userId}
       and expires_at > (clock_timestamp() at time zone 'UTC') limit 1`);

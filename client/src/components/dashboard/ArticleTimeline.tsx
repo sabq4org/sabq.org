@@ -34,6 +34,8 @@ import {
   Archive,
   Undo2,
   History,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 import {
   ARTICLE_IMAGE_SOURCE_LABELS,
@@ -115,7 +117,7 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
 
 const FILTER_EVENT_TYPES: Record<Exclude<FilterKey, "all">, Set<string>> = {
   content: new Set(["created", "updated", "restored"]),
-  status: new Set(["published", "unpublished", "archived", "deleted"]),
+  status: new Set(["published", "unpublished", "archived", "deleted", "draft_locked", "draft_unlocked"]),
   review: new Set(["approved", "rejected"]),
 };
 
@@ -132,6 +134,8 @@ const EVENT_STYLE: Record<
   rejected: { icon: XCircle, label: "رفض", tone: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
   deleted: { icon: Trash, label: "حذف", tone: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
   restored: { icon: RotateCcw, label: "استعادة", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  draft_locked: { icon: Lock, label: "قفل المسودة", tone: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
+  draft_unlocked: { icon: LockOpen, label: "فك القفل", tone: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
 };
 
 function formatDateTime(dateString: string): string {

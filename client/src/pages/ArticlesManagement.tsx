@@ -51,6 +51,8 @@ import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReview
 import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
 import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { cn } from "@/lib/utils";
+import { DraftLockBadge, DraftLockButton, DraftLockFilterChip, useDraftLockSummary } from "@/components/articles/DraftLockControls";
+import { draftLockBlocksUser } from "@shared/draftLock";
 import { EditRequestLabel, EditRequestsFilter, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests } from "@/components/articles/ArticleEditRequests";
 import { articleAcceptsEditRequests, isEditRequestOwner } from "@shared/articleEditRequests";
 import {
@@ -133,6 +135,10 @@ type Article = {
     companyName: string | null;
   } | null;
   authorId?: string | null;
+  draftLockedBy?: string | null;
+  draftLockedByName?: string | null;
+  draftLockedAt?: string | null;
+  draftLockNote?: string | null;
 };
 
 type Category = {
@@ -1111,6 +1117,8 @@ export default function ArticlesManagement() {
   const canViewArticles = user && hasAnyPermission(user, "articles.view", "articles.create", "articles.edit", "articles.edit_any", "articles.edit_own");
   const canCreateArticle = user && hasAnyPermission(user, "articles.create");
   const canEditAny = user && hasAnyPermission(user, "articles.edit", "articles.edit_any");
+  // فك قفل مسودة زميل لمسؤول النظام وحده (صلاحية «*»)، مثل الخادم
+  const isSystemAdmin = !!user?.permissions?.includes("*");
   const canEditOwn = user && hasAnyPermission(user, "articles.edit_own");
   const canDeleteArticle = user && hasAnyPermission(user, "articles.delete");
   const canPublishArticle = user && hasAnyPermission(user, "articles.publish");
@@ -1270,7 +1278,12 @@ export default function ArticlesManagement() {
   }, [user?.id, searchTerm, activeStatus, typeFilter, categoryFilter, currentPage]);
 
   // Fetch articles with filters and pagination
-  const articlesQueryKey = ["/api/admin/articles", user?.id, listParams.search, activeStatus, typeFilter, categoryFilter, currentPage];
+  const [draftLockedOnly, setDraftLockedOnly] = useState(false);
+  const draftLockSummary = useDraftLockSummary(!!canViewArticles);
+  useEffect(() => {
+    if (activeStatus !== "draft") setDraftLockedOnly(false);
+  }, [activeStatus]);
+  const articlesQueryKey = ["/api/admin/articles", user?.id, listParams.search, activeStatus, typeFilter, categoryFilter, currentPage, draftLockedOnly ? "locked" : "all"];
   const { data: articlesData, isLoading: articlesLoading, isFetching: articlesFetching, isPlaceholderData, isError: articlesError, refetch: refetchArticles } = useQuery<ArticlesPage>({
     queryKey: articlesQueryKey,
     queryFn: async ({ signal }) => {
@@ -1281,6 +1294,7 @@ export default function ArticlesManagement() {
       if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
       params.append("page", currentPage.toString());
       params.append("limit", "30");
+      if (draftLockedOnly) params.append("draftLocked", "true");
       
       const url = `/api/admin/articles?${params.toString()}`;
       const response = await fetch(apiUrl(url), { credentials: "include", signal });
@@ -1354,7 +1368,17 @@ export default function ArticlesManagement() {
   const deskList = useMemo(() => buildDeskList(articles, activeStatus, now), [articles, activeStatus, now]);
 
   // نفس أزرار الصف في الموضعين: عمود «الإجراءات» على الديسكتوب، وسطر تحت العنوان على الآيباد.
-  const renderRowActions = (article: Article, wireAlign: "start" | "end") => (
+  const renderRowActions = (article: Article, wireAlign: "start" | "end") => draftLockBlocksUser(article, user?.id) ? (
+    // «قفل المسودات»: لا أزرار على مسودة زميل مقفلة (الخادم يرفض على أي حال)
+    <div className={cn("flex flex-wrap items-center gap-2", wireAlign === "end" ? "justify-end" : "justify-start")} data-testid={`draft-locked-actions-${article.id}`}>
+      <span className="text-xs leading-5 text-amber-900 dark:text-amber-100">لا تعديل ولا نشر ولا حذف حتى يُفك القفل</span>
+      <DraftLockButton article={article} userId={user?.id} canLock={false} isSystemAdmin={isSystemAdmin} />
+    </div>
+  ) : (
+    <div className={cn("flex flex-wrap items-center gap-2", wireAlign === "end" ? "justify-end" : "justify-start")}>
+    {article.status === "draft" && canEditArticle(article) && (
+      <DraftLockButton article={article} userId={user?.id} canLock isSystemAdmin={isSystemAdmin} />
+    )}
     <RowActions
       variant="wire"
       wireAlign={wireAlign}
@@ -1381,6 +1405,7 @@ export default function ArticlesManagement() {
       canTranslate={!!canPublishArticle}
       canSocialPublish={!!canSocialPublish}
     />
+    </div>
   );
   const canSeeWeekBoard = !!user && hasAnyPermission(user, "opinion.review", "articles.schedule");
   const displayedPage = articlesData?.page ?? currentPage;
@@ -1944,7 +1969,19 @@ export default function ArticlesManagement() {
           ) : undefined}
         />
 
-        <EditRequestsFilter pending={editRequests.reviewer ? editRequests.pending : []} onOpen={setReviewRequestId} />
+        <div className="flex flex-wrap items-start gap-2">
+          <EditRequestsFilter pending={editRequests.reviewer ? editRequests.pending : []} onOpen={setReviewRequestId} />
+          <DraftLockFilterChip
+            total={draftLockSummary.data?.total ?? 0}
+            active={draftLockedOnly}
+            onToggle={() => {
+              const next = !draftLockedOnly;
+              setDraftLockedOnly(next);
+              // القفل للمسودات فقط: الشريحة تفتح تبويب «مسودة»
+              setListParams((previous) => ({ ...previous, ...(next ? { status: "draft" as const } : {}), page: 1 }));
+            }}
+          />
+        </div>
 
         {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
@@ -2411,6 +2448,7 @@ export default function ArticlesManagement() {
                                 testId={`banner-review-desktop-${article.id}`}
                               />
                               {renderEditRequestRow(article)}
+                              <DraftLockBadge article={article} userId={user?.id} testId={`draft-lock-badge-desktop-${article.id}`} />
                               {article.status === "draft" && (
                                 <EditorialDraftReviewCue
                                   article={article}
@@ -2513,6 +2551,7 @@ export default function ArticlesManagement() {
                         testId={`banner-review-mobile-${article.id}`}
                       />
                       {renderEditRequestRow(article)}
+                      <DraftLockBadge article={article} userId={user?.id} testId={`draft-lock-badge-mobile-${article.id}`} />
 
                       {article.status === "archived" && (article as any).reviewNotes && (
                         <div
@@ -2573,8 +2612,17 @@ export default function ArticlesManagement() {
                     />
                   </div>
                   
-                  {/* Action Buttons - Permission-based visibility */}
+                  {/* «قفل المسودات»: مسودة زميل مقفلة = بلا أزرار، مع فك القفل لمسؤول النظام */}
+                  {draftLockBlocksUser(article, user?.id) ? (
+                    <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2" data-testid={`draft-locked-actions-mobile-${article.id}`}>
+                      <span className="text-xs text-amber-900 dark:text-amber-100">لا تعديل ولا نشر ولا حذف حتى يُفك القفل</span>
+                      <DraftLockButton article={article} userId={user?.id} canLock={false} isSystemAdmin={isSystemAdmin} />
+                    </div>
+                  ) : (
                   <div className="space-y-1.5 pt-2 border-t border-border/60">
+                    {article.status === "draft" && canEditArticle(article) && (
+                      <DraftLockButton article={article} userId={user?.id} canLock isSystemAdmin={isSystemAdmin} />
+                    )}
                     {/* Primary Action Buttons Grid */}
                     <div className="grid grid-cols-2 gap-1.5">
                       {canEditArticle(article) && (
@@ -2757,6 +2805,7 @@ export default function ArticlesManagement() {
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               ))
             )}
