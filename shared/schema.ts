@@ -3457,6 +3457,8 @@ export const articleIpViews = pgTable("article_ip_views", {
 }, (table) => [
   uniqueIndex("uq_article_ip_views_article_ip").on(table.articleId, table.ipHash),
   index("idx_article_ip_views_article").on(table.articleId),
+  // التنظيف الليلي يحذف بـ last_seen؛ بلا هذا الفهرس كان يمسح 8.7 مليون صف ويسقط بالمهلة.
+  index("idx_article_ip_views_last_seen").on(table.lastSeen),
 ]);
 
 // Pending view increments — hot-path flush never locks `articles` rows.
@@ -13889,7 +13891,7 @@ export const legacyRedirects = pgTable("legacy_redirects", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id),
 }, (table) => [
-  index("idx_legacy_redirects_old_path").on(table.oldPath),
+  // old_path already has a unique index (legacy_redirects_old_path_unique); the plain index was redundant (dropped 2026-11-02).
   index("idx_legacy_redirects_active").on(table.isActive),
 ]);
 
@@ -14572,7 +14574,7 @@ export const articleDailyStats = pgTable("article_daily_stats", {
 }, (table) => [
   uniqueIndex("idx_article_daily_stats_unique").on(table.articleId, table.date),
   index("idx_article_daily_stats_date").on(table.date),
-  index("idx_article_daily_stats_article").on(table.articleId),
+  // (article_id) alone is covered by idx_article_daily_stats_unique (article_id, date); dropped 2026-11-02.
 ]);
 
 export type ArticleDailyStat = typeof articleDailyStats.$inferSelect;

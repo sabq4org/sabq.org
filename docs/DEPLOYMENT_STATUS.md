@@ -1,6 +1,8 @@
 # حالة النشر الحالية — sabq.org
 
-> **آخر تحديث:** 2026-10-21
+> **آخر تحديث:** 2026-11-02
+>
+> **تحديث 2026-11-02 (مراجعة Neon/Cloudflare/Render):** أُضيف قسم «خدمات Render» أدناه بأسماء الخدمات وخططها وثغرات التشغيل المفتوحة بعد الهجرة (TheSports، Twilio، web-next 500، الخروج). أقسام Railway بقيت لبيئة staging فقط.
 >
 > **تحديث 2026-10-21:** انتقل الـ API من Railway إلى **Render** (خدمة `sabq.org`، منطقة Virginia، `sabq-api-virginia.onrender.com`) بعد تعطل نشر Railway. `api.sabq.org` يمر عبر Cloudflare Worker `sabq-api-origin` الذي يوجّه إلى Render، وسجل DNS لـ`api.sabq.org` صار يشير إلى Render. أقسام Railway أدناه تاريخية حتى تُراجع الوثيقة كاملة.
 >
@@ -14,15 +16,16 @@
 |--------|--------|--------|---------|
 | **الواجهة (SPA)** | Cloudflare Pages | `sabq.org` · `www.sabq.org` | `npm run build:client` → `dist/public/` · `functions/_middleware.js` |
 | **الـ API** | Render (Dockerfile، Virginia) — كان Railway حتى 2026-10-21 | `api.sabq.org` | `SERVE_SPA=false` · `DB_DRIVER=pg` |
-| **قاعدة البيانات** | Neon / Postgres | `NEON_DATABASE_URL` إن وُجد، وإلا `DATABASE_URL` على Railway | لا تشغّل `db:push` على prod بدون `./push-to-production.sh` |
-| **Redis** | Upstash (أو Redis مُدار) على Railway | `REDIS_URL` | **مُستخدم في الإنتاج** لتخفيف جلسات Neon — انظر § Redis |
+| **قاعدة البيانات** | Neon / Postgres (مشروع `sabq.org — PRODUCTION`، فرع `production`، compute 2–10 CU) | `NEON_DATABASE_URL` إن وُجد، وإلا `DATABASE_URL` في Environment الخدمة على Render | لا تشغّل `db:push` على prod؛ التغييرات عبر SQL مُراجَع (AGENTS.md § Workflow C) |
+| **Redis** | Upstash عبر `REDIS_URL` في Environment الخدمة على Render | `REDIS_URL` | **مُستخدم في الإنتاج** لتخفيف جلسات Neon — انظر § Redis |
 | **الوسائط** | R2 لصور الأخبار تدريجياً + Cloudflare Images fallback + R2/S3 لبقية الملفات | `media.sabq.org` | راجع [`R2_NEWS_IMAGES_ROLLOUT.md`](R2_NEWS_IMAGES_ROLLOUT.md) |
 
 ```
 المتصفح → Cloudflare Pages (sabq.org)
               ├─ ملفات ثابتة (dist/public)
               ├─ functions/_middleware.js  (proxy /api، SEO، slug-redirect)
-              └─ Railway api.sabq.org       (Express headless)
+              └─ api.sabq.org (Worker sabq-api-origin: كاش حافة + توقيع IP)
+                    └─ Render sabq-api-virginia.onrender.com (Express headless)
 ```
 
 **مراجع تفصيلية:**
@@ -40,6 +43,36 @@
 | **Replit** | legacy — كان الإنتاج الأصلي (عملية واحدة: API + SPA). الكود ما زال يدعم هذا الوضع محلياً عبر `npm run dev` |
 | **Vercel** | مُستبدَل بـ Cloudflare Pages على `sabq.org` (كان وسيطاً قبل Pages) |
 | **`sabq.news`** | تجريبي سابق (Vercel + Railway) — ليس الإنتاج الرسمي |
+| **Railway (production)** | استضاف الـ API من مايو حتى 2026-10-21 ثم تعطل النشر وانتقلت الخدمات إلى Render. بقيت بيئة `staging` المعزولة فقط (انظر القسم أدناه). `railway.json` وملفات `railway*.json` تخدم staging لا الإنتاج |
+
+---
+
+## خدمات Render (الإنتاج منذ 2026-10-21)
+
+Workspace واحد (`sabq@me.com`) في منطقة **Virginia**. كل خدمة تنشر تلقائياً عند أي commit على `main` إلا ما ذُكر. **Build Filters مضبوطة منذ 2026-11-02** (من لوحة Render، لا من ملف في المستودع): الـ API و`newsletter-worker` يُعاد نشرهما عند تغيّر `server/**`، `shared/**`، `package.json`، `package-lock.json`، `Dockerfile`، `.dockerignore`، `tsconfig.json`، `drizzle.config.ts`، `public/**`، `certs/**`، `docs/systems/**`؛ و`web-next` عند `web-next/**`؛ و`meetings-agent` عند `meetings-agent/**`. قبل ذلك كان أي commit على `main` (حتى تعديل iOS أو أندرويد فقط) يعيد نشر الخدمات كلها؛ في 2026-10-31 أعادت عشر commits لأندرويد نشر الـ API عشر مرات في ست ساعات. عند إضافة اعتماد جديد خارج هذه المسارات أضِفه في اللوحة لكل خدمة معنية.
+
+| الخدمة | النوع والخطة | المصدر | ملاحظات |
+|--------|---------------|--------|---------|
+| `sabq.org` (`sabq-api-virginia.onrender.com`) | Web، `2c-8g`، autoscaling 1–2 نسخة (CPU 70% / ذاكرة 60%) | جذر المستودع، `Dockerfile` | هذا هو `api.sabq.org`. فعلياً نسخة واحدة طوال الوقت (مراجعة 2026-11-02)؛ health على `/health` بمهلة 5 ثوانٍ |
+| `sabq-web-next-virginia` | Web، `1c-2g` | `web-next/`، `Dockerfile` | SSR العام؛ يعتمد على `seo-bundle` من الـ API، ويرد **500** للزواحف إن رد الـ API 503 |
+| `sabq-newsletter-worker` | Background worker، `1c-2g` | جذر المستودع، أمر `node dist/newsletter-worker.js` | يبنيه `build:server` نفسه |
+| `sabq-meetings-agent` | Background worker، `1c-2g` | `meetings-agent/`، `Dockerfile` خاص | لا يبنيه CI الجذر |
+| `sabq-mirror-virginia` | Web، `0.5c-512mb` | فرع **`feature/readonly-mirror-news-subdomain`** و`Dockerfile.mirror` (غير موجود على `main`) | يقرأ من نقطة Neon للقراءة فقط `mirror`؛ الفرع متقادم عن `main` |
+| `sabq-publisher` | Web، `0.5c-512mb`، قرص 1 GB على `/data` | مستودع `sabq4org/sabq-publisher` | بوت «نشر سبق» |
+
+خدمات أخرى في نفس الـ workspace لا تخص sabq.org: `158` (منصة مدرسة) و`economy-week` (خطة Free تنام عند الخمول).
+
+### مسار `api.sabq.org`
+
+سجل DNS يشير إلى Cloudflare (proxied)، والمسار `api.sabq.org/*` مربوط بالـ Worker `sabq-api-origin` (`cloudflare-worker/api-origin-worker.js`، إعدادات `wrangler.api.toml`). الـ Worker يوقّع `X-Sabq-Client-IP` بسر `EDGE_PROXY_SHARED_SECRET`، ويخدم من كاش الحافة القراءات العامة (`public-api-burst-cache.js`)، وصوت «استمع»، وفيديو X، وخرائط الموقع، ثم يمرر الباقي إلى `API_ORIGIN` (الافتراضي Render). الخروج من Render يُحاسَب بالحجم، وكان نحو **25–30 GB/يوم** في مطلع نوفمبر 2026؛ أي قراءة عامة ساخنة جديدة تُضاف إلى قائمة الكاش في الـ Worker أو في `functions/_middleware.js`.
+
+### ثغرات تشغيل مفتوحة بعد الهجرة (مراجعة 2026-11-02)
+
+- **TheSports:** الـ API يرد «IP is not authorized» وMQTT يُرفض كل دقيقة؛ IP خروج Render غير مسجّل عند المزوّد. `/api/sports/summary` يرد 502 بعد انتظار 20 ثانية. العلاج: تسجيل IPs خروج Render الثابتة عند TheSports، أو `THESPORTS_MQTT_ENABLED=false` مؤقتاً لإيقاف الضجيج.
+- **Twilio/WhatsApp:** كل إرسال يفشل بـ 401 ورمز 20003 (مصادقة)؛ `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN` على Render غير صحيحة أو غائبة، فتنبيهات المحررين عبر واتساب لا تصل.
+- **web-next:** صفحات `/article/*` ترد 500 لـ Googlebot وBingbot عند 503 من `seo-bundle` (نحو 45 حالة يومياً).
+- **نسخة واحدة:** الحد الأدنى 1 بينما كان الإنتاج على Railway بنسختين منذ 2026-10-13. القرار عند المالك.
+- **ذاكرة الـ API:** ترتفع تدريجياً بين النشرات (1.6 → 1.9 GB في 18 ساعة من حد 8 GB)؛ نمط التسرب القديم لم يُحسم.
 
 ---
 
@@ -118,6 +151,8 @@ railway tcp-proxy delete <PROXY_ID> --yes \
 
 ## Railway Watch Paths — خدمات المستودع الواحد
 
+> **تاريخي (قبل 2026-10-21):** ينطبق على خدمات Railway فقط. Render لا يقرأ `railway*.json`؛ ما يعيد النشر هناك هو Build Filters من لوحة Render، وقد ضُبطت في 2026-11-02 بالأنماط نفسها (انظر «خدمات Render» أعلاه).
+
 خدمات Railway المرتبطة بفرع `main` تستخدم `build.watchPatterns` داخل ملفات
 `railway*.json`. الأنماط تُحسب من جذر المستودع حتى عندما تضبط الخدمة
 `Root Directory`، وتمنع إنشاء deployment إذا لم يطابق أي ملف متغيّر.
@@ -171,16 +206,16 @@ railway tcp-proxy delete <PROXY_ID> --yes \
 | Editor presence | متزامن بين pods | نسخة واحدة | نسخة واحدة |
 | الكاش الساخن | `memoryCache.ts` | نفس السلوك | نفس السلوك |
 
-**تشغيل مُستحسن مع Static IP:** Redis على Railway (شبكة داخلية) بدل Upstash العام، أو allowlist عناوين Static IP في Upstash.
+**تشغيل مُستحسن مع Static IP:** (كُتب في عهد Railway) allowlist عناوين خروج Render الثابتة في Upstash إن فُعّلت القائمة.
 
 ### أين يُضبط
 
-- **Railway** → Variables → `REDIS_URL` (مثال: `rediss://…upstash.io` أو `redis://…railway.internal`)
+- **Render** → الخدمة `sabq.org` → Environment → `REDIS_URL` (مثال: `rediss://…upstash.io`)
 - **ليس** على Cloudflare Pages — الواجهة لا تتصل بـ Redis
 
 ### كيف تتأكد
 
-1. Railway → Variables → `REDIS_URL` موجود
+1. Render → Environment → `REDIS_URL` موجود
 2. سجلات الإقلاع: `[Session Pool] Isolated PostgreSQL pool initialized` ثم `[Session] Redis primary + isolated PostgreSQL failover` ✅
    أو `Using isolated PostgreSQL store` ⚠️ بدون Redis
 3. عند انقطاع: `[Session] Redis unhealthy … using PostgreSQL` ثم الموقع يبقى يستجيب (بدون 502 على csrf)
@@ -201,7 +236,7 @@ npm run db:down                                        # إيقاف مع الإ�
 الدليل: [`docs/setup/LOCAL_POSTGRES_AR.md`](setup/LOCAL_POSTGRES_AR.md).  
 `REDIS_URL=redis://localhost:6379` اختياري؛ بدونها الجلسات على Postgres المحلي أو ذاكرة العملية.
 
-**الإنتاج على Neon لم يتغير** — لا تلمس متغيرات Railway ولا فرع Neon من هذا المسار.
+**الإنتاج على Neon لم يتغير** — لا تلمس متغيرات Render ولا فرع Neon من هذا المسار.
 
 ---
 
@@ -215,7 +250,7 @@ npm run build         # بناء كامل
 npm run check         # TypeScript
 ```
 
-- **لا** `db:push` / `db:push:local` على رابط الإنتاج أو Neon — للتطوير المحلي فقط `db:push:local`. للإنتاج: `./push-to-production.sh` مع رابط Railway الفعلي (`NEON_DATABASE_URL` أولًا) عبر `SCHEMA_DATABASE_URL`.
+- **لا** `db:push` / `db:push:local` على رابط الإنتاج أو Neon — للتطوير المحلي فقط `db:push:local`. للإنتاج: ملف SQL إضافي مُراجَع في `migrations/` ينفّذه المالك في محرر Neon (AGENTS.md § Workflow C). `./push-to-production.sh` لا يستخدمه الوكلاء.
 - **لا** تفترض أن الوثائق القديمة التي تذكر «Replit = production» ما زالت صحيحة — راجع هذا الملف أولاً
 - عند تعديل الـ proxy أو SEO على الحافة: **`functions/_middleware.js`** على Pages، وليس `server/seoInjector.ts` وحده (الـ injector يخدم وضع single-process فقط)
-- صيانة قاعدة البيانات عند إقلاع الخادم **متوقفة افتراضياً**. لا تعمل إلا مع `RUN_DB_STARTUP_MAINTENANCE=true`، ويظل `SKIP_DB_MAINTENANCE=true` مانعاً أعلى أولوية. لا تفعّلها على Railway مع رابط Neon pooled؛ نفّذ أعمال الصيانة كعملية تشغيلية مقصودة وباتصال admin مباشر.
+- صيانة قاعدة البيانات عند إقلاع الخادم **متوقفة افتراضياً**. لا تعمل إلا مع `RUN_DB_STARTUP_MAINTENANCE=true`، ويظل `SKIP_DB_MAINTENANCE=true` مانعاً أعلى أولوية. لا تفعّلها على Render مع رابط Neon pooled؛ نفّذ أعمال الصيانة كعملية تشغيلية مقصودة وباتصال admin مباشر.

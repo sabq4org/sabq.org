@@ -139,7 +139,9 @@ export default tseslint.config(
   },
   {
     files: ["server/storage.ts"],
-    rules: { "max-lines": ["error", { max: 21100 }] },
+    // RATCHETED DOWN 2026-11-02: reporter profile + activity-log entity info moved
+    // to server/services (−450 lines). Current size 20997; ceiling follows it down.
+    rules: { "max-lines": ["error", { max: 21050 }] },
   },
   {
     // Third emerging monolith: mobileApiRoutes.ts is the /api/v1 surface and had
