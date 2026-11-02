@@ -70,6 +70,13 @@ describe("draft lock guard targets", () => {
       ["POST", "/api/articles/a1/media-assets"],
       ["POST", "/api/articles/a1/auto-categorize"],
       ["POST", "/api/admin/opinion-writers/schedule-article/a1"],
+      ["PATCH", "/api/dashboard/opinion/a1"],
+      ["DELETE", "/api/dashboard/opinion/a1"],
+      ["POST", "/api/dashboard/opinion/a1/publish"],
+      ["POST", "/api/dashboard/opinion/a1/approve"],
+      ["POST", "/api/dashboard/opinion/a1/reject"],
+      ["POST", "/api/dashboard/opinion/a1/request-revision"],
+      ["POST", "/api/dashboard/opinion/a1/submit-review"],
     ];
     for (const [method, path] of cases) {
       expect(draftLockTargets("web", method, path), `${method} ${path}`).toEqual(["a1"]);
@@ -85,11 +92,14 @@ describe("draft lock guard targets", () => {
     expect(draftLockTargets("web", "POST", "/api/admin/articles")).toBeNull();
     expect(draftLockTargets("web", "POST", "/api/admin/articles/update-order")).toBeNull();
     expect(draftLockTargets("web", "PATCH", "/api/admin/articles/metrics")).toBeNull();
+    expect(draftLockTargets("web", "POST", "/api/dashboard/opinion")).toBeNull();
   });
 
   it("reads the ids of bulk archive and bulk delete", () => {
     expect(draftLockTargets("web", "POST", "/api/admin/articles/bulk-archive", { articleIds: ["a", "b", 3] })).toEqual(["a", "b"]);
     expect(draftLockTargets("web", "POST", "/api/admin/articles/bulk-delete-permanent", { articleIds: [] })).toBeNull();
+    const many = Array.from({ length: 700 }, (_, i) => `id${i}`);
+    expect(draftLockTargets("web", "POST", "/api/admin/articles/bulk-archive", { articleIds: many })).toHaveLength(700);
   });
 
   it("covers the mobile admin and resubmit writes under /api/v1", () => {

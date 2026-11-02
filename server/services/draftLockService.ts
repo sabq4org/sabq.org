@@ -74,13 +74,18 @@ export async function getDraftLock(articleId: string, userId: string): Promise<D
  * يرجع أول قفل مانع مع كل المعرّفات المقفلة عند غيره، أو null.
  */
 export async function findDraftLockBlock(articleIds: string[], userId: string | null | undefined): Promise<DraftLockBlock | null> {
-  const ids = Array.from(new Set(articleIds)).slice(0, 500);
+  const ids = Array.from(new Set(articleIds));
   if (!ids.length) return null;
-  const rows = await db
-    .select(lockColumns)
-    .from(articles)
-    .where(and(inArray(articles.id, ids), eq(articles.status, "draft"), isNotNull(articles.draftLockedBy)));
-  const blocking = (rows as LockRow[]).filter((row) => draftLockBlocksUser(row, userId));
+  // كل المعرّفات تُفحص على دفعات، فلا تفلت مسودة مقفلة في آخر دفعة جماعية كبيرة
+  const rows: LockRow[] = [];
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = await db
+      .select(lockColumns)
+      .from(articles)
+      .where(and(inArray(articles.id, ids.slice(i, i + 500)), eq(articles.status, "draft"), isNotNull(articles.draftLockedBy)));
+    rows.push(...(chunk as LockRow[]));
+  }
+  const blocking = rows.filter((row) => draftLockBlocksUser(row, userId));
   if (!blocking.length) return null;
   const first = blocking[0];
   const message = blocking.length > 1

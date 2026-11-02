@@ -96,6 +96,9 @@ const WEB_RULES: Array<{ methods: string[]; pattern: RegExp }> = [
   { methods: ["POST"], pattern: new RegExp(`^/api/articles/${ID}/(auto-categorize|media-assets)$`) },
   { methods: ["POST", "DELETE"], pattern: new RegExp(`^/api/articles/${ID}/tags(/.*)?$`) },
   { methods: ["POST"], pattern: new RegExp(`^/api/admin/opinion-writers/schedule-article/${ID}$`) },
+  // لوحة مقالات الرأي: تعديل وحذف ومراجعة ونشر
+  { methods: ["PATCH", "PUT", "DELETE"], pattern: new RegExp(`^/api/dashboard/opinion/${ID}$`) },
+  { methods: ["POST"], pattern: new RegExp(`^/api/dashboard/opinion/${ID}/(submit-review|approve|reject|publish|request-revision)$`) },
 ];
 const MOBILE_RULES: Array<{ methods: string[]; pattern: RegExp }> = [
   { methods: ["PATCH", "DELETE"], pattern: new RegExp(`^/admin/articles/${ID}$`) },
@@ -117,7 +120,7 @@ export function draftLockTargets(surface: DraftLockSurface, method: string, path
     const ids = (body as { articleIds?: unknown; ids?: unknown } | undefined)?.articleIds
       ?? (body as { ids?: unknown } | undefined)?.ids;
     if (!Array.isArray(ids)) return null;
-    const list = ids.filter((id): id is string => typeof id === "string" && id.length > 0).slice(0, 500);
+    const list = ids.filter((id): id is string => typeof id === "string" && id.length > 0);
     return list.length ? list : null;
   }
   for (const rule of surface === "web" ? WEB_RULES : MOBILE_RULES) {
