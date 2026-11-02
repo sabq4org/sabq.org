@@ -7,11 +7,12 @@
 -- المباشرة (ep-shy-block بلا -pooler) مع الملف كاملاً:
 --   psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f migrations/20261102_prod_cleanup_bloat_indexes.sql
 -- لا شيء هنا يقفل جدولاً إلا VACUUM FULL على role_permissions (460 صفاً، ثوانٍ).
+-- هذا الملف إضافي فقط (فهارس وتفريغ): لا DROP TABLE ولا تغيير إعدادات. قرارا المالك
+-- (حذف جدول النسخة الاحتياطية، وضبط autovacuum) في scripts/sql/neon-owner-decisions-2026-11-02.sql.
 -- =============================================================================
 
--- 1) جدول نسخة احتياطية من 2026-07-25 (نحو 428 ألف صف، 59 MB). لا يشير إليه أي كود
---    في server/ أو shared/ أو scripts/. اللقطات اليومية تحتفظ به 14 يوماً بعد الحذف.
-DROP TABLE IF EXISTS public.role_permissions_backup_2026_07_25;
+-- 1) حذف جدول النسخة الاحتياطية role_permissions_backup_2026_07_25 نُقل إلى
+--    scripts/sql/neon-owner-decisions-2026-11-02.sql (قرار مالك؛ migrations/ إضافية فقط).
 
 -- 2) role_permissions: 460 صفاً تشغل 88 MB (تضخم ×897 بعد عمليات يوليو).
 --    VACUUM FULL يعيد كتابة الجدول وفهارسه؛ القفل أقل من ثانية على هذا الحجم.
@@ -25,16 +26,8 @@ DROP INDEX CONCURRENTLY IF EXISTS public.idx_article_daily_stats_article;   -- 2
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_legacy_redirects_old_path;     -- 26 MB؛ يغطيه legacy_redirects_old_path_unique
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_articles_seo_keywords;         -- 111 MB؛ حلّ محله idx_articles_seo_keywords_gin (jsonb_path_ops، جزئي) الذي ينشئه server/db.ts عند الإقلاع
 
--- 4) autovacuum أكثر حساسية للجداول الكبيرة. الافتراضي 20% يعني أن articles
---    تنتظر نحو 190 ألف صف ميت قبل أي تفريغ (وهذا ما رأيناه: 19% ميت و682 MB مهدرة).
-ALTER TABLE public.articles            SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_analyze_scale_factor = 0.01);
-ALTER TABLE public.article_ip_views    SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_analyze_scale_factor = 0.01);
-ALTER TABLE public.notifications_inbox SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_analyze_scale_factor = 0.01);
-ALTER TABLE public.article_daily_stats SET (autovacuum_vacuum_scale_factor = 0.02, autovacuum_analyze_scale_factor = 0.01);
-ALTER TABLE public.reading_history     SET (autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.02);
-ALTER TABLE public.ai_usage_logs       SET (autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.02);
-ALTER TABLE public.behavior_logs       SET (autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.02);
-ALTER TABLE public.sports_name_translations SET (autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.02);
+-- 4) ضبط autovacuum للجداول الكبيرة نُقل إلى scripts/sql/neon-owner-decisions-2026-11-02.sql
+--    (تغيير إعدادات على مستوى الجدول؛ قرار مالك خارج migrations/).
 
 -- 5) تفريغ يدوي أولي (عادي، غير قافل). articles قد يأخذ دقائق؛ الباقي أقل.
 VACUUM (ANALYZE) public.articles;
@@ -46,8 +39,7 @@ VACUUM (ANALYZE) public.ai_usage_logs;
 VACUUM (ANALYZE) public.behavior_logs;
 VACUUM (ANALYZE) public.sports_name_translations;
 
--- 6) تحقق: الجدول اختفى، والفهارس الأربعة اختفت، وrole_permissions صغير، والصفوف الميتة انخفضت.
-SELECT to_regclass('public.role_permissions_backup_2026_07_25') AS backup_table_should_be_null;
+-- 6) تحقق: الفهارس الأربعة اختفت، وفهرس last_seen موجود، وrole_permissions صغير، والصفوف الميتة انخفضت.
 SELECT indexname FROM pg_indexes WHERE schemaname='public' AND indexname IN
   ('idx_notifications_inbox_user_id','idx_article_daily_stats_article','idx_legacy_redirects_old_path','idx_articles_seo_keywords');
 SELECT pg_size_pretty(pg_total_relation_size('public.role_permissions')) AS role_permissions_total;
@@ -79,4 +71,4 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_article_ip_views_last_seen
 --    ANALYZE article_daily_stats / reading_history. قبل ذلك لم يُحلَّل جدول الإحصاءات
 --    اليومية قط، فكان المخطِّط يختار فهرس date ويرشّح 1.5 مليون صف لكل طلب تحليلات
 --    كاتب (>15ث، يسقط بالمهلة)؛ بعده يستخدم (article_id, date): 266ms.
---    بنود autovacuum في (4) تمنع تكرار ذلك.
+--    ضبط autovacuum في ملف قرارات المالك يمنع تكرار ذلك.
