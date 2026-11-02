@@ -1069,6 +1069,11 @@ export const articles = pgTable("articles", {
   // «إنعاش»: يعيد الخبر لصدارة الموجز بترتيب COALESCE(resurfaced_at, published_at)
   // دون المساس بتاريخ النشر الظاهر أو المشاهدات أو الرابط.
   resurfacedAt: timestamp("resurfaced_at"),
+  // «قفل المسودات» (shared/draftLock.ts): يكتبها الخادم فقط، وفعّالة على المسودة وحدها.
+  draftLockedBy: varchar("draft_locked_by"),
+  draftLockedByName: text("draft_locked_by_name"),
+  draftLockedAt: timestamp("draft_locked_at"),
+  draftLockNote: text("draft_lock_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -1078,6 +1083,8 @@ export const articles = pgTable("articles", {
   index("idx_articles_author_status").on(table.authorId, table.status),
   // لوحة المراسل على كل الحالات — migrations/20261031_reporter_dashboard_indexes.sql
   index("idx_articles_reporter_status").on(table.reporterId, table.status),
+  // المسودات المقفلة (شريحة «مقفلة» وملخصها) — migrations/20261102_draft_lock.sql
+  index("idx_articles_draft_locked").on(table.draftLockedAt).where(sql`draft_locked_by is not null`),
   index("idx_articles_submitter_status").on(table.submitterId, table.status),
   // صفحة الكاتب (reporter_id OR author_id) مرتبة بالنشر — migrations/20261031_author_page_indexes.sql
   index("idx_articles_reporter_published")
@@ -3965,6 +3972,11 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   // طوابع «النشر أولاً» يملكها الخادم. riskLabel يبقى مقبولاً من المحرر.
   draftCreatedAt: true,
   correctedAt: true,
+  // قفل المسودة له مسار خاص (/api/admin/articles/:id/draft-lock)
+  draftLockedBy: true,
+  draftLockedByName: true,
+  draftLockedAt: true,
+  draftLockNote: true,
 }).extend({
   slug: z.string().max(150, "الرابط (slug) يجب أن لا يتجاوز 150 حرف"),
   imageFocalPoint: imageFocalPointSchema.nullable().optional(),

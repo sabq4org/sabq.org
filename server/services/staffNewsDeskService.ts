@@ -310,6 +310,7 @@ async function writeConflict(articleId: string, userId: string): Promise<StaffNe
   const [row] = await db.select({ status: articles.status }).from(articles).where(eq(articles.id, articleId)).limit(1);
   if (row?.status === "published") return new StaffNewsDeskError(409, "conflict", "هذا الخبر منشور بالفعل");
   const conflict = await articleWriteConflict(articleId, userId);
+  if (conflict.draftLock) return new StaffNewsDeskError(409, "conflict", conflict.message);
   return conflict.code === "ARTICLE_LOCKED"
     ? new StaffNewsDeskError(409, "conflict", "الخبر مفتوح للتحرير عند زميل الآن. أعد المحاولة بعد انتهائه.")
     : new StaffNewsDeskError(409, "conflict", "تغيّر الخبر بعد فتحه. حدّث الشاشة وراجعه من جديد.");

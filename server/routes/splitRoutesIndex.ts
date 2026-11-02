@@ -30,6 +30,7 @@ import aiPublicStatsRouter from "./aiPublicStats";
 import aiStaffRouter from "./aiStaff";
 import opsRoomRouter from "./opsRoom";
 import articleEditLocksRouter from "./articleEditLocks";
+import articleDraftLockRouter from "./articleDraftLock";
 import opinionTicketsRouter from "./opinionTickets";
 import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
 import opinionWritersRouter from "./opinionWriters";
@@ -135,6 +136,8 @@ export function registerSplitRoutes(app: Express) {
   // Must run after setupAuth (caller guarantees that).
   // First: hides drafts/scheduled articles from the public article handlers in routes.ts.
   app.use(unpublishedArticleGuardRouter);
+  // «قفل المسودات»: يسبق كل مسارات الكتابة على المقالات هنا وفي routes.ts.
+  app.use(articleDraftLockRouter);
   // «استمع» audio: after the guard, so a draft's clip stays staff-only.
   app.use(articleSummaryAudioRouter);
   app.use(systemSettingsRouter);

@@ -1084,6 +1084,9 @@ if (!(globalThis as any).__sabqServer) {
     // رفع صورة واحدة قبل إرسال الخبر/المقال من الجوال (POST /articles/images).
     const mobileSubmissionImages = (await import("./routes/mobileSubmissionImages")).default;
     app.use("/api/v1", mobileSubmissionImages);
+    // «قفل المسودات»: يرفض الكتابة على مسودة مقفلة عند زميل قبل mobileApiRoutes.
+    const mobileDraftLockGuard = (await import("./routes/mobileDraftLockGuard")).default;
+    app.use("/api/v1", mobileDraftLockGuard);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 

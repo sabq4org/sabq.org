@@ -125,6 +125,8 @@ import { SabqEditorAssistant } from "@/components/article-editor/SabqEditorAssis
 import { PublishFirstPanel } from "@/components/article-editor/PublishFirstPanel";
 import { editorialCategoryChoices, type PublishFirstRiskLabel } from "@shared/publishFirst";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
+import { DraftLockedEditorBanner, type DraftLockArticle } from "@/components/articles/DraftLockControls";
+import { draftLockBlocksUser, type DraftLockFields } from "@shared/draftLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { apiRequest, apiUrl, queryClient, getCsrfToken } from "@/lib/queryClient";
@@ -798,12 +800,18 @@ export default function ArticleEditor() {
 
   // ===== Article Edit Lock Management =====
   // Extracted to hooks/useArticleEditLock.ts (refactor: article-editor-split)
-  const { lockStatus, isLockedByOther, takeOverLock, isTakingOverLock } = useArticleEditLock({
+  // «قفل المسودات»: مسودة مقفلة عند زميل تُفتح للقراءة فقط، بلا قفل تحرير ولا حفظ تلقائي.
+  const draftLockedByOther = !isNewArticle && Boolean(article?.id) && draftLockBlocksUser(article as DraftLockFields, user?.id);
+  const isSystemAdmin = !!user?.permissions?.includes("*");
+  const { lockStatus, isLockedByOther: editLockedByOther, takeOverLock, isTakingOverLock } = useArticleEditLock({
     articleId: id,
     isNewArticle,
     user,
     isUserLoading,
+    // ننتظر المادة أولًا حتى لا نطلب قفل تحرير على مسودة مقفلة عند زميل
+    skipAcquire: draftLockedByOther || (!isNewArticle && !article?.id),
   });
+  const isLockedByOther = editLockedByOther || draftLockedByOther;
 
   // Load article data when editing
   useEffect(() => {
@@ -1142,7 +1150,7 @@ export default function ArticleEditor() {
   ]);
 
   const serverAutosave = useArticleServerAutosave({
-    enabled: Boolean(user?.id) && (isNewArticle || Boolean(article?.id)),
+    enabled: Boolean(user?.id) && (isNewArticle || Boolean(article?.id)) && !draftLockedByOther,
     isNewArticle,
     articleId: id,
     userId: user?.id,
@@ -2845,8 +2853,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         )}
 
+        {draftLockedByOther && article?.id && (
+          <DraftLockedEditorBanner article={article as DraftLockArticle} userId={user?.id} isSystemAdmin={isSystemAdmin} />
+        )}
         {/* Lock Alert - When article is locked by another user */}
-        {isLockedByOther && lockStatus?.lockedBy && (
+        {editLockedByOther && !draftLockedByOther && lockStatus?.lockedBy && (
           <div 
             className="mb-4 flex items-center gap-3 p-3.5 bg-red-50 dark:bg-card border border-red-500 dark:border-border rounded-xl"
             data-testid="lock-alert"

@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { and, eq } from "drizzle-orm";
 import { articles } from "@shared/schema";
-import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "../../server/services/articleWriteVersion";
+import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter, draftLockAllowsWriter } from "../../server/services/articleWriteVersion";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const url = process.env.SESSION_REVOCATION_TEST_URL;
 if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) throw new Error("Local database only");
@@ -12,8 +12,8 @@ describe.skipIf(!url)("atomic article version", () => {
     pool = new Pool({ connectionString: url, options: "-c search_path=version_audit" });
     await pool.query("CREATE SCHEMA version_audit");
     await pool.query("CREATE TABLE article_edit_locks(article_id varchar, user_id varchar, expires_at timestamp)");
-    await pool.query("CREATE TABLE articles (id varchar PRIMARY KEY, title text, updated_at timestamp NOT NULL)");
-    await pool.query("INSERT INTO articles VALUES ('a', 'original', '2026-09-04T12:00:00.123456')");
+    await pool.query("CREATE TABLE articles (id varchar PRIMARY KEY, title text, updated_at timestamp NOT NULL, status text NOT NULL DEFAULT 'draft', draft_locked_by varchar)");
+    await pool.query("INSERT INTO articles (id, title, updated_at) VALUES ('a', 'original', '2026-09-04T12:00:00.123456')");
   });
   afterAll(async () => { if (pool) { await pool.query("DROP SCHEMA version_audit CASCADE"); await pool.end(); } });
   it("accepts exactly one concurrent save and refuses stale replay", async () => {
@@ -32,5 +32,19 @@ describe.skipIf(!url)("atomic article version", () => {
       .where(and(eq(articles.id, "a"), articleLockAllowsWriter(user))).returning({ title: articles.title });
     expect(await save("other")).toHaveLength(0);
     expect(await save("owner")).toHaveLength(1);
+    await pool.query("DELETE FROM article_edit_locks");
+  });
+  it("refuses a colleague's draft lock until the draft leaves draft status", async () => {
+    await pool.query("UPDATE articles SET draft_locked_by = 'locker', status = 'draft'");
+    const db = drizzle(pool);
+    const save = (user: string) => db.update(articles).set({ title: user })
+      .where(and(eq(articles.id, "a"), articleLockAllowsWriter(user))).returning({ title: articles.title });
+    const draftOnly = (user: string) => db.update(articles).set({ title: user })
+      .where(and(eq(articles.id, "a"), draftLockAllowsWriter(user))).returning({ title: articles.title });
+    expect(await save("colleague")).toHaveLength(0);
+    expect(await draftOnly("colleague")).toHaveLength(0);
+    expect(await save("locker")).toHaveLength(1);
+    await pool.query("UPDATE articles SET status = 'published'");
+    expect(await save("colleague")).toHaveLength(1);
   });
 });

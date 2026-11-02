@@ -233,6 +233,35 @@ describe("updateBotDraft on a published article", () => {
     });
   });
 
+  it("refuses a draft another editor locked («قفل المسودات») and writes nothing", async () => {
+    dbState.article = publishedArticle({
+      status: "draft",
+      sourceMetadata: { type: "bot", bot: "nashr-sabq" },
+      draftLockedBy: "editor-k",
+      draftLockedByName: "خالد",
+    });
+    await expect(updateBotDraft({ name: "nashr-sabq" }, "art-pub", { title: "عنوان من البوت" }))
+      .rejects.toMatchObject({ httpStatus: 409, code: "locked_by_editor", details: { draftLock: true, editor: "خالد" } });
+    expect(dbState.updateCalls).toBe(0);
+  });
+
+  it("lets the locker's own personal bot keep editing the locked draft", async () => {
+    const existing = publishedArticle({
+      status: "draft",
+      sourceMetadata: { type: "bot", bot: "publisher-k", publisherUserId: "editor-k" },
+      draftLockedBy: "editor-k",
+      draftLockedByName: "خالد",
+    });
+    dbState.article = existing;
+    dbState.updated = { ...existing, title: "عنوان صاحب القفل", updatedAt: new Date("2026-09-26T09:00:00.000Z") };
+    await updateBotDraft(
+      { name: "publisher-k", personal: { userId: "editor-k", tokenId: "t", capabilities: ["edit"] } as any },
+      "art-pub",
+      { title: "عنوان صاحب القفل" },
+    );
+    expect(dbState.updateCalls).toBe(1);
+  });
+
   it("persists the archive reason in notes and both audit surfaces", async () => {
     const existing = publishedArticle({
       sourceMetadata: { type: "bot", bot: "publisher-u", publisherUserId: "u", publisherTokenId: "t", clientReference: "ref-1" },

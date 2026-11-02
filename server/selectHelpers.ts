@@ -216,6 +216,11 @@ export const articleAdminSelect = {
   isPublisherNews: articles.isPublisherNews,
   publisherId: articles.publisherId,
   albumImages: articles.albumImages,
+  // «قفل المسودات» — شارة الصف وإخفاء أزرار الزملاء (shared/draftLock.ts)
+  draftLockedBy: articles.draftLockedBy,
+  draftLockedByName: articles.draftLockedByName,
+  draftLockedAt: articles.draftLockedAt,
+  draftLockNote: articles.draftLockNote,
   publishedAt: articles.publishedAt,
   createdAt: articles.createdAt,
   updatedAt: articles.updatedAt,
