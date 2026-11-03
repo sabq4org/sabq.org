@@ -201,7 +201,7 @@ journalistic integrity.
 ## 4. تحسين البرومبت — `enhancePrompt`
 
 **الملف:** `server/services/imageGenerationService.ts`
-**النموذج:** `gemini-2.5-flash-preview-05-20`
+**النموذج:** `gemini-3.8-flash`
 
 يُستخدم لإثراء البرومبت تلقائياً قبل إرساله لنموذج التوليد:
 

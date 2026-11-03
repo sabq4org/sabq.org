@@ -322,8 +322,8 @@ Return JSON only (same structure as Arabic prompt).
 | اللغة | النموذج الأساسي | النموذج الاحتياطي |
 |-------|----------------|------------------|
 | عربي | `claude-sonnet-4-5` | `gpt-5.1` |
-| إنجليزي | `gpt-5.1` | `gemini-2.5-flash-preview-05-20` |
-| أردو | `gemini-2.5-flash-preview-05-20` | `claude-sonnet-4-5` |
+| إنجليزي | `gpt-5.1` | `gemini-3.8-flash` |
+| أردو | `gemini-3.8-flash` | `claude-sonnet-4-5` |
 
 ### System Prompt — عربي:
 

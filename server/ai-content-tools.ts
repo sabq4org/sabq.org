@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { claudeJsonOutput } from "./ai/claudeStructuredOutputs";
 import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
+import { withGeminiFlashFallback } from "./ai/geminiModels";
 
 // Zod schemas for AI responses validation with coercion
 const ClaudeTopicSchema = z.object({
@@ -68,7 +69,7 @@ const genai = new GoogleGenerativeAI(
 // drift from the model actually called.
 const CLAUDE_MODEL = "claude-sonnet-4-6";
 const GPT_MODEL = "gpt-5.1";
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Gemini model id lives in ./ai/geminiModels (GEMINI_FLASH_MODEL + fallback).
 
 // Output schemas for the Claude branches (enforced when CLAUDE_STRUCTURED_OUTPUTS=on).
 // The prompt text still asks for JSON because the GPT/Gemini branches share it.
@@ -308,8 +309,6 @@ export async function suggestImageQuery(contentText: string): Promise<{
   console.log(`🖼️ [AI Tools] Suggesting image queries`);
 
   try {
-    const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
-
     const prompt = `أنت خبير في البحث عن الصور الصحفية. قم بتحليل المحتوى التالي واقترح كلمات بحث للعثور على صور مناسبة:
 
 📄 المحتوى:
@@ -327,7 +326,9 @@ ${contentText.substring(0, 1000)}
   "description": "وصف الصورة المثالية بالعربية"
 }`;
 
-    const result = await model.generateContent(prompt);
+    const { result } = await withGeminiFlashFallback("suggestImageQuery", (m) =>
+      genai.getGenerativeModel({ model: m }).generateContent(prompt),
+    );
     const response = result.response;
     const text = response.text();
 
@@ -557,8 +558,9 @@ ${context ? `السياق: ${context}` : ''}
     (async () => {
       try {
         console.log(`🤖 [Gemini] Starting analysis...`);
-        const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
-        const result = await model.generateContent(prompt);
+        const { result, model: geminiModelUsed } = await withGeminiFlashFallback("fact-check", (m) =>
+          genai.getGenerativeModel({ model: m }).generateContent(prompt),
+        );
         const response = result.response;
         const text = response.text();
 
@@ -571,7 +573,7 @@ ${context ? `السياق: ${context}` : ''}
         console.log(`✅ [Gemini] Analysis complete - Verdict: ${analysis.verdict}`);
 
         return {
-          model: GEMINI_MODEL,
+          model: geminiModelUsed,
           verdict: analysis.verdict as Verdict,
           confidence: analysis.confidence,
           reasoning: analysis.reasoning,
@@ -813,11 +815,10 @@ export async function analyzeTrends(
       ...claudeJsonOutput(TRENDS_JSON_SCHEMA),
     } as Anthropic.MessageCreateParamsNonStreaming);
 
-    // 4. تحليل بـ Gemini 2.0 Flash - الكلمات المفتاحية والتوصيات
+    // 4. تحليل بـ Gemini Flash (GEMINI_FLASH_MODEL مع احتياطي) - الكلمات المفتاحية والتوصيات
     console.log(`🤖 [Gemini] Starting keywords and recommendations analysis...`);
     
-    const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
-    const geminiPromise = model.generateContent(`أنت محلل محتوى متخصص في استخراج الكلمات المفتاحية.
+    const geminiPromise = withGeminiFlashFallback("trends-keywords", (m) => genai.getGenerativeModel({ model: m }).generateContent(`أنت محلل محتوى متخصص في استخراج الكلمات المفتاحية.
 
 المهمة: استخراج أهم الكلمات المفتاحية من المحتوى التالي.
 
@@ -843,7 +844,7 @@ ${combinedText.substring(0, 10000)}
   "recommendations": ["توصية 1", "توصية 2"]
 }
 
-⚠️ مهم: أرجع JSON فقط بدون أي شرح أو مقدمة.`);
+⚠️ مهم: أرجع JSON فقط بدون أي شرح أو مقدمة.`)).then((r) => r.result);
 
     // انتظار كلا النموذجين بشكل مستقل
     const results = await Promise.allSettled([claudePromise, geminiPromise]);

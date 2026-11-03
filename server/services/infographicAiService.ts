@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { withGeminiFlashFallback } from "../ai/geminiModels";
 
 // Initialize Gemini AI with API key
 const genai = new GoogleGenerativeAI(
@@ -43,13 +44,14 @@ export async function generateInfographicSuggestions(
   console.log("🎨 [Infographic AI] Generating infographic suggestions");
 
   try {
-    const model = genai.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 2000,
-      }
-    });
+    const flashModel = (model: string) =>
+      genai.getGenerativeModel({
+        model,
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 2000,
+        },
+      });
 
     const prompt = `أنت خبير في تصميم الإنفوجرافيك الصحفي وتحويل المحتوى النصي إلى محتوى بصري جذاب.
 
@@ -116,7 +118,7 @@ ${category ? `التصنيف: ${category}` : ""}
   }
 }`;
 
-    const result = await model.generateContent(prompt);
+    const { result } = await withGeminiFlashFallback("infographic", (m) => flashModel(m).generateContent(prompt));
     const response = result.response;
     const text = response.text();
 
