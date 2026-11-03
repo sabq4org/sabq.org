@@ -1518,7 +1518,7 @@
         "tests/unit/samaTlsChain.test.ts",
         "tests/fixtures/sama/**"
       ],
-      "lastReviewed": "2026-10-21"
+      "lastReviewed": "2026-11-03"
     },
     {
       "id": "platform-runtime",

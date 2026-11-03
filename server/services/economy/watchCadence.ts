@@ -55,7 +55,10 @@ export function intervalMinutes(source: WatchSource, now: Date, fomc: Set<string
       if (workday && r.hour >= 9 && r.hour <= 13) return 10;
       return 60;
     case "pos_weekly":
-      if (r.weekday === 2 && r.hour >= 9 && r.hour <= 17) return 15; // الثلاثاء
+      // ساما تنشر عادةً الثلاثاء، وقد يتأخر الملف إلى المساء (24 أكتوبر 2026 ظهر بعد 23:00)
+      // أو إلى الأربعاء — لذلك كثافة حتى منتصف ليل الثلاثاء، ثم 30 د نهار الأربعاء.
+      if (r.weekday === 2 && r.hour >= 9) return 15; // الثلاثاء 09:00–23:59
+      if (r.weekday === 3 && r.hour <= 17) return 30; // الأربعاء 00:00–17:59
       return 360;
     case "money_supply_weekly":
       if (r.weekday === 4 && r.hour >= 9 && r.hour <= 17) return 15; // الخميس

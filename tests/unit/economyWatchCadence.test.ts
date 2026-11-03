@@ -31,9 +31,13 @@ describe("إيقاع رصد ساما", () => {
     expect(intervalMinutes("fx", riyadh("2026-08-25T16:00:00Z"), fomc)).toBe(60);
   });
 
-  it("نقاط البيع: 15 دقيقة نهار الثلاثاء فقط؛ عرض النقود: الخميس", () => {
+  it("نقاط البيع: 15 دقيقة الثلاثاء حتى منتصف الليل و30 نهار الأربعاء؛ عرض النقود: الخميس", () => {
     expect(intervalMinutes("pos_weekly", riyadh("2026-08-25T12:00:00Z"), fomc)).toBe(15);
-    expect(intervalMinutes("pos_weekly", riyadh("2026-08-26T12:00:00Z"), fomc)).toBe(360);
+    expect(intervalMinutes("pos_weekly", riyadh("2026-08-25T23:30:00Z"), fomc)).toBe(15); // مساء الثلاثاء
+    expect(intervalMinutes("pos_weekly", riyadh("2026-08-25T08:00:00Z"), fomc)).toBe(360); // قبل 9 صباح الثلاثاء
+    expect(intervalMinutes("pos_weekly", riyadh("2026-08-26T12:00:00Z"), fomc)).toBe(30); // الأربعاء نهارًا
+    expect(intervalMinutes("pos_weekly", riyadh("2026-08-26T19:00:00Z"), fomc)).toBe(360); // مساء الأربعاء
+    expect(intervalMinutes("pos_weekly", riyadh("2026-08-27T12:00:00Z"), fomc)).toBe(360); // الخميس
     expect(intervalMinutes("money_supply_weekly", riyadh("2026-08-27T12:00:00Z"), fomc)).toBe(15);
     expect(intervalMinutes("money_supply_weekly", riyadh("2026-08-25T12:00:00Z"), fomc)).toBe(360);
   });
