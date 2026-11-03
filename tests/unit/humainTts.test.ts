@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const fixture = vi.hoisted(() => ({ path: '' }));
 vi.mock('node:module', () => ({ createRequire: () => ({ resolve: () => fixture.path }) }));
-import { pcmToWav, splitHumainText, synthesizeHumain, isContentRejection, HumainTtsError } from '../../server/services/humainTts';
+import { pcmToWav, splitHumainText, synthesizeHumain, isContentRejection, HumainTtsError, withNewsStyle } from '../../server/services/humainTts';
 let dir: string;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'humain-worker-test-')); fixture.path = join(dir, 'sdk.mjs');
@@ -20,6 +20,11 @@ describe('HUMAIN bounded worker', () => {
     expect(wav.subarray(0, 4).toString()).toBe('RIFF'); expect(wav.subarray(8, 12).toString()).toBe('WAVE');
     expect(wav.readUInt32LE(24)).toBe(24000); expect(wav.readUInt16LE(22)).toBe(1); expect(wav.readUInt16LE(34)).toBe(16);
     expect(wav.readUInt32LE(40)).toBe(4); expect(wav.subarray(44)).toEqual(Buffer.from([1,0,2,0]));
+  });
+  it('sends every chunk in the news speaking style', async () => {
+    await sdk(`async *synthesizeStream(text) { if (text !== '<emotion value="news">نشرة أخبار</emotion>') throw Error('TTS_WRONG_MARKUP'); yield {audio: new Uint8Array([1,0]), is_last: true}; }`);
+    expect((await synthesizeHumain('نشرة أخبار', 'voice', 2000)).length).toBe(46);
+    expect(withNewsStyle('أ<b>ب')).toBe('<emotion value="news">أ b ب</emotion>');
   });
   it('loads the official SDK CommonJS entry exposed as a default export', async () => {
     fixture.path = join(dir, 'sdk.cjs');
