@@ -78,6 +78,8 @@ describe("computeFocusPlacement", () => {
     expect(computeFocusPlacement(null, 100, 100).objectPosition).toBe(DEFAULT_FOCUS_POSITION);
     expect(legacyObjectPosition({ x: 50, y: 50 })).toBe(DEFAULT_FOCUS_POSITION);
     expect(legacyObjectPosition({ x: 20, y: 70 })).toBe("20% 70%");
+    // a manual centre pick from the editor is intentional and is kept
+    expect(legacyObjectPosition(readImageFocus({ imageFocalPoint: { x: 50, y: 50, source: "manual" } }))).toBe("50% 50%");
   });
 
   it("moves the hero caption below when the face sits low in the frame", () => {
@@ -90,6 +92,7 @@ describe("computeFocusPlacement", () => {
 describe("readImageFocus", () => {
   it("reads snake_case rows and drops a box without image size", () => {
     expect(readImageFocus({ image_focal_point: { x: 10, y: 20, box: { x: 1, y: 1, w: 5, h: 5 } } })).toEqual({ x: 10, y: 20 });
+    expect(readImageFocus({ imageFocalPoint: { x: 1, y: 2, source: "manual" } })?.source).toBe("manual");
     expect(readImageFocus({ imageFocalPoint: null })).toBeNull();
     expect(readImageFocus({ imageFocalPoint: { x: "a", y: 2 } })).toBeNull();
   });

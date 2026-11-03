@@ -56,6 +56,7 @@ export function readImageFocus(article: unknown): ImageFocusData | null {
   const y = readNumber(raw.y);
   if (x === null || y === null) return null;
   const out: ImageFocusData = { x: clamp(x, 0, 100), y: clamp(y, 0, 100) };
+  if (raw.source === "manual" || raw.source === "gemini-box") out.source = raw.source;
   const b = raw.box as Record<string, unknown> | undefined;
   const iw = readNumber(raw.iw);
   const ih = readNumber(raw.ih);
@@ -81,7 +82,8 @@ export function legacyObjectPosition(focus: ImageFocusData | null): string {
     // تقدير معقول قبل القياس: مركز الموضوع أفقيًا، وأعلاه عموديًا.
     return `${pct(focus.box.x + focus.box.w / 2)} ${pct(clamp(focus.box.y, 0, 100))}`;
   }
-  if (focus.x === 50 && focus.y === 50) return DEFAULT_FOCUS_POSITION;
+  // نقطة المنتصف اليدوية («إعادة تعيين» في المحرر) اختيار مقصود فتبقى كما هي.
+  if (focus.x === 50 && focus.y === 50 && focus.source !== "manual") return DEFAULT_FOCUS_POSITION;
   return `${pct(focus.x)} ${pct(focus.y)}`;
 }
 
