@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SABQ_LANGUAGE_STANDARDS_AR, SABQ_PRIMARY_EDITOR_MODEL } from "./ai/sabqEditorialPrompt";
 import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
+import { GEMINI_FLASH_MODEL } from "./ai/geminiModels";
 
 // SEO Generator for multilingual articles
 // Supports Arabic (Claude), English (GPT-4o), and Urdu (Gemini)
@@ -51,10 +52,10 @@ const SEO_MODEL_CONFIG: Record<"ar" | "en" | "ur", { primary: SeoModelRef; fallb
   },
   en: {
     primary: { provider: "openai" as const, model: "gpt-5.1" },
-    fallback: { provider: "gemini" as const, model: "gemini-2.5-flash" },
+    fallback: { provider: "gemini" as const, model: GEMINI_FLASH_MODEL },
   },
   ur: {
-    primary: { provider: "gemini" as const, model: "gemini-2.5-flash" },
+    primary: { provider: "gemini" as const, model: GEMINI_FLASH_MODEL },
     fallback: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
   },
 };

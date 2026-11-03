@@ -1,5 +1,6 @@
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import pRetry from "p-retry";
+import { minimalThinkingConfig, withGeminiFlashFallback } from "../ai/geminiModels";
 
 // On Replit: Replit's AI Integrations proxy. Off Replit: Gemini directly.
 const replitProxyUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
@@ -64,15 +65,17 @@ export async function generateSmartInsights(
 العنوان: ${articleTitle}
 المحتوى: ${cleanContent}`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        temperature: 0.3,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
-      }
-    });
+    const { result: response, model: usedModel } = await withGeminiFlashFallback("smart-insights", (model) =>
+      ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          temperature: 0.3,
+          maxOutputTokens: 1024,
+          thinkingConfig: minimalThinkingConfig(model),
+        },
+      }),
+    );
 
     // Extract text from the new @google/genai SDK response format
     let text = response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -118,7 +121,7 @@ export async function generateSmartInsights(
     return {
       insights: parsed.insights,
       contextToken,
-      model: "gemini-2.5-flash",
+      model: usedModel,
       generatedAt: new Date().toISOString()
     };
   };
@@ -163,15 +166,17 @@ ${cleanContent}
 
 ${chatHistory.length > 0 ? `المحادثة السابقة:\n${chatHistory.map(m => `${m.role === 'user' ? 'المستخدم' : 'المساعد'}: ${m.content}`).join('\n')}\n\n---\n\n` : ''}سؤال المستخدم الحالي: ${userMessage}`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: contextPrompt,
-      config: {
-        temperature: 0.5,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
-      }
-    });
+    const { result: response, model: usedModel } = await withGeminiFlashFallback("smart-insights-chat", (model) =>
+      ai.models.generateContent({
+        model,
+        contents: contextPrompt,
+        config: {
+          temperature: 0.5,
+          maxOutputTokens: 1024,
+          thinkingConfig: minimalThinkingConfig(model),
+        },
+      }),
+    );
 
     // Extract text from the new @google/genai SDK response format
     let text = response?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -188,7 +193,7 @@ ${chatHistory.length > 0 ? `المحادثة السابقة:\n${chatHistory.map(
 
     return {
       response: text.trim(),
-      model: "gemini-2.5-flash"
+      model: usedModel
     };
   };
 

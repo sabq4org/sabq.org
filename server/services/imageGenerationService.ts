@@ -1,8 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import pRetry from "p-retry";
+import { withGeminiFlashFallback } from "../ai/geminiModels";
 
 const genAI = new GoogleGenerativeAI(process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+// Model id centralized in ../ai/geminiModels; one retry on the fallback model.
+const generateWithFlash = (prompt: string) =>
+  withGeminiFlashFallback("image-prompt-enhance", (m) => genAI.getGenerativeModel({ model: m }).generateContent(prompt)).then((r) => r.result);
 
 interface GenerateImageOptions {
   prompt: string;
@@ -68,7 +71,7 @@ Original prompt: ${prompt}
 
 Enhanced prompt (max 200 chars):`;
 
-      const result = await model.generateContent(enhancementPrompt);
+      const result = await generateWithFlash(enhancementPrompt);
       return result.response.text().trim() || prompt;
     } catch (error) {
       console.error("Error enhancing prompt:", error);

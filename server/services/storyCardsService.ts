@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import pRetry from "p-retry";
+import { withGeminiFlashFallback } from "../ai/geminiModels";
 import { eq } from "drizzle-orm";
 import { storyCards } from "@shared/schema";
 import visualAiService from "./visualAiService";
@@ -8,7 +9,9 @@ import { db } from "../db";
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+// Model id centralized in ../ai/geminiModels; one retry on the fallback model.
+const generateWithFlash = (prompt: string) =>
+  withGeminiFlashFallback("story-cards", (m) => genAI.getGenerativeModel({ model: m }).generateContent(prompt)).then((r) => r.result);
 
 interface StorySlide {
   order: number;
@@ -90,7 +93,7 @@ ${language === 'ar' ? 'Output all text in Arabic RTL format.' : ''}`;
 
       const result = await pRetry(
         async () => {
-          const response = await model.generateContent(prompt);
+          const response = await generateWithFlash(prompt);
           const text = response.response.text();
           
           // Extract JSON from response
