@@ -31,7 +31,7 @@ import {
 } from "../../server/services/socialPublishing/socialPublishingService";
 import { notifyAuthorOfSocialPostStatus } from "../../server/services/editorialNotifications";
 
-describe("opinionAuthorSocialProposal — نافذة الـ24 ساعة", () => {
+describe("opinionAuthorSocialProposal — نافذة الـ72 ساعة", () => {
   const baseTime = new Date("2026-08-18T12:00:00.000Z");
 
   beforeEach(() => {
@@ -75,35 +75,35 @@ describe("opinionAuthorSocialProposal — نافذة الـ24 ساعة", () => {
     expect(res.remainingMs).toBe(0);
   });
 
-  it("مقال نُشر الآن (0 ms) → مؤهل، ومتبقٍ 24 ساعة كاملة", () => {
+  it("مقال نُشر الآن (0 ms) → مؤهل، ومتبقٍ 72 ساعة كاملة", () => {
     const res = isWithinOpinionSocialWindow(baseTime);
     expect(res.eligible).toBe(true);
     expect(res.remainingMs).toBe(SOCIAL_POST_OPINION_WINDOW_MS);
     expect(res.windowExpiresAt).toEqual(new Date(baseTime.getTime() + SOCIAL_POST_OPINION_WINDOW_MS));
   });
 
-  it("مقال نُشر قبل 5 ساعات → مؤهل، ومتبقٍ 19 ساعة", () => {
+  it("مقال نُشر قبل 5 ساعات → مؤهل، ومتبقٍ 67 ساعة", () => {
     const publishedAt = new Date(baseTime.getTime() - 5 * 60 * 60 * 1000);
     const res = isWithinOpinionSocialWindow(publishedAt);
     expect(res.eligible).toBe(true);
-    expect(res.remainingMs).toBe(19 * 60 * 60 * 1000);
+    expect(res.remainingMs).toBe(67 * 60 * 60 * 1000);
   });
 
-  it("مقال نُشر قبل 23 ساعة و59 دقيقة → مؤهل", () => {
-    const publishedAt = new Date(baseTime.getTime() - (23 * 60 + 59) * 60 * 1000);
+  it("مقال نُشر قبل 71 ساعة و59 دقيقة → مؤهل", () => {
+    const publishedAt = new Date(baseTime.getTime() - (71 * 60 + 59) * 60 * 1000);
     const res = isWithinOpinionSocialWindow(publishedAt);
     expect(res.eligible).toBe(true);
     expect(res.remainingMs).toBe(60 * 1000);
   });
 
-  it("مقال نُشر بالضبط قبل 24 ساعة → مؤهل (0 ms)", () => {
+  it("مقال نُشر بالضبط قبل 72 ساعة → مؤهل (0 ms)", () => {
     const publishedAt = new Date(baseTime.getTime() - SOCIAL_POST_OPINION_WINDOW_MS);
     const res = isWithinOpinionSocialWindow(publishedAt);
     expect(res.eligible).toBe(true);
     expect(res.remainingMs).toBe(0);
   });
 
-  it("مقال تجاوز 24 ساعة بدقيقة واحدة → غير مؤهل (EXPIRED_24H)", () => {
+  it("مقال تجاوز 72 ساعة بدقيقة واحدة → غير مؤهل (EXPIRED_24H)", () => {
     const publishedAt = new Date(baseTime.getTime() - (SOCIAL_POST_OPINION_WINDOW_MS + 60 * 1000));
     const res = isWithinOpinionSocialWindow(publishedAt);
     expect(res.eligible).toBe(false);
@@ -111,8 +111,8 @@ describe("opinionAuthorSocialProposal — نافذة الـ24 ساعة", () => {
     expect(res.remainingMs).toBe(0);
   });
 
-  it("مقال نُشر قبل 3 أيام → غير مؤهل (EXPIRED_24H)", () => {
-    const publishedAt = new Date(baseTime.getTime() - 3 * 24 * 60 * 60 * 1000);
+  it("مقال نُشر قبل 4 أيام → غير مؤهل (EXPIRED_24H)", () => {
+    const publishedAt = new Date(baseTime.getTime() - 4 * 24 * 60 * 60 * 1000);
     const res = isWithinOpinionSocialWindow(publishedAt);
     expect(res.eligible).toBe(false);
     expect(res.reason).toBe("EXPIRED_24H");
@@ -255,7 +255,7 @@ describe("opinionAuthorSocialProposal — التحقق والأمان والمل
     ).rejects.toThrow("لا يمكن تقديم مقترح لمقال غير منشور بعد");
   });
 
-  it("يرفض إذا تجاوز المقال 24 ساعة من تاريخ النشر الفعلي", async () => {
+  it("يرفض إذا تجاوز المقال 72 ساعة من تاريخ النشر الفعلي", async () => {
     mockDb.select.mockReturnValueOnce({
       from: () => ({
         where: () => ({
@@ -271,7 +271,7 @@ describe("opinionAuthorSocialProposal — التحقق والأمان والمل
                 articleType: "opinion",
                 authorId,
                 submitterId: authorId,
-                publishedAt: new Date(nowTime.getTime() - 25 * 60 * 60 * 1000), // قبل 25 ساعة
+                publishedAt: new Date(nowTime.getTime() - 73 * 60 * 60 * 1000), // قبل 73 ساعة
               },
             ]),
         }),
@@ -285,10 +285,10 @@ describe("opinionAuthorSocialProposal — التحقق والأمان والمل
         text: "نص المقترح",
         textSource: "custom",
       }),
-    ).rejects.toThrow("انتهت مهلة الـ24 ساعة لتقديم مقترح النشر الاجتماعي لهذا المقال");
+    ).rejects.toThrow("انتهت مهلة الـ72 ساعة لتقديم مقترح النشر الاجتماعي لهذا المقال");
   });
 
-  it("ينشئ مسودة مقترح جديدة بنجاح ضمن الـ24 ساعة مع تثبيت الرابط والصورة", async () => {
+  it("ينشئ مسودة مقترح جديدة بنجاح ضمن الـ72 ساعة مع تثبيت الرابط والصورة", async () => {
     const articleData = {
       id: articleId,
       title: "مقال رأي متميز",

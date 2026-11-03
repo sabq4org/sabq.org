@@ -1003,8 +1003,9 @@ function WriterTrackingCard({
   const elapsedMs = isActuallyPublished
     ? Date.now() - new Date(article.publishedAt!).getTime()
     : Infinity;
-  const isWithin24Hours =
-    isActuallyPublished && elapsedMs >= 0 && elapsedMs <= 24 * 60 * 60 * 1000;
+  // نفس مهلة الخادم SOCIAL_POST_OPINION_WINDOW_MS (72 ساعة).
+  const isWithinSocialWindow =
+    isActuallyPublished && elapsedMs >= 0 && elapsedMs <= 72 * 60 * 60 * 1000;
 
   const toneClasses = {
     default: "border-border bg-card",
@@ -1067,7 +1068,7 @@ function WriterTrackingCard({
             )}
             {article.status === "published" && (
               <>
-                {isWithin24Hours && onSocialProposal && (
+                {isWithinSocialWindow && onSocialProposal && (
                   <Button
                     variant="outline"
                     size="sm"

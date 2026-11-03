@@ -208,7 +208,7 @@ router.post(
   },
 );
 
-// ── مقترح النشر على منصة X لمقال الرأي المنشور (نافذة 24 ساعة) ────────
+// ── مقترح النشر على منصة X لمقال الرأي المنشور (نافذة 72 ساعة) ────────
 
 router.get("/api/opinion-author/articles/:articleId/social-proposal", async (req, res) => {
   try {

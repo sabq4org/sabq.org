@@ -32,13 +32,13 @@ describe("agency social publishing rules", () => {
     expect(allowedAgencyActions("off")).toEqual([]);
   });
 
-  it("opens a 48-hour window from the story's publish time", () => {
+  it("opens a 72-hour window from the story's publish time", () => {
     const published = new Date("2026-10-06T08:00:00Z");
-    expect(agencySocialWindow(published, new Date("2026-10-08T07:59:00Z"))).toEqual({
+    expect(agencySocialWindow(published, new Date("2026-10-09T07:59:00Z"))).toEqual({
       eligible: true,
-      expiresAt: "2026-10-08T08:00:00.000Z",
+      expiresAt: "2026-10-09T08:00:00.000Z",
     });
-    expect(agencySocialWindow(published, new Date("2026-10-08T08:00:00Z")).eligible).toBe(false);
+    expect(agencySocialWindow(published, new Date("2026-10-09T08:00:00Z")).eligible).toBe(false);
     expect(agencySocialWindow(null).eligible).toBe(false);
   });
 
