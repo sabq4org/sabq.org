@@ -220,7 +220,7 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<art
 3. مقترح تغريدة من وكالة (`saveAgencySocialPost` — مع بقاء `aalhazmi@sabq.org` مستلماً افتراضياً دائماً).
 
 ### طرق الضبط
-1. **متغير البيئة (موصى به في الإنتاج على Railway):**
+1. **متغير البيئة (موصى به في الإنتاج على Render):**
    ```env
    DESK_BOT_ALERT_EMAILS=sohba@mail.grokbot.com
    ```

@@ -6,7 +6,7 @@
 
 - **AGENTS.md (هذا الملف):** القواعد الثابتة، طريقة العمل، الممنوعات، فلسفة المنصات.
 - **[`CLAUDE.md`](CLAUDE.md):** التفاصيل التقنية — الأوامر، المعمارية، الأنظمة ومساراتها، بوابات CI، والـ gotchas. **إلزامي قبل أي تعديل كود.**
-- **[`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md):** حالة الإنتاج الفعلية (Cloudflare Pages + Railway + Neon).
+- **[`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md):** حالة الإنتاج الفعلية (Cloudflare Pages + Render + Neon).
 
 ---
 
@@ -16,7 +16,7 @@
 
 1. **الدمج فقط بعد أن يخضرّ CI.** لا دمج إلى `main` إلا عبر PR، بعد نجاح كل الفحوص المطلوبة على آخر commit، وبطلب دمج صريح من علي. فحص أحمر لا يُتجاوز ولا يُعطَّل ولا يُدمج فوقه.
 2. **لا حذف بيانات، ولا تغيير مدمّر في الـ schema.** ممنوع `DROP` (قاعدة/مخطط/جدول/عمود)، `TRUNCATE`، `DELETE` أو `UPDATE` بلا `WHERE` محدد، وتغيير اسم عمود أو نوعه. التغييرات إضافية فقط (جدول/عمود nullable أو بقيمة افتراضية/فهرس).
-3. **لا إعادة تشغيل للقاعدة ولا تغيير إعداداتها.** لا restart/suspend للـ compute، ولا تغيير إعدادات Neon أو Railway Postgres، ولا إعادة ضبط أو استعادة أو حذف فروع Neon.
+3. **لا إعادة تشغيل للقاعدة ولا تغيير إعداداتها.** لا restart/suspend للـ compute، ولا تغيير إعدادات Neon، ولا إعادة ضبط أو استعادة أو حذف فروع Neon.
 4. **الفهارس تُبنى بدون قفل الجداول:** `CREATE INDEX CONCURRENTLY` على أي جدول فيه بيانات، وخارج أي transaction (الاستثناء الوحيد: فهارس جدول جديد فارغ في نفس الملف).
 5. **نسخة احتياطية أو فرع Neon قبل أي تعديل مباشر على القاعدة.** لا تعديل بيانات أو مخطط على الإنتاج قبل وجود وسيلة استعادة مؤكدة (جدول backup أو فرع Neon).
 6. **أي شيء خطير أو غير مؤكد يرجع لعلي.** إذا كان الإجراء لا يمكن التراجع عنه، أو يمس الإنتاج أو بيانات المستخدمين، أو لم تتأكد من أثره — توقف واسأل.
@@ -71,7 +71,7 @@ sabq.org/
 ├── android-native/      ← Android (Kotlin / Jetpack Compose)
 ├── android/             ← (قديم — Capacitor، في طور الإيقاف؛ لا تطوّر فيه)
 ├── functions/           ← Cloudflare Pages middleware (proxy، SEO، redirects)
-├── meetings-agent/      ← خدمة Railway مستقلة (لا يبنيها CI الجذر)
+├── meetings-agent/      ← خدمة Render مستقلة (لا يبنيها CI الجذر)
 └── migrations/          ← ملفات SQL يدوية مؤرخة لإجراءات الإنتاج
 ```
 
@@ -108,7 +108,7 @@ sabq.org/
 
 1. **Spec قبل الكود:** Umbrella Issue بعنوان `[FEATURE] <اسم الميزة>` يحدد: Spec UI (من iOS)، Spec API (endpoint + payload + نوع المصادقة)، Spec Schema، Spec Web.
 2. **نموذج بصري معتمد قبل أي كود واجهة:** أي واجهة جديدة (ومنها التقارير المطبوعة) تبدأ بنموذج يراجعه علي ويعتمده. لا يلزم لإضافة عنصر جديد في قائمة قائمة.
-3. **Backend أولاً:** PR يضم schema + endpoint، ينشر على Railway قبل عمل المنصات.
+3. **Backend أولاً:** PR يضم schema + endpoint، ينشر على Render قبل عمل المنصات.
 4. **iOS:** بجودة المرجع، ثم TestFlight ثم Apple Review. الويب/أندرويد يبدآن بالتوازي.
 5. **Android-native:** يطابق iOS 1:1 بلا تبسيط.
 6. **Web:** نفس endpoints، تصميم يتبع نظام الويب الحالي.
@@ -145,7 +145,7 @@ sabq.org/
 - شغّل قبل الـ PR: `npm run check` و`lint` على الملفات المتأثرة والاختبارات المناسبة، وراجع بوابات CI في `CLAUDE.md` (حدود طول الملفات، gitleaks، رقم بناء iOS).
 
 ### النشر
-- الدمج في `main` ينشر تلقائياً (Pages + Railway). النشر يُتحقق منه: `/api/version` يطابق SHA الدمج، و`https://api.sabq.org/health` سليم، ثم مسار المستخدم المتأثر. نجاح البناء أو HTTP 200 وحده لا يكفي.
+- الدمج في `main` ينشر تلقائياً (Pages + Render). النشر يُتحقق منه: `/api/version` يطابق SHA الدمج، و`https://api.sabq.org/health` سليم، ثم مسار المستخدم المتأثر. نجاح البناء أو HTTP 200 وحده لا يكفي.
 - خدمات منفصلة لا تُنشر إلا بطلب صريح (مثل بوت «نشر سبق» في مستودع `sabq-publisher`).
 
 ### المنصات
@@ -187,7 +187,7 @@ Project Board "Sabq Roadmap": `Backlog → Spec → Backend → iOS → Android 
 - لا تطبع الأسرار أو روابط الاتصال، ولا تحفظها في Git أو المحادثة، ولا تعدّل ملفات `.env`.
 - لا تحذف migrations موجودة ولا تعدّل ملف SQL قديماً في `migrations/`.
 - لا تشغّل `npm run db:push` أو `drizzle-kit push` ضد Neon أو الإنتاج، ولا `--force`. للتطوير: `npm run db:push:local` (localhost فقط).
-- لا تحذف خدمات Railway أو بيئاتها أو volumes.
+- لا تحذف خدمات Render أو بيئاتها أو أقراصها (disks).
 - لا تعطّل المصادقة أو الحماية أو فحوص CI لتجاوز عائق.
 - لا تطوّر داخل `android/` (Capacitor قديم).
 

@@ -99,7 +99,7 @@ function initPool(databaseUrl: string): void {
   };
 
   if (DB_DRIVER === 'pg') {
-    console.log('[DB] Initializing connection (Standard PG via node-postgres) — Railway / generic PostgreSQL...');
+    console.log('[DB] Initializing connection (Standard PG via node-postgres) — Neon over TCP / generic PostgreSQL...');
     pool = new PgPool(poolConfig);
     installPostgresPoolErrorHandling(pool, handleMainPoolError);
     db = drizzlePg(pool, { schema });

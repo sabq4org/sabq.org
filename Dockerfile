@@ -1,8 +1,8 @@
 # ============================================================
-# Sabq backend Dockerfile (Railway-aligned headless build)
+# Sabq backend Dockerfile (Render headless build)
 # ============================================================
 # Builds ONLY the Express server bundle. The frontend (Vite) is
-# built separately on Cloudflare Pages — Railway runs the API in headless
+# built separately on Cloudflare Pages — Render runs the API in headless
 # mode (SERVE_SPA=false default below).
 #
 # Note: this image does NOT serve the SPA. Local docker-compose
@@ -14,7 +14,7 @@
 # Stage 1: Builder
 FROM node:24.22.1-alpine AS builder
 
-# Bumped to bust Railway's docker layer cache when mobileApiRoutes.ts
+# Bumped to bust the platform's docker layer cache when mobileApiRoutes.ts
 # changes weren't being picked up despite commits landing on main. Any
 # string change here invalidates every cached layer below.
 ARG DEPLOY_MARKER=2026-05-16-mobileapi-redeploy
@@ -112,7 +112,7 @@ RUN mkdir -p /app/dist/public && chown -R sabq:nodejs /app/dist
 USER sabq
 
 ENV NODE_ENV=production
-# Railway injects PORT — default 5000 only matters for local docker run.
+# Render injects PORT — default 5000 only matters for local docker run.
 ENV PORT=5000
 # Headless by default in this image. Override SERVE_SPA=true if you
 # build the client separately and mount dist/public.

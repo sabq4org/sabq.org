@@ -325,6 +325,6 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 ## ما يضبطه المالك قبل الإطلاق
 
 1. دفع جدول `social_post_bot_keys`.
-2. `SABQ_BOT_SOCIAL_TOKEN` سر جديد على Railway (ليس توكن المسودات).
+2. `SABQ_BOT_SOCIAL_TOKEN` سر جديد على Render (ليس توكن المسودات).
 3. حساب X مرتبط من `/dashboard/social-publishing` (OAuth: `tweet.read tweet.write users.read media.write offline.access`) **أو** `SOCIAL_PUBLISH_TRANSPORT=publer` مع `PUBLER_API_KEY` و`PUBLER_WORKSPACE_ID` ثم مزامنة الحساب. خطة X المدفوعة أو Publer Business مطلوبة للنشر البرمجي.
 4. مفتاح الذكاء `OPENAI_API_KEY` (أو سلسلة الاحتياط) إن استُخدم `suggest`.

@@ -13,7 +13,7 @@ if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV || "development",
-    release: process.env.RENDER_GIT_COMMIT || process.env.RAILWAY_GIT_COMMIT_SHA || undefined,
+    release: process.env.RENDER_GIT_COMMIT || undefined,
     sendDefaultPii: false,
     integrations: [
       Sentry.requestDataIntegration({
@@ -76,8 +76,8 @@ if ((globalThis as any).__sabqAttachExpress) {
 
 app.get("/health", async (_req, res) => {
   let dbReady = false;
-  // بوابة النشر: Railway لا يحوّل الترافيك للحاوية الجديدة إلا بعد نجاح
-  // healthcheck (مهلة 60s في railway.json). قبل هذه البوابة كانت الحاوية
+  // بوابة النشر: Render لا يحوّل الترافيك للحاوية الجديدة إلا بعد نجاح
+  // healthcheck على /health. قبل هذه البوابة كانت الحاوية
   // تبلّغ 200 فورًا بينما pool فارغ وNeon بارد وRedis لم يتصل بعد، فتستقبل
   // موجة الترافيك كاملة وتغرق في «timeout exceeded when trying to connect»
   // لدقائق (نوبتا نشر 2026-07-18). المزلاج يثبت بعد أول تحقق ناجح فلا
@@ -128,16 +128,14 @@ app.get("/health", async (_req, res) => {
 
 const serverBootedAt = new Date().toISOString();
 // Render (الإنتاج منذ 2026-10-21) يضع RENDER_GIT_COMMIT/RENDER_GIT_BRANCH وقت
-// التشغيل؛ متغيرات Railway تبقى احتياطًا.
+// التشغيل.
 const deployCommit =
   process.env.RENDER_GIT_COMMIT ||
-  process.env.RAILWAY_GIT_COMMIT_SHA ||
   process.env.VERCEL_GIT_COMMIT_SHA ||
   process.env.GIT_COMMIT_SHA ||
   null;
 const deployBranch =
   process.env.RENDER_GIT_BRANCH ||
-  process.env.RAILWAY_GIT_BRANCH ||
   process.env.VERCEL_GIT_COMMIT_REF ||
   null;
 

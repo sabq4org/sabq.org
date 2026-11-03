@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     console.log("[NewsletterWorker] Scheduler disabled; queued deliveries only");
   }
 
-  // Railway يحتاج health endpoint حتى للـ worker غير العام.
+  // health endpoint للتشخيص حتى في الـ worker غير العام.
   const server = http.createServer((req, res) => {
     if (req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });

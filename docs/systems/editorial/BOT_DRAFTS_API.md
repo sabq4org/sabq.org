@@ -28,7 +28,7 @@
 
 | البيئة | Base URL | ملاحظة |
 |--------|----------|--------|
-| الإنتاج | `https://api.sabq.org` | Railway مباشرة (مثل الموبايل). يتجاوز وسيط Pages فلا يتأثر بمشكلة IP الواحد. |
+| الإنتاج | `https://api.sabq.org` | خادم Render مباشرة (مثل الموبايل). يتجاوز وسيط Pages فلا يتأثر بمشكلة IP الواحد. |
 | الإنتاج عبر الواجهة | `https://sabq.org` | يعمل أيضاً عبر وسيط `/api/*` لكن الأفضل `api.sabq.org`. |
 | محلياً | `http://localhost:5000` | `npm run dev` مع `BOT_DRAFTS_API_TOKENS` في `.env.local`. |
 
@@ -570,7 +570,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 ## 2) المصادقة للبوتات
 
-**التصميم المختار: توكن Bearer ثابت لكل بوت، من متغير بيئة على Railway، بلا جلسة متصفح.** وهو أصغر مسار آمن متاح لأن:
+**التصميم المختار: توكن Bearer ثابت لكل بوت، من متغير بيئة على Render، بلا جلسة متصفح.** وهو أصغر مسار آمن متاح لأن:
 
 - المشروع يستخدم النمط نفسه فعلاً لعامل محاضر الاجتماعات (`/api/internal/meetings-agent/*` + سر مشترك)؛ البادئة `/api/internal/` **معفاة أصلاً من CSRF** (`server/csrf.ts`) ومن محدد الكتابة العام (`server/index.ts`)، فلم نلمس أياً منهما.
 - لا جدول جديد ولا `db:push` ولا صلاحيات RBAC جديدة. `published` و`scheduled` و`ready_to_publish` قيم في `articles.status` القائم. التوكن لا يُترجم لمستخدم Passport ولا يفتح `/api/admin/*`.
@@ -580,9 +580,9 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 | المتغير | القيمة | أين |
 |---------|--------|-----|
-| `BOT_DRAFTS_API_TOKENS` | `nashr-sabq:<token>,grok-bot:<token>` — اسم صغير `[a-z0-9_-]` ثم `:` ثم توكن ≥32 حرفاً | Railway → خدمة API → Variables |
-| `BOT_DRAFTS_AUTHOR_USER_ID` | اختياري. حساب الإسناد (`articles.authorId` و`articles.reporterId`). الافتراضي حساب «صحيفة سبق» `RnP7eDOAl5T5rGpib9_8d` — نفس إسناد وكلاء البريد/الواتساب | Railway |
-| `BOT_DRAFTS_WRITE_RATE_LIMIT` | اختياري. كتابات/دقيقة لكل بوت (افتراضي 30) | Railway |
+| `BOT_DRAFTS_API_TOKENS` | `nashr-sabq:<token>,grok-bot:<token>` — اسم صغير `[a-z0-9_-]` ثم `:` ثم توكن ≥32 حرفاً | Render → خدمة `sabq.org` → Environment |
+| `BOT_DRAFTS_AUTHOR_USER_ID` | اختياري. حساب الإسناد (`articles.authorId` و`articles.reporterId`). الافتراضي حساب «صحيفة سبق» `RnP7eDOAl5T5rGpib9_8d` — نفس إسناد وكلاء البريد/الواتساب | Render |
+| `BOT_DRAFTS_WRITE_RATE_LIMIT` | اختياري. كتابات/دقيقة لكل بوت (افتراضي 30) | Render |
 
 توليد توكن:
 
@@ -592,7 +592,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 ### القواعد
 
-- **لا تضع التوكن في الشات أو في الريبو أو في الـ prompt.** يُخزَّن في Railway (جهة الخادم) وفي مدير أسرار منصة البوت (متغير `SABQ_BOT_DRAFTS_TOKEN`).
+- **لا تضع التوكن في الشات أو في الريبو أو في الـ prompt.** يُخزَّن في Render (جهة الخادم) وفي مدير أسرار منصة البوت (متغير `SABQ_BOT_DRAFTS_TOKEN`).
 - لكل بوت توكنه باسمه: الاسم يُسجَّل في `sourceMetadata.bot` وفي سجل أحداث المادة (`article_events`) وسجل النشاط، فيُعرف من أنشأ ومن عدّل.
 - المقارنة ثابتة الزمن على SHA-256 ولا تُطبع التوكنات في اللوج أبداً (اللوج يذكر اسم البوت ومعرّف المادة فقط).
 - التدوير: بدّل الزوج في `BOT_DRAFTS_API_TOKENS` وأعد النشر؛ لإيقاف بوت واحد احذف زوجه.
@@ -749,7 +749,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 
 ### تعليمات تشغيل بوت «نشر سبق»
 
-1. اطلب من علي إضافة زوج `nashr-sabq:<token>` إلى `BOT_DRAFTS_API_TOKENS` على Railway، وضع التوكن نفسه في أسرار البوت باسم `SABQ_BOT_DRAFTS_TOKEN`.
+1. اطلب من علي إضافة زوج `nashr-sabq:<token>` إلى `BOT_DRAFTS_API_TOKENS` على Render، وضع التوكن نفسه في أسرار البوت باسم `SABQ_BOT_DRAFTS_TOKEN`.
 2. في تعريف أداة البوت استورد `docs/systems/editorial/bot-drafts.openapi.yaml` أو عرّف الأدوات: إنشاء، تحديث، رفع صورة، `publish_sabq_draft` (`POST /publish` جسم `{}`)، `schedule_sabq_draft` (`POST /schedule` مع `publishAt`)، `reschedule_sabq_draft` (`PATCH /schedule`)، `unschedule_sabq_draft` (`DELETE /schedule`)، `archive_sabq_draft` (`POST /archive`)، `set_sabq_visibility` (`PATCH /visibility`)، و`mark_sabq_draft_ready` (`PATCH /ready`) للمسار الثانوي.
 3. تعليمة النظام للبوت:
    - «لإنشاء مسودة في سبق: `POST /api/internal/bot-drafts` مع `title` و`content` و`categorySlug` و`clientReference`، واحفظ `id` و`editUrl`.»
@@ -795,7 +795,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 | 7c | `GET /by-public-id/<englishSlug>` لخبر منشور، ثم لرابط مسودة أو لرابط غير موجود | `200` بـ`id` و`publicUrl`، ثم `404 not_found` |
 | 8 | توكن خاطئ / بدون توكن | `401` مع `Cache-Control: private, no-store` ولا يظهر أي توكن في الرد أو اللوج |
 | 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت وغير منشورة) | `404` — لا كشف لمسودات المحررين |
-| 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated/published/scheduled` و`marked ready` بلا توكنات |
+| 10 | لوج الخادم بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated/published/scheduled` و`marked ready` بلا توكنات |
 | 11 | `POST` بمتن نصي و`imageUrls` من `deliveryUrl` | `201` و`bodyImageUrls` فيها الروابط بالترتيب؛ معاينة اللوحة تعرض صوراً أسفل المتن لا نص الرابط. الغلاف يبقى في `imageUrl` فقط |
 
 آلياً: `npm run test:unit -- tests/unit/botDrafts.test.ts` (التوكنات، الحقول الممنوعة، نشر وجدولة، وقت ماضٍ وجسم فارغ، قفل ومصدر خاطئ ومادة منشورة، 401/403/405/409/422، رفع الصور، CSRF).
@@ -809,13 +809,13 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 - **أخبار عربية `news` فقط**. لا رأي/تحليل/EN/UR من هذا العقد.
 - **لا idempotency على الإنشاء**: تكرار `POST` ينتج مسودتين؛ استخدم `clientReference` للمطابقة، ولا تعد المحاولة بعد `201`.
 - **لا حذف نهائي من البوت**: `POST /archive` أرشفة ناعمة لمادة منشورة (`source=bot` فقط). الاستعادة من لوحة المحرر. `DELETE /:id` يبقى 405.
-- المحدد `express-rate-limit` في الذاكرة لكل نسخة خادم؛ مع عدة نسخ Railway السقف الفعلي ≈ السقف × عدد النسخ.
+- المحدد `express-rate-limit` في الذاكرة لكل نسخة خادم؛ مع عدة نسخ خادم السقف الفعلي ≈ السقف × عدد النسخ.
 
 ## قرارات تحتاج موافقة علي الحازمي قبل الدمج
 
 1. **نمط المصادقة**: توكن Bearer ثابت لكل بوت من متغير بيئة (لا جدول توكنات ولا OAuth). البديل الأثقل: جدول `api_tokens` مع صلاحيات وتدوير من اللوحة — يمكن الترقية لاحقاً دون تغيير عقد البوت.
 2. **الإسناد الافتراضي** لحساب «صحيفة سبق». البديل: حساب خدمة مخصص عبر `BOT_DRAFTS_AUTHOR_USER_ID`.
-3. **ضبط الأسرار على Railway** (`BOT_DRAFTS_API_TOKENS`) وإعادة النشر — بدونها المسار يرد `503` ولا أثر له على التحرير الحالي.
+3. **ضبط الأسرار على Render** (`BOT_DRAFTS_API_TOKENS`) وإعادة النشر — بدونها المسار يرد `503` ولا أثر له على التحرير الحالي.
 
 لا تغييرات schema ولا `db:push`: النشر والجدولة يستخدمان `published` و`scheduled` و`scheduledAt` و`publishedAt` و`publishType` القائمة. `sourceMetadata` يبقى jsonb بلا DDL.
 

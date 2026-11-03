@@ -39,16 +39,17 @@ API_ORIGIN=https://api.sabq.org PUBLIC_SITE_URL=https://sabq.org npm run dev
 
 See `.env.example`. Required in production:
 
-- `API_ORIGIN` — Railway API origin the SSR fetches from (e.g. `https://api.sabq.org`).
+- `API_ORIGIN` — API origin the SSR fetches from (e.g. `https://api.sabq.org`).
 - `PUBLIC_SITE_URL` — canonical origin for `<canonical>` / OG (`https://sabq.org`).
 - `STAGING_NO_INDEX=true` — staging فقط؛ يضيف `X-Robots-Tag` و`robots` meta
   ويحوّل الكاش إلى `private, no-store`. اتركه غير مضبوط في الإنتاج.
 - `STAGING_ACCESS_TOKEN` — staging فقط؛ يفعّل Basic Auth باسم مستخدم `sabq`.
-  مسار `/health` مستثنى حتى يعمل Railway health check.
+  مسار `/health` مستثنى حتى يعمل فحص صحة Render.
 
-## Deploy (Railway)
+## Deploy (Render)
 
-Second Railway service, Dockerfile builder (`railway.json`). Build context is
+Render Web Service `sabq-web-next-virginia` (Virginia), Docker build with Root
+Directory `web-next` and Build Filter `web-next/**`. Build context is
 this folder only (self-contained — no monorepo deps at runtime). Standalone
 output → `node server.js` on `$PORT`. Front it with a subdomain (e.g.
 `next.sabq.org`).

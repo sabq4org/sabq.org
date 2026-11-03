@@ -87,7 +87,7 @@ export interface HomeBundle {
 }
 
 /**
- * Fetch the aggregated SSR bundle for an article from the Railway API.
+ * Fetch the aggregated SSR bundle for an article from the API.
  * Returns null on 404 (so the page can render notFound()) and throws on other
  * failures (so Next surfaces a 500 instead of silently rendering an empty page,
  * which would poison the edge cache).

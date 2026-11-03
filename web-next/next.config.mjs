@@ -9,7 +9,7 @@ const nextConfig = {
   turbopack: {
     root: new URL(".", import.meta.url).pathname,
   },
-  // Standalone output keeps the Railway Docker image small (only the traced
+  // Standalone output keeps the Docker image small (only the traced
   // server + minimal node_modules are copied).
   output: "standalone",
   poweredByHeader: false,

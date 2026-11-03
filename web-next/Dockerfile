@@ -1,4 +1,4 @@
-# Next.js SSR app (web-next) for Railway. Self-contained: builds only from the
+# Next.js SSR app (web-next) for Render. Self-contained: builds only from the
 # web-next/ context (no dependency on the parent monorepo at runtime). Uses
 # Next "standalone" output so the runtime image stays small.
 
@@ -18,7 +18,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV STAGING_NO_INDEX=false
-# Bind to all interfaces so Railway's proxy can reach the container.
+# Bind to all interfaces so Render's proxy can reach the container.
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3001
 

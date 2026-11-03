@@ -2,7 +2,7 @@ name: Smoke (production)
 
 # Read-only smoke tests against the live site (sabq.org).
 # - Runs every 6 hours as synthetic monitoring.
-# - Runs after a push to main (deploys go out from main via Pages/Railway);
+# - Runs after a push to main (deploys go out from main via Pages/Render);
 #   the wait step gives the deploy a head start.
 # - Can be run manually against any URL (e.g. a preview deployment).
 #

@@ -2,7 +2,7 @@
   "name": "sabq-web-next",
   "version": "0.1.0",
   "private": true,
-  "description": "SSR frontend for sabq.org public content routes (articles, categories, home). Hosted on Railway, fronted by Cloudflare. Consumes the existing api.sabq.org API.",
+  "description": "SSR frontend for sabq.org public content routes (articles, categories, home). Hosted on Render, fronted by Cloudflare. Consumes the existing api.sabq.org API.",
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3001",

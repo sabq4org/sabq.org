@@ -75,7 +75,7 @@ export default tseslint.config(
     },
   },
   {
-    // Server: console IS the logging mechanism (Railway captures stdout).
+    // Server: console IS the logging mechanism (Render captures stdout).
     files: ["server/**/*.ts"],
     rules: {
       "no-console": "off",
