@@ -1,0 +1,167 @@
+[
+  {
+    "file": "01.webp",
+    "section": "hero",
+    "title": "ولي العهد يرأس مجلس الوزراء.. سياسة وطنية للفضاء وقرارات لتعزيز أمن الطاقة والتعاون الدولي",
+    "imageUrl": "https://media.sabq.org/news/2026/11/9fd3f7c1-c7ea-4ff0-ba2f-a3599fb6d51c/w1600.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "02.webp",
+    "section": "hero",
+    "title": "وزارة المالية: 84 مليار ريال عجز الميزانية السعودية في الربع الثالث.. 259 مليارًا إيرادات و343 مليارًا نفقات",
+    "imageUrl": "https://media.sabq.org/news/2026/11/6cbe7e71-f73c-42bb-b0d1-615c039e016b/w1600.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "03.webp",
+    "section": "hero",
+    "title": "التحالف يعترض ويدمر طائرة مسيرة فوق منطقة مكة المكرمة",
+    "imageUrl": "https://media.sabq.org/news/2026/10/5500a501-4179-4db0-8a75-cd43b0018170/w1091.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "04.webp",
+    "section": "hero",
+    "title": "الاتحاد الآسيوي يؤجل كأس آسيا في السعودية إلى 23 ديسمبر 2027",
+    "imageUrl": "https://media.sabq.org/news/2026/11/8c5e3dc2-be19-4a29-9b6e-f1cc8bda596c/w926.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "05.webp",
+    "section": "hero",
+    "title": "سلاح «صدام» المميت يعود من الظل.. كيف وصل غاز الخردل إلى جبهات الحوثيين في تعز؟",
+    "imageUrl": "https://media.sabq.org/news/2026/11/a5d2b7fe-218b-42bf-8e47-85dc7207284e/w1199.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "06.webp",
+    "section": "forYou",
+    "title": "الأمير خالد بن سلطان يدشّن المعرض الدولي للسيارات بجدة 2026 في نسخته العشرين",
+    "imageUrl": "https://media.sabq.org/news/2026/11/c3c5fa76-7f6d-4b0a-a21a-a58bb31ec408/w1249.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 40
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "07.webp",
+    "section": "forYou",
+    "title": "وزير الخارجية يبحث مع نظيره المصري مستجدات الأوضاع الإقليمية وجهود خفض التصعيد",
+    "imageUrl": "https://media.sabq.org/news/2026/11/7ec51bb4-eae8-419b-b65e-fcf265037337/w1200.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50,
+      "confidence": "high"
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "08.webp",
+    "section": "forYou",
+    "title": "أكثر من 100 شاب وشابة يقلعون عن التدخين بالقنفذة",
+    "imageUrl": "https://media.sabq.org/news/2026/11/d5fabae4-f39d-4e4c-8af4-05d622c5f058/w1600.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "09.webp",
+    "section": "forYou",
+    "title": "السعودية وقطر تكثفان التنسيق الدبلوماسي لخفض التصعيد وضمان أمن الممرات المائية وحرية الملاحة",
+    "imageUrl": "https://media.sabq.org/news/2026/11/79cc1913-632d-4732-bc6e-6265b8c50050/w1200.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50,
+      "confidence": "high"
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "10.webp",
+    "section": "forYou",
+    "title": "الأخضر تحت 17 يدشّن معسكره الإعدادي في قطر استعدادًا لكأس العالم 2026",
+    "imageUrl": "https://media.sabq.org/news/2026/11/f385afbf-8f0b-40ca-b5ef-3ff12fbcb65a/w1280.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "11.webp",
+    "section": "forYou",
+    "title": "التحالف: اعتراض وتدمير طائرة مسيَّرة أطلقتها الميليشيا الحوثية الإرهابية باتجاه المنطقة الجنوبية",
+    "imageUrl": "https://media.sabq.org/news/2026/10/b6c26090-a210-4300-81c9-93a58e5187a3/w1600.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "12.webp",
+    "section": "forYou",
+    "title": "وزير السياحة يفتتح جناح «أرض السعودية» في سوق السفر العالمي بلندن",
+    "imageUrl": "https://media.sabq.org/news/2026/11/08cf6d57-1469-4b68-95fe-243b7c054a7c/w1600.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "13.webp",
+    "section": "forYou",
+    "title": "\"يونيسف\" تكتفي بـ\"القلق\" إزاء قصف الحوثيين مركزاً صحياً في لحج وسقوط 5 شهداء",
+    "imageUrl": "https://media.sabq.org/news/2026/11/a117ac97-67d4-4c2e-83b1-f4488258ce79/w801.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "14.webp",
+    "section": "forYou",
+    "title": "الشرطة الإسبانية تحقق مع حارس أندورا بتهمة القتل غير العمد لمهاجم تينيريفي ",
+    "imageUrl": "https://media.sabq.org/news/2026/11/be802194-c075-44c3-89ec-94e37877a4e8/w801.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "15.webp",
+    "section": "forYou",
+    "title": "مشروب يومي قد يخفض خطر الخرف 18%.. دراسة تكشف سر حماية الدماغ والذاكرة",
+    "imageUrl": "https://media.sabq.org/news/2026/11/3a2e77ce-9224-45ff-bb30-579bc55b0763/w801.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50
+    },
+    "http": "200 image/webp"
+  },
+  {
+    "file": "16.webp",
+    "section": "forYou",
+    "title": "1208 عمليات عسكرية خلال 24 ساعة.. «فجر اليمن» تحيّد 370 حوثياً وتدمّر 120 آلية",
+    "imageUrl": "https://media.sabq.org/news/2026/11/5914a9ad-d080-452c-8531-583747383cd1/w1536.webp",
+    "imageFocalPoint": null,
+    "http": "200 image/webp"
+  },
+  {
+    "file": "17.webp",
+    "section": "forYou",
+    "title": "\"التحالف\": اعتراض وتدمير طائرة مسيّرة بالمنطقة الشرقية",
+    "imageUrl": "https://media.sabq.org/news/2026/10/df2d2eee-fc8d-4136-8dd7-ab05661ab3c0/w1091.webp",
+    "imageFocalPoint": {
+      "x": 50,
+      "y": 50
+    },
+    "http": "200 image/webp"
+  }
+]
