@@ -34,6 +34,13 @@ export function splitHumainText(text: string, limit = 450): string[] {
   return chunks;
 }
 
+// News speaking style (HUMAIN, 2026-11). Only `value=` parses; `style=`/`name=`
+// fail with TTS_EMOTION_MARKUP_INVALID, and an unknown value is silently ignored.
+// The ~30-char wrapper still fits the 450 chunk limit under HUMAIN's 500.
+export function withNewsStyle(text: string): string {
+  return `<emotion value="news">${text.replace(/[<>]/g, ' ')}</emotion>`;
+}
+
 export function pcmToWav(pcm: Buffer): Buffer {
   if (!pcm.length || pcm.length % 2 || pcm.length > 16 * 1024 * 1024) throw new HumainTtsError('TTS_INVALID_AUDIO');
   const header = Buffer.alloc(44);
@@ -90,7 +97,7 @@ const { parentPort, workerData } = require('node:worker_threads');
 export async function synthesizeHumain(text: string, voiceId: string, timeoutMs = 25_000): Promise<Buffer> {
   const key = process.env.HUMAIN_VOICE_API_KEY?.trim();
   if (!key) throw new HumainTtsError('HUMAIN_NOT_CONFIGURED');
-  const chunks = splitHumainText(text);
+  const chunks = splitHumainText(text).map(withNewsStyle);
   const sdkUrl = pathToFileURL(createRequire(import.meta.url).resolve('@humain-voice/sdk')).href;
   const worker = new Worker(workerSource, { eval: true, workerData: { sdkUrl, key, chunks, voiceId } });
   let timer: ReturnType<typeof setTimeout> | undefined;
