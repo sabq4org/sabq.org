@@ -38,7 +38,7 @@ export type AgencyMediaChoice = "article" | "images" | "video" | "none";
 export type AgencySocialAction = "submit" | "publish_now" | "schedule";
 
 /** المهلة التي يمكن فيها طلب تغريدة للخبر بعد نشره. */
-export const AGENCY_SOCIAL_WINDOW_MS = 48 * 60 * 60 * 1000;
+export const AGENCY_SOCIAL_WINDOW_MS = 72 * 60 * 60 * 1000;
 /** عدد مرات توليد النص المسموحة لكل وكالة في اليوم (بتوقيت الرياض). */
 export const AGENCY_SOCIAL_AI_DAILY_LIMIT = 5;
 
@@ -217,7 +217,7 @@ export async function saveAgencySocialPost(
     throw new SocialPublishValidationError("يمكن طلب التغريدة بعد نشر الخبر");
   }
   if (status.state === "expired") {
-    throw new SocialPublishValidationError("انتهت مهلة 48 ساعة لطلب تغريدة لهذا الخبر");
+    throw new SocialPublishValidationError("انتهت مهلة 72 ساعة لطلب تغريدة لهذا الخبر");
   }
   if (input.media === "video" && !status.videoSupported) {
     throw new SocialPublishValidationError("نشر الفيديو غير متاح حاليًا");

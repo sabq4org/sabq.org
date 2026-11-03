@@ -103,10 +103,10 @@ export default function PublisherArticles() {
     staleTime: 5 * 60_000,
   });
   const socialEnabled = Boolean(socialSettings && socialSettings.mode !== "off");
-  // مهلة طلب التغريدة: 48 ساعة من نشر الخبر (نفس قاعدة الخادم). null = انتهت.
+  // مهلة طلب التغريدة: 72 ساعة من نشر الخبر (نفس قاعدة الخادم). null = انتهت.
   const socialHoursRemaining = (publishedAt: string | null) => {
     if (!publishedAt) return null;
-    const left = 48 * 3600_000 - (Date.now() - new Date(publishedAt).getTime());
+    const left = 72 * 3600_000 - (Date.now() - new Date(publishedAt).getTime());
     return left > 0 ? Math.max(1, Math.ceil(left / 3600_000)) : null;
   };
 
@@ -433,7 +433,7 @@ export default function PublisherArticles() {
           )}
         </Card>
         <p className="text-xs text-muted-foreground">
-          الخط الداكن على شريط القراءات هو المعتاد في قسم الخبر داخل سبق. يمكن طلب تغريدة للخبر خلال 48 ساعة من نشره.
+          الخط الداكن على شريط القراءات هو المعتاد في قسم الخبر داخل سبق. يمكن طلب تغريدة للخبر خلال 72 ساعة من نشره.
         </p>
 
         <AlertDialog

@@ -1,6 +1,6 @@
 // نافذة إعداد مقترح منشور لمنصة X لكاتب الرأي.
 // تتيح للكاتب إعداد مقترح لنص المنشور (من العنوان أو مخصص) لمقاله المنشور
-// خلال نافذة الـ24 ساعة، مع تثبيت الرابط وصورة المقال، وإرسال المقترح لمراجعة فريق سبق.
+// خلال نافذة الـ72 ساعة، مع تثبيت الرابط وصورة المقال، وإرسال المقترح لمراجعة فريق سبق.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -201,13 +201,13 @@ export function OpinionAuthorSocialProposalDialog({
           </div>
         ) : (
           <div className="space-y-4 py-1">
-            {/* تنبيه نافذة الـ24 ساعة أو انتهاء المهلة */}
+            {/* تنبيه نافذة الـ72 ساعة أو انتهاء المهلة */}
             {isEligible ? (
               <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-foreground sm:text-sm">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-primary shrink-0" />
                   <span>
-                    متاح لتقديم المقترح خلال أول 24 ساعة من النشر.
+                    متاح لتقديم المقترح خلال أول 72 ساعة من النشر.
                   </span>
                 </div>
                 {remainingHours > 0 && (
@@ -220,9 +220,9 @@ export function OpinionAuthorSocialProposalDialog({
               <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                 <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
                 <div className="space-y-1">
-                  <p className="font-semibold">انتهت مهلة الـ24 ساعة</p>
+                  <p className="font-semibold">انتهت مهلة الـ72 ساعة</p>
                   <p className="text-xs leading-relaxed opacity-90">
-                    ميزة اقتراح المنشور متاحة خلال أول 24 ساعة فقط من وقت النشر الفعلي للمقال.
+                    ميزة اقتراح المنشور متاحة خلال أول 72 ساعة فقط من وقت النشر الفعلي للمقال.
                   </p>
                   {existing && (
                     <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
@@ -235,7 +235,7 @@ export function OpinionAuthorSocialProposalDialog({
               <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                 <Info className="h-5 w-5 shrink-0 text-amber-600" />
                 <p className="leading-relaxed">
-                  هذا المقال لم يُنشر فعلياً بعد، ولا تبدأ مهلة الـ24 ساعة إلا بعد النشر.
+                  هذا المقال لم يُنشر فعلياً بعد، ولا تبدأ مهلة الـ72 ساعة إلا بعد النشر.
                 </p>
               </div>
             )}
@@ -290,7 +290,7 @@ export function OpinionAuthorSocialProposalDialog({
                     </div>
                     {isEligible && (
                       <p className="text-xs text-muted-foreground">
-                        يمكنك تعديل النص وإعادة الإرسال طالما المقال ضمن نافذة الـ24 ساعة.
+                        يمكنك تعديل النص وإعادة الإرسال طالما المقال ضمن نافذة الـ72 ساعة.
                       </p>
                     )}
                   </div>

@@ -990,9 +990,14 @@ export async function publishClaimedPost(
   }
 }
 
-// ── مقترحات كتّاب الرأي (نافذة 24 ساعة) ───────────────────────────────
+// ── مقترحات كتّاب الرأي (نافذة 72 ساعة) ───────────────────────────────
 
-export const SOCIAL_POST_OPINION_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const SOCIAL_POST_OPINION_WINDOW_MS = 72 * 60 * 60 * 1000;
+
+/**
+ * رمز انتهاء المهلة يبقى `EXPIRED_24H` كما هو (عقد API قائم تقرؤه الواجهة)
+ * رغم أن النافذة صارت 72 ساعة منذ 2026-11-03.
+ */
 
 export interface OpinionSocialWindowCheck {
   eligible: boolean;
@@ -1157,7 +1162,7 @@ export async function createOrUpdateAuthorSocialProposal(
   if (!windowCheck.eligible) {
     if (windowCheck.reason === "EXPIRED_24H") {
       throw new SocialPublishValidationError(
-        "انتهت مهلة الـ24 ساعة لتقديم مقترح النشر الاجتماعي لهذا المقال",
+        "انتهت مهلة الـ72 ساعة لتقديم مقترح النشر الاجتماعي لهذا المقال",
         400,
       );
     }

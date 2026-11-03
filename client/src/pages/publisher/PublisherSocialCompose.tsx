@@ -350,7 +350,7 @@ export default function PublisherSocialCompose() {
   const blocked: Partial<Record<State, string>> = {
     off: "النشر الاجتماعي غير مفعّل لوكالتكم. تواصلوا مع فريق سبق لتفعيله.",
     not_published: "يمكن طلب التغريدة بعد نشر الخبر في سبق.",
-    expired: "انتهت مهلة 48 ساعة من نشر الخبر لطلب تغريدة له.",
+    expired: "انتهت مهلة 72 ساعة من نشر الخبر لطلب تغريدة له.",
   };
   const live = data.state === "live" ? data.livePost ?? data.post : null;
   const pending = data.state === "pending" ? data.post : null;

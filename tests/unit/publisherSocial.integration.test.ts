@@ -154,7 +154,7 @@ const submit = (over: Partial<AgencySocialInput> = {}): AgencySocialInput => ({
     expect(editorAlerts.sendEditorWhatsAppNotice.mock.calls[0][0]).toContain("جدولت تغريدة");
   });
 
-  it("keeps one live tweet per story and closes the window after 48 hours", async () => {
+  it("keeps one live tweet per story and closes the window after 72 hours", async () => {
     await story();
     const pub = await agency("approval");
     await pool.query(
@@ -164,9 +164,9 @@ const submit = (over: Partial<AgencySocialInput> = {}): AgencySocialInput => ({
     await expect(saveAgencySocialPost(pub, "m", "story", submit())).rejects.toMatchObject({ status: 409 });
 
     await pool.query("TRUNCATE articles, social_posts");
-    await story({ publishedHoursAgo: 49 });
+    await story({ publishedHoursAgo: 73 });
     expect((await getAgencySocialStatus(pub, "story"))?.state).toBe("expired");
-    await expect(saveAgencySocialPost(pub, "m", "story", submit())).rejects.toThrow("48");
+    await expect(saveAgencySocialPost(pub, "m", "story", submit())).rejects.toThrow("72");
   });
 
   it("hides other agencies' stories and unpublished ones", async () => {

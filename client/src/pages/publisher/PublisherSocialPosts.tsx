@@ -92,7 +92,7 @@ export default function PublisherSocialPosts() {
           <Card>
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center text-muted-foreground">
               <Share2 className="h-8 w-8 opacity-60" />
-              <p>لا توجد تغريدات بعد. يمكنكم طلب تغريدة لأي خبر خلال 48 ساعة من نشره.</p>
+              <p>لا توجد تغريدات بعد. يمكنكم طلب تغريدة لأي خبر خلال 72 ساعة من نشره.</p>
               <Link href="/dashboard/publisher/articles">
                 <Button variant="outline">أخباري</Button>
               </Link>
