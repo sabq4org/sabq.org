@@ -11,7 +11,7 @@ import { parsePage, parseLimit } from "../utils/pagination";
 const router: Router = Router();
 
 function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; needsReview?: boolean; confidence?: "high" | "medium" | "low" }; shouldSave: boolean } {
-  const data: any = { x: result.x, y: result.y, confidence: result.confidence, subject: result.subject };
+  const data: any = { x: result.x, y: result.y, confidence: result.confidence, subject: result.subject, box: result.box, iw: result.iw, ih: result.ih, kind: result.kind, source: result.source };
   if (result.confidence === "low") {
     data.needsReview = true;
     return { data, shouldSave: true };
@@ -45,6 +45,11 @@ router.post("/api/admin/focal-points/batch", requireAuth, requirePermission("art
     const batchSize = Math.min(Number(req.body.batchSize) || 20, 100);
     const concurrency = Math.min(Number(req.body.concurrency) || 8, 10);
 
+    // redetect=true: يعيد حساب الأخبار المنشورة خلال آخر `days` يومًا التي لم يحسبها كاشف المربعات.
+    // النقاط اليدوية المعلَّمة source=manual (من المحرر بعد هذا التغيير) تبقى كما هي.
+    // النقاط الأقدم بلا source لا يمكن تمييز اليدوي منها عن الكاشف القديم، فتُعاد كلها.
+    const redetect = req.body.redetect === true;
+    const days = Math.min(Math.max(Number(req.body.days) || 30, 1), 90);
     const articlesNeedingFP = await db
       .select({ id: articles.id, imageUrl: articles.imageUrl, title: articles.title })
       .from(articles)
@@ -52,7 +57,10 @@ router.post("/api/admin/focal-points/batch", requireAuth, requirePermission("art
         and(
           eq(articles.status, 'published'),
           isNotNull(articles.imageUrl),
-          isNull(articles.imageFocalPoint)
+          redetect
+            ? sql`${articles.publishedAt} >= now() - make_interval(days => ${days})
+                AND coalesce(${articles.imageFocalPoint}->>'source', '') NOT IN ('gemini-box', 'manual')`
+            : isNull(articles.imageFocalPoint)
         )
       )
       .orderBy(desc(articles.publishedAt))
@@ -62,7 +70,7 @@ router.post("/api/admin/focal-points/batch", requireAuth, requirePermission("art
       return res.json({ message: "All published articles with images already have focal points", processed: 0, succeeded: 0, failed: 0 });
     }
 
-    const imageCache = new Map<string, { x: number; y: number; confidence: string; subject: string }>();
+    const imageCache = new Map<string, FocalPointResult>();
 
     let succeeded = 0;
     let failed = 0;
@@ -87,7 +95,7 @@ router.post("/api/admin/focal-points/batch", requireAuth, requirePermission("art
             }
 
             const isLowConfidence = focalResult.confidence === "low";
-            const focalData: any = { x: focalResult.x, y: focalResult.y, confidence: focalResult.confidence };
+            const focalData: any = { x: focalResult.x, y: focalResult.y, confidence: focalResult.confidence, box: focalResult.box, iw: focalResult.iw, ih: focalResult.ih, kind: focalResult.kind, source: focalResult.source };
             if (isLowConfidence) {
               focalData.needsReview = true;
               skippedLowConfidence++;

@@ -1,5 +1,6 @@
 // Reference: javascript_openai blueprint
 import OpenAI from "openai";
+import { detectImageFocus, isImageFocusDetectorEnabled } from "./services/imageFocusDetector";
 import { retryWithBackoff } from "./utils/retryWithBackoff";
 import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
 import {
@@ -1762,9 +1763,30 @@ export interface FocalPointResult {
   y: number;
   confidence: "high" | "medium" | "low";
   subject: string;
+  // من كاشف المربعات (server/services/imageFocusDetector.ts) — اختيارية.
+  box?: { x: number; y: number; w: number; h: number };
+  iw?: number;
+  ih?: number;
+  kind?: "face" | "group" | "subject";
+  source?: "gemini-box";
 }
 
+/**
+ * نقطة تركيز الصورة. الأساسي: Gemini يعيد مربع الوجه/الموضوع (imageFocusDetector).
+ * عند غياب المفتاح أو فشله نرجع للكاشف القديم بنقطة واحدة.
+ */
 export async function detectImageFocalPoint(imageUrl: string): Promise<FocalPointResult> {
+  if (isImageFocusDetectorEnabled()) {
+    try {
+      return await detectImageFocus(imageUrl);
+    } catch (error) {
+      console.warn("[FocalPoint] box detector failed, using legacy detector:", error instanceof Error ? error.message : error);
+    }
+  }
+  return detectImageFocalPointLegacy(imageUrl);
+}
+
+async function detectImageFocalPointLegacy(imageUrl: string): Promise<FocalPointResult> {
   const response = await withRetry(async () => {
     return await trackedOpenAICompletion(openai, "image-focal-point", {
       model: "gpt-4o-mini",

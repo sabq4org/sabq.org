@@ -1,6 +1,6 @@
 import { publicArticleText, type PublicArticleLocale } from "./publicArticleText";
 import { BookOpen, Brain, Play } from "lucide-react";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getImageFocus } from "@/lib/imageUtils";
 import { getArticleCardImageSrc } from "@shared/articleHeroPreload";
 import type { ArticleWithDetails } from "@shared/schema";
 import { OptimizedImage } from "../OptimizedImage";
@@ -30,7 +30,7 @@ export function ArticleMedia({
           alt={article.title}
           className="h-full w-full object-cover"
           wrapperClassName="h-full w-full"
-          objectPosition={getObjectPosition(article)}
+          focus={getImageFocus(article)}
           priority={priority}
           preferSize={variant === "grid" ? "medium" : "small"}
         />

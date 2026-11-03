@@ -6,6 +6,7 @@ import {
   DEFAULT_IMAGE_SIZES_ATTR,
 } from "@/lib/cdnImage";
 import { getOptimizedImageSrc, getOptimizedImageSrcSet, type ImageSize } from "@/lib/optimizedImageSources";
+import { computeFocusPlacement, legacyObjectPosition, type FocusFrameMode, type ImageFocusData } from "@shared/imageFocus";
 
 export type { ImageSize };
 
@@ -17,6 +18,13 @@ interface OptimizedImageProps {
   /** Classes applied only to the wrapper div (for placeholder positioning) */
   wrapperClassName?: string;
   objectPosition?: string;
+  /**
+   * بيانات تركيز الصورة (articles.image_focal_point). عند تمريرها يُحسب موضع القص من مقاس
+   * الإطار الفعلي ويتجاهل `objectPosition`. انظر shared/imageFocus.ts.
+   */
+  focus?: ImageFocusData | null;
+  /** hero: يترك أسفل الإطار للعنوان. card: يوسّط الموضوع. */
+  focusMode?: FocusFrameMode;
   priority?: boolean;
   aspectRatio?: string;
   fallbackGradient?: string;
@@ -108,6 +116,8 @@ export function OptimizedImage({
   className = "",
   wrapperClassName = "",
   objectPosition = "center",
+  focus,
+  focusMode = "card",
   priority = false,
   aspectRatio,
   fallbackGradient = "from-primary/10 to-accent/10",
@@ -131,13 +141,37 @@ export function OptimizedImage({
   const [useFallback, setUseFallback] = useState(false);
   const [isInView, setIsInView] = useState(priority || eager);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const usesFocus = focus !== undefined;
+  const focusKey = usesFocus ? JSON.stringify(focus) : "";
+  const [focusPosition, setFocusPosition] = useState<string>(() => legacyObjectPosition(focus ?? null));
+
+  // يعيد حساب موضع القص كلما تغيّر مقاس الإطار (البطاقة نفسها تتغير بين الجوال وسطح المكتب).
+  useEffect(() => {
+    if (!usesFocus) return;
+    const el = imgRef.current;
+    const update = () => {
+      const node = imgRef.current;
+      if (!node) return;
+      const { width, height } = node.getBoundingClientRect();
+      setFocusPosition(computeFocusPlacement(focus ?? null, width, height, focusMode).objectPosition);
+    };
+    update();
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // focus يأتي ككائن جديد مع كل رسم؛ نعتمد على قيمته المسلسلة (focusKey).
+  }, [usesFocus, focusKey, focusMode, isInView, useFallback]);
 
   const normalizedSrc = useMemo(() => normalizeImageSrc(src), [src]);
   
   const optimizedSrc = useMemo(() => {
     if (webpSrc) return webpSrc;
-    return getOptimizedImageSrc(normalizedSrc, { width, height, quality, preferSize, aspectRatio });
-  }, [normalizedSrc, webpSrc, width, height, quality, preferSize, aspectRatio]);
+    // مع مربع تركيز لا نطلب قصًا من الـCDN (fit=cover)، وإلا لا تطابق إحداثيات المربع الصورة المسلَّمة.
+    const cdnAspect = focus?.box ? undefined : aspectRatio;
+    return getOptimizedImageSrc(normalizedSrc, { width, height: focus?.box ? undefined : height, quality, preferSize, aspectRatio: cdnAspect });
+  }, [normalizedSrc, webpSrc, width, height, quality, preferSize, aspectRatio, focus?.box]);
   
   const isTransformed = optimizedSrc !== normalizedSrc;
   
@@ -223,7 +257,7 @@ export function OptimizedImage({
 
   const imageStyles: CSSProperties = {
     ...style,
-    objectPosition: style?.objectPosition ?? objectPosition,
+    objectPosition: style?.objectPosition ?? (usesFocus ? focusPosition : objectPosition),
   };
 
   // Build the final className for the img element. Priority (LCP / above-the-
@@ -252,7 +286,7 @@ export function OptimizedImage({
               ? `url(${blurDataUrl})` 
               : gradientPlaceholder,
             backgroundSize: 'cover',
-            backgroundPosition: objectPosition,
+            backgroundPosition: usesFocus ? focusPosition : objectPosition,
             filter: hasBlurDataUrl ? 'blur(10px)' : 'none',
           }}
           aria-hidden="true"
@@ -276,6 +310,7 @@ export function OptimizedImage({
                 alt={alt}
                 width={width}
                 height={height}
+                ref={imgRef}
                 className={imgClassName}
                 style={imageStyles}
                 loading={priority || eager ? "eager" : "lazy"}
@@ -293,6 +328,7 @@ export function OptimizedImage({
               alt={alt}
               width={width}
               height={height}
+              ref={imgRef}
               className={imgClassName}
               style={imageStyles}
               loading={priority || eager ? "eager" : "lazy"}

@@ -153,6 +153,7 @@ import {
   WriterEditorialNoticesMobile,
 } from "@/components/WriterEditorialNotices";
 import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
+import type { ImageFocusData } from "@shared/imageFocus";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 import { HeroImageSuggestions } from "@/components/dashboard/HeroImageSuggestions";
@@ -279,7 +280,7 @@ export default function ArticleEditor() {
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [thumbnailManuallyDeleted, setThumbnailManuallyDeleted] = useState(false);
   const [heroImageMediaId, setHeroImageMediaId] = useState<string | null>(null);
-  const [imageFocalPoint, setImageFocalPoint] = useState<{ x: number; y: number } | null>(null);
+  const [imageFocalPoint, setImageFocalPoint] = useState<ImageFocusData | null>(null);
   const [keywords, setKeywords] = useState<string[]>([]);
   
   // New fields
@@ -3769,7 +3770,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       <ImageFocalPointPicker
                         imageUrl={imageUrl}
                         currentFocalPoint={imageFocalPoint || undefined}
-                        onFocalPointChange={(point) => setImageFocalPoint(point)}
+                        onFocalPointChange={(point) => setImageFocalPoint({ x: point.x, y: point.y, source: "manual" })}
                       />
                     </CardContent>
                   </CollapsibleContent>

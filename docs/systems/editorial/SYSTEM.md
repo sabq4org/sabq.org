@@ -391,3 +391,11 @@
 - **فك قفل الزميل:** مدير النظام فقط، بسبب مكتوب إلزامي، مع إشعار `DraftLockOverridden` لصاحب القفل وتسجيل `draft_unlocked` في سجل الخبر (`draft_locked` عند القفل).
 - **الواجهة:** `client/src/components/articles/DraftLockControls.tsx` (زر القفل، شارة «مقفلة باسمك / لدى فلان»، فلتر «مقفلة · N»، شريط القراءة فقط في المحرر). المحرر لا يطلب قفل التحرير ولا يحفظ تلقائياً على مسودة مقفلة لغيره.
 - **خارج النطاق حالياً:** جداول `en_articles`/`ur_articles`.
+
+## تركيز صور الأخبار — 2026-11-03
+
+- الكاشف: `server/services/imageFocusDetector.ts` (Gemini Flash، `IMAGE_FOCUS_MODEL`) يعيد مربعات الوجوه والموضوع الرئيسي، ويُستدعى من `detectImageFocalPoint` في `server/openai.ts` عند إنشاء الخبر أو تغيير صورته. عند غياب مفتاح Gemini أو فشله يعود الكاشف القديم (gpt-4o-mini)؛ `IMAGE_FOCUS_DETECTOR=legacy` يفرضه.
+- التخزين: الحقل نفسه `articles.image_focal_point` بحقول إضافية اختيارية `box` (نسب مئوية)، `iw`/`ih` (أبعاد الأصل)، `kind` (`face|group|subject`)، `source` (`gemini-box|manual`). لا تغيير في قاعدة البيانات. `x,y` تبقى للتوافق (iOS ومن لا يقرأ المربع) وتقع على الوجه الأوضح.
+- الحساب: `shared/imageFocus.ts` (خالص، `tests/unit/imageFocus.test.ts`). `OptimizedImage` يأخذ `focus` و`focusMode` ويحسب `object-position` من مقاس الإطار الفعلي. النقطة 50/50 القديمة وغياب النقطة = الثلث العلوي.
+- البارزة (`HeroCarousel.tsx`): تدرج أقصر، والعنوان ينتقل إلى شريط فاتح تحت الصورة تلقائيًا عندما يقع الوجه تحت منطقة العنوان (`heroCaptionShouldMoveBelow`).
+- النقطة اليدوية من المحرر تُحفظ `source: "manual"` ولا تمسها إعادة الحساب. إعادة الحساب: `POST /api/admin/focal-points/batch` مع `{ "redetect": true, "days": 30 }`.
