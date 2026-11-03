@@ -13,7 +13,7 @@ import sharp from "sharp";
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { GEMINI_FLASH_MODEL, minimalThinkingConfig, withGeminiFlashFallback } from "../ai/geminiModels";
 import { assertSafeImageUrl } from "../utils/safeImageUrl";
-import { logUsage } from "../ai/gateway/usageLogger";
+import type { UsageLogEntry } from "../ai/gateway/usageLogger";
 import { buildFocusFromBoxes, parseFocusResponse, type ImageFocusData } from "@shared/imageFocus";
 
 const FEATURE_KEY = "image-focal-point";
@@ -40,6 +40,13 @@ export interface ImageFocusDetection extends ImageFocusData {
   confidence: "high" | "medium" | "low";
   subject: string;
   source: "gemini-box";
+}
+
+// استيراد متأخر: usageLogger يحمّل قاعدة البيانات، ونريد الكاشف قابلًا للتشغيل في سكربت مستقل.
+function logUsage(entry: UsageLogEntry): void {
+  import("../ai/gateway/usageLogger")
+    .then((m) => m.logUsage(entry))
+    .catch(() => {});
 }
 
 let client: ReturnType<typeof createGoogleGenAI> | null = null;
