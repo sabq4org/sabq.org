@@ -167,17 +167,18 @@ flowchart LR
 
 ## 5. التشغيل والعمليات (Operations)
 
-### أ. نشر العامل عبر Wrangler
-- يعيش الكود المصدري للعامل حالياً على جهاز العمليات (ops box) في المسار:
-  `/workspace/sabq-elections`
-  *(ملاحظة للفريق التقني: يُفضّل لاحقاً نقل كود العامل إلى `tools/elections-worker/` داخل هذا المستودع أو إلى مستودع مستقل تحت `sabq4org` لضمان تتبع الإصدارات).*
-- يحتوي العامل على الارتباطات (Bindings) التالية:
-  - `ASSETS`: مجلد الأصول الثابتة (واجهة الصفحة + ملفات `/vendor/` و`/fonts/`).
-  - `DATA_SOURCE`: متغير نصي مضبوط حالياً على `"nyt-preview"`.
-- لنشر تعديل من جهاز العمليات:
+### أ. كود العامل والنشر عبر Wrangler
+- **في هذا المستودع:** تم حفظ الكود المصدري الكامل للعامل وأصوله الثابتة تحت المسار:
+  [`tools/elections-worker/`](../tools/elections-worker/)
+  - `tools/elections-worker/src/worker.js`: كود العامل ونقطة النهاية `/api/results` ومحوّل `nytAdapter`.
+  - `tools/elections-worker/dist/`: الأصول الثابتة (`index.html`، `app.js`، `share.js`، `app.css`، الشعارات، الخطوط، وملفات الخرائط `vendor/cd119.json` و`vendor/states.json`).
+  - `tools/elections-worker/wrangler.jsonc`: إعدادات العامل (`name: "sabq-elections-preview"`، ومعرّف الحساب `account_id`، وربط `ASSETS` على `dist`، ومتغير `DATA_SOURCE: "nyt-preview"`).
+  *(النسخة الأصلية على جهاز العمليات موجودة أيضاً في `/workspace/sabq-elections`).*
+- **طريقة النشر (Deploy):**
+  يُنشر العامل مباشرةً من مجلد `tools/elections-worker/` باستخدام `CLOUDFLARE_API_TOKEN` الخاص بحساب Cloudflare:
   ```bash
-  cd /workspace/sabq-elections
-  npx wrangler deploy
+  cd tools/elections-worker
+  CLOUDFLARE_API_TOKEN=<token> npx wrangler deploy
   ```
 
 ### ب. منع الفهرسة (`noindex` / `robots.txt`)
@@ -203,7 +204,7 @@ curl -s https://sabq-elections-preview.sabq-1ac.workers.dev/api/results | jq '{s
 1. **السلوك التلقائي الفوري:** يلتقط العامل الاستثناء ويعيد `demo: true` (`source: "sample"`). عندها يخفي `ElectionsLiveStrip` شارة مقاعد الشيوخ تلقائياً دون كسر واجهة `sabq.org`.
 2. **التشخيص:** افحص حقل `error` في `/api/results` لمعرفة ما إذا كان الخطأ HTTP 403/404 من `static01.nyt.com` أو تغيّراً في مسار JSON (`partyControlData` / `races`).
 3. **المعالجة:**
-   - إن كان تغييراً بسيطاً في أسماء الحقول داخل ملفات NYT: حدّث دالتي `normBalance` و`normRace` في `/workspace/sabq-elections/src/worker.js` وانشر بـ `npx wrangler deploy`.
+   - إن كان تغييراً بسيطاً في أسماء الحقول داخل ملفات NYT: حدّث دالتي `normBalance` و`normRace` في `tools/elections-worker/src/worker.js` وانشر بـ `CLOUDFLARE_API_TOKEN=<token> npx wrangler deploy` من داخل `tools/elections-worker/`.
    - إن توقف المصدر كلياً قبل جاهزية البديل المرخّص: عطّل الشريط مؤقتاً بضبط `VITE_ELECTIONS_STRIP_ENABLED=false` و`NEXT_PUBLIC_ELECTIONS_STRIP_ENABLED=false`.
 
 ---
@@ -219,4 +220,4 @@ curl -s https://sabq-elections-preview.sabq-1ac.workers.dev/api/results | jq '{s
    - حذف الملفين `client/src/components/ElectionsLiveStrip.tsx` و`web-next/components/ElectionsLiveStrip.tsx`.
    - إزالة متغيرات `VITE_ELECTIONS_*` من `.env.example` و`NEXT_PUBLIC_ELECTIONS_*` من `web-next/.env.example`.
 3. **إيقاف أو أرشفة العامل:**
-   - إما إبقاء العامل `sabq-elections-preview` كأرشيف للقراءة فقط أو حذفه من Cloudflare Workers بعد أخذ نسخة من `/workspace/sabq-elections`.
+   - إما إبقاء العامل `sabq-elections-preview` كأرشيف للقراءة فقط أو حذفه من Cloudflare Workers (الكود محفوظ في `tools/elections-worker/`).

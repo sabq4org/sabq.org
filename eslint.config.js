@@ -26,6 +26,7 @@ export default tseslint.config(
       "android/**",
       "ios/**",
       "cloudflare-worker/**",
+      "tools/elections-worker/**",
       "functions/**",
       "attached_assets/**",
       "public/**",
