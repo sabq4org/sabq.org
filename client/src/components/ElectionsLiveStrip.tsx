@@ -8,10 +8,11 @@ const ENV = import.meta.env as Record<string, string | undefined>;
 export const ELECTIONS_STRIP_ENABLED = ENV.VITE_ELECTIONS_STRIP_ENABLED !== "false";
 export const ELECTIONS_PAGE_URL = ENV.VITE_ELECTIONS_URL || "https://sabq.org/elections";
 const ELECTIONS_API_URL = ENV.VITE_ELECTIONS_API_URL || `${ELECTIONS_PAGE_URL.replace(/\/$/, "")}/api/results`;
+// Declared before INITIAL_DISMISSED: readDismissed() reads it at module load.
+const DISMISS_STORAGE_NAME = "sabq-elections-strip-2026-dismissed";
 // SPA: read localStorage synchronously so dismissed users never see a flash.
 const INITIAL_DISMISSED = readDismissed();
 
-const DISMISS_STORAGE_NAME = "sabq-elections-strip-2026-dismissed";
 const REFRESH_MS = 5 * 60 * 1000;
 
 type Balance = { d: number; r: number };
@@ -45,14 +46,19 @@ export function ElectionsLiveStrip() {
       const t = setTimeout(() => ctrl.abort(), 5000);
       try {
         const res = await fetch(ELECTIONS_API_URL, { signal: ctrl.signal, credentials: "omit" });
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
         const b = data?.offices?.senate?.balance;
-        if (alive && !data?.demo && b && Number.isFinite(b.D?.seats) && Number.isFinite(b.R?.seats)) {
+        if (!alive) return;
+        // Any failed or demo/invalid refresh clears the numbers, so the strip never
+        // shows stale results next to «مباشر» while the source is down.
+        if (!data?.demo && b && Number.isFinite(b.D?.seats) && Number.isFinite(b.R?.seats)) {
           setBalance({ d: b.D.seats, r: b.R.seats });
+        } else {
+          setBalance(null);
         }
       } catch {
-        /* fail silently */
+        if (alive) setBalance(null);
       } finally {
         clearTimeout(t);
       }
