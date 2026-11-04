@@ -10,13 +10,37 @@ import { useEffect, useState } from "react";
 export const ELECTIONS_STRIP_ENABLED = process.env.NEXT_PUBLIC_ELECTIONS_STRIP_ENABLED !== "false";
 export const ELECTIONS_PAGE_URL = process.env.NEXT_PUBLIC_ELECTIONS_URL || "https://sabq.org/elections";
 const ELECTIONS_API_URL = process.env.NEXT_PUBLIC_ELECTIONS_API_URL || `${ELECTIONS_PAGE_URL.replace(/\/$/, "")}/api/results`;
-// SSR: render visible on the server; hide after hydration if dismissed.
-const INITIAL_DISMISSED = false;
-
 const DISMISS_STORAGE_NAME = "sabq-elections-strip-2026-dismissed";
 const REFRESH_MS = 5 * 60 * 1000;
+// Covers edge/browser caching and one polling interval without keeping old totals live.
+const MAX_RESULT_AGE_MS = 15 * 60 * 1000;
 
 type Balance = { d: number; r: number };
+type Results = { senate: Balance | null; house: Balance | null };
+const EMPTY_RESULTS: Results = { senate: null, house: null };
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+/** Invalid or demo totals must never appear as live election results. */
+export function parseElectionBalances(value: unknown, now = Date.now()): Results {
+  const data = record(value);
+  if (data?.demo !== false) return EMPTY_RESULTS;
+  const fetchedAt = typeof data.fetchedAt === "string" ? Date.parse(data.fetchedAt) : NaN;
+  if (!Number.isFinite(fetchedAt) || now - fetchedAt > MAX_RESULT_AGE_MS || fetchedAt - now > REFRESH_MS) {
+    return EMPTY_RESULTS;
+  }
+  const offices = record(data.offices);
+  const read = (office: "senate" | "house", total: number): Balance | null => {
+    const balance = record(record(offices?.[office])?.balance);
+    const d = record(balance?.D)?.seats;
+    const r = record(balance?.R)?.seats;
+    return typeof d === "number" && typeof r === "number" && Number.isInteger(d) && Number.isInteger(r)
+      && d >= 0 && r >= 0 && d + r <= total ? { d, r } : null;
+  };
+  return { senate: read("senate", 100), house: read("house", 435) };
+}
 
 function readDismissed(): boolean {
   try {
@@ -26,14 +50,28 @@ function readDismissed(): boolean {
   }
 }
 
-/**
- * Slim, dismissible live strip for the US 2026 midterm results, rendered
- * directly under the site header. Fixed height (no layout shift when the
- * balance arrives); the live balance fetch fails silently.
- */
+function ChamberResult({ title, balance }: { title: string; balance: Balance | null }) {
+  return (
+    <span className="flex min-w-0 flex-col justify-center gap-0.5 px-1.5 sm:px-4 lg:px-3" aria-label={balance ? `${title}: الديمقراطيون ${balance.d}، الجمهوريون ${balance.r}` : `${title}: النتائج غير متاحة حالياً`}>
+      <span className="text-center text-xs font-semibold leading-5 lg:text-[13px]">{title}</span>
+      <span className="flex items-center justify-center gap-3 sm:gap-5 lg:gap-4">
+        <span className="flex min-w-0 flex-col items-center gap-0.5 lg:flex-row lg:gap-2">
+          <span className="whitespace-nowrap text-[10px] leading-4 sm:text-xs">الديمقراطيون</span>
+          <bdi dir="ltr" className="text-[22px] font-bold leading-6 tabular-nums text-[#216dc5] sm:text-2xl dark:text-[#80b8ff]">{balance?.d ?? "—"}</bdi>
+        </span>
+        <span className="flex min-w-0 flex-col items-center gap-0.5 lg:flex-row lg:gap-2">
+          <span className="whitespace-nowrap text-[10px] leading-4 sm:text-xs">الجمهوريون</span>
+          <bdi dir="ltr" className="text-[22px] font-bold leading-6 tabular-nums text-[#b73544] sm:text-2xl dark:text-[#ff9da9]">{balance?.r ?? "—"}</bdi>
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/** Same layout in SPA and SSR; each breakpoint reserves its space before data arrives. */
 export function ElectionsLiveStrip() {
-  const [dismissed, setDismissed] = useState<boolean>(INITIAL_DISMISSED);
-  const [balance, setBalance] = useState<Balance | null>(null);
+  const [dismissed, setDismissed] = useState<boolean>(false);
+  const [results, setResults] = useState<Results>(EMPTY_RESULTS);
 
   useEffect(() => {
     if (readDismissed()) setDismissed(true);
@@ -42,28 +80,28 @@ export function ElectionsLiveStrip() {
   useEffect(() => {
     if (!ELECTIONS_STRIP_ENABLED || dismissed || !ELECTIONS_API_URL) return;
     let alive = true;
+    let pending: AbortController | null = null;
     const load = async () => {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 5000);
+      pending = ctrl;
+      const timeout = setTimeout(() => ctrl.abort(), 5000);
       try {
         const res = await fetch(ELECTIONS_API_URL, { signal: ctrl.signal, credentials: "omit" });
-        if (!res.ok) return;
-        const data = await res.json();
-        const b = data?.offices?.senate?.balance;
-        if (alive && !data?.demo && b && Number.isFinite(b.D?.seats) && Number.isFinite(b.R?.seats)) {
-          setBalance({ d: b.D.seats, r: b.R.seats });
-        }
+        const data: unknown = res.ok ? await res.json() : null;
+        if (alive) setResults(parseElectionBalances(data));
       } catch {
-        /* fail silently */
+        if (alive) setResults(EMPTY_RESULTS);
       } finally {
-        clearTimeout(t);
+        clearTimeout(timeout);
+        if (pending === ctrl) pending = null;
       }
     };
-    load();
-    const id = setInterval(load, REFRESH_MS);
+    void load();
+    const interval = setInterval(load, REFRESH_MS);
     return () => {
       alive = false;
-      clearInterval(id);
+      clearInterval(interval);
+      pending?.abort();
     };
   }, [dismissed]);
 
@@ -74,49 +112,55 @@ export function ElectionsLiveStrip() {
     try {
       window.localStorage.setItem(DISMISS_STORAGE_NAME, "1");
     } catch {
-      /* ignore */
+      /* Dismiss still works for this visit when browser storage is unavailable. */
     }
   };
 
   return (
-    <div
+    <section
       dir="rtl"
+      aria-label="نتائج الانتخابات النصفية الأمريكية 2026"
       data-testid="elections-live-strip"
-      className="w-full border-t border-red-200/60 bg-[#0f172a] text-white dark:border-red-900/40"
+      className="w-full border-y border-[#dce8f1] bg-[#f0f7fc] text-[#14253e] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
     >
-      <div className="container mx-auto flex h-9 items-center gap-2 px-4 text-[13px] sm:px-6 sm:text-sm lg:px-8">
+      <div className="container mx-auto flex items-start gap-1 px-3 sm:px-6 lg:items-center lg:px-8">
         <a
           href={ELECTIONS_PAGE_URL}
           target="_blank"
           rel="noopener"
-          className="flex min-w-0 flex-1 items-center gap-2 hover:underline"
+          aria-label="نتائج الانتخابات النصفية الأمريكية 2026 والخريطة — يفتح في نافذة جديدة"
+          className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px_68px] items-center rounded-sm outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#216dc5] lg:grid-cols-[minmax(180px,1fr)_minmax(520px,1.7fr)_auto] lg:grid-rows-[64px]"
           data-testid="link-elections-live"
         >
-          <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75 motion-reduce:animate-none" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-          </span>
-          <span className="shrink-0 font-bold text-red-400">مباشر</span>
-          <span className="shrink-0 opacity-50" aria-hidden="true">|</span>
-          <span className="truncate font-semibold">نتائج الانتخابات النصفية الأمريكية 2026</span>
-          {balance && (
-            <span className="hidden shrink-0 items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs sm:inline-flex" aria-label={`مجلس الشيوخ: الديمقراطيون ${balance.d}، الجمهوريون ${balance.r}`}>
-              الشيوخ
-              <b className="text-[#5aa2ff]">د {balance.d}</b>–<b className="text-[#ff6b7d]">ج {balance.r}</b>
+          <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 lg:flex-col lg:items-start lg:gap-0">
+            <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-[#b73544] dark:text-[#ff9da9]">
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+              <span className="hidden min-[375px]:inline">مباشر</span>
             </span>
-          )}
-          <span className="mr-auto hidden shrink-0 text-[#4cbcfd] sm:inline">تابع النتائج ←</span>
+            <span className="whitespace-nowrap text-[13px] font-bold sm:text-base lg:text-lg">أمريكا تنتخب 2026</span>
+          </span>
+          <span className="col-span-2 col-start-1 row-start-2 grid h-full min-w-0 grid-cols-2 border-t border-[#dce8f1] py-1 dark:border-slate-700 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:h-12 lg:border-t-0 lg:py-0">
+            <ChamberResult title="مجلس الشيوخ" balance={results.senate} />
+            <span className="flex min-w-0 justify-center border-r border-[#ccdce9] dark:border-slate-700">
+              <ChamberResult title="مجلس النواب" balance={results.house} />
+            </span>
+          </span>
+          <span className="col-start-2 row-start-1 flex min-h-11 items-center gap-1 whitespace-nowrap text-xs font-semibold text-[#096ebd] hover:underline sm:text-sm lg:col-start-3 lg:pr-4 dark:text-[#80b8ff]">
+            <span className="sm:hidden">النتائج</span>
+            <span className="hidden sm:inline">النتائج والخريطة</span>
+            <span aria-hidden="true">←</span>
+          </span>
         </a>
         <button
           type="button"
           onClick={dismiss}
           aria-label="إخفاء شريط الانتخابات"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/70 hover:bg-white/10 hover:text-white"
+          className="mt-1 flex h-9 w-7 shrink-0 items-center justify-center rounded-md text-xl text-slate-500 outline-offset-2 hover:bg-blue-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#216dc5] lg:mt-0 lg:w-9 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
           data-testid="button-dismiss-elections-strip"
         >
-          ×
+          <span aria-hidden="true">×</span>
         </button>
       </div>
-    </div>
+    </section>
   );
 }

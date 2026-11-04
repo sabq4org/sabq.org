@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-23 (كاش بروكسي Pages لطلبات GET المجهولة واحترام s-maxage للأصل) | المالك: platform
+> آخر مراجعة: 2026-11-04 (عقد نتائج شريط الانتخابات في الترويسة) | المالك: platform
 
 
 ## الغرض
@@ -10,6 +10,7 @@
 لا يوجد — مولّد SEO بالذكاء الاصطناعي تحت `editorial` (`seo-generator`).
 
 ## عقود مهمة
+- **شريط الانتخابات (2026-11-04):** `ElectionsLiveStrip` في `SiteHeader` يعرض مجلسَي الشيوخ والنواب ويطابق نسخة SPA. يحجز 66px للكمبيوتر و114px للجوال، ويستعلم كل 5 دقائق من `/elections/api/results` بمهلة 5 ثوانٍ. يقبل نتائج فعلية بأعداد مقاعد صحيحة و`fetchedAt` بعمر أقصاه 15 دقيقة؛ يستبدلها بشرطات عند فشل التحديث أو عدم صلاحيتها. تفاصيل التصميم والإغلاق والبيئة: [`elections-2026-live-strip.md`](../../elections-2026-live-strip.md).
 - **بقاء وسوم القياس على التحويل (2026-10-03):** `slugRedirect` يلحق استعلام الطلب على مسار 301 (`redirectTargetWithSearch`) لخبر أو قسم. حافة Pages كانت تُبقي `url.search` عند `Response.redirect`. `utm_source` و`utm_medium` و`utm_campaign` و`utm_content` تصل إلى الصفحة. canonical يبقى بلا هذه الوسوم.
 - **سبب التحديث (2026-09-27، أزيل 2026-10-31):** `seo-bundle` لم يعد يرسل `updateLines`، ولا يعرض web-next أسطر «تحديث: …» للقارئ.
 - **رابط صفحة الخدمة في متن الخبر (2026-10-22):** `contentHtml` العربي في `seo-bundle` يلحق، بعد رابط المونديال، فقرة رابط إلى `/services/*` حين يطابق العنوان خدمة من مواعيدك (`withServiceLinkHtml` في `shared/servicePages/articleLink.ts`)، ولا يكررها إن كان الرابط في المتن. `semanticHtml` العربي في `seo-meta` (قشرة SPA حين يتعذّر SSR) يحمل الرابط نفسه قائمة مخفية بجوار رابط المونديال. القاعدة في `docs/systems/mawaeed/SYSTEM.md`.
