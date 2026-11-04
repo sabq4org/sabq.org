@@ -1,5 +1,7 @@
 node_modules
 dist
+!tools/elections-worker/dist/
+!tools/elections-worker/dist/**
 .DS_Store
 server/public
 vite.config.ts.*
