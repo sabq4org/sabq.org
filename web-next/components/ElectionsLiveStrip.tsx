@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 
 /**
  * Toggle: set NEXT_PUBLIC_ELECTIONS_STRIP_ENABLED=false to hide the strip.
- * NEXT_PUBLIC_ELECTIONS_URL switches the target (e.g. to a sabq.org route later).
+ * NEXT_PUBLIC_ELECTIONS_URL switches the target (default: the sabq.org/elections Worker route).
  * Mirrors client/src/components/ElectionsLiveStrip.tsx.
  */
 export const ELECTIONS_STRIP_ENABLED = process.env.NEXT_PUBLIC_ELECTIONS_STRIP_ENABLED !== "false";
-export const ELECTIONS_PAGE_URL = process.env.NEXT_PUBLIC_ELECTIONS_URL || "https://sabq-elections-preview.sabq-1ac.workers.dev";
+export const ELECTIONS_PAGE_URL = process.env.NEXT_PUBLIC_ELECTIONS_URL || "https://sabq.org/elections";
 const ELECTIONS_API_URL = process.env.NEXT_PUBLIC_ELECTIONS_API_URL || `${ELECTIONS_PAGE_URL.replace(/\/$/, "")}/api/results`;
 // SSR: render visible on the server; hide after hydration if dismissed.
 const INITIAL_DISMISSED = false;

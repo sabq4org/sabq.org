@@ -98,7 +98,16 @@ flowchart LR
 
 ## 3. مزايا صفحة النتائج التفاعلية (Page Features)
 
-تُقدَّم صفحة النتائج من أصول العامل الثابتة (`env.ASSETS`) على `https://sabq-elections-preview.sabq-1ac.workers.dev` وتشمل:
+تُقدَّم صفحة النتائج من أصول العامل الثابتة (`env.ASSETS`) على `https://sabq.org/elections` وتبقى متاحة أيضاً على `https://sabq-elections-preview.sabq-1ac.workers.dev`.
+
+**مسارات Cloudflare الحيّة (zone sabq.org، أضيفت 2026-11-04) → العامل `sabq-elections-preview`:**
+
+| النمط | Route ID |
+|---|---|
+| `sabq.org/elections` | `950f6756f4724744925db2f6319ecfe9` |
+| `sabq.org/elections/*` | `871fcdb4542441e4a32e8d3de6102943` |
+
+يزيل العامل البادئة `/elections` قبل التوجيه، ويعيد كتابة روابط HTML المطلقة عبر `HTMLRewriter`، وتستخدم السكربتات `window.__BASE` للأصول ونقطة `/api/results` وروابط المشاركة (`?office=&state=&race=`). لا يمسّ العامل `/robots.txt` الخاص بـ sabq.org (يُخدم robots الخاص بالعامل على workers.dev فقط). تشمل الصفحة:
 
 1. **الأقسام الثلاثة:**
    - **مجلس الشيوخ (Senate):** شريط توازن الأغلبية (51 مقعداً للديمقراطيين، 50 للجمهوريين) مع تفصيل المقاعد المحسومة والحالية والمقاعد غير المطروحة (`noElection`).
@@ -139,7 +148,7 @@ flowchart LR
 | المتغير في `client` (Vite) | المتغير في `web-next` | القيمة الافتراضية | الوصف |
 |---|---|---|---|
 | `VITE_ELECTIONS_STRIP_ENABLED` | `NEXT_PUBLIC_ELECTIONS_STRIP_ENABLED` | مفعّل (`!== "false"`) | ضبطه على `"false"` يعطّل الشريط ويمنع أي طلب شبكي |
-| `VITE_ELECTIONS_URL` | `NEXT_PUBLIC_ELECTIONS_URL` | `https://sabq-elections-preview.sabq-1ac.workers.dev` | رابط الوجهة عند النقر على الشريط |
+| `VITE_ELECTIONS_URL` | `NEXT_PUBLIC_ELECTIONS_URL` | `https://sabq.org/elections` | رابط الوجهة عند النقر على الشريط |
 | `VITE_ELECTIONS_API_URL` | `NEXT_PUBLIC_ELECTIONS_API_URL` | `<ELECTIONS_URL>/api/results` | نقطة نهاية JSON لجلب توازن مجلس الشيوخ |
 
 **كيفية إيقاف الشريط فوراً:**
@@ -158,7 +167,7 @@ flowchart LR
 - إذا سقط العامل، أو انتهت المهلة، أو عادت بيانات تجريبية (`demo: true`)، يُبتلع الخطأ بصمت ويبقى الشريط ظاهراً كرابط مباشر نظيف بدون أرقام غير موثوقة.
 
 ### هـ. توافق سياسة أمن المحتوى (CSP) و CORS
-- يسمح إعداد CSP الحالي في المنصة (`connect-src https:`) بطلبات `fetch` المباشرة من المتصفح إلى `https://sabq-elections-preview.sabq-1ac.workers.dev/api/results`.
+- يسمح إعداد CSP الحالي في المنصة (`connect-src https:`) بطلبات `fetch` المباشرة من المتصفح إلى `https://sabq.org/elections/api/results` (نفس الأصل).
 - يتحقق العامل من ترويسة `Origin` عبر التعبير النمطي:
   `/^https:\/\/([a-z0-9-]+\.)*sabq\.org$/` أو `/^http:\/\/localhost(:\d+)?$/`
   ويُرجع `Access-Control-Allow-Origin: <origin>` مع `Vary: Origin`.
@@ -188,14 +197,14 @@ flowchart LR
   User-agent: *
   Disallow: /
   ```
-- يمرّر العامل **جميع** الاستجابات (HTML، `/api/results`، `/robots.txt`، والتحويلات) عبر دالة `withRobots` التي تضيف الترويسة:
+- يمرّر العامل **جميع** الاستجابات (HTML، `/api/results`، والتحويلات؛ و`/robots.txt` على workers.dev فقط) عبر دالة `withRobots` التي تضيف الترويسة:
   `X-Robots-Tag: noindex, nofollow`
 
 ### ج. المراقبة والفحص الصحي (Monitoring)
 يمكن التحقق من صحة العامل وحالة الكاش ومصدر البيانات عبر الأمر:
 ```bash
-curl -sI -H "Origin: https://sabq.org" https://sabq-elections-preview.sabq-1ac.workers.dev/api/results
-curl -s https://sabq-elections-preview.sabq-1ac.workers.dev/api/results | jq '{source, demo, fetchedAt, senate: .offices.senate.balance}'
+curl -sI -H "Origin: https://sabq.org" https://sabq.org/elections/api/results
+curl -s https://sabq.org/elections/api/results | jq '{source, demo, fetchedAt, senate: .offices.senate.balance}'
 ```
 - `x-cache: HIT` أو `MISS` يوضح حالة كاش الحافة الداخلي (`https://cache.internal/sabq-elections/results-v1` ومدته 270 ثانية).
 - إذا تحول `demo` إلى `true` أو ظهر الحقل `error` في استجابة JSON، فهذا يعني فشل جلب ملفات NYT أو تغيّر مسارها/هيكلها.

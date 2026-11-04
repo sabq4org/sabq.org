@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 
 /**
  * Toggle: set VITE_ELECTIONS_STRIP_ENABLED=false to hide the strip site-wide.
- * VITE_ELECTIONS_URL switches the target (e.g. to a sabq.org route later).
+ * VITE_ELECTIONS_URL switches the target (default: the sabq.org/elections Worker route).
  */
 const ENV = import.meta.env as Record<string, string | undefined>;
 export const ELECTIONS_STRIP_ENABLED = ENV.VITE_ELECTIONS_STRIP_ENABLED !== "false";
-export const ELECTIONS_PAGE_URL = ENV.VITE_ELECTIONS_URL || "https://sabq-elections-preview.sabq-1ac.workers.dev";
+export const ELECTIONS_PAGE_URL = ENV.VITE_ELECTIONS_URL || "https://sabq.org/elections";
 const ELECTIONS_API_URL = ENV.VITE_ELECTIONS_API_URL || `${ELECTIONS_PAGE_URL.replace(/\/$/, "")}/api/results`;
 // SPA: read localStorage synchronously so dismissed users never see a flash.
 const INITIAL_DISMISSED = readDismissed();

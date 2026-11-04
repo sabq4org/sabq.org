@@ -1,4 +1,4 @@
-const LOGO=new Image();LOGO.src="/sabq-logo-full-white.svg";
+const LOGO=new Image();LOGO.src=(window.__BASE||"")+"/sabq-logo-full-white.svg";
 let SH={t:null,id:null,sz:"1200x675",blob:null,url:null};
 function rr(c,x,y,w,h,r){c.beginPath();c.roundRect(x,y,w,h,r);c.fill();}
 function txt(c,s,x,y,size,col="#fff",wt=700,align="right"){c.font=`${wt} ${size}px Tajawal`;c.fillStyle=col;c.textAlign=align;c.fillText(s,x,y);}
@@ -41,6 +41,6 @@ const fname=()=>`sabq-midterms-${SH.t}${SH.id?"-"+SH.id:""}-${SH.sz}.png`;
 document.getElementById("shx").onclick=()=>document.getElementById("shm").hidden=true;
 document.querySelectorAll("[data-sz]").forEach(b=>b.onclick=()=>{SH.sz=b.dataset.sz;document.querySelectorAll("[data-sz]").forEach(x=>x.classList.toggle("on",x===b));paintShare();});
 document.getElementById("shdl").onclick=()=>{const a=document.createElement("a");a.href=SH.url;a.download=fname();a.click();};
-document.getElementById("shcp").onclick=async()=>{const u=SH.t==="balance"?location.origin+"/":linkFor(SH.t,SH.id);try{await navigator.clipboard.writeText(u);document.getElementById("shmsg").textContent="نُسخ الرابط: "+u;}catch{prompt("الرابط:",u);}};
-document.getElementById("shsh").onclick=async()=>{const u=SH.t==="balance"?location.origin+"/":linkFor(SH.t,SH.id);const f=new File([SH.blob],fname(),{type:"image/png"});
+document.getElementById("shcp").onclick=async()=>{const u=SH.t==="balance"?location.origin+(window.__BASE||"")+"/":linkFor(SH.t,SH.id);try{await navigator.clipboard.writeText(u);document.getElementById("shmsg").textContent="نُسخ الرابط: "+u;}catch{prompt("الرابط:",u);}};
+document.getElementById("shsh").onclick=async()=>{const u=SH.t==="balance"?location.origin+(window.__BASE||"")+"/":linkFor(SH.t,SH.id);const f=new File([SH.blob],fname(),{type:"image/png"});
  try{if(navigator.canShare?.({files:[f]}))await navigator.share({files:[f],title:"نتائج الانتخابات النصفية — سبق",url:u});else if(navigator.share)await navigator.share({title:"نتائج الانتخابات النصفية — سبق",url:u});else document.getElementById("shcp").click();}catch(e){}};

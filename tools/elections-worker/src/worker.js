@@ -29,11 +29,12 @@ function normRace(r, officeKey) {
 function normBalance(d, k) {
   const o = d.partyControlData?.results?.[0]?.offices?.[k]; if (!o) return null;
   const b = o.party_balance || {}; const g = p => ({ seats: b[p]?.seats || 0, noElection: b[p]?.no_election || 0, flips: b[p]?.flip_count || 0, winner: !!b[p]?.winner });
-  return { total: o.total, toWin: o.to_win, called: o.num_races_called, up: o.open_seats, D: g("DEM"), R: g("GOP"), I: g("OTH") };
+  const tw = o.to_win; const toWin = tw && typeof tw === "object" ? { D: tw.DEM ?? tw.D, R: tw.GOP ?? tw.R, I: tw.OTH ?? tw.I } : { D: tw, R: tw, I: tw };
+  return { total: o.total, toWin, called: o.num_races_called, up: o.open_seats, D: g("DEM"), R: g("GOP"), I: g("OTH") };
 }
 async function nytAdapter() {
   const offices = { senate: "S", house: "H", governor: "G" };
-  const out = { source: "nyt-preview", sourceLabel: "AP عبر ملفات NYT العامة — معاينة داخلية فقط", demo: false, fetchedAt: new Date().toISOString(), offices: {} };
+  const out = { source: "nyt-preview", sourceLabel: "أسوشيتد برس (AP)", demo: false, fetchedAt: new Date().toISOString(), offices: {} };
   await Promise.all(Object.entries(offices).map(async ([name, k]) => {
     const r = await fetch(NYT(name), { cf: { cacheTtl: 60 }, headers: { "user-agent": "sabq-elections-preview/0.1 (internal)" } });
     if (!r.ok) throw new Error(name + " " + r.status);
@@ -42,7 +43,7 @@ async function nytAdapter() {
   }));
   return out;
 }
-const RESULTS_CACHE_URL = "https://cache.internal/sabq-elections/results-v1";
+const RESULTS_CACHE_URL = "https://cache.internal/sabq-elections/results-v3";
 async function results(env, ctx) {
   const cache = caches.default;
   const hit = await cache.match(RESULTS_CACHE_URL);
@@ -64,8 +65,15 @@ function withRobots(r) { const n = new Response(r.body, r); n.headers.set("x-rob
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
-    if (url.pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /\n", { headers: { "content-type": "text/plain;charset=utf-8", "cache-control": "public, max-age=3600", "x-robots-tag": NOINDEX } });
-    if (url.pathname === "/login" || url.pathname === "/logout") return withRobots(new Response(null, { status: 303, headers: { location: "/" } }));
+    let base = "";
+    if (url.pathname === "/elections" || url.pathname.startsWith("/elections/")) {
+      base = "/elections";
+      url.pathname = url.pathname.slice(base.length) || "/";
+      req = new Request(url.toString(), req);
+    }
+    const onSabq = /(^|\.)sabq\.org$/.test(url.hostname);
+    if (url.pathname === "/robots.txt" && !onSabq && !base) return new Response("User-agent: *\nDisallow: /\n", { headers: { "content-type": "text/plain;charset=utf-8", "cache-control": "public, max-age=3600", "x-robots-tag": NOINDEX } });
+    if (url.pathname === "/login" || url.pathname === "/logout") return withRobots(new Response(null, { status: 303, headers: { location: base + "/" } }));
     if (url.pathname === "/api/results") {
       const origin = req.headers.get("origin") || "";
       const ok = /^https:\/\/([a-z0-9-]+\.)*sabq\.org$/.test(origin) || /^http:\/\/localhost(:\d+)?$/.test(origin);
@@ -75,6 +83,10 @@ export default {
     }
     const r = await env.ASSETS.fetch(req);
     const n = withRobots(r); n.headers.set("cache-control", url.pathname.startsWith("/vendor/") || url.pathname.startsWith("/fonts/") ? "public, max-age=86400" : "public, max-age=60");
+    if (base && (n.headers.get("content-type") || "").includes("text/html")) {
+      const fix = attr => ({ element(e) { const v = e.getAttribute(attr); if (v && v.startsWith("/") && !v.startsWith("//")) e.setAttribute(attr, base + v); } });
+      return new HTMLRewriter().on("[src]", fix("src")).on("link[href]", fix("href")).on("a[href]", fix("href")).transform(n);
+    }
     return n;
   },
 };
