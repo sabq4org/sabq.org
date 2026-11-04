@@ -6,7 +6,6 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { AdSlot } from "./AdSlot";
 import { BreakingNewsTicker } from "./BreakingNewsTicker";
 import { AudioBulletinBar } from "./AudioBulletinBar";
-import { ElectionsLiveStrip } from "./ElectionsLiveStrip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -666,7 +665,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           )}
         </SheetContent>
       </Sheet>
-      <ElectionsLiveStrip />
       <AudioBulletinBar />
       <BreakingNewsTicker />
       {nd96.active && (
