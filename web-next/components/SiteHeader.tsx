@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ElectionsLiveStrip } from "./ElectionsLiveStrip";
 
 /**
  * Server-rendered header for the SSR public surfaces. Visually matches the SPA
@@ -59,7 +58,6 @@ export function SiteHeader() {
           <div className="hidden w-12 md:block" aria-hidden="true" />
         </div>
       </div>
-      <ElectionsLiveStrip />
     </header>
   );
 }
