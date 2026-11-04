@@ -11,14 +11,14 @@ const ELECTIONS_API_URL = ENV.VITE_ELECTIONS_API_URL || `${ELECTIONS_PAGE_URL.re
 // SPA: read localStorage synchronously so dismissed users never see a flash.
 const INITIAL_DISMISSED = readDismissed();
 
-const DISMISS_KEY = "sabq-elections-strip-2026-dismissed";
+const DISMISS_STORAGE_NAME = "sabq-elections-strip-2026-dismissed";
 const REFRESH_MS = 5 * 60 * 1000;
 
 type Balance = { d: number; r: number };
 
 function readDismissed(): boolean {
   try {
-    return typeof window !== "undefined" && window.localStorage.getItem(DISMISS_KEY) === "1";
+    return typeof window !== "undefined" && window.localStorage.getItem(DISMISS_STORAGE_NAME) === "1";
   } catch {
     return false;
   }
@@ -70,7 +70,7 @@ export function ElectionsLiveStrip() {
   const dismiss = () => {
     setDismissed(true);
     try {
-      window.localStorage.setItem(DISMISS_KEY, "1");
+      window.localStorage.setItem(DISMISS_STORAGE_NAME, "1");
     } catch {
       /* ignore */
     }

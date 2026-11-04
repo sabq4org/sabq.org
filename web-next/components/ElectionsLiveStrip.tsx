@@ -13,14 +13,14 @@ const ELECTIONS_API_URL = process.env.NEXT_PUBLIC_ELECTIONS_API_URL || `${ELECTI
 // SSR: render visible on the server; hide after hydration if dismissed.
 const INITIAL_DISMISSED = false;
 
-const DISMISS_KEY = "sabq-elections-strip-2026-dismissed";
+const DISMISS_STORAGE_NAME = "sabq-elections-strip-2026-dismissed";
 const REFRESH_MS = 5 * 60 * 1000;
 
 type Balance = { d: number; r: number };
 
 function readDismissed(): boolean {
   try {
-    return typeof window !== "undefined" && window.localStorage.getItem(DISMISS_KEY) === "1";
+    return typeof window !== "undefined" && window.localStorage.getItem(DISMISS_STORAGE_NAME) === "1";
   } catch {
     return false;
   }
@@ -72,7 +72,7 @@ export function ElectionsLiveStrip() {
   const dismiss = () => {
     setDismissed(true);
     try {
-      window.localStorage.setItem(DISMISS_KEY, "1");
+      window.localStorage.setItem(DISMISS_STORAGE_NAME, "1");
     } catch {
       /* ignore */
     }

@@ -42,10 +42,10 @@ async function nytAdapter() {
   }));
   return out;
 }
-const CACHE_KEY = "https://cache.internal/sabq-elections/results-v1";
+const RESULTS_CACHE_URL = "https://cache.internal/sabq-elections/results-v1";
 async function results(env, ctx) {
   const cache = caches.default;
-  const hit = await cache.match(CACHE_KEY);
+  const hit = await cache.match(RESULTS_CACHE_URL);
   if (hit) { const h = new Response(hit.body, hit); h.headers.set("x-cache", "HIT"); h.headers.set("cache-control", "private, max-age=240"); return h; }
   let data;
   try {
@@ -55,7 +55,7 @@ async function results(env, ctx) {
     data = { source: "sample", sourceLabel: "بيانات تجريبية", demo: true, error: String(e.message || e), fetchedAt: new Date().toISOString(), offices: {} };
   }
   const resp = json(data, 200, { "cache-control": "public, max-age=270" });
-  ctx.waitUntil(cache.put(CACHE_KEY, resp.clone()));
+  ctx.waitUntil(cache.put(RESULTS_CACHE_URL, resp.clone()));
   const r = new Response(resp.body, resp); r.headers.set("x-cache", "MISS"); r.headers.set("cache-control", "private, max-age=240"); return r;
 }
 
