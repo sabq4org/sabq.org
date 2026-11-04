@@ -74,17 +74,17 @@ function render(){if(!DATA)return;const demo=DATA.demo;
  document.getElementById("srcf").textContent=demo?"بيانات تجريبية":"أسوشيتد برس (AP)";
  document.getElementById("updf").textContent=dtf.format(new Date(DATA.fetchedAt));document.getElementById("upd").textContent="آخر تحديث: "+dtf.format(new Date(DATA.fetchedAt));
  balance();drawMap();drawPanel();if(FIRST){FIRST=false;if(SEL)zoomTo(SEL);if(SELRACE)setTimeout(()=>document.getElementById("r-"+SELRACE)?.scrollIntoView({block:"center"}),300);}pathMaj();flips();keyRaces();calls();}
-async function load(){try{let r=await fetch("/api/results",{cache:"no-store"});let d=await r.json();
- if(d.demo){const s=await (await fetch("/sample.json")).json();d={...s,demo:true,error:d.error};}DATA=d;render();}catch(e){console.warn("load failed",e);}left=REFRESH;}
+async function load(){try{let r=await fetch((window.__BASE||"")+"/api/results",{cache:"no-store"});let d=await r.json();
+ if(d.demo){const s=await (await fetch((window.__BASE||"")+"/sample.json")).json();d={...s,demo:true,error:d.error};}DATA=d;render();}catch(e){console.warn("load failed",e);}left=REFRESH;}
 setInterval(()=>{left--;document.getElementById("next").textContent=`التحديث التالي خلال ${Math.floor(left/60)}:${String(left%60).padStart(2,"0")} (كل 5 دقائق)`;if(left<=0)load();},1000);
 document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));OFF=b.dataset.o;zoomTo(null);drawMap();keyRaces();link();});
-Promise.all([d3.json("/vendor/states.json"),d3.json("/vendor/cd119.json")]).then(([us,cd])=>{states=topojson.feature(us,us.objects.states).features;CDS=topojson.feature(cd,cd.objects.cb_2024_us_cd119_20m).features;
+Promise.all([d3.json((window.__BASE||"")+"/vendor/states.json"),d3.json((window.__BASE||"")+"/vendor/cd119.json")]).then(([us,cd])=>{states=topojson.feature(us,us.objects.states).features;CDS=topojson.feature(cd,cd.objects.cb_2024_us_cd119_20m).features;
  const q=new URLSearchParams(location.search);if(q.get("office")&&ON[q.get("office")]){OFF=q.get("office");document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x.dataset.o===OFF));}
  if(q.get("state"))SEL=q.get("state").toUpperCase();if(q.get("race"))SELRACE=q.get("race");if(q.get("map")==="states")HMODE="state";FIRST=true;load();});
 let FIRST=false;
 function link(){const q=new URLSearchParams();q.set("office",OFF);if(SEL)q.set("state",SEL);if(SELRACE)q.set("race",SELRACE);if(OFF==="house"&&HMODE!=="district")q.set("map","states");history.replaceState(null,"","?"+q);}
 const linkFor=(t,id)=>{const r=t==="race"&&["senate","house","governor"].flatMap(races).find(x=>x.id===id);const q=new URLSearchParams();
- if(r){q.set("office",r.o);q.set("state",r.st);q.set("race",r.id);}else if(t==="state"){q.set("office",OFF);q.set("state",id);}return location.origin+"/?"+q;};
+ if(r){q.set("office",r.o);q.set("state",r.st);q.set("race",r.id);}else if(t==="state"){q.set("office",OFF);q.set("state",id);}return location.origin+(window.__BASE||"")+"/?"+q;};
 document.querySelectorAll("#hmode button").forEach(b=>b.onclick=()=>{HMODE=b.dataset.m;document.querySelectorAll("#hmode button").forEach(x=>x.classList.toggle("on",x===b));zoomTo(HMODE==="district"?SEL:null);drawMap();link();});
 document.addEventListener("click",e=>{const b=e.target.closest("[data-share]");if(b){e.preventDefault();openShare(b.dataset.share,b.dataset.id);}
  if(e.target.closest("[data-reset]")){SEL=null;SELRACE=null;zoomTo(null);drawMap();drawPanel();link();}});
