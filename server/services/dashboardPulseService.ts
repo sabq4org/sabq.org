@@ -68,10 +68,18 @@ export function riyadhDayStart(now: Date): Date {
 
 async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
   const now = new Date();
+  // يوم الرياض: للمؤشرات التي يُحسب طرفاها (اليوم/أمس) هنا — المواد والتعليقات.
   const todayStart = riyadhDayStart(now);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
   const yesterdayComparableEnd = new Date(
     yesterdayStart.getTime() + (now.getTime() - todayStart.getTime()),
+  );
+  // يوم الخادم: «أمس» للمشاهدات/القراءات/التفاعلات يقابل قيم «اليوم» في
+  // storage.getAdminDashboardStats (منتصف ليل الخادم) — يجب أن يبقى الطرفان على النافذة نفسها.
+  const serverTodayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const serverYesterdayStart = new Date(serverTodayStart.getTime() - 24 * 60 * 60 * 1000);
+  const serverYesterdayComparableEnd = new Date(
+    serverYesterdayStart.getTime() + (now.getTime() - serverTodayStart.getTime()),
   );
   const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
@@ -100,10 +108,10 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .from(articles),
     db
       .select({
-        viewsYesterday: sql<number>`count(*) filter (where ${userEvents.createdAt} >= ${yesterdayStart} and ${userEvents.createdAt} < ${yesterdayComparableEnd})`,
+        viewsYesterday: sql<number>`count(*) filter (where ${userEvents.createdAt} >= ${serverYesterdayStart} and ${userEvents.createdAt} < ${serverYesterdayComparableEnd})`,
       })
       .from(userEvents)
-      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, yesterdayStart))),
+      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, serverYesterdayStart))),
     db
       .select({
         receivedToday: sql<number>`count(*) filter (where ${comments.createdAt} >= ${todayStart})`,
@@ -113,12 +121,12 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .from(comments),
     db
       .select({
-        yesterdayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${yesterdayStart} and ${reactions.createdAt} < ${yesterdayComparableEnd})`,
+        yesterdayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${serverYesterdayStart} and ${reactions.createdAt} < ${serverYesterdayComparableEnd})`,
       })
       .from(reactions),
     db
       .select({
-        readsYesterday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${yesterdayStart} and ${readingHistory.readAt} < ${yesterdayComparableEnd})`,
+        readsYesterday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${serverYesterdayStart} and ${readingHistory.readAt} < ${serverYesterdayComparableEnd})`,
       })
       .from(readingHistory),
     db
@@ -163,12 +171,11 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .limit(8),
     db
       .select({
-        // الساعة بتوقيت الرياض لتتسق مع بداية اليوم أعلاه
-        hour: sql<string>`to_char(date_trunc('hour', ${userEvents.createdAt}) + interval '3 hours', 'HH24:00')`,
+        hour: sql<string>`to_char(date_trunc('hour', ${userEvents.createdAt}), 'HH24:00')`,
         views: sql<number>`count(*)`,
       })
       .from(userEvents)
-      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, todayStart)))
+      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, serverTodayStart)))
       .groupBy(sql`date_trunc('hour', ${userEvents.createdAt})`)
       .orderBy(sql`date_trunc('hour', ${userEvents.createdAt})`),
   ]);
