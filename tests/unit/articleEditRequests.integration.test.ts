@@ -115,8 +115,8 @@ describe.skipIf(!url)("article edit requests against PostgreSQL", () => {
       user_name text NOT NULL, acquired_at timestamp, expires_at timestamp NOT NULL, last_heartbeat timestamp)`);
     state.db = drizzle(pool);
     await pool.query(`INSERT INTO users (id, email, first_name) VALUES ('${REPORTER}', 'r@test.local', 'مراسل'), ('${EDITOR}', 'e@test.local', 'محرر')`);
-    await pool.query(`INSERT INTO articles (id, title, slug, content, status, article_type, reporter_id, author_id, updated_at)
-      VALUES ('a1', 'العنوان الأصلي', 'a1-slug', '<p>نص</p>', 'published', 'news', '${REPORTER}', '${EDITOR}', '2026-10-31T10:00:00.123456')`);
+    await pool.query(`INSERT INTO articles (id, title, slug, content, status, article_type, reporter_id, author_id, updated_at, published_at)
+      VALUES ('a1', 'العنوان الأصلي', 'a1-slug', '<p>نص</p>', 'published', 'news', '${REPORTER}', '${EDITOR}', '2026-10-31T10:00:00.123456', now())`);
     await pool.query(`INSERT INTO push_devices (id, user_id, device_token, token_provider, platform, bundle_id)
       VALUES ('d1', '${REPORTER}', 'tok-1', 'apns', 'ios', 'com.sabq.sabqorg')`);
     state.failInsideApprovalTx = false;

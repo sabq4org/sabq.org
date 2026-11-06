@@ -222,6 +222,7 @@ interface ContextResponse {
   article: { id: string; title: string; subtitle: string | null; status: string; articleType?: string | null; imageUrl: string | null; albumImages: string[] };
   paragraphs: string[];
   acceptsRequests: boolean;
+  closedMessage?: string | null;
   pendingRequestId: string | null;
 }
 
@@ -360,7 +361,7 @@ export function RequestEditDialog({
             </Button>
           </div>
         ) : !data.acceptsRequests ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">لا يمكن طلب تعديل خبر مؤرشف.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">{data.closedMessage || "لا يمكن طلب تعديل خبر مؤرشف."}</p>
         ) : (
           <div className="space-y-5">
             <div className="rounded-2xl bg-muted/50 px-4 py-3 text-[15px] font-semibold leading-7">{data.article.title}</div>

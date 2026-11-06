@@ -381,7 +381,7 @@ export default function ReporterMyArticlesPage() {
                   const status = contributorArticleStatusLabel(article);
                   const requests = editRequests.byArticle.get(article.id);
                   const canRequestEdit =
-                    articleAcceptsEditRequests(article.status)
+                    articleAcceptsEditRequests(article)
                     && (article.status !== "draft" || article.reviewStatus === "pending_review")
                     && !requests?.some((i) => i.status === "pending");
                   const canEdit =
