@@ -164,7 +164,7 @@ interface DashboardStats {
 interface DashboardPulse {
   articles: Pick<
     DashboardStats["articles"],
-    "publishedToday" | "publishedYesterday" | "pendingReview" | "needsChanges" | "viewsYesterday"
+    "publishedToday" | "publishedYesterday" | "pendingReview" | "needsChanges" | "draft" | "scheduled" | "viewsYesterday"
   >;
   comments: Pick<
     DashboardStats["comments"],

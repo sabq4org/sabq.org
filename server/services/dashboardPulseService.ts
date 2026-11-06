@@ -16,6 +16,9 @@ export interface DashboardPulseStats {
     publishedYesterday: number;
     pendingReview: number;
     needsChanges: number;
+    /** مسودات مفتوحة غير مرفوعة للمراجعة ولا معادة للتعديل. */
+    draft: number;
+    scheduled: number;
     viewsYesterday: number;
   };
   comments: {
@@ -53,12 +56,30 @@ export async function getDashboardPulseStats(): Promise<DashboardPulseStats> {
   );
 }
 
+const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC+3 طوال السنة (بلا توقيت صيفي)
+
+/** منتصف ليل اليوم بتوقيت الرياض، مستقلًا عن المنطقة الزمنية للخادم (Render = UTC). */
+export function riyadhDayStart(now: Date): Date {
+  const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - RIYADH_OFFSET_MS,
+  );
+}
+
 async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // يوم الرياض: للمؤشرات التي يُحسب طرفاها (اليوم/أمس) هنا — المواد والتعليقات.
+  const todayStart = riyadhDayStart(now);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
   const yesterdayComparableEnd = new Date(
     yesterdayStart.getTime() + (now.getTime() - todayStart.getTime()),
+  );
+  // يوم الخادم: «أمس» للمشاهدات/القراءات/التفاعلات يقابل قيم «اليوم» في
+  // storage.getAdminDashboardStats (منتصف ليل الخادم) — يجب أن يبقى الطرفان على النافذة نفسها.
+  const serverTodayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const serverYesterdayStart = new Date(serverTodayStart.getTime() - 24 * 60 * 60 * 1000);
+  const serverYesterdayComparableEnd = new Date(
+    serverYesterdayStart.getTime() + (now.getTime() - serverTodayStart.getTime()),
   );
   const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
@@ -77,16 +98,20 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .select({
         publishedToday: sql<number>`count(*) filter (where ${articles.status} = 'published' and ${articles.publishedAt} >= ${todayStart})`,
         publishedYesterday: sql<number>`count(*) filter (where ${articles.status} = 'published' and ${articles.publishedAt} >= ${yesterdayStart} and ${articles.publishedAt} < ${yesterdayComparableEnd})`,
-        pendingReview: sql<number>`count(*) filter (where ${articles.reviewStatus} = 'pending_review')`,
-        needsChanges: sql<number>`count(*) filter (where ${articles.reviewStatus} = 'needs_changes')`,
+        // review_status يبقى عالقًا على أخبار نُشرت أو أُرشفت من مسارات قديمة؛
+        // لا تُحسب في المسار إلا المسودات (status = 'draft').
+        pendingReview: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.reviewStatus} = 'pending_review')`,
+        needsChanges: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.reviewStatus} = 'needs_changes')`,
+        draft: sql<number>`count(*) filter (where ${articles.status} = 'draft' and (${articles.reviewStatus} is null or ${articles.reviewStatus} not in ('pending_review', 'needs_changes')))`,
+        scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled')`,
       })
       .from(articles),
     db
       .select({
-        viewsYesterday: sql<number>`count(*) filter (where ${userEvents.createdAt} >= ${yesterdayStart} and ${userEvents.createdAt} < ${yesterdayComparableEnd})`,
+        viewsYesterday: sql<number>`count(*) filter (where ${userEvents.createdAt} >= ${serverYesterdayStart} and ${userEvents.createdAt} < ${serverYesterdayComparableEnd})`,
       })
       .from(userEvents)
-      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, yesterdayStart))),
+      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, serverYesterdayStart))),
     db
       .select({
         receivedToday: sql<number>`count(*) filter (where ${comments.createdAt} >= ${todayStart})`,
@@ -96,12 +121,12 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .from(comments),
     db
       .select({
-        yesterdayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${yesterdayStart} and ${reactions.createdAt} < ${yesterdayComparableEnd})`,
+        yesterdayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${serverYesterdayStart} and ${reactions.createdAt} < ${serverYesterdayComparableEnd})`,
       })
       .from(reactions),
     db
       .select({
-        readsYesterday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${yesterdayStart} and ${readingHistory.readAt} < ${yesterdayComparableEnd})`,
+        readsYesterday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${serverYesterdayStart} and ${readingHistory.readAt} < ${serverYesterdayComparableEnd})`,
       })
       .from(readingHistory),
     db
@@ -150,7 +175,7 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
         views: sql<number>`count(*)`,
       })
       .from(userEvents)
-      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, todayStart)))
+      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, serverTodayStart)))
       .groupBy(sql`date_trunc('hour', ${userEvents.createdAt})`)
       .orderBy(sql`date_trunc('hour', ${userEvents.createdAt})`),
   ]);
@@ -161,6 +186,8 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       publishedYesterday: Number(articleStats.publishedYesterday),
       pendingReview: Number(articleStats.pendingReview),
       needsChanges: Number(articleStats.needsChanges),
+      draft: Number(articleStats.draft),
+      scheduled: Number(articleStats.scheduled),
       viewsYesterday: Number(viewsStats.viewsYesterday),
     },
     comments: {
