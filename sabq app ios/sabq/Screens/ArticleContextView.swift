@@ -7,6 +7,8 @@ import SwiftUI
 /// الخارجية. لا تحمل منطق تنقّل: من يعرضها يقرر ماذا يفعل اللمس.
 struct ArticleContextView: View {
     let context: ArticleContext
+    /// A reader can supply its existing audio-enabled summary above this view.
+    var showsSummary = true
     var onOpenArticle: (Article) -> Void
     var onOpenOpinion: (OpinionArticle) -> Void
     var onOpenKeyword: (String) -> Void
@@ -18,7 +20,7 @@ struct ArticleContextView: View {
             if context.isEmpty {
                 emptyState
             }
-            if !context.summaryPoints.isEmpty {
+            if showsSummary, !context.summaryPoints.isEmpty {
                 summarySection
             }
             if !context.storySoFar.isEmpty {

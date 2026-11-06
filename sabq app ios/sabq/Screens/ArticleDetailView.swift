@@ -128,16 +128,6 @@ struct ArticleDetailView: View {
         ArticleContext.news(article: displayArticle, related: relatedArticles, keywords: displayTags)
     }
 
-    /// مفتوحًا على Duo والعمود المجاور يعرض «سياق الخبر»: الموجز الذكي ينتقل
-    /// إليه (نموذج Duo المعتمد) فلا يتكرر في القارئ.
-    private var summaryMovedToContextColumn: Bool {
-        publishesReaderContext
-            && FoldableDevice.isFoldable(observed: foldableObserved)
-            && duoContentInsets == nil
-            && navigation?.homeSidebarMode == .context
-            && navigation?.readerContext?.id == displayArticle.id
-    }
-
     var body: some View {
         if let opinion = redirectToOpinion {
             // Slug landed here as an article but the API returned opinion
@@ -156,144 +146,175 @@ struct ArticleDetailView: View {
 
     private var articleDetailContent: some View {
         GeometryReader { proxy in
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Hero is intentionally STATIC under scroll — no
-                    // pull-zoom, no parallax, no scale change.
-                    //
-                    // Keep the whole photo with aspect-fit. On an unfolded
-                    // landscape Duo, bound its viewport so a portrait does
-                    // not push the title and story below the entire screen.
-                    // The existing lightbox still opens the full-size photo.
-                    heroImage
-                        .frame(height: isDuoSpread && displayArticle.videoURL == nil
-                               ? min(240, max(0, proxy.size.height * 0.4)) : nil)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
-                            guard displayArticle.videoURL == nil,
-                                  displayArticle.imageURL?.isEmpty == false else { return }
-                            SabqHaptics.light()
-                            isHeroLightboxPresented = true
-                        }
-                        .aiImageBadgeOverlay(
-                            isVisible: displayArticle.isAiGeneratedImage,
-                            model: displayArticle.aiImageModel,
-                            inset: 12,
-                            corner: .topLeading
-                        )
-
-                    VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                        // Editorial column order (per user 2026-05-14):
-                        //   labels → title → metadata → smart summary →
-                        //   audio (if any) → divider → body.
-                        // Focus mode collapses secondary surfaces to keep
-                        // only the reading column.
-
-                        // ترتيب النموذج المعتمد ومسافاته: الوسوم ← 12 ← العنوان ← 16 ←
-                        // الكاتب ← 16 ← فاصل ← 16 ← الموجز ← 24 ← النص.
-                        // سطر الوسوم بارتفاع هدف لمس 44 يزيد ~12 فوق النص وتحته.
-                        VStack(alignment: .leading, spacing: 0) {
-                            if !isFocusMode {
-                                labelsRow
-                                    .animatedAppear(index: 0)
-                                    .padding(.bottom, SabqLayout.space12)
+            let layout = DuoArticleLayout(
+                size: proxy.size,
+                isDuoLandscape: isDuoSpread,
+                prefersSingleColumn: isFocusMode || dynamicTypeSize.isAccessibilitySize
+            )
+            // Keep this HStack and the article ScrollView mounted through
+            // folding, rotation and focus mode; only the context is conditional.
+            HStack(alignment: .top, spacing: layout.spacing) {
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Hero is intentionally STATIC under scroll — no
+                        // pull-zoom, no parallax, no scale change.
+                        //
+                        // Duo fills the reading column with a focal crop, while
+                        // the existing lightbox keeps the original photo available.
+                        heroImage(croppedHeight: layout.heroHeight)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
+                                guard displayArticle.videoURL == nil,
+                                      displayArticle.imageURL?.isEmpty == false else { return }
+                                SabqHaptics.light()
+                                isHeroLightboxPresented = true
                             }
+                            .aiImageBadgeOverlay(
+                                isVisible: displayArticle.isAiGeneratedImage,
+                                model: displayArticle.aiImageModel,
+                                inset: 12,
+                                corner: .topLeading
+                            )
 
-                            articleTitle
-                                .animatedAppear(index: 1)
-                                .padding(.bottom, displayArticle.subtitle == nil ? SabqLayout.space16 : SabqLayout.space8)
+                        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                            // Editorial column order (per user 2026-05-14):
+                            //   labels → title → metadata → smart summary →
+                            //   audio (if any) → divider → body.
+                            // Focus mode collapses secondary surfaces to keep
+                            // only the reading column.
 
-                            if let subtitle = displayArticle.subtitle {
-                                articleSubtitle(subtitle)
+                            // ترتيب النموذج المعتمد ومسافاته: الوسوم ← 12 ← العنوان ← 16 ←
+                            // الكاتب ← 16 ← فاصل ← 16 ← الموجز ← 24 ← النص.
+                            // سطر الوسوم بارتفاع هدف لمس 44 يزيد ~12 فوق النص وتحته.
+                            VStack(alignment: .leading, spacing: 0) {
+                                if !isFocusMode {
+                                    labelsRow
+                                        .animatedAppear(index: 0)
+                                        .padding(.bottom, SabqLayout.space12)
+                                }
+
+                                articleTitle
                                     .animatedAppear(index: 1)
-                                    .padding(.bottom, SabqLayout.space16)
+                                    .padding(.bottom, displayArticle.subtitle == nil ? SabqLayout.space16 : SabqLayout.space8)
+
+                                if let subtitle = displayArticle.subtitle {
+                                    articleSubtitle(subtitle)
+                                        .animatedAppear(index: 1)
+                                        .padding(.bottom, SabqLayout.space16)
+                                }
+
+                                articleMeta
+                                    .animatedAppear(index: 2)
+
+                                SidebarRowDivider()
+                                    .padding(.vertical, SabqLayout.space16)
+
+                                if !isFocusMode, !layout.showsContext {
+                                    smartSummaryCard
+                                        .animatedAppear(index: 3)
+                                        .padding(.bottom, SabqLayout.space8)
+                                }
                             }
 
-                            articleMeta
-                                .animatedAppear(index: 2)
+                            articleBody
+                                .analyticsReadingBody()
 
-                            SidebarRowDivider()
-                                .padding(.vertical, SabqLayout.space16)
+                            if let lines = displayArticle.updateLines, !lines.isEmpty {
+                                updateLinesList(lines)
+                            }
 
-                            if !isFocusMode, !summaryMovedToContextColumn {
-                                smartSummaryCard
-                                    .animatedAppear(index: 3)
-                                    .padding(.bottom, SabqLayout.space8)
+                            mediaAssetsGallery
+
+                            // Weekly-photos pack — only renders when the
+                            // backend tagged this article as a photo
+                            // collection. Shows up right after the intro
+                            // paragraph, before the action bar.
+                            if let photos = displayArticle.weeklyPhotos, !photos.isEmpty {
+                                weeklyPhotosGallery(photos)
+                            }
+
+                            // Lower sections — body / keywords / share /
+                            // related / comments — used to all share the
+                            // VStack's 18 pt spacing, which made the page
+                            // feel cramped right where the reader's eye is
+                            // already tired. Add explicit top-padding so each
+                            // section settles into its own breathing room
+                            // (effective gap = 18 base + N below).
+                            actionBar
+                                .padding(.top, SabqLayout.space16)
+
+                            if !isFocusMode, !layout.showsContext, !displayTags.isEmpty {
+                                tagsSection
+                                    .padding(.top, SabqLayout.space24)
+                            }
+
+                            if !isFocusMode, !relatedOpinions.isEmpty {
+                                relatedOpinionsSection
+                                    .padding(.top, SabqLayout.space24)
+                            }
+
+                            if !isFocusMode, !layout.showsContext, !relatedArticles.isEmpty {
+                                relatedSection
+                                    .padding(.top, SabqLayout.space24)
+                            }
+
+                            if !isFocusMode, let store = commentsStore {
+                                ArticleCommentsSection(store: store)
+                                    .padding(.top, SabqLayout.space24)
                             }
                         }
-
-                        articleBody
-                            .analyticsReadingBody()
-
-                        if let lines = displayArticle.updateLines, !lines.isEmpty {
-                            updateLinesList(lines)
-                        }
-
-                        mediaAssetsGallery
-
-                        // Weekly-photos pack — only renders when the
-                        // backend tagged this article as a photo
-                        // collection. Shows up right after the intro
-                        // paragraph, before the action bar.
-                        if let photos = displayArticle.weeklyPhotos, !photos.isEmpty {
-                            weeklyPhotosGallery(photos)
-                        }
-
-                        // Lower sections — body / keywords / share /
-                        // related / comments — used to all share the
-                        // VStack's 18 pt spacing, which made the page
-                        // feel cramped right where the reader's eye is
-                        // already tired. Add explicit top-padding so each
-                        // section settles into its own breathing room
-                        // (effective gap = 18 base + N below).
-                        actionBar
-                            .padding(.top, SabqLayout.space16)
-
-                        if !isFocusMode, !displayTags.isEmpty {
-                            tagsSection
-                                .padding(.top, SabqLayout.space24)
-                        }
-
-                        if !isFocusMode, !relatedOpinions.isEmpty {
-                            relatedOpinionsSection
-                                .padding(.top, SabqLayout.space24)
-                        }
-
-                        if !isFocusMode, !relatedArticles.isEmpty {
-                            relatedSection
-                                .padding(.top, SabqLayout.space24)
-                        }
-
-                        if !isFocusMode, let store = commentsStore {
-                            ArticleCommentsSection(store: store)
-                                .padding(.top, SabqLayout.space24)
-                        }
+                        .frame(width: max(0, min(layout.articleWidth - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
+                        .padding(.horizontal, SabqLayout.pageMargin)
+                        .padding(.top, SabqLayout.space16)
+                        .padding(.bottom, SabqLayout.tabBarClearance)
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
-                    .padding(.horizontal, SabqLayout.pageMargin)
-                    .padding(.top, SabqLayout.space16)
-                    .padding(.bottom, SabqLayout.tabBarClearance)
-                    .frame(maxWidth: .infinity)
+                    .frame(width: layout.articleWidth, alignment: .leading)
                 }
-                .frame(width: proxy.size.width, alignment: .leading)
-            }
-            .sabqNavigationEdge()
-            .sabqScrollProgressTracker { progress in
-                // Update through the class — does NOT invalidate this view
-                // body, only the `ReadingProgressOverlay` subview observes
-                // via @ObservedObject so the bar still animates smoothly.
-                scrollProgress.value = progress
-                BehaviorTracker.shared.updateScroll(percent: Double(progress))
-            }
-            .analyticsReadingProgress { progress in
-                SabqAnalytics.updateReading(articleId: displayArticle.id, percent: Int(progress * 100))
-            }
+                .frame(width: layout.articleWidth)
+                .accessibilityIdentifier("article.readingColumn")
+                .sabqNavigationEdge()
+                .sabqScrollProgressTracker { progress in
+                    // Update through the class — does NOT invalidate this view
+                    // body, only the `ReadingProgressOverlay` subview observes
+                    // via @ObservedObject so the bar still animates smoothly.
+                    scrollProgress.value = progress
+                    BehaviorTracker.shared.updateScroll(percent: Double(progress))
+                }
+                .analyticsReadingProgress { progress in
+                    SabqAnalytics.updateReading(articleId: displayArticle.id, percent: Int(progress * 100))
+                }
 
-            .sabqAutoHideTabBar()
-            .overlay(alignment: .top) {
-                ReadingProgressOverlay(model: scrollProgress)
+                .sabqAutoHideTabBar()
+                .overlay(alignment: .top) {
+                    ReadingProgressOverlay(model: scrollProgress)
+                }
+
+                if layout.showsContext {
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                            Text("سياق الخبر")
+                                .font(SabqType.sectionHeading.font)
+                                .foregroundStyle(SabqTheme.textPrimary)
+                                .accessibilityAddTraits(.isHeader)
+                            smartSummaryCard
+                            ArticleContextView(
+                                context: articleContext,
+                                showsSummary: false,
+                                onOpenArticle: { openContextDestination($0) },
+                                onOpenOpinion: { openContextDestination($0) },
+                                onOpenKeyword: { openContextDestination(KeywordRoute(keyword: $0)) }
+                            )
+                        }
+                        .padding(.top, SabqLayout.space8)
+                        .padding(.bottom, SabqLayout.tabBarClearance)
+                    }
+                    .frame(width: layout.contextWidth)
+                    .accessibilityIdentifier("article.contextColumn")
+                }
             }
+            .padding(.horizontal, layout.gutter)
         }
         .background(focusBackground)
         .environment(\.sabqJustifiesBody, false)
@@ -424,6 +445,11 @@ struct ArticleDetailView: View {
     }
 
     // MARK: - سياق الخبر
+
+    private func openContextDestination<Value: Hashable>(_ value: Value) {
+        guard let navigation else { return }
+        navigation.openFromReaderContext(value, in: navigation.selectedTab)
+    }
 
     private func publishContext(_ context: ArticleContext) {
         guard publishesReaderContext, isOnScreen, displayArticle.id != displayArticle.slug,
@@ -604,10 +630,9 @@ struct ArticleDetailView: View {
 
     // MARK: - Hero Image
 
-    // Aspect-fit keeps the editor's photo whole. The landscape Duo caller
-    // additionally bounds the viewport height; other layouts keep its
-    // natural width-driven height.
-    private var heroImage: some View {
+    // Duo uses the same editorial focal point as cards. Other layouts keep
+    // the original aspect-fit image, and the lightbox always shows it whole.
+    private func heroImage(croppedHeight: CGFloat?) -> some View {
         Group {
             if let video = displayArticle.videoURL {
                 // قالب الفيديو: الفيديو مكان الصورة كما في الويب
@@ -617,8 +642,16 @@ struct ArticleDetailView: View {
                     fallbackImageURL: displayArticle.imageURL
                 )
             } else if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fit) {
-                    heroPlaceholder
+                if let croppedHeight {
+                    FocalCachedAsyncImage(url: url, focalPoint: displayArticle.imageFocalPoint, maxPixelSize: 1600) {
+                        SabqImagePlaceholder()
+                    }
+                    .frame(height: croppedHeight)
+                    .clipped()
+                } else {
+                    CachedAsyncImage(url: url, contentMode: .fit) {
+                        heroPlaceholder
+                    }
                 }
             } else {
                 heroPlaceholder

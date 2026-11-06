@@ -179,8 +179,8 @@ struct ContentView: View {
 
     private func tabNavigation(_ tab: AppTab) -> some View {
         // Duo: «الرئيسية» مكدّس واحد لا قارئ جانبي — مفتوحًا تعرض رئيسيتها
-        // بعمودين (`homeSpreadLayout`) والخبر يُفتح بعرض الشاشة (تصميم المالك
-        // 2026-10-18). iPad يبقى على العمود والقارئ.
+        // بعمودين (`homeSpreadLayout`). صفحة الخبر تقسم مساحتها إلى الخبر
+        // وسياقه عند اتساعها، داخل المكدّس نفسه. iPad يبقى على العمود والقارئ.
         let isDuoHome = tab == .home && FoldableDevice.isFoldable(observed: foldableObserved)
         return SabqTabNavigation(path: path(for: tab), usesReaderColumns: tab != .profile && !isDuoHome) {
             tabRoot(tab)
