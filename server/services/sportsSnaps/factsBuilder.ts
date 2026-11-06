@@ -122,6 +122,8 @@ function teamRef(raw: any): SnapTeamRef {
   };
 }
 
+const POSTPONED_SHORT = new Set(["PST", "CANC", "ABD"]);
+
 function statusOf(raw: any): SnapFixtureFact["status"] {
   const short = String(raw?.fixture?.status?.short ?? "").toUpperCase();
   return {
@@ -135,6 +137,9 @@ function toUpcomingFact(raw: any, teamId: number): SnapFixtureFact | null {
   const fixtureId = Number(raw?.fixture?.id ?? 0);
   const kickoffTs = Number(raw?.fixture?.timestamp ?? 0);
   if (!fixtureId || !kickoffTs) return null;
+  // API-Football «next» يعيد المؤجلة/الملغاة بموعدها القديم — ليست مباراة قادمة.
+  const shortStatus = String(raw?.fixture?.status?.short ?? "").toUpperCase();
+  if (POSTPONED_SHORT.has(shortStatus)) return null;
 
   const home = teamRef(raw?.teams?.home);
   const away = teamRef(raw?.teams?.away);
