@@ -133,19 +133,7 @@ function requireSportsAiEditor(...codes: PermissionCode[]) {
   };
 }
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
-
-const RIYADH_TZ = "Asia/Riyadh";
-const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
-  timeZone: RIYADH_TZ,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-/** مفتاح يوم بتوقيت الرياض (YYYY-MM-DD) لتصنيف "مباريات اليوم" بدقة محلية. */
-function riyadhDayKey(ts: number): string {
-  return dayKeyFmt.format(new Date(ts * 1000));
-}
+import { bucketFixtures, compareByMatchPhase } from "../services/sports/fixtureBuckets";
 
 /**
  * موسم أرشيفي اختياري عبر ?season=YYYY — لإبقاء بيانات موسم منتهٍ (مثل 2025/2026)
@@ -187,44 +175,6 @@ function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   if (f.status.finished) return false;
   const now = Math.floor(Date.now() / 1000);
   return now >= f.timestamp - KICKOFF_HOT_BEFORE_SEC && now <= f.timestamp + KICKOFF_HOT_AFTER_SEC;
-}
-
-/** مباشر → قادمة → منتهية (يمنع ظهور «انتهت» فوق «مباشر» داخل نفس القائمة). */
-function compareByMatchPhase(
-  a: Pick<SplFixture, "timestamp" | "status">,
-  b: Pick<SplFixture, "timestamp" | "status">,
-): number {
-  const rank = (f: Pick<SplFixture, "status">) =>
-    f.status.live ? 0 : f.status.finished ? 2 : 1;
-  const ra = rank(a);
-  const rb = rank(b);
-  if (ra !== rb) return ra - rb;
-  if (ra === 2) return b.timestamp - a.timestamp;
-  return a.timestamp - b.timestamp;
-}
-
-/** يقسّم جدول البطولة إلى مباشر/اليوم/قادمة/نتائج جاهزة للعرض. */
-function bucketFixtures(fixtures: SplFixture[]) {
-  const todayKey = riyadhDayKey(Math.floor(Date.now() / 1000));
-
-  const live = fixtures.filter((f) => f.status.live).sort(compareByMatchPhase);
-  // «اليوم» = كل مباريات يوم الرياض بما فيها الجارية (فلتر اليوم ليس «غير المباشر»).
-  // تبويب «مباشر» يبقى اختصارًا للجارية فقط.
-  const today = fixtures
-    .filter((f) => riyadhDayKey(f.timestamp) === todayKey)
-    .sort(compareByMatchPhase);
-  // 54 ≈ 6 جولات × 9 مباريات (روشن) — السقف السابق 20 كان يقطع منتصف الجولة
-  // الثالثة. الجدول الكامل يبقى عبر /rounds + /round لا عبر هذه المعاينة.
-  const upcoming = fixtures
-    .filter((f) => !f.status.live && !f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
-    .sort(compareByMatchPhase)
-    .slice(0, 54);
-  const results = fixtures
-    .filter((f) => f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 54);
-
-  return { live, today, upcoming, results };
 }
 
 const todayHomeSnapshot = new SportsComponentSnapshot<Awaited<ReturnType<typeof getGlobalTodayFixtures>>>({
@@ -548,7 +498,7 @@ export function registerSportsRoutes(app: Express) {
     if (!comp) return;
     if (!isSaudiLeagueConfigured()) {
       res.set("Cache-Control", "public, max-age=30, s-maxage=60");
-      res.json({ configured: false, live: [], today: [], upcoming: [], results: [] });
+      res.json({ configured: false, live: [], today: [], upcoming: [], results: [], postponed: [] });
       return;
     }
     try {
@@ -557,7 +507,7 @@ export function registerSportsRoutes(app: Express) {
       if (season) {
         const buckets = bucketFixtures(await getFixtures(comp, season));
         res.set("Cache-Control", "public, max-age=600, s-maxage=86400, stale-while-revalidate=86400");
-        res.json({ configured: true, live: [], today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
+        res.json({ configured: true, live: [], today: buckets.today, upcoming: buckets.upcoming, results: buckets.results, postponed: buckets.postponed });
         return;
       }
       const [fixtures, liveNow] = await Promise.all([getFixtures(comp), getLiveFixtures(comp)]);
@@ -573,7 +523,7 @@ export function registerSportsRoutes(app: Express) {
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
-      res.json({ configured: true, live, today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
+      res.json({ configured: true, live, today: buckets.today, upcoming: buckets.upcoming, results: buckets.results, postponed: buckets.postponed });
     } catch (error) {
       console.error("[Sports] matches failed:", error);
       res.status(502).json({ message: "تعذر جلب المباريات حاليًا" });

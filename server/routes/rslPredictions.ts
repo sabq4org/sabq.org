@@ -27,6 +27,7 @@ import {
   getTournamentBlockSettings,
   isBlockHidden,
 } from "../services/tournamentBlockSettings";
+import { isPostponedFixture } from "../services/sports/fixtureBuckets";
 
 const router = Router();
 
@@ -109,7 +110,10 @@ router.get("/api/rsl/hero", async (_req, res) => {
     const fixtures = fixturesRaw.map((f) => liveById.get(f.id) ?? f);
 
     const todayKey = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const today = fixtures.filter((f) => (f.date ?? "").slice(0, 10) === todayKey);
+    // المؤجلة تبقى بتاريخها القديم لدى المزوّد — ليست «مباريات اليوم».
+    const today = fixtures.filter(
+      (f) => (f.date ?? "").slice(0, 10) === todayKey && !isPostponedFixture(f),
+    );
     const upcoming = fixtures.filter(isUpcomingFixture).sort((a, b) => a.timestamp - b.timestamp);
     const nextMatch = live[0] ?? today.find(isUpcomingFixture) ?? upcoming[0] ?? null;
 
