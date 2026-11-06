@@ -396,15 +396,10 @@ struct RoshnView: View {
                 } else {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(groupedByDay(fixtures), id: \.0) { day, items in
-                            HStack(spacing: SabqLayout.space4) {
-                                Text(day)
-                                    .sabqText(SabqType.metaEmphasis)
-                                    .foregroundStyle(RoshnTheme.accentInk)
-                                if let round = items.first?.round, !round.isEmpty {
-                                    Text("· \(round)")
-                                        .sabqText(SabqType.meta)
-                                        .foregroundStyle(SabqTheme.textSecondary)
-                                }
+                            // نص واحد يبدأ بالعربية: «·» في Text مستقل كان يُحسب اتجاهه
+                            // يسارًا فتظهر «الجولة 13 ·» بنقطة معلّقة في آخر السطر.
+                            HStack(spacing: 0) {
+                                dayHeading(day, round: items.first?.round)
                                 Spacer()
                             }
                             .padding(.top, SabqLayout.space16)
@@ -424,6 +419,17 @@ struct RoshnView: View {
                 }
             }
         }
+    }
+
+    private func dayHeading(_ day: String, round: String?) -> Text {
+        let dayText = Text(day)
+            .font(SabqType.metaEmphasis.font)
+            .foregroundStyle(RoshnTheme.accentInk)
+        guard let round, !round.isEmpty else { return dayText }
+        let roundText = Text(" · \(round)")
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.textSecondary)
+        return Text("\(dayText)\(roundText)")
     }
 
     private func fixtures(for bucket: MatchBucket) -> [RsFixture] {
@@ -853,6 +859,15 @@ struct RoshnMatchRow: View {
                         .foregroundStyle(SabqTheme.textSecondary)
                         .lineLimit(1).minimumScaleFactor(0.85)
                 }
+            } else if fixture.unplayable {
+                // مؤجلة/ملغاة: المزوّد يبقي الموعد القديم — لا نعرضه كساعة انطلاق.
+                Text(fixture.status.label.isEmpty ? "مؤجلة" : fixture.status.label)
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                Text("موعد جديد يُعلن لاحقًا")
+                    .sabqText(SabqType.tag)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(1).minimumScaleFactor(0.75)
             } else {
                 Text(RsFormat.time(fixture))
                     .sabqText(SabqType.button)
