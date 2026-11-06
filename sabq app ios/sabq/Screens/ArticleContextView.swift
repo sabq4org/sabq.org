@@ -130,7 +130,7 @@ struct ArticleContextView: View {
     }
 
     private var relatedSection: some View {
-        section("أخبار مرتبطة", note: nil) {
+        section("أخبار قد تهمك", note: nil) {
             VStack(spacing: 0) {
                 ForEach(Array(context.related.enumerated()), id: \.element.id) { index, article in
                     if index > 0 { SidebarRowDivider() }

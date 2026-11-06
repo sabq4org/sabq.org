@@ -211,7 +211,7 @@ struct ArticleDetailView: View {
                                     .padding(.vertical, SabqLayout.space16)
 
                                 if !isFocusMode, !layout.showsContext {
-                                    smartSummaryCard
+                                    smartSummaryCard()
                                         .animatedAppear(index: 3)
                                         .padding(.bottom, SabqLayout.space8)
                                 }
@@ -298,7 +298,7 @@ struct ArticleDetailView: View {
                                 .font(SabqType.sectionHeading.font)
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .accessibilityAddTraits(.isHeader)
-                            smartSummaryCard
+                            smartSummaryCard(compactHeader: true)
                             ArticleContextView(
                                 context: articleContext,
                                 showsSummary: false,
@@ -753,7 +753,7 @@ struct ArticleDetailView: View {
     /// when an audio file exists, keeping the listen action visually
     /// connected to the textual summary.
     @ViewBuilder
-    private var smartSummaryCard: some View {
+    private func smartSummaryCard(compactHeader: Bool = false) -> some View {
         let body = smartSummaryText
         // The listen button drives ElevenLabs TTS at request time, so
         // we surface it whenever there's actual text to speak (and a
@@ -769,7 +769,8 @@ struct ArticleDetailView: View {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                let stacksHeader = compactHeader || dynamicTypeSize.isAccessibilitySize
+                let summaryLayout = stacksHeader
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
                     : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
                 summaryLayout {
@@ -780,12 +781,26 @@ struct ArticleDetailView: View {
                             .font(SabqType.label)
                     }
                     .foregroundStyle(SabqTheme.primary)
-                    Spacer(minLength: 0)
+                    if !stacksHeader { Spacer(minLength: 0) }
                     if canListen {
-                        if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
-                            summaryAudioAttribution
+                        // The provider appears after playback starts. Reserve
+                        // a separate row in the narrow context column so it
+                        // cannot squeeze the title or split the pause label.
+                        let audioLayout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
+                            : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
+                        audioLayout {
+                            if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
+                                summaryAudioAttribution
+                                    .fixedSize(horizontal: true, vertical: false)
+                            }
+                            if compactHeader && !dynamicTypeSize.isAccessibilitySize {
+                                Spacer(minLength: 0)
+                            }
+                            listenButton
+                                .fixedSize(horizontal: true, vertical: false)
                         }
-                        listenButton
+                        .frame(maxWidth: stacksHeader ? .infinity : nil, alignment: .leading)
                     }
                 }
 
