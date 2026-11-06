@@ -87,11 +87,24 @@ final class FocalImageRenderingTests: XCTestCase {
         defer { window.isHidden = true }
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
-        // Let the cached load task and opacity-only fade finish.
+        // Let the cached load start, then wait for stable rendered pixels.
+        // A busy simulator can delay the opacity fade beyond a fixed sleep.
         try await Task.sleep(nanoseconds: 400_000_000)
-        let image = UIGraphicsImageRenderer(size: container, format: format).image { _ in
-            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        func snapshot() -> UIImage {
+            UIGraphicsImageRenderer(size: container, format: format).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
         }
+        var image = snapshot()
+        var stableFrames = 0
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            let next = snapshot()
+            stableFrames = next.pngData() == image.pngData() ? stableFrames + 1 : 0
+            image = next
+            if stableFrames >= 2 { break }
+        }
+        XCTAssertGreaterThanOrEqual(stableFrames, 2, "Image fade did not settle")
         let attachment = XCTAttachment(image: image)
         attachment.name = "\(portrait ? "portrait" : "landscape")-\(String(describing: focal))-\(direction)"
         attachment.lifetime = .keepAlways

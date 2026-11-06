@@ -119,6 +119,7 @@ struct ArticleDetailView: View {
     /// غير `nil` على الشاشة الضيقة لـ Duo فقط (`DuoTabContainer`). صنف الحجم لا
     /// يصلح هنا: الحاوية الثابتة تفرض `.regular` داخل مكدّسات UIKit.
     @Environment(\.duoContentInsets) private var duoContentInsets
+    @Environment(\.homeSpreadLayout) private var isDuoSpread
     @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
     /// الخبر ظاهر فعلًا (ليس مغطًّى بصفحة مدفوعة فوقه) — وحده ينشر سياقه.
     @State private var isOnScreen = false
@@ -160,17 +161,13 @@ struct ArticleDetailView: View {
                     // Hero is intentionally STATIC under scroll — no
                     // pull-zoom, no parallax, no scale change.
                     //
-                    // The hero image renders at its NATURAL aspect ratio
-                    // (no fixed-height crop) so portraits stay portrait
-                    // and landscapes stay landscape — same as the WEB
-                    // ArticleDetail.tsx hero and the live Capacitor
-                    // Android app the user reads on the Play Store
-                    // build. The focal point is a CARDS-only concern
-                    // (HomeFeed / Trending / lists); in the detail view
-                    // the reader expects to see the WHOLE image the
-                    // editor uploaded, otherwise faces in tall portraits
-                    // get chopped off the top.
+                    // Keep the whole photo with aspect-fit. On an unfolded
+                    // landscape Duo, bound its viewport so a portrait does
+                    // not push the title and story below the entire screen.
+                    // The existing lightbox still opens the full-size photo.
                     heroImage
+                        .frame(height: isDuoSpread && displayArticle.videoURL == nil
+                               ? min(240, max(0, proxy.size.height * 0.4)) : nil)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
@@ -607,9 +604,9 @@ struct ArticleDetailView: View {
 
     // MARK: - Hero Image
 
-    // Natural aspect ratio: the image fills the width and the height
-    // follows the image's intrinsic w/h. No fixed-height crop — in the
-    // detail view we show the editor's photo whole as-is.
+    // Aspect-fit keeps the editor's photo whole. The landscape Duo caller
+    // additionally bounds the viewport height; other layouts keep its
+    // natural width-driven height.
     private var heroImage: some View {
         Group {
             if let video = displayArticle.videoURL {

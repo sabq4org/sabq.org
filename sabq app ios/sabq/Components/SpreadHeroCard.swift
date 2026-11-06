@@ -27,18 +27,6 @@ struct SpreadHeroCard: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .overlay(alignment: .bottom) {
-                LinearGradient(
-                    colors: [.black.opacity(0), .black.opacity(0.55), .black.opacity(0.82)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(maxHeight: .infinity)
-                .mask(alignment: .bottom) {
-                    Rectangle().frame(height: 220).frame(maxHeight: .infinity, alignment: .bottom)
-                }
-                .allowsHitTesting(false)
-            }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     Text(article.categoryTitle)
@@ -58,6 +46,22 @@ struct SpreadHeroCard: View {
                 }
                 .padding(SabqLayout.space16)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    // Size the shade to the actual caption, then fade into
+                    // the photo above it. Masking a full-card gradient at
+                    // a fixed height cuts through nontransparent pixels.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black.opacity(0.55), location: 0.35),
+                            .init(color: .black.opacity(0.82), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .padding(.top, -32)
+                    .allowsHitTesting(false)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .aiImageBadgeOverlay(
