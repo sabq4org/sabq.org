@@ -13,8 +13,11 @@ export interface BucketableFixture {
   status: { code: string; live: boolean; finished: boolean };
 }
 
-/** حالات بلا موعد لعب فعلي (مؤجلة/ملغاة/متوقفة/معلّقة). AWD/WO محسومة فتُعامل كمنتهية. */
-const NO_PLAY_DATE_STATUS = new Set(["PST", "CANC", "ABD", "SUSP", "INT", "TBD"]);
+/**
+ * حالات بلا موعد لعب فعلي: مؤجلة/ملغاة/مُلغاة بعد البدء. لا تُدرج TBD (مباراة
+ * قائمة بلا ساعة محدّدة) ولا SUSP/INT (توقّف أثناء اللعب) — تلك مباريات حقيقية.
+ */
+const NO_PLAY_DATE_STATUS = new Set(["PST", "CANC", "ABD"]);
 
 export function isPostponedFixture(f: BucketableFixture): boolean {
   if (f.status.live || f.status.finished) return false;

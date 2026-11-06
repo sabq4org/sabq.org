@@ -133,7 +133,7 @@ function requireSportsAiEditor(...codes: PermissionCode[]) {
   };
 }
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
-import { bucketFixtures, compareByMatchPhase } from "../services/sports/fixtureBuckets";
+import { bucketFixtures, compareByMatchPhase, isPostponedFixture } from "../services/sports/fixtureBuckets";
 
 /**
  * موسم أرشيفي اختياري عبر ?season=YYYY — لإبقاء بيانات موسم منتهٍ (مثل 2025/2026)
@@ -421,7 +421,11 @@ export function registerSportsRoutes(app: Express) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
     const resilient = req.query.resilient === "1";
     try {
-      const load = async () => (await overlayLiveBoardList(await getGlobalTodayFixtures(date))).map(withClockAnchor);
+      // المؤجلة/الملغاة تبقى بتاريخها القديم لدى المزوّد — ليست من مباريات اليوم.
+      const load = async () =>
+        (await overlayLiveBoardList(await getGlobalTodayFixtures(date)))
+          .filter((f) => !isPostponedFixture(f))
+          .map(withClockAnchor);
       const snapshot = resilient
         ? await todayHomeSnapshot.get(`today:${currentSportsLang()}:${sportsComponentDay(date)}`, load)
         : { data: await load(), freshness: undefined };
@@ -478,7 +482,9 @@ export function registerSportsRoutes(app: Express) {
     const to = dayKey(req.query.to) ?? riyadhDay(45);
     if (from > to) return res.status(400).json({ message: "نطاق تواريخ غير صالح" });
     try {
-      const fixtures = (await overlayLiveBoardList(await getUnifiedFixtures(comps, from, to))).map(withClockAnchor);
+      const fixtures = (await overlayLiveBoardList(await getUnifiedFixtures(comps, from, to)))
+        .filter((f) => !isPostponedFixture(f))
+        .map(withClockAnchor);
       res.set(
         "Cache-Control",
         fixtures.some(isHotFixture)
