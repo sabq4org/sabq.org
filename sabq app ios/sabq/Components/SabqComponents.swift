@@ -603,7 +603,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-                ZStack(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
                 if let image {
                     focalImage(image, in: proxy.size)
                         .opacity(shown ? 1 : 0)
@@ -613,7 +613,10 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
                         .frame(width: proxy.size.width, height: proxy.size.height)
                 }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            // The fill image reports its oversized dimensions to the stack.
+            // Centering that stack would add half the overflow to our focal
+            // offset, cutting off faces and exposing the opposite edge.
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .clipped()
             // The whole app runs in RTL (.sabqRTL()), which flips
             // `.topLeading` alignment to actually anchor at top-RIGHT.
