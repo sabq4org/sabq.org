@@ -530,10 +530,10 @@ import { pool } from "./db";
 import { paginationOrReject, parseLimit, parseOffset, parsePage } from "./utils/pagination";
 
 function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean }; shouldSave: boolean } {
-  const data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean } = {
+  const data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean } & Pick<FocalPointResult, "box" | "iw" | "ih" | "kind" | "source"> = {
     x: result.x,
     y: result.y,
-    confidence: result.confidence,
+    confidence: result.confidence, box: result.box, iw: result.iw, ih: result.ih, kind: result.kind, source: result.source,
   };
   if (result.confidence === "low") {
     data.needsReview = true;

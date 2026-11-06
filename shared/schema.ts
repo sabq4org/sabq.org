@@ -58,12 +58,26 @@ export const aiConfigSchema = z.object({
 }).optional();
 
 // Article jsonb schemas
-export const imageFocalPointSchema = z.object({
+// box/iw/ih/kind/source: من كاشف المربعات (shared/imageFocus.ts). تبقى عند حفظ المحرر
+// حتى لا يضيع المربع مع كل تعديل للخبر.
+const imageFocusBoxSchema = z.object({
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  w: z.number().min(0).max(100),
+  h: z.number().min(0).max(100),
+});
+export const imageFocalPointValueSchema = z.object({
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100),
   needsReview: z.boolean().optional(),
   confidence: z.enum(["high", "medium", "low"]).optional(),
-}).optional();
+  box: imageFocusBoxSchema.optional(),
+  iw: z.number().int().positive().max(100000).optional(),
+  ih: z.number().int().positive().max(100000).optional(),
+  kind: z.enum(["face", "group", "subject"]).optional(),
+  source: z.enum(["gemini-box", "manual"]).optional(),
+});
+export const imageFocalPointSchema = imageFocalPointValueSchema.optional();
 
 export const seoSchema = z.object({
   metaTitle: z.string().optional(),
@@ -853,6 +867,11 @@ export const articles = pgTable("articles", {
     y: number; // percentage 0-100 from top
     needsReview?: boolean;
     confidence?: "high" | "medium" | "low";
+    box?: { x: number; y: number; w: number; h: number }; // subject box, % of image
+    iw?: number; // original image width (px)
+    ih?: number; // original image height (px)
+    kind?: "face" | "group" | "subject";
+    source?: "gemini-box" | "manual";
   }>(),
   
   // AI Image Generation tracking (for featured image)
@@ -4539,10 +4558,7 @@ export const updateArticleSchema = z.object({
   thumbnailManuallyDeleted: z.boolean().optional(),
   isAiGeneratedImage: z.boolean().optional(),
   albumImages: z.array(z.string()).optional(),
-  imageFocalPoint: z.object({
-    x: z.number().min(0).max(100),
-    y: z.number().min(0).max(100),
-  }).nullable().optional(),
+  imageFocalPoint: imageFocalPointValueSchema.nullable().optional(),
   // varchar في القاعدة، ومعرفات الاستيراد ليست كلها UUID. الوجود يُفحص في المسار.
   categoryId: z.union([
     z.string().trim().min(1).max(64, "معرف التصنيف غير صحيح"),

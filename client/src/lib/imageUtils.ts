@@ -1,5 +1,6 @@
 import { getCacheBustedImageUrl, getArticleDisplayImageUrl } from "@shared/articleHeroPreload";
 export { getCacheBustedImageUrl, getArticleDisplayImageUrl };
+import { legacyObjectPosition, readImageFocus, type ImageFocusData } from "@shared/imageFocus";
 
 /**
  * Image utility functions for cache busting and URL handling
@@ -68,16 +69,21 @@ export function getFocalPoint(article: any): FocalPoint | null {
  * @returns CSS object-position string (e.g., "30% 70%")
  */
 export function getObjectPosition(article: any, defaultPosition: string = 'center'): string {
-  const focalPoint = getFocalPoint(article);
-  
-  if (!focalPoint) {
+  const focus = readImageFocus(article);
+
+  if (!focus) {
     return defaultPosition;
   }
-  
-  const x = Math.max(0, Math.min(100, focalPoint.x));
-  const y = Math.max(0, Math.min(100, focalPoint.y));
-  
-  return `${x}% ${y}%`;
+
+  // مربع الكاشف، أو نقطة 50/50 التي كان الكاشف القديم يخمّنها لمعظم الصور:
+  // الموضع المشترك من shared/imageFocus.ts (الثلث العلوي عند غياب نقطة موثوقة).
+  // للقص الدقيق حسب الإطار مرّر `focus` إلى OptimizedImage بدل هذا الموضع الثابت.
+  return legacyObjectPosition(focus);
+}
+
+/** بيانات التركيز الكاملة (مع المربع) لتمريرها إلى OptimizedImage عبر `focus`. */
+export function getImageFocus(article: any): ImageFocusData | null {
+  return readImageFocus(article);
 }
 
 /**

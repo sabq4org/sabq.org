@@ -15,7 +15,8 @@ import type { ArticleWithDetails } from "@shared/schema";
 // light without a visible drop on the gradient-overlaid hero.
 const HERO_QUALITY = 72;
 import { formatArticleTimestamp, formatDateOnly } from "@/lib/formatTime";
-import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl, getImageFocus } from "@/lib/imageUtils";
+import { HERO_CAPTION_TOP_MOBILE, heroCaptionShouldMoveBelow, type ImageFocusData } from "@shared/imageFocus";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 // Detect iOS Safari to use simplified carousel (prevents zoom bug)
@@ -45,8 +46,14 @@ interface ProcessedHeroArticle extends ArticleWithDetails {
   isNew: boolean;
   formattedDate: string;
   objectPosition: string;
+  focus: ImageFocusData | null;
   displayImage: string | null;
 }
+
+// نسبة إطار البارزة على سطح المكتب (ثلثا الحاوية × 420px) وعلى الجوال، لقرار
+// «العنوان تحت الصورة». ثابتة عمدًا حتى لا يتذبذب الشكل مع تغيّر المقاس.
+const HERO_DESKTOP_RATIO = 2.1;
+const HERO_MOBILE_RATIO = 16 / 9;
 
 interface HeroCarouselProps {
   articles: ArticleWithDetails[];
@@ -67,6 +74,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
       isNew: isNewArticle(article.publishedAt),
       formattedDate: formatPublishedDate(article.publishedAt),
       objectPosition: getObjectPosition(article),
+      focus: getImageFocus(article),
       displayImage: getArticleDisplayImageUrl(article),
     }));
     
@@ -82,6 +90,9 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
 
   // Get hero article and secondary articles (2 for mobile, 4 for desktop)
   const heroArticle = processedArticles[0];
+  // الوجه سيقع تحت العنوان: نعرض العنوان على شريط فاتح تحت الصورة بدل فوقها.
+  const heroBelowMobile = heroCaptionShouldMoveBelow(heroArticle.focus, HERO_MOBILE_RATIO, HERO_CAPTION_TOP_MOBILE);
+  const heroBelowDesktop = heroCaptionShouldMoveBelow(heroArticle.focus, HERO_DESKTOP_RATIO);
   const mobileSecondaryArticles = processedArticles.slice(1, 3);
   const desktopSecondaryArticles = processedArticles.slice(1, 5);
 
@@ -92,30 +103,32 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
         {/* Main Hero Article */}
         <Link href={`/article/${heroArticle.englishSlug || heroArticle.slug}`}>
           <article className="relative cursor-pointer group" role="article" aria-label={heroArticle.title}>
-            <div className="relative aspect-[16/9] rounded-lg overflow-hidden">
+            <div className={`relative ${heroBelowMobile ? "aspect-[16/14] bg-card border border-border" : "aspect-[16/9]"} rounded-lg overflow-hidden`}>
               {heroArticle.displayImage ? (
                 <OptimizedImage
                   src={heroArticle.displayImage}
                   alt={heroArticle.title}
                   className="w-full h-full object-cover"
-                  objectPosition={heroArticle.objectPosition}
+                  focus={heroArticle.focus}
+                  focusMode="hero"
+                  wrapperClassName={`!absolute inset-x-0 top-0 ${heroBelowMobile ? "bottom-[35.7%]" : "bottom-0"}`}
                   priority={isMobile}
                   sizes={HERO_SIZES_ATTR}
                   quality={HERO_QUALITY}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
+                <div className={`absolute inset-x-0 top-0 ${heroBelowMobile ? "bottom-[35.7%]" : "bottom-0"} bg-gradient-to-br from-primary/20 to-primary/5`} />
               )}
               
               {/* Bottom Gradient Overlay - Red for breaking, Black for normal */}
-              <div className={`absolute inset-0 bg-gradient-to-t ${
+              <div className={`absolute inset-0 bg-gradient-to-t ${heroBelowMobile ? "hidden" : ""} ${
                 heroArticle.newsType === "breaking" 
-                  ? "from-red-900/85 via-red-800/50 to-transparent" 
-                  : "from-black/80 via-black/40 to-transparent"
+                  ? "from-red-900/85 via-red-800/50 via-35% to-transparent to-60%" 
+                  : "from-black/80 via-black/40 via-35% to-transparent to-60%"
               }`} />
               
               {/* Content Overlay at Bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
+              <div className={`absolute bottom-0 left-0 right-0 ${heroBelowMobile ? "h-[35.7%] px-4 py-2 flex flex-col justify-center" : "p-4"}`}>
                 {/* Breaking/New Badge only */}
                 {heroArticle.newsType === "breaking" && (
                   <div className="flex items-center gap-2 mb-2">
@@ -135,7 +148,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                 )}
                 
                 {/* Title */}
-                <h1 className="text-lg font-bold line-clamp-2 text-white drop-shadow-lg">
+                <h1 className={`text-lg font-bold ${heroBelowMobile ? "text-foreground line-clamp-2" : "text-white drop-shadow-lg line-clamp-2"}`}>
                   {heroArticle.title}
                 </h1>
                 {/* Category and Date */}
@@ -143,7 +156,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   {heroArticle.category && (
                     <Badge 
                       variant="outline" 
-                      className="text-[10px] px-2 py-0.5 border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"
+                      className={`text-[10px] px-2 py-0.5 ${heroBelowMobile ? "border-border text-muted-foreground" : "border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"}`}
                     >
                       {heroArticle.category.nameAr}
                     </Badge>
@@ -157,7 +170,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                     </Badge>
                   )}
                   {heroArticle.formattedDate && (
-                    <span className="flex items-center gap-1 text-[10px] text-white/80">
+                    <span className={`flex items-center gap-1 text-[10px] ${heroBelowMobile ? "text-muted-foreground" : "text-white/80"}`}>
                       <Clock className="h-3 w-3" />
                       {heroArticle.formattedDate}
                     </span>
@@ -189,7 +202,8 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                             src={art.displayImage}
                             alt={art.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            objectPosition={art.objectPosition}
+                            focus={art.focus}
+                            wrapperClassName="h-full w-full"
                             priority={false}
                             preferSize="small"
                             aspectRatio="16/9"
@@ -264,31 +278,33 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
         {/* Main Hero Article - 2/3 width */}
         <Link href={`/article/${heroArticle.englishSlug || heroArticle.slug}`} className="w-2/3 h-full">
           <article className="relative cursor-pointer group h-full" role="article" aria-label={heroArticle.title}>
-            <div className="relative h-full rounded-lg overflow-hidden">
+            <div className={`relative h-full rounded-lg overflow-hidden ${heroBelowDesktop ? "bg-card border border-border" : ""}`}>
               {heroArticle.displayImage ? (
                 <OptimizedImage
                   src={heroArticle.displayImage}
                   alt={heroArticle.title}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                  objectPosition={heroArticle.objectPosition}
+                  focus={heroArticle.focus}
+                  focusMode="hero"
+                  wrapperClassName={`!absolute inset-x-0 top-0 ${heroBelowDesktop ? "bottom-[38%]" : "bottom-0"}`}
                   priority={!isMobile}
                   preferSize="large"
                   sizes={HERO_SIZES_ATTR}
                   quality={HERO_QUALITY}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
+                <div className={`absolute inset-x-0 top-0 ${heroBelowDesktop ? "bottom-[38%]" : "bottom-0"} bg-gradient-to-br from-primary/20 to-primary/5`} />
               )}
               
               {/* Bottom Gradient Overlay */}
-              <div className={`absolute inset-0 bg-gradient-to-t ${
+              <div className={`absolute inset-0 bg-gradient-to-t ${heroBelowDesktop ? "hidden" : ""} ${
                 heroArticle.newsType === "breaking" 
-                  ? "from-red-900/90 via-red-800/40 to-transparent" 
-                  : "from-black/85 via-black/35 to-transparent"
+                  ? "from-red-900/90 via-red-800/40 via-35% to-transparent to-60%" 
+                  : "from-black/85 via-black/35 via-35% to-transparent to-60%"
               }`} />
               
               {/* Content Overlay */}
-              <div className="absolute bottom-0 left-0 right-0 p-6">
+              <div className={`absolute bottom-0 left-0 right-0 ${heroBelowDesktop ? "h-[38%] px-6 py-3 flex flex-col justify-center" : "p-6"}`}>
                 <div className="flex items-center gap-2 flex-wrap mb-3">
                   {heroArticle.newsType === "breaking" && (
                     <Badge variant="destructive" className="shrink-0 gap-1">
@@ -304,7 +320,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   )}
                 </div>
                 
-                <h1 className="text-2xl lg:text-3xl font-bold line-clamp-3 text-white drop-shadow-lg">
+                <h1 className={`text-2xl lg:text-3xl font-bold ${heroBelowDesktop ? "text-foreground line-clamp-2" : "text-white drop-shadow-lg line-clamp-3"}`}>
                   {heroArticle.title}
                 </h1>
                 
@@ -312,7 +328,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   {heroArticle.category && (
                     <Badge 
                       variant="outline" 
-                      className="text-xs px-2 py-0.5 border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"
+                      className={`text-xs px-2 py-0.5 ${heroBelowDesktop ? "border-border text-muted-foreground" : "border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"}`}
                     >
                       {heroArticle.category.nameAr}
                     </Badge>
@@ -326,7 +342,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                     </Badge>
                   )}
                   {heroArticle.formattedDate && (
-                    <span className="flex items-center gap-1 text-xs text-white/80">
+                    <span className={`flex items-center gap-1 text-xs ${heroBelowDesktop ? "text-muted-foreground" : "text-white/80"}`}>
                       <Clock className="h-3 w-3" />
                       {heroArticle.formattedDate}
                     </span>
@@ -358,7 +374,8 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                             src={article.displayImage}
                             alt={article.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            objectPosition={article.objectPosition || "center top"}
+                            focus={article.focus}
+                            wrapperClassName="h-full w-full"
                             priority={false}
                             preferSize="small"
                           />
@@ -480,6 +497,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
       isNew: isNewArticle(article.publishedAt),
       formattedDate: formatPublishedDate(article.publishedAt),
       objectPosition: getObjectPosition(article),
+      focus: getImageFocus(article),
       displayImage: getArticleDisplayImageUrl(article),
     }));
     
@@ -495,6 +513,9 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
 
   // Get hero article and secondary articles (2 for mobile, 4 for desktop)
   const heroArticle = processedArticles[0];
+  // الوجه سيقع تحت العنوان: نعرض العنوان على شريط فاتح تحت الصورة بدل فوقها.
+  const heroBelowMobile = heroCaptionShouldMoveBelow(heroArticle.focus, HERO_MOBILE_RATIO, HERO_CAPTION_TOP_MOBILE);
+  const heroBelowDesktop = heroCaptionShouldMoveBelow(heroArticle.focus, HERO_DESKTOP_RATIO);
   const mobileSecondaryArticles = processedArticles.slice(1, 3);
   const desktopSecondaryArticles = processedArticles.slice(1, 5);
 
@@ -505,13 +526,15 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
         {/* Main Hero Article */}
         <Link href={`/article/${heroArticle.englishSlug || heroArticle.slug}`}>
           <article className="relative cursor-pointer group" role="article" aria-label={heroArticle.title}>
-            <div className="relative aspect-[16/9] rounded-lg overflow-hidden">
+            <div className={`relative ${heroBelowMobile ? "aspect-[16/14] bg-card border border-border" : "aspect-[16/9]"} rounded-lg overflow-hidden`}>
               {heroArticle.displayImage ? (
                 <OptimizedImage
                   src={heroArticle.displayImage}
                   alt={heroArticle.title}
                   className="w-full h-full object-cover"
-                  objectPosition={heroArticle.objectPosition}
+                  focus={heroArticle.focus}
+                  focusMode="hero"
+                  wrapperClassName={`!absolute inset-x-0 top-0 ${heroBelowMobile ? "bottom-[35.7%]" : "bottom-0"}`}
                   priority={isMobile}
                   preferSize="medium"
                   aspectRatio="16/9"
@@ -519,18 +542,18 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   quality={HERO_QUALITY}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
+                <div className={`absolute inset-x-0 top-0 ${heroBelowMobile ? "bottom-[35.7%]" : "bottom-0"} bg-gradient-to-br from-primary/20 to-primary/5`} />
               )}
               
               {/* Bottom Gradient Overlay - Red for breaking, Black for normal */}
-              <div className={`absolute inset-0 bg-gradient-to-t ${
+              <div className={`absolute inset-0 bg-gradient-to-t ${heroBelowMobile ? "hidden" : ""} ${
                 heroArticle.newsType === "breaking" 
-                  ? "from-red-900/85 via-red-800/50 to-transparent" 
-                  : "from-black/80 via-black/40 to-transparent"
+                  ? "from-red-900/85 via-red-800/50 via-35% to-transparent to-60%" 
+                  : "from-black/80 via-black/40 via-35% to-transparent to-60%"
               }`} />
               
               {/* Content Overlay at Bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
+              <div className={`absolute bottom-0 left-0 right-0 ${heroBelowMobile ? "h-[35.7%] px-4 py-2 flex flex-col justify-center" : "p-4"}`}>
                 {/* Breaking/New Badge only */}
                 {heroArticle.newsType === "breaking" && (
                   <div className="flex items-center gap-2 mb-2">
@@ -550,7 +573,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                 )}
                 
                 {/* Title */}
-                <h1 className="text-lg font-bold line-clamp-2 text-white drop-shadow-lg">
+                <h1 className={`text-lg font-bold ${heroBelowMobile ? "text-foreground line-clamp-2" : "text-white drop-shadow-lg line-clamp-2"}`}>
                   {heroArticle.title}
                 </h1>
                 {/* Category and Date */}
@@ -558,7 +581,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   {heroArticle.category && (
                     <Badge 
                       variant="outline" 
-                      className="text-[10px] px-2 py-0.5 border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"
+                      className={`text-[10px] px-2 py-0.5 ${heroBelowMobile ? "border-border text-muted-foreground" : "border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"}`}
                     >
                       {heroArticle.category.nameAr}
                     </Badge>
@@ -572,7 +595,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                     </Badge>
                   )}
                   {heroArticle.formattedDate && (
-                    <span className="flex items-center gap-1 text-[10px] text-white/80">
+                    <span className={`flex items-center gap-1 text-[10px] ${heroBelowMobile ? "text-muted-foreground" : "text-white/80"}`}>
                       <Clock className="h-3 w-3" />
                       {heroArticle.formattedDate}
                     </span>
@@ -604,7 +627,8 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                             src={article.displayImage}
                             alt={article.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            objectPosition={article.objectPosition}
+                            focus={article.focus}
+                            wrapperClassName="h-full w-full"
                             priority={false}
                             preferSize="small"
                             aspectRatio="16/9"
@@ -679,31 +703,33 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
         {/* Main Hero Article - 2/3 width */}
         <Link href={`/article/${heroArticle.englishSlug || heroArticle.slug}`} className="w-2/3 h-full">
           <article className="relative cursor-pointer group h-full" role="article" aria-label={heroArticle.title}>
-            <div className="relative h-full rounded-lg overflow-hidden">
+            <div className={`relative h-full rounded-lg overflow-hidden ${heroBelowDesktop ? "bg-card border border-border" : ""}`}>
               {heroArticle.displayImage ? (
                 <OptimizedImage
                   src={heroArticle.displayImage}
                   alt={heroArticle.title}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                  objectPosition={heroArticle.objectPosition}
+                  focus={heroArticle.focus}
+                  focusMode="hero"
+                  wrapperClassName={`!absolute inset-x-0 top-0 ${heroBelowDesktop ? "bottom-[38%]" : "bottom-0"}`}
                   priority={!isMobile}
                   preferSize="large"
                   sizes={HERO_SIZES_ATTR}
                   quality={HERO_QUALITY}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
+                <div className={`absolute inset-x-0 top-0 ${heroBelowDesktop ? "bottom-[38%]" : "bottom-0"} bg-gradient-to-br from-primary/20 to-primary/5`} />
               )}
               
               {/* Bottom Gradient Overlay */}
-              <div className={`absolute inset-0 bg-gradient-to-t ${
+              <div className={`absolute inset-0 bg-gradient-to-t ${heroBelowDesktop ? "hidden" : ""} ${
                 heroArticle.newsType === "breaking" 
-                  ? "from-red-900/95 via-red-800/60 via-30% to-transparent" 
-                  : "from-black/95 via-black/50 via-35% to-transparent"
+                  ? "from-red-900/95 via-red-800/60 via-35% to-transparent to-60%" 
+                  : "from-black/95 via-black/50 via-35% to-transparent to-60%"
               }`} />
               
               {/* Content Overlay at Bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-6">
+              <div className={`absolute bottom-0 left-0 right-0 ${heroBelowDesktop ? "h-[38%] px-6 py-3 flex flex-col justify-center" : "p-6"}`}>
                 {/* Badges */}
                 <div className="flex items-center gap-2 flex-wrap mb-3">
                   {(heroArticle.isAiGeneratedThumbnail || heroArticle.isAiGeneratedImage) && (
@@ -739,7 +765,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                 </div>
                 
                 {/* Title */}
-                <h1 className="text-2xl lg:text-3xl font-bold line-clamp-3 text-white drop-shadow-lg mb-2">
+                <h1 className={`text-2xl lg:text-3xl font-bold mb-2 ${heroBelowDesktop ? "text-foreground line-clamp-2" : "text-white drop-shadow-lg line-clamp-3"}`}>
                   {heroArticle.title}
                 </h1>
                 
@@ -748,7 +774,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   {heroArticle.category && (
                     <Badge 
                       variant="outline" 
-                      className="text-xs px-2 py-0.5 border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"
+                      className={`text-xs px-2 py-0.5 ${heroBelowDesktop ? "border-border text-muted-foreground" : "border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"}`}
                     >
                       {heroArticle.category.nameAr}
                     </Badge>
@@ -762,7 +788,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                     </Badge>
                   )}
                   {heroArticle.formattedDate && (
-                    <span className="flex items-center gap-1 text-xs text-white/70">
+                    <span className={`flex items-center gap-1 text-xs ${heroBelowDesktop ? "text-muted-foreground" : "text-white/70"}`}>
                       <Clock className="h-3 w-3" />
                       {heroArticle.formattedDate}
                     </span>
@@ -794,7 +820,8 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                             src={article.displayImage}
                             alt={article.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            objectPosition={article.objectPosition || "center top"}
+                            focus={article.focus}
+                            wrapperClassName="h-full w-full"
                             priority={false}
                             preferSize="small"
                           />
