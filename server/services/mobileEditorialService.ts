@@ -206,7 +206,7 @@ export async function getMyNewsBoard(input: { userId: string; filter: MyNewsFilt
       publishedAt: iso(row.publishedAt),
       pendingEditRequest: pending,
       lastEditRequest: last,
-      canRequestEdit: requests.ready && !pending && articleAcceptsEditRequests(row.status),
+      canRequestEdit: requests.ready && !pending && articleAcceptsEditRequests(row, now.getTime()),
     });
   }
 

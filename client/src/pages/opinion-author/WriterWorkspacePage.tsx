@@ -63,6 +63,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { OpinionAuthorSocialProposalDialog } from "./OpinionAuthorSocialProposalDialog";
+import { articleAcceptsEditRequests } from "@shared/articleEditRequests";
 import { EditRequestLabel, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests, type EditRequestListItem } from "@/components/articles/ArticleEditRequests";
 
 type ArticleRow = {
@@ -1079,7 +1080,7 @@ function WriterTrackingCard({
                     <Share2 className="h-4 w-4" /> اقتراح منشور X
                   </Button>
                 )}
-                {onRequestEdit && !editRequests?.some((item) => item.status === "pending") && (
+                {onRequestEdit && articleAcceptsEditRequests(article) && !editRequests?.some((item) => item.status === "pending") && (
                   <RequestEditButton onClick={onRequestEdit} />
                 )}
                 <Button variant="outline" size="sm" onClick={onView}>

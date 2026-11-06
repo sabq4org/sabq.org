@@ -1151,7 +1151,7 @@ export default function ArticlesManagement() {
   }, []);
   const renderEditRequestRow = (article: Article) => {
     const items = editRequests.byArticle.get(article.id);
-    const canRequest = !!user?.id && !canEditAny && articleAcceptsEditRequests(article.status)
+    const canRequest = !!user?.id && !canEditAny && articleAcceptsEditRequests(article)
       && [article.authorId, article.author?.id, article.enteredBy?.id].some((id) => isEditRequestOwner({ authorId: id }, user.id));
     if (!items?.length && !canRequest) return null;
     return (

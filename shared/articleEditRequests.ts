@@ -357,6 +357,40 @@ export function isEditRequestOwner(
   return [article.authorId, article.reporterId, article.submitterId].some((id) => Boolean(id) && id === userId);
 }
 
-export function articleAcceptsEditRequests(status: string | null | undefined): boolean {
-  return (EDIT_REQUEST_ARTICLE_STATUSES as readonly string[]).includes(status ?? "");
+/** بعد النشر يبقى «طلب تعديل» متاحًا لصاحب الخبر ثلاث ساعات فقط، ثم يُغلق. */
+export const EDIT_REQUEST_PUBLISHED_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+type EditRequestArticleState = {
+  status: string | null | undefined;
+  publishedAt?: Date | string | null;
+};
+
+function toMs(value: Date | string | null | undefined): number | null {
+  if (!value) return null;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * هل تقبل المادة طلب تعديل الآن؟ المسودة والمجدولة نعم. المنشورة خلال ثلاث ساعات
+ * من نشرها فقط، وبلا تاريخ نشر صالح تُعامل كقديمة. المؤرشفة لا.
+ * يُقبل نص الحالة وحده للفحص العام (هل الحالة نفسها تقبل الطلبات).
+ */
+export function articleAcceptsEditRequests(
+  article: string | null | undefined | EditRequestArticleState,
+  now: number = Date.now(),
+): boolean {
+  const state: EditRequestArticleState = typeof article === "object" && article !== null ? article : { status: article };
+  if (!(EDIT_REQUEST_ARTICLE_STATUSES as readonly string[]).includes(state.status ?? "")) return false;
+  if (state.status !== "published" || typeof article !== "object" || article === null) return true;
+  const published = toMs(state.publishedAt);
+  if (published === null || published > now) return false;
+  return now - published < EDIT_REQUEST_PUBLISHED_WINDOW_MS;
+}
+
+/** سبب إغلاق الطلب، لعرضه لصاحب الخبر. */
+export function editRequestClosedMessage(status: string | null | undefined): string {
+  return status === "published"
+    ? "انتهت مدة طلب التعديل: تُتاح ثلاث ساعات بعد النشر. للتعديل الآن تواصل مع المحرر."
+    : "لا يمكن طلب تعديل خبر مؤرشف";
 }

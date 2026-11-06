@@ -1202,7 +1202,7 @@ struct WriterWorkspaceView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if article.status == "published" {
+                if article.status == "published" && writerEditRequestWindowOpen(article.publishedAt) {
                     Button {
                         editRequestTarget = article
                     } label: {
@@ -1435,6 +1435,16 @@ struct WriterWorkspaceView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space24)
     }
+}
+
+/// «طلب تعديل» يُتاح ثلاث ساعات بعد النشر فقط، كما في الخادم (shared/articleEditRequests.ts).
+private func writerEditRequestWindowOpen(_ publishedAt: String?, now: Date = Date()) -> Bool {
+    guard let publishedAt else { return false }
+    let parser = ISO8601DateFormatter()
+    parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let date = parser.date(from: publishedAt) ?? ISO8601DateFormatter().date(from: publishedAt) else { return false }
+    let elapsed = now.timeIntervalSince(date)
+    return elapsed >= 0 && elapsed < 3 * 60 * 60
 }
 
 // تاريخ عربي مختصر بتوقيت الرياض — نسخة محلية لأن نظيرتها في

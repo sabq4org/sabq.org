@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import {
   articleAcceptsEditRequests,
+  editRequestClosedMessage,
   baseSnapshotFor,
   buildEditRequestPatch,
   editRequestShortLabel,
@@ -119,7 +120,8 @@ export async function getEditRequestContext(articleId: string, userId: string) {
       ok: true as const,
       article: articleBrief(article),
       paragraphs: editableParagraphs(article.content),
-      acceptsRequests: articleAcceptsEditRequests(article.status),
+      acceptsRequests: articleAcceptsEditRequests(article),
+      closedMessage: articleAcceptsEditRequests(article) ? null : editRequestClosedMessage(article.status),
       pendingRequestId: pending?.id ?? null,
     };
   } catch (error) {
@@ -134,8 +136,8 @@ export async function createEditRequest(input: EditRequestInput, userId: string)
   if (!isEditRequestOwner(article, userId)) {
     return { ok: false as const, status: 403, message: "طلب التعديل متاح لصاحب الخبر فقط" };
   }
-  if (!articleAcceptsEditRequests(article.status)) {
-    return { ok: false as const, status: 409, code: "ARTICLE_NOT_EDITABLE", message: "لا يمكن طلب تعديل خبر مؤرشف" };
+  if (!articleAcceptsEditRequests(article)) {
+    return { ok: false as const, status: 409, code: "ARTICLE_NOT_EDITABLE", message: editRequestClosedMessage(article.status) };
   }
   try {
     // الفحص والإدراج في معاملة واحدة تحت قفل استشاري على (المادة، صاحب الطلب):
