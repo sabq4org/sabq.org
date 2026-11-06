@@ -16,6 +16,9 @@ export interface DashboardPulseStats {
     publishedYesterday: number;
     pendingReview: number;
     needsChanges: number;
+    /** مسودات مفتوحة غير مرفوعة للمراجعة ولا معادة للتعديل. */
+    draft: number;
+    scheduled: number;
     viewsYesterday: number;
   };
   comments: {
@@ -53,9 +56,19 @@ export async function getDashboardPulseStats(): Promise<DashboardPulseStats> {
   );
 }
 
+const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC+3 طوال السنة (بلا توقيت صيفي)
+
+/** منتصف ليل اليوم بتوقيت الرياض، مستقلًا عن المنطقة الزمنية للخادم (Render = UTC). */
+export function riyadhDayStart(now: Date): Date {
+  const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - RIYADH_OFFSET_MS,
+  );
+}
+
 async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = riyadhDayStart(now);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
   const yesterdayComparableEnd = new Date(
     yesterdayStart.getTime() + (now.getTime() - todayStart.getTime()),
@@ -77,8 +90,12 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .select({
         publishedToday: sql<number>`count(*) filter (where ${articles.status} = 'published' and ${articles.publishedAt} >= ${todayStart})`,
         publishedYesterday: sql<number>`count(*) filter (where ${articles.status} = 'published' and ${articles.publishedAt} >= ${yesterdayStart} and ${articles.publishedAt} < ${yesterdayComparableEnd})`,
-        pendingReview: sql<number>`count(*) filter (where ${articles.reviewStatus} = 'pending_review')`,
-        needsChanges: sql<number>`count(*) filter (where ${articles.reviewStatus} = 'needs_changes')`,
+        // review_status يبقى عالقًا على أخبار نُشرت أو أُرشفت من مسارات قديمة؛
+        // لا تُحسب في المسار إلا المسودات (status = 'draft').
+        pendingReview: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.reviewStatus} = 'pending_review')`,
+        needsChanges: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.reviewStatus} = 'needs_changes')`,
+        draft: sql<number>`count(*) filter (where ${articles.status} = 'draft' and (${articles.reviewStatus} is null or ${articles.reviewStatus} not in ('pending_review', 'needs_changes')))`,
+        scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled')`,
       })
       .from(articles),
     db
@@ -146,7 +163,8 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .limit(8),
     db
       .select({
-        hour: sql<string>`to_char(date_trunc('hour', ${userEvents.createdAt}), 'HH24:00')`,
+        // الساعة بتوقيت الرياض لتتسق مع بداية اليوم أعلاه
+        hour: sql<string>`to_char(date_trunc('hour', ${userEvents.createdAt}) + interval '3 hours', 'HH24:00')`,
         views: sql<number>`count(*)`,
       })
       .from(userEvents)
@@ -161,6 +179,8 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       publishedYesterday: Number(articleStats.publishedYesterday),
       pendingReview: Number(articleStats.pendingReview),
       needsChanges: Number(articleStats.needsChanges),
+      draft: Number(articleStats.draft),
+      scheduled: Number(articleStats.scheduled),
       viewsYesterday: Number(viewsStats.viewsYesterday),
     },
     comments: {
