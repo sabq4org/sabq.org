@@ -41,4 +41,10 @@ describe("bucketFixtures — المباريات المؤجلة", () => {
     expect(isPostponedFixture(fx(8, "2026-11-06T17:30:00+03:00", "1H", true))).toBe(false);
     expect(isPostponedFixture(fx(9, "2026-11-06T17:30:00+03:00", "CANC"))).toBe(true);
   });
+
+  it("TBD (موعد بلا ساعة) والتوقف أثناء اللعب مباريات حقيقية لا تُخفى", () => {
+    expect(isPostponedFixture(fx(10, "2026-11-20T20:00:00+03:00", "TBD"))).toBe(false);
+    expect(isPostponedFixture(fx(11, "2026-11-06T17:30:00+03:00", "SUSP"))).toBe(false);
+    expect(isPostponedFixture(fx(12, "2026-11-06T17:30:00+03:00", "INT"))).toBe(false);
+  });
 });
