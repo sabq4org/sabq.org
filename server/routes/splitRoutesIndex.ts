@@ -122,6 +122,7 @@ import editorialResearchRouter from "./editorialResearch";
 import imageStylesRouter from "./imageStyles";
 import deepseekLabRouter from "./deepseekLab";
 import editorialImagesRouter from "./editorialImages";
+import infographicStudioRouter from "./infographicStudio";
 import videoResolverRouter from "./videoResolver";
 import mawaeedRouter from "./mawaeed";
 import infathRouter from "./infath";
@@ -270,6 +271,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(imageStylesRouter);
   app.use(deepseekLabRouter);
   app.use(editorialImagesRouter);
+  app.use(infographicStudioRouter);
   // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
   app.use(videoResolverRouter);
   app.use(mawaeedRouter);
