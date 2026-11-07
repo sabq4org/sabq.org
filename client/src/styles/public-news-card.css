@@ -122,6 +122,11 @@
   color: #fff;
   border: 0;
 }
+.public-label-infographic {
+  background: #e6f5fe;
+  color: #0b6fa8;
+  border: 0;
+}
 .public-label-reading {
   background: #047857;
   color: #fff;

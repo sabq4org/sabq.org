@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Brain, Camera, Flame, Zap } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Camera, Flame, Zap } from "lucide-react";
 import { publicArticleText } from "./publicArticleText";
 import type { ArticleWithDetails } from "@shared/schema";
 
@@ -78,6 +78,26 @@ export function ContentLabel({
     );
   }
   return null;
+}
+
+/** ليبل «إنفوجرافيك» — يظهر قبل ليبل القسم في سطر الليبلات تحت الصورة. */
+export function InfographicLabel({
+  article,
+  locale = "ar",
+}: {
+  article: ArticleWithDetails;
+  locale?: "ar" | "en" | "ur";
+}) {
+  if (article.articleType !== "infographic") return null;
+  return (
+    <Badge
+      className="public-label public-label-infographic inline-flex items-center gap-1 shrink-0"
+      data-testid={`badge-infographic-${article.id}`}
+    >
+      <BarChart3 className="h-3 w-3" aria-hidden="true" />
+      {publicArticleText[locale].infographic}
+    </Badge>
+  );
 }
 
 export function ContentStateLabels({

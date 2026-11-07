@@ -71,6 +71,10 @@ export function getObjectPosition(article: any, defaultPosition: string = 'cente
   const focalPoint = getFocalPoint(article);
   
   if (!focalPoint) {
+    // بلا صورة واجهة تعرض البطاقة الإنفوجرافيك الطولي نفسه: نُظهر أعلاه (العنوان والرقم الأكبر)
+    if (article?.articleType === 'infographic' && !article?.infographicBannerUrl) {
+      return 'center top';
+    }
     return defaultPosition;
   }
   

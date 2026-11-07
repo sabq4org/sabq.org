@@ -1417,8 +1417,8 @@ async function buildCategoryLandingPreload(category: { id: string; slug: string;
           .orderBy(desc(articles.displayOrder), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
           .limit(CATEGORY_ARTICLES_API_LIMIT);
     const lead = pickCategoryLandingLead(rows);
-    // Infographics render InfographicArticleCard (no priority image).
-    if (!lead || lead.articleType === "infographic") return undefined;
+    // Infographics render the standard card too (front image via getArticleCardImageSrc).
+    if (!lead) return undefined;
     return buildCardImagePreload(lead);
   } catch (err) {
     console.warn("[edge-meta] category preload skipped:", (err as Error)?.message);

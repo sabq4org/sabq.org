@@ -3,11 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import type { ArticleWithDetails } from "@shared/schema";
-import { ContentLabel, ContentStateLabels } from "./public/ContentLabel";
+import { ContentLabel, ContentStateLabels, InfographicLabel } from "./public/ContentLabel";
 import { ArticleMedia } from "./public/ArticleMedia";
 import { ArticleMeta } from "./public/ArticleMeta";
 import { ArticleActions } from "./public/ArticleActions";
-import { InfographicArticleCard } from "./InfographicArticleCard";
 import "@/styles/public-news-card.css";
 
 export type NewsCardViewMode = "grid" | "list" | "compact";
@@ -51,17 +50,9 @@ export function NewsArticleCard({
   const category = categories.find(item => item.id === (inputArticle.categoryId || inputArticle.category?.id) || (inputArticle.category?.slug && item.slug === inputArticle.category.slug));
   const article = category ? { ...inputArticle, category: { ...inputArticle.category, ...category } } : inputArticle;
   const resolvedMode = compact ? "compact" : viewMode;
-  if (article.articleType === "infographic")
-    return (
-      <InfographicArticleCard
-        article={article}
-        locale={locale}
-        href={href}
-        variant={resolvedMode === "compact" ? "compact" : "grid"}
-      />
-    );
   const labels = (
     <div className="public-labels flex flex-wrap items-center gap-2">
+      <InfographicLabel article={article} locale={locale} />
       <ContentLabel
         article={article}
         locale={locale}
