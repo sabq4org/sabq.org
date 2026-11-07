@@ -3477,6 +3477,15 @@ export const articleViewDeltas = pgTable("article_view_deltas", {
   index("idx_article_view_deltas_pending").on(table.pending),
 ]);
 
+// Real article opens per 10-minute bucket (every visitor, web + apps, no boost).
+// Feeds «مرات فتح الأخبار» on the newsroom dashboard. One row per bucket, so the
+// table grows by ~144 rows/day. Written from the same buffer as articleViewDeltas.
+export const articleOpenBuckets = pgTable("article_open_buckets", {
+  bucketStart: timestamp("bucket_start", { withTimezone: true }).primaryKey(),
+  opens: integer("opens").default(0).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Feed Recommendations - التوصيات المخصصة للعرض في الفيد
 export const feedRecommendations = pgTable("feed_recommendations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -1,6 +1,7 @@
 import { registerShutdownHook } from "../shutdown";
 import { pool } from "../db";
 import { withCache } from "../memoryCache";
+import { flushArticleOpenBuckets, recordArticleOpens } from "./articleOpenBuckets";
 
 /**
  * Buffered article view-count increments.
@@ -46,9 +47,14 @@ export function getLiveArticleViews(articleId: string): Promise<number | null> {
   });
 }
 
-/** Queue a view-count increment for an article (cheap, non-blocking). */
-export function bufferArticleViewIncrement(articleId: string, increment: number): void {
+/**
+ * Queue a view-count increment for an article (cheap, non-blocking).
+ * `opens` = real opens behind this call (no boost) for «مرات فتح الأخبار»;
+ * pass 0 when another call already counted the same open.
+ */
+export function bufferArticleViewIncrement(articleId: string, increment: number, opens = 1): void {
   if (!articleId || !Number.isFinite(increment) || increment <= 0) return;
+  recordArticleOpens(opens);
   if (!pending.has(articleId) && pending.size >= MAX_PENDING) {
     droppedSinceWarn += 1;
     return;
@@ -103,6 +109,7 @@ async function flushChunk(chunk: [string, number][]): Promise<void> {
 }
 
 export async function flushArticleViewCounters(): Promise<void> {
+  await flushArticleOpenBuckets();
   if (flushing || pending.size === 0) return;
   flushing = true;
   const batch = [...pending.entries()];

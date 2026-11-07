@@ -79,6 +79,7 @@ import { useNav, trackNavClick } from "@/nav/useNav";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { UserRole } from "@/nav/types";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { formatReadDuration, kpiComparison } from "@/lib/dailyKpiFormat";
 
 interface DashboardStats {
   articles: {
@@ -164,14 +165,15 @@ interface DashboardStats {
 interface DashboardPulse {
   articles: Pick<
     DashboardStats["articles"],
-    "publishedToday" | "publishedYesterday" | "pendingReview" | "needsChanges" | "draft" | "scheduled" | "viewsYesterday"
-  >;
+    "publishedToday" | "publishedYesterday" | "pendingReview" | "needsChanges" | "draft" | "scheduled" | "viewsToday" | "viewsYesterday"
+  > & { viewsSource?: "opens" | "legacy" };
+  users?: Pick<DashboardStats["users"], "activeToday">;
   comments: Pick<
     DashboardStats["comments"],
     "receivedToday" | "moderatedToday" | "pendingOlderThanTwoHours"
   >;
-  reactions: Pick<DashboardStats["reactions"], "yesterdayCount">;
-  engagement: Pick<DashboardStats["engagement"], "readsYesterday">;
+  reactions: Pick<DashboardStats["reactions"], "todayCount" | "yesterdayCount">;
+  engagement: Pick<DashboardStats["engagement"], "readsToday" | "readsYesterday" | "averageTimeOnSite">;
   trendingArticles: DashboardStats["trendingArticles"];
   upcomingSchedule: DashboardStats["upcomingSchedule"];
   hourlyViews: DashboardStats["hourlyViews"];
@@ -231,15 +233,6 @@ const percentChange = (current: number, previous: number) => {
   return Math.round(((current - previous) / previous) * 100);
 };
 
-const duration = (seconds: number) => {
-  if (!seconds) return "غير متاح";
-  const mins = Math.floor(seconds / 60);
-  const rem = Math.round(seconds % 60);
-  if (mins === 0) return `${rem} ثانية`;
-  if (rem === 0) return `${mins} دقيقة`;
-  return `${mins} د و ${rem} ث`;
-};
-
 function MetricCard({
   title,
   value,
@@ -260,10 +253,8 @@ function MetricCard({
   loading?: boolean;
 }) {
   const numericValue = typeof value === "number" ? value : undefined;
-  const change =
-    numericValue !== undefined && previous !== undefined
-      ? percentChange(numericValue, previous)
-      : undefined;
+  const comparison = numericValue !== undefined ? kpiComparison(numericValue, previous) : undefined;
+  const change = comparison?.kind === "percent" ? comparison.value : undefined;
 
   return (
     <Card className="relative overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
@@ -302,6 +293,10 @@ function MetricCard({
               ) : null}
               {change > 0 ? "+" : ""}
               {change}%
+            </span>
+          ) : comparison?.kind === "yesterday" && !loading ? (
+            <span className="inline-flex items-center rounded-full bg-muted px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold tabular-nums text-muted-foreground shrink-0">
+              أمس {number(comparison.value)}
             </span>
           ) : footerValue ? (
             <span className="font-semibold text-foreground tabular-nums shrink-0">
@@ -1280,7 +1275,7 @@ export default function NewsroomPulseDashboard() {
         viewsYesterday: 0,
         ...pulse?.articles,
       },
-      users: { ...base.users, activeYesterday: 0 },
+      users: { ...base.users, activeYesterday: 0, ...pulse?.users },
       comments: {
         ...base.comments,
         receivedToday: 0,
@@ -1569,7 +1564,7 @@ export default function NewsroomPulseDashboard() {
                 previous={stats?.articles.viewsYesterday}
                 icon={Eye}
                 iconBoxClass="bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
-                helper={`التراكمي ${compactNumber(stats?.articles.totalViews)}`}
+                helper={`العدّاد المعروض ${compactNumber(stats?.articles.totalViews)}`}
                 loading={statsQuery.isLoading}
               />
               <MetricCard
@@ -1601,11 +1596,10 @@ export default function NewsroomPulseDashboard() {
               />
               <MetricCard
                 title="متوسط زمن القراءة"
-                value={duration(stats?.engagement.averageTimeOnSite ?? 0)}
+                value={formatReadDuration(stats?.engagement.averageTimeOnSite)}
                 icon={Clock3}
                 iconBoxClass="bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-400"
-                helper="متوسط جلسة القارئ"
-                footerValue={`${stats?.engagement.averageTimeOnSite ?? 0}ث`}
+                helper="قراءات الأعضاء اليوم"
                 loading={statsQuery.isLoading}
               />
             </div>
