@@ -43,14 +43,18 @@
   border-radius: 12px;
 }
 .public-news-compact-list--hero .public-news-card-compact .public-card-media-compact {
-  width: 144px;
+  /* Fills the card height so there is never an empty band under the image;
+     about 40% of a phone row, never half. */
+  width: 40%;
+  max-width: 156px;
   height: auto;
-  aspect-ratio: 16 / 9;
+  min-height: 88px;
+  align-self: stretch;
   border-radius: 8px;
 }
 /* Keep the text block about as tall as the 16:9 thumbnail (no empty band under it). */
 .public-news-compact-list--hero .public-news-card-compact .public-card-link {
-  align-items: center;
+  align-items: stretch;
   padding: 10px;
 }
 .public-news-compact-list--hero .public-labels {
