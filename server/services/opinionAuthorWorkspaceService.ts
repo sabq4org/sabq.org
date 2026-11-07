@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { aiGateway } from "../ai/gateway";
 import { memoryCache } from "../memoryCache";
@@ -31,9 +31,13 @@ function writerOpinionScope(userId: string) {
   );
 }
 
-// نفس أولوية «التتبع» القديمة (كانت تُحسب في الذاكرة) لكن داخل SQL كي يمكن
-// ترقيمها: يحتاج إجراءك ← بانتظار المراجعة ← مجدول ← معتمد ← منشور ← مسودة ← مرفوض/مؤرشف.
+// أولوية «التتبع» داخل SQL كي يمكن ترقيمها: يحتاج إجراءك ← بانتظار المراجعة ← مجدول
+// ← معتمد ← منشور ← مسودة ← مرفوض/مؤرشف. الحالة النهائية (منشور/مؤرشف/مرفوض) تسبق
+// review_status: كثير من المقالات المنشورة قديمًا بقي review_status فيها
+// 'pending_review'، فكانت تتصدّر القائمة وتدفع المقال المنشور حديثًا إلى الأسفل.
 const trackingPriority = sql<number>`CASE
+  WHEN ${articles.status} = 'published' THEN 4
+  WHEN ${articles.status} IN ('archived', 'rejected') THEN 6
   WHEN ${articles.reviewStatus} = 'needs_changes' THEN 0
   WHEN ${articles.reviewStatus} = 'pending_review' THEN 1
   WHEN ${articles.status} = 'scheduled' THEN 2
@@ -123,6 +127,8 @@ export async function getOpinionAuthorWorkspace(userId: string, options: WriterW
       .from(articles)
       .where(and(
         scope,
+        // منشور/مؤرشف/مرفوض ليس على المكتب مهما بقي في review_status.
+        notInArray(articles.status, ["published", "archived", "rejected"]),
         or(
           inArray(articles.status, ["draft", "scheduled"]),
           inArray(articles.reviewStatus, ["pending_review", "needs_changes"]),

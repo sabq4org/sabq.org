@@ -32,6 +32,9 @@ type Row = {
 // منطق المساحة قبل التعديل حرفيًا (الترتيب والترشيح في الذاكرة) — مرجع المقارنة.
 function legacy(writerArticles: Row[], commentRows: Array<{ articleId: string; likesCount: number; content: string; sentiment: string | null }>) {
   const priority = (a: Row) => {
+    // الحالة النهائية تسبق review_status القديم (مقالات منشورة بقيت pending_review).
+    if (a.status === "published") return 4;
+    if (a.status === "archived" || a.status === "rejected") return 6;
     if (a.reviewStatus === "needs_changes") return 0;
     if (a.reviewStatus === "pending_review") return 1;
     if (a.status === "scheduled") return 2;
@@ -49,6 +52,7 @@ function legacy(writerArticles: Row[], commentRows: Array<{ articleId: string; l
   const top = [...commentRows].sort((a, b) => b.likesCount - a.likesCount)[0];
   return {
     desk: writerArticles
+      .filter((a) => !["published", "archived", "rejected"].includes(a.status))
       .filter((a) => a.status === "draft" || a.status === "scheduled" || a.reviewStatus === "pending_review" || a.reviewStatus === "needs_changes")
       .sort((a, b) => Number(b.reviewStatus === "needs_changes") - Number(a.reviewStatus === "needs_changes"))
       .slice(0, 6).map((a) => a.id),
