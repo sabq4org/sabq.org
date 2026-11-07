@@ -31,7 +31,7 @@ interface InfographicStudioCardProps {
   onApply: (result: InfographicStudioApply) => void;
 }
 
-const VISIBLE_STEPS: InfographicStudioStep[] = ["brief", "images", "render", "upload"];
+const VISIBLE_STEPS: InfographicStudioStep[] = ["brief", "design", "images", "render", "upload"];
 const JOB_ID = /^[0-9a-f-]{36}$/i;
 const JOB_NOT_FOUND = "العملية غير موجودة.";
 

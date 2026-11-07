@@ -129,7 +129,7 @@ export function numbersFromStory(source: string): string {
   return extra.length ? `${source}\n${extra.join(" ")}` : source;
 }
 
-function numbersOk(text: string, source: string): boolean {
+export function numbersOk(text: string, source: string): boolean {
   return !/[0-9٠-٩۰-۹]/.test(text) || valueAppearsInSource(text, source);
 }
 
@@ -204,6 +204,9 @@ export function checkBrief(raw: unknown, story: string): BriefCheck {
   if (!brief.titleLines.every((l) => numbersOk(l, source))) problems.push("titleLines have a number not in the story");
   if (!brief.body.every((p) => numbersOk(p, source))) problems.push("body has a number not in the story");
   if (brief.highlight && !brief.titleLines.some((l) => l.includes(brief.highlight))) problems.push("highlight is not part of titleLines");
+  // Design text is Arabic: a Latin word here is a leaked field name or placeholder («بـ highlight ريال»).
+  const designText = [...brief.titleLines, brief.highlight, brief.kicker, brief.hero?.unit ?? "", brief.hero?.caption ?? "", ...brief.figures.map((f) => f.label), ...brief.points.map((p) => `${p.title} ${p.text}`)];
+  if (designText.some((t) => /[A-Za-z{}<>]/.test(t))) problems.push("design text (titleLines, kicker, hero, figures, points) must be Arabic only: no Latin words, field names or placeholders; write the actual words and numbers");
   return { brief, problems };
 }
 

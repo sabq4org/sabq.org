@@ -24,9 +24,27 @@ import {
 } from "@shared/infographicStudio";
 import { newsImageStorageService } from "../newsImageStorageService";
 import { areOpenAIImagesConfigured, EditorialImageError, generateOpenAIEditorialImage } from "../openaiImagesProvider";
-import { generateInfographicBrief, heroPrompt, InfographicBriefError, type InfographicBrief } from "./brief";
-import { buildBodyHtml, buildVerticalHtml, buildWideHtml, verticalPhotoHeight, WIDE_PHOTO_WIDTH, withSafeColours, type TemplateAssets } from "./templates";
-import { layoutProblems, renderCanvases } from "./render";
+import { generateInfographicBrief, heroPrompt, InfographicBriefError, numbersFromStory, numbersOk, type InfographicBrief } from "./brief";
+import {
+  buildBodyHtml,
+  buildDesignedHtml,
+  buildVerticalHtml,
+  buildWideHtml,
+  verticalPhotoHeight,
+  WIDE_PHOTO_WIDTH,
+  withSafeColours,
+  type TemplateAssets,
+} from "./templates";
+import { layoutProblems, renderCanvases, type RenderedCanvas } from "./render";
+import {
+  designContractProblems,
+  designMessages,
+  repairMessage,
+  requestDesign,
+  sanitizeDesignCss,
+  sanitizeDesignHtml,
+  type InfographicDesign,
+} from "./designer";
 
 export const INFOGRAPHIC_STUDIO_JOB_TTL_MS = 12 * 60_000;
 const expiredMessage = "انتهت العملية قبل اكتمالها. يمكنك بدء محاولة جديدة.";
@@ -121,8 +139,13 @@ function loadAssets(): Omit<TemplateAssets, "heroDataUri"> {
     .readFileSync(path.resolve(process.cwd(), "public/branding/identity/sabq-logo-white.svg"), "utf8")
     .replace(/<\?xml[^>]*>/, "")
     .replace(/<metadata>[\s\S]*?<\/metadata>/, "");
+  const logoColor = fs
+    .readFileSync(path.resolve(process.cwd(), "public/branding/identity/sabq-logo.svg"), "utf8")
+    .replace(/<\?xml[^>]*>/, "")
+    .replace(/<metadata>[\s\S]*?<\/metadata>/, "");
   assetsCache = {
     logoWhiteSvg: logo,
+    logoColorSvg: logoColor,
     fonts: {
       handicraftsBlack: uri("infographic/TheYearofHandicrafts-Black.otf", "font/otf"),
       alexandriaArabic: uri("infographic/Alexandria-arabic.woff2", "font/woff2"),
@@ -162,6 +185,38 @@ async function upload(id: string, kind: "infographic" | "banner", png: Buffer): 
   return uploaded.deliveryUrl;
 }
 
+/** House rules every generated photo carries, whatever the art director wrote. */
+function designedImagePrompt(prompt: string): string {
+  return [
+    "Photorealistic editorial photograph, natural colours, cinematic soft light, high detail.",
+    prompt,
+    "No text, letters, numbers, logos, watermarks or flags. No recognisable real people. No religious holy sites.",
+  ].join("\n");
+}
+
+/**
+ * A designed canvas is accepted only when it renders cleanly: fonts, nothing outside its zone or the
+ * canvas, no overlapping text blocks, and every number in the visible text found in the story.
+ */
+export function designedCanvasProblems(canvases: RenderedCanvas[], source: string): string[] {
+  const problems: string[] = [];
+  canvases.forEach((c, i) => {
+    const name = i === 0 ? "vertical" : "wide";
+    const { hard } = layoutProblems(c.report);
+    hard.forEach((h) => problems.push(`${name}: ${h}`));
+    if (c.report.overlaps.length) problems.push(`${name}: overlapping text blocks ${c.report.overlaps.join(", ")}`);
+    if (c.report.lowContrast.length) problems.push(`${name}: weak contrast under ${c.report.lowContrast.join(", ")}; add a scrim or move the text to a calm area`);
+    if (c.report.titleLines > 2) problems.push(`${name}: the title runs to ${c.report.titleLines} lines; keep it to two`);
+    const lines = c.text.split(/\n+/).filter((l) => /[0-9٠-٩]/.test(l) && !/sabq\.org/.test(l));
+    const bad = lines.filter((l) => !numbersOk(l, source));
+    if (bad.length) problems.push(`${name}: numbers not in the story: ${bad.slice(0, 3).join(" | ")}`);
+    const lowerSource = source.toLowerCase();
+    const latin = (c.text.replace(/sabq\.org/gi, "").match(/[A-Za-z]{3,}/g) ?? []).filter((word) => !lowerSource.includes(word.toLowerCase()));
+    if (latin.length) problems.push(`${name}: Latin words that are not in the story: ${latin.slice(0, 5).join(", ")}`);
+  });
+  return problems;
+}
+
 /** Runs after the 202 response; every outcome is persisted on the job row. */
 export async function runInfographicStudioJob(userId: string, input: InfographicStudioRequest): Promise<void> {
   const id = input.requestId;
@@ -173,26 +228,82 @@ export async function runInfographicStudioJob(userId: string, input: Infographic
     const brief = withSafeColours(generated.brief);
     await setStep(id, userId, "images", { brief });
 
-    const photo = await generateOpenAIEditorialImage({
-      requestId: randomUUID(),
-      prompt: heroPrompt(brief),
-      model: INFOGRAPHIC_STUDIO_IMAGE_MODEL,
-      size: "1024x1024",
-      quality: "high",
-    });
-    await setStep(id, userId, "render");
-
     const assets = loadAssets();
     const v = INFOGRAPHIC_STUDIO_CANVAS.vertical;
     const w = INFOGRAPHIC_STUDIO_CANVAS.wide;
-    const [vertical, banner] = await renderCanvases([
-      { html: buildVerticalHtml(brief, { ...assets, heroDataUri: await coverDataUri(photo.buffer, v.width, verticalPhotoHeight(brief)) }), ...v },
-      { html: buildWideHtml(brief, { ...assets, heroDataUri: await coverDataUri(photo.buffer, WIDE_PHOTO_WIDTH, w.height) }), ...w },
-    ]);
+    const story = generated.source;
+
+    // Art director: the model designs both canvases from Sabq's guide. Any failure falls back to the template.
+    await setStep(id, userId, "design");
+    let design: InfographicDesign | null = null;
+    let conversation = designMessages(brief, story);
+    try {
+      const first = await requestDesign(conversation, userId);
+      design = first.design;
+      conversation = [...conversation, { role: "assistant", content: first.raw }];
+      if (design && designContractProblems(design).length) {
+        const fix = await requestDesign([...conversation, repairMessage(designContractProblems(design))], userId);
+        conversation = [...conversation, repairMessage(designContractProblems(design)), { role: "assistant", content: fix.raw }];
+        design = fix.design && !designContractProblems(fix.design).length ? { ...fix.design, imageVertical: design.imageVertical, imageWide: design.imageWide } : null;
+      }
+    } catch (error) {
+      console.warn("[infographic-studio] design step failed", { generationId: id, error: (error as Error)?.message });
+      design = null;
+    }
+
+    await setStep(id, userId, "images");
+    const designed = design;
+    const [tall, wide] = designed
+      ? await Promise.all([
+          generateOpenAIEditorialImage({ requestId: randomUUID(), prompt: designedImagePrompt(designed.imageVertical), model: INFOGRAPHIC_STUDIO_IMAGE_MODEL, size: "1024x1536", quality: "high" }),
+          generateOpenAIEditorialImage({ requestId: randomUUID(), prompt: designedImagePrompt(designed.imageWide), model: INFOGRAPHIC_STUDIO_IMAGE_MODEL, size: "1536x864", quality: "high" }),
+        ])
+      : await generateOpenAIEditorialImage({ requestId: randomUUID(), prompt: heroPrompt(brief), model: INFOGRAPHIC_STUDIO_IMAGE_MODEL, size: "1024x1024", quality: "high" }).then((p) => [p, p] as const);
+    await setStep(id, userId, "render");
+
+    const tallUri = await coverDataUri(tall.buffer, v.width, v.height);
+    const wideUri = await coverDataUri(wide.buffer, w.width, w.height);
+    const source = numbersFromStory(story);
+    const renderDesign = (d: InfographicDesign) =>
+      renderCanvases([
+        { html: buildDesignedHtml(brief, { ...assets, heroDataUri: tallUri }, "vertical", { css: sanitizeDesignCss(d.cssVertical), html: sanitizeDesignHtml(d.htmlVertical) }), ...v },
+        { html: buildDesignedHtml(brief, { ...assets, heroDataUri: wideUri }, "wide", { css: sanitizeDesignCss(d.cssWide), html: sanitizeDesignHtml(d.htmlWide) }), ...w },
+      ]);
+
+    let canvases: RenderedCanvas[] | null = null;
+    let fallbackNote = "";
+    if (designed) {
+      let current: InfographicDesign = designed;
+      for (let attempt = 0; attempt < 2 && !canvases; attempt++) {
+        const out = await renderDesign(current);
+        const problems = designedCanvasProblems(out, source);
+        if (!problems.length) {
+          canvases = out;
+          break;
+        }
+        console.warn("[infographic-studio] designed canvas refused", JSON.stringify({ generationId: id, attempt, problems: problems.slice(0, 8) }));
+        if (attempt === 1) break;
+        try {
+          const fix = await requestDesign([...conversation, repairMessage(problems)], userId);
+          if (!fix.design || designContractProblems(fix.design).length) break;
+          current = { ...fix.design, imageVertical: current.imageVertical, imageWide: current.imageWide };
+        } catch {
+          break;
+        }
+      }
+      if (!canvases) fallbackNote = "تعذر اعتماد التصميم الإبداعي فاستُخدم القالب الثابت؛ يمكنك إعادة التصميم.";
+    }
+    if (!canvases) {
+      canvases = await renderCanvases([
+        { html: buildVerticalHtml(brief, { ...assets, heroDataUri: await coverDataUri(tall.buffer, v.width, verticalPhotoHeight(brief)) }), ...v },
+        { html: buildWideHtml(brief, { ...assets, heroDataUri: await coverDataUri(wide.buffer, WIDE_PHOTO_WIDTH, w.height) }), ...w },
+      ]);
+    }
+    const [vertical, banner] = canvases;
     const checks = [layoutProblems(vertical.report), layoutProblems(banner.report)];
     const hard = checks.flatMap((c) => c.hard);
     if (hard.length) throw new InfographicStudioError(422, "layout_failed", `لم يجتز التصميم الفحص: ${hard.join("؛ ")}`);
-    const warnings = Array.from(new Set(checks.flatMap((c) => c.warnings)));
+    const warnings = Array.from(new Set([...(fallbackNote ? [fallbackNote] : []), ...checks.flatMap((c) => c.warnings)]));
 
     await setStep(id, userId, "upload");
     const [infographicUrl, bannerUrl] = await Promise.all([upload(id, "infographic", vertical.png), upload(id, "banner", banner.png)]);
@@ -201,7 +312,7 @@ export async function runInfographicStudioJob(userId: string, input: Infographic
       bannerUrl,
       headline: withInfographicPrefix(brief.headline),
       bodyHtml: buildBodyHtml(brief.body),
-      metaphor: brief.metaphor,
+      metaphor: design?.concept || brief.metaphor,
       figures: [
         ...(brief.hero ? [{ value: brief.hero.value, label: [brief.hero.unit, brief.hero.caption].filter(Boolean).join(" ") }] : []),
         ...brief.figures,
@@ -217,7 +328,7 @@ export async function runInfographicStudioJob(userId: string, input: Infographic
         thumbnailUrl: bannerUrl,
         generationTime: Math.round((Date.now() - started) / 1000),
         updatedAt: new Date(),
-        metadata: sql`coalesce(${aiImageGenerations.metadata}, '{}'::jsonb) || ${JSON.stringify({ step: "done", result, imagePrompts: [photo.prompt] })}::jsonb`,
+        metadata: sql`coalesce(${aiImageGenerations.metadata}, '{}'::jsonb) || ${JSON.stringify({ step: "done", result, imagePrompts: [tall.prompt, wide.prompt], design: design ? { concept: design.concept } : null })}::jsonb`,
       })
       .where(filter);
   } catch (error) {

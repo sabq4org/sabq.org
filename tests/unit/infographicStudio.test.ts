@@ -11,6 +11,7 @@ import { INFOGRAPHIC_HEADLINE_PREFIX, infographicStudioRequestSchema, withInfogr
 import { checkBrief, generateInfographicBrief, heroPrompt, numbersFromStory, salvageBrief } from "../../server/services/infographicStudio/brief";
 import {
   buildBodyHtml,
+  buildDesignedHtml,
   buildVerticalHtml,
   buildWideHtml,
   ensureContrast,
@@ -23,6 +24,7 @@ import {
   withSafeColours,
   wordsToStretch,
 } from "../../server/services/infographicStudio/templates";
+import { designContractProblems, parseDesign, sanitizeDesignCss, sanitizeDesignHtml } from "../../server/services/infographicStudio/designer";
 import { contrastRatio, isLegible, layoutProblems } from "../../server/services/infographicStudio/render";
 
 const source =
@@ -242,13 +244,16 @@ describe("templates", () => {
   it("stretches title words with house kashida where the letters join", () => {
     expect(stretchWord("الحوار")).toBe("الحـــوار");
     expect(stretchWord("الصقور")).toBe("الصقـــور");
-    expect(stretchWord("ليلة")).toBe("ليلـــة");
+    expect(stretchWord("ليلة")).toBe("ليـــلة");
+    expect(stretchWord("بيوتهم")).toBe("بيـــوتهم"); // middle of the word, as the guide asks
     expect(stretchWord("ريال")).toBe("ريـــال");
     expect(stretchWord("آلاف")).toBe("آلاف"); // never inside lam-alef, never after the first letter
     expect(stretchWord("مزاد")).toBe("مزاد");
     expect(stretchWord("في")).toBe("في");
     expect(stretchWord("2026")).toBe("2026");
-    expect(stretchWord("تفكّك")).toBe("تفكّـــك"); // the shadda stays on its letter
+    expect(stretchWord("تفكّك")).toBe("تفـــكّك");
+    expect(stretchWord("شدّة")).toBe("شدّة"); // too short once joins are counted
+    expect(stretchWord("محمّدية")).toContain("ّ"); // the shadda stays on its letter
     expect(Array.from(wordsToStretch("ليلة مزاد الصقور الكبرى"))).toHaveLength(2);
   });
 
@@ -315,5 +320,53 @@ describe("plan normalisation", () => {
   it("still refuses a number that is not in the story after trimming", () => {
     const c = checkBrief({ ...plan(), hero: { value: "999", unit: "", caption: "رقم مخترع" } }, source);
     expect(c.problems.join(" ")).toMatch(/999/);
+  });
+});
+
+describe("art director step", () => {
+  const sample = [
+    "<concept>بطاقة مزاد</concept>",
+    "<image_vertical>A falcon in the lower half</image_vertical>",
+    "<image_wide>A falcon on the left</image_wide>",
+    "<css_vertical>.ph{background:var(--photo) center/cover;background-image:url(https://x.test/a.png)}@import url(https://x.test/b.css);</css_vertical>",
+    '<html_vertical><div class="ph"></div><div data-qa="logo">{{LOGO_WHITE}}</div><div data-zone="z"><div data-qa="title">ليلة</div></div><div data-qa="ai-label">{{AI_LABEL}}</div><span data-qa="source">المصدر</span><script>alert(1)</script><img src="https://x.test/c.png" onerror="alert(2)"><div onclick="x()">a</div></html_vertical>',
+    "<css_wide>.ph{background:var(--photo)}</css_wide>",
+    '<html_wide><div class="ph"></div><div data-qa="logo">{{LOGO_COLOR}}</div><div data-zone="z"><div data-qa="title">ليلة</div></div><div data-qa="ai-label">{{AI_LABEL}}</div></html_wide>',
+  ].join("\n");
+
+  it("parses the tagged answer and finds no contract problem in a complete design", () => {
+    const d = parseDesign(sample)!;
+    expect(d.concept).toBe("بطاقة مزاد");
+    expect(designContractProblems(d)).toEqual([]);
+  });
+
+  it("strips scripts, handlers, images and remote URLs", () => {
+    const d = parseDesign(sample)!;
+    const html = sanitizeDesignHtml(d.htmlVertical);
+    expect(html).not.toMatch(/script|alert|<img|onerror|onclick/);
+    const css = sanitizeDesignCss(d.cssVertical);
+    expect(css).not.toMatch(/x\.test|@import/);
+    expect(css).toContain("var(--photo)");
+  });
+
+  it("reports a design that misses the logo, label or title", () => {
+    const d = parseDesign(sample.replace("{{AI_LABEL}}", "").replace('data-qa="title">ليلة</div></div><div data-qa="ai-label">{{AI_LABEL}}</div></html_wide>', 'data-qa="x">ليلة</div></div></html_wide>'))!;
+    const problems = designContractProblems(d).join(" ");
+    expect(problems).toMatch(/vertical: \{\{AI_LABEL\}\}/);
+    expect(problems).toMatch(/wide: the title/);
+  });
+
+  it("fills the logo and label inside the house shell", () => {
+    const p = checkBrief(plan(), source).brief!;
+    const d = parseDesign(sample)!;
+    const html = buildDesignedHtml(p, assets, "wide", { css: sanitizeDesignCss(d.cssWide), html: sanitizeDesignHtml(d.htmlWide) });
+    expect(html).toContain("صورة مولدة بالذكاء الاصطناعي");
+    expect(html).not.toContain("{{");
+    expect(html).toContain("width:1920px;height:1080px");
+  });
+
+  it("refuses a Latin placeholder in the design text", () => {
+    const c = checkBrief({ ...plan(), titleLines: ["ليلة مزاد", "بـ highlight ريال"] }, source);
+    expect(c.problems.join(" ")).toMatch(/Arabic only/);
   });
 });

@@ -13,6 +13,8 @@ import type { InfographicBrief } from "./brief";
 export interface TemplateAssets {
   heroDataUri: string;
   logoWhiteSvg: string;
+  /** Natural-colour logo for light cool backgrounds (designed canvases only). */
+  logoColorSvg?: string;
   fonts: { handicraftsBlack: string; alexandriaArabic: string; alexandriaLatin: string; plexSemiBold: string; plexRegular: string };
 }
 
@@ -77,8 +79,9 @@ const MAX_STRETCHED_PER_LINE = 2;
 const MIN_STRETCH_LETTERS = 4;
 
 /**
- * House kashida («شبكـــة»، «الحـــوار»): one stretch per word, as late in the word as the joins allow,
- * never after the first letter, never inside lam-alef. Diacritics stay with their letter.
+ * House kashida (guide v2): one stretch per word, in the middle of the word, not before its last
+ * letter when an earlier join exists («بيـــوتهم» not «بيوتهـــم»). Never after the article «ال»,
+ * never inside lam-alef, and diacritics stay with their letter.
  */
 export function stretchWord(word: string): string {
   const chars = Array.from(word);
@@ -87,16 +90,24 @@ export function stretchWord(word: string): string {
     if (AR_LETTER.test(c)) letters.push(i);
   });
   if (letters.length < MIN_STRETCH_LETTERS || word.includes("ـ")) return word;
-  for (let k = letters.length - 2; k >= 1; k--) {
+  const lead = chars[letters[0]] === "ا" && chars[letters[1]] === "ل" ? 2 : 0;
+  const stemLen = letters.length - lead;
+  if (stemLen < 3) return word;
+  const candidates: number[] = [];
+  for (let k = Math.max(lead, 1); k <= letters.length - 2; k++) {
     const cur = chars[letters[k]];
     const next = chars[letters[k + 1]];
     if (NON_JOINING.has(cur) || (cur === "ل" && ALEF.has(next))) continue;
-    if (letters[k + 1] !== letters[k] + 1 && !chars.slice(letters[k] + 1, letters[k + 1]).every((c) => AR_MARK.test(c))) continue;
-    let at = letters[k] + 1;
-    while (at < chars.length && AR_MARK.test(chars[at])) at++;
-    return chars.slice(0, at).join("") + KASHIDA + chars.slice(at).join("");
+    if (!chars.slice(letters[k] + 1, letters[k + 1]).every((c) => AR_MARK.test(c))) continue;
+    candidates.push(k);
   }
-  return word;
+  if (!candidates.length) return word;
+  // Stretch after the letter that ends the first half of the stem.
+  const target = lead + Math.ceil(stemLen / 2) - 1;
+  const k = candidates.reduce((best, c) => (Math.abs(c - target) < Math.abs(best - target) ? c : best));
+  let at = letters[k] + 1;
+  while (at < chars.length && AR_MARK.test(chars[at])) at++;
+  return chars.slice(0, at).join("") + KASHIDA + chars.slice(at).join("");
 }
 
 /** The longest stretchable words of a title line (up to two), so the stretch reads as rhythm, not noise. */
@@ -162,12 +173,12 @@ window.__fit = function(){
 function base(a: TemplateAssets, b: InfographicBrief, w: number, h: number, css: string, body: string): string {
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
 ${fontFaces(a)}
-:root{--s:1;--ink:${b.ink};--accent:${b.accent};--wash:${rgb(b.wash)};--a1:0.8;--a2:0.5}
-body.bg-only .zone,body.bg-only .foot,body.bg-only .ai,body.bg-only .logo{visibility:hidden}
+:root{--s:1;--ink:${b.ink};--accent:${b.accent};--wash:${rgb(b.wash)};--a1:0.8;--a2:0.5;--photo:url(${a.heroDataUri})}
+body.bg-only .zone,body.bg-only .foot,body.bg-only .ai,body.bg-only .logo,body.bg-only [data-qa]{visibility:hidden}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:${w}px;height:${h}px;background:#000}
 .canvas{position:relative;width:${w}px;height:${h}px;overflow:hidden;background:${b.wash}}
-.photo{position:absolute;background:${b.wash} url(${a.heroDataUri}) center/cover no-repeat}
+.photo{position:absolute;background:${b.wash} var(--photo) center/cover no-repeat}
 .photo::after{content:"";position:absolute;inset:0}
 .logo-shade{position:absolute;width:640px;height:540px;border-radius:50%;background:radial-gradient(closest-side,rgba(20,28,40,.55),rgba(20,28,40,0));pointer-events:none}
 .logo{position:absolute;width:170px;height:auto}
@@ -279,6 +290,28 @@ export function buildWideHtml(b: InfographicBrief, a: TemplateAssets): string {
   ${b.hero ? heroHtml(b, true) : `<div class="kicker" data-qa="kicker">${escapeHtml(b.kicker)}</div>`}
 </div>
 <div class="ai" data-qa="ai-label">${AI_IMAGE_LABEL}</div>`;
+  return base(a, b, width, height, css, body);
+}
+
+/**
+ * A canvas designed by the art-director step: its CSS and markup inside the house shell (fonts,
+ * colours, fitter, `--photo`). Both arrive sanitised; placeholders are filled here.
+ */
+export function buildDesignedHtml(
+  b: InfographicBrief,
+  a: TemplateAssets,
+  kind: "vertical" | "wide",
+  design: { css: string; html: string },
+): string {
+  const { width, height } = INFOGRAPHIC_STUDIO_CANVAS[kind];
+  const body = design.html
+    .replaceAll("{{LOGO_WHITE}}", a.logoWhiteSvg)
+    .replaceAll("{{LOGO_COLOR}}", a.logoColorSvg ?? a.logoWhiteSvg)
+    .replaceAll("{{AI_LABEL}}", AI_IMAGE_LABEL);
+  const css = `
+.canvas{direction:rtl}
+.canvas [data-qa=logo] svg{width:100%;height:auto;display:block}
+${design.css}`;
   return base(a, b, width, height, css, body);
 }
 
