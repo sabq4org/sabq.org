@@ -44,3 +44,14 @@ html [data-testid="dms-ad-slot-Leaderboard"] {
   padding: 0 !important;
   overflow: hidden !important;
 }
+
+/* Homepage on phones: hide the 300x250 MPU that the DMS GTM container injects
+ * itself as a direct child of <main> (right after the Mawaeed strip). It is
+ * not rendered by React (no dms-ad-slot-wrapper), so CSS is the only lever on
+ * our side. The slot is still requested by GPT; DMS can stop it in GTM.
+ * html[data-sabq-home] is set by pages/Home.tsx. Owner ask, 2026-11-07. */
+@media (max-width: 767px) {
+  html[data-sabq-home] main > #MPU {
+    display: none !important;
+  }
+}
