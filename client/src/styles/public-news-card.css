@@ -43,13 +43,14 @@
   border-radius: 12px;
 }
 .public-news-compact-list--hero .public-news-card-compact .public-card-media-compact {
-  /* Fills the card height so there is never an empty band under the image;
-     about 40% of a phone row, never half. */
+  /* One fixed size for every thumbnail (portrait images are cropped, not
+     stretched); about 40% of a phone row, never half. The text block
+     (labels + 2-line title + time) is shorter than this, so no empty band
+     appears under the image. Crop follows the article's focal point. */
   width: 40%;
   max-width: 156px;
-  height: auto;
-  min-height: 88px;
-  align-self: stretch;
+  height: 100px;
+  align-self: flex-start;
   border-radius: 8px;
 }
 /* Keep the text block about as tall as the 16:9 thumbnail (no empty band under it). */
