@@ -27,6 +27,8 @@ export interface LayoutReport {
 export interface RenderedCanvas {
   png: Buffer;
   report: LayoutReport;
+  /** Visible text of the canvas, for checking that every number in it comes from the story. */
+  text: string;
 }
 
 /** Hard failures block the job; everything else becomes an editor-facing warning. */
@@ -142,7 +144,9 @@ async function measureLayout(page: Page) {
         });
       })
       .filter((b) => b.w > 4 && b.h > 4);
-    return { scale, fontsLoaded, overflow, overlaps, titleLines, boxes };
+    const canvas = document.querySelector<HTMLElement>(".canvas");
+    const text = canvas ? canvas.innerText : "";
+    return { scale, fontsLoaded, overflow, overlaps, titleLines, boxes, text };
   });
 }
 
@@ -190,6 +194,13 @@ export function renderCanvases(pages: Array<{ html: string; width: number; heigh
       for (const p of pages) {
         const page = await browser.newPage();
         await page.setViewport({ width: p.width, height: p.height, deviceScaleFactor: 1 });
+        // Pages are self-contained (data URIs); model-written markup must never reach the network.
+        await page.setRequestInterception(true);
+        page.on("request", (req) => {
+          const url = req.url();
+          if (url.startsWith("data:") || url === "about:blank") void req.continue();
+          else void req.abort();
+        });
         await page.setContent(p.html, { waitUntil: "load", timeout: 60_000 });
         let layout = await measureLayout(page);
         let lowContrast: string[] = [];
@@ -220,7 +231,7 @@ export function renderCanvases(pages: Array<{ html: string; width: number; heigh
           blank: stats.channels.slice(0, 3).every((c) => c.stdev < 4),
         };
         const png = await withAiProvenance(sharp(shot).png({ compressionLevel: 9 })).toBuffer();
-        out.push({ png, report });
+        out.push({ png, report, text: layout.text });
       }
       return out;
     } finally {

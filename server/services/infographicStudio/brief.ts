@@ -129,7 +129,7 @@ export function numbersFromStory(source: string): string {
   return extra.length ? `${source}\n${extra.join(" ")}` : source;
 }
 
-function numbersOk(text: string, source: string): boolean {
+export function numbersOk(text: string, source: string): boolean {
   return !/[0-9٠-٩۰-۹]/.test(text) || valueAppearsInSource(text, source);
 }
 
@@ -204,8 +204,14 @@ export function checkBrief(raw: unknown, story: string): BriefCheck {
   if (!brief.titleLines.every((l) => numbersOk(l, source))) problems.push("titleLines have a number not in the story");
   if (!brief.body.every((p) => numbersOk(p, source))) problems.push("body has a number not in the story");
   if (brief.highlight && !brief.titleLines.some((l) => l.includes(brief.highlight))) problems.push("highlight is not part of titleLines");
+  // Design text is Arabic: a Latin word here is a leaked field name or placeholder («بـ highlight ريال»).
+  const designText = [...brief.titleLines, brief.highlight, brief.kicker, brief.hero?.unit ?? "", brief.hero?.caption ?? "", ...brief.figures.map((f) => f.label), ...brief.points.map((p) => `${p.title} ${p.text}`)];
+  if (designText.some(hasLatin)) problems.push("design text (titleLines, kicker, hero, figures, points) must be Arabic only: no Latin words, field names or placeholders; write the actual words and numbers");
   return { brief, problems };
 }
+
+/** A Latin letter or markup in design text is a leaked field name or placeholder. */
+const hasLatin = (t: string): boolean => /[A-Za-z{}<>]/.test(t);
 
 /**
  * After the retry: drop what is still unverified and keep the job alive when enough remains.
@@ -213,9 +219,9 @@ export function checkBrief(raw: unknown, story: string): BriefCheck {
  */
 export function salvageBrief(brief: InfographicBrief, story: string): InfographicBrief | null {
   const source = numbersFromStory(story);
-  const hero = brief.hero && valueAppearsInSource(brief.hero.value, source) ? brief.hero : null;
-  const figures = brief.figures.filter((f) => valueAppearsInSource(f.value, source)).slice(0, MAX_FIGURES);
-  const points = brief.points.filter((p) => numbersOk(`${p.title} ${p.text}`, source)).slice(0, MAX_POINTS);
+  const hero = brief.hero && valueAppearsInSource(brief.hero.value, source) && !hasLatin(`${brief.hero.unit} ${brief.hero.caption}`) ? brief.hero : null;
+  const figures = brief.figures.filter((f) => valueAppearsInSource(f.value, source) && !hasLatin(f.label)).slice(0, MAX_FIGURES);
+  const points = brief.points.filter((p) => numbersOk(`${p.title} ${p.text}`, source) && !hasLatin(`${p.title} ${p.text}`)).slice(0, MAX_POINTS);
   let mode = brief.mode;
   if (mode === "figures" && (!hero || figures.length < MIN_FIGURES)) {
     if (points.length < MIN_POINTS) return null;
@@ -224,7 +230,7 @@ export function salvageBrief(brief: InfographicBrief, story: string): Infographi
   if (mode === "points" && points.length < MIN_POINTS) return null;
   const body = brief.body.map((p) => verifiedSentences(p, source)).filter(Boolean);
   if (body.length === 0) return null;
-  const titleLines = brief.titleLines.filter((l) => numbersOk(l, source));
+  const titleLines = brief.titleLines.filter((l) => numbersOk(l, source) && !hasLatin(l));
   if (titleLines.length === 0) return null;
   return {
     ...brief,
@@ -235,7 +241,8 @@ export function salvageBrief(brief: InfographicBrief, story: string): Infographi
     body,
     titleLines,
     headline: numbersOk(brief.headline, source) ? brief.headline : titleLines.join(" "),
-    highlight: titleLines.some((l) => l.includes(brief.highlight)) ? brief.highlight : "",
+    kicker: hasLatin(brief.kicker) ? "" : brief.kicker,
+    highlight: brief.highlight && !hasLatin(brief.highlight) && titleLines.some((l) => l.includes(brief.highlight)) ? brief.highlight : "",
   };
 }
 

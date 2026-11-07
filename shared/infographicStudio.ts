@@ -29,12 +29,13 @@ export const infographicStudioRequestSchema = z
 
 export type InfographicStudioRequest = z.infer<typeof infographicStudioRequestSchema>;
 
-export type InfographicStudioStep = "queued" | "brief" | "images" | "render" | "upload" | "done";
+export type InfographicStudioStep = "queued" | "brief" | "design" | "images" | "render" | "upload" | "done";
 
 export const INFOGRAPHIC_STUDIO_STEP_LABELS: Record<InfographicStudioStep, string> = {
   queued: "في الانتظار",
-  brief: "قراءة الخبر واختيار الفكرة",
-  images: "توليد الصورة البطلة",
+  brief: "قراءة الخبر واختيار الأرقام",
+  design: "تصميم الفكرة والتكوين",
+  images: "توليد الصورتين",
   render: "بناء التصميم وفحصه",
   upload: "حفظ الملفات",
   done: "اكتمل",
