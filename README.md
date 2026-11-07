@@ -49,7 +49,7 @@
 [![SwiftUI](https://img.shields.io/badge/SwiftUI-iOS_17+-FA7343?style=for-the-badge&logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui)
 [![Compose](https://img.shields.io/badge/Compose-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com)
-[![Railway](https://img.shields.io/badge/Railway-API-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app)
+[![Render](https://img.shields.io/badge/Render-API-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://render.com)
 
 <br/>
 
@@ -115,7 +115,7 @@ It powers a real newsroom: writers compose with an AI co-pilot, editors approve 
 | 🤖 AI providers | **5** (OpenAI · Anthropic · Gemini · ElevenLabs · Google TTS) | **5** مزوّدات |
 | ⏰ Background jobs | **14** node-cron jobs with leader election | **14** مهمة خلفية |
 | 📱 Native apps | **iOS** SwiftUI · **Android** Compose · **Web** Vite SPA | **iOS** و**أندرويد** نيتيف |
-| 🚀 Deploy topology | Cloudflare Pages + Railway · Upstash Redis (جلسات — تخفيف Neon) | Pages + Railway + Redis |
+| 🚀 Deploy topology | Cloudflare Pages + Render · Upstash Redis (جلسات — تخفيف Neon) | Pages + Render + Redis |
 
 </div>
 
@@ -136,7 +136,7 @@ flowchart LR
     end
     
     subgraph Backend["⚙️ Backend · الخلفية"]
-        R[Railway · Node 22<br/>api.sabq.org]
+        R[Render · Node 22<br/>api.sabq.org]
         Jobs[14 Cron Jobs<br/>Leader-Elected]
     end
     
@@ -187,7 +187,7 @@ flowchart LR
     class iOS,Android mobile
 ```
 
-> **Note:** الإنتاج على **sabq.org** = Cloudflare Pages + Railway (`api.sabq.org`) + Neon + Upstash Redis للجلسات. انظر [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
+> **Note:** الإنتاج على **sabq.org** = Cloudflare Pages + Render (`api.sabq.org`) + Neon + Upstash Redis للجلسات. انظر [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
 
 ---
 
@@ -284,7 +284,7 @@ OpenAI · Anthropic Claude · Google Gemini · ElevenLabs (multi-voice TTS) · G
 <td><b>☁️ Platform</b><br/>المنصّة</td>
 <td>
 
-Cloudflare (Pages, Workers, DNS, Images, R2) · Railway (Node API) · Neon (Postgres) · Upstash (Redis sessions)
+Cloudflare (Pages, Workers, DNS, Images, R2) · Render (Node API) · Neon (Postgres) · Upstash (Redis sessions)
 
 </td>
 </tr>
@@ -368,8 +368,7 @@ sabq.org/
 ├── 📦 android/ + ios/          Legacy Capacitor wrappers
 │
 ├── ☁️ cloudflare-worker/       Edge Worker (SEO meta, image transforms)
-├── 🐳 Dockerfile               Railway build source
-├── 🚂 railway.json             Railway config-as-code
+├── 🐳 Dockerfile               Render build source (API + newsletter worker)
 └── ▲ vercel.json               Vercel build + rewrite config
 ```
 
@@ -387,16 +386,16 @@ The same codebase supports two deployment modes via env flags — no code branch
 <th>Stack</th>
 </tr>
 <tr>
-<td><b>🟢 Replit (legacy)</b></td>
-<td><code>sabq.org</code></td>
+<td><b>🟢 Cloudflare Pages + Render</b></td>
+<td><code>sabq.org</code> · <code>api.sabq.org</code></td>
 <td><b>Production</b><br/>الإنتاج</td>
-<td>Single Express process serves API + SPA on one port. Original topology, still production.</td>
+<td>SPA + edge middleware on Cloudflare Pages, headless Express API on Render (<code>SERVE_SPA=false</code>), Neon Postgres. See <code>docs/DEPLOYMENT_STATUS.md</code>.</td>
 </tr>
 <tr>
-<td><b>🟡 Vercel + Railway + CF</b></td>
-<td><code>sabq.news</code></td>
-<td>Experimental<br/>تجريبي</td>
-<td>Frontend on Vercel, backend on Railway, Cloudflare in front. Split via env flags <code>SERVE_SPA=false</code>, <code>COOKIE_DOMAIN</code>, <code>VITE_API_URL</code>.</td>
+<td><b>⚪ Single process</b></td>
+<td><code>localhost</code></td>
+<td>Local dev<br/>تطوير محلي</td>
+<td>One Express process serves API + SPA on one port (<code>npm run dev</code>). The original Replit topology.</td>
 </tr>
 </table>
 

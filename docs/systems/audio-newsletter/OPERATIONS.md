@@ -33,7 +33,7 @@ ENABLE_NEWSLETTER_DELIVERY_WORKER=false
 
 ## إعداد الخدمة
 
-خدمة Railway المستقلة تستخدم `/railway.newsletter-worker.json` وأمر `node dist/newsletter-worker.js` مع health path `/health`. لا تغيّر متغيرات الإنتاج لمجرد نشر PR.
+خدمة Render المستقلة `sabq-newsletter-worker` (Background Worker) تبني من `Dockerfile` الجذري بأمر `node dist/newsletter-worker.js`. لا تغيّر متغيرات الإنتاج لمجرد نشر PR.
 
 مزامنة الوتيرة تستخدم مجموعتين منفصلتين في حساب MailerLite المعتمد:
 

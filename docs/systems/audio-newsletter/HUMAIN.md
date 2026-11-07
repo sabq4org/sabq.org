@@ -12,11 +12,11 @@
 
 ## التفعيل
 
-في Railway افتح مشروع سبق، اختر خدمة الـAPI والبيئة المطلوبة، ثم **Variables → New Variable**. الاسم `HUMAIN_VOICE_API_KEY` والقيمة مفتاح HUMAIN الخاص بتلك البيئة. احفظ وراجع التغييرات ثم Deploy لتطبيقها. هذا متغير خادم ولا يُضاف إلى Cloudflare Pages أو باسم يبدأ بـ`VITE_`. بعد نشر الكود: إعدادات النظام → صوت موجز الأخبار → معاينة ثم حفظ. [دليل Railway](https://docs.railway.com/variables).
+في Render افتح خدمة الـAPI `sabq.org`، ثم **Environment → Add Environment Variable**. الاسم `HUMAIN_VOICE_API_KEY` والقيمة مفتاح HUMAIN الخاص بتلك البيئة. احفظ وراجع التغييرات ثم Deploy لتطبيقها. هذا متغير خادم ولا يُضاف إلى Cloudflare Pages أو باسم يبدأ بـ`VITE_`. بعد نشر الكود: إعدادات النظام → صوت موجز الأخبار → معاينة ثم حفظ. [دليل Render](https://render.com/docs/configure-environment-variables).
 
 
 - مكتبة الخادم المثبتة: `@humain-voice/sdk@0.18.0`، بإذن المستخدم.
-- أضف `HUMAIN_VOICE_API_KEY` إلى بيئة **خادم Railway** بمفتاح الإنتاج المخصص عند اعتماد النشر. لا تستخدم مفتاح التجربة ولا تضع أي مفتاح في `VITE_*` أو إعدادات المتصفح.
+- أضف `HUMAIN_VOICE_API_KEY` إلى بيئة **خادم Render** بمفتاح الإنتاج المخصص عند اعتماد النشر. لا تستخدم مفتاح التجربة ولا تضع أي مفتاح في `VITE_*` أو إعدادات المتصفح.
 - يبقى `ELEVENLABS_API_KEY` للاحتياط؛ يتيح الحقل المنفصل اختيار صوت ElevenLabs من قائمة سبق الحالية. الافتراضي «علي». Google يستعمل `GOOGLE_TTS_CREDENTIALS_JSON` كما سابقاً.
 - ظهور «المفتاح مضاف» يعني وجوده في البيئة فقط؛ نجاح زر المعاينة هو اختبار الاتصال والتوليد والرصيد لذلك الصوت.
 - لا migrations ولا تعديل `.env` ضمن هذه الميزة. الإعداد محفوظ في `system_settings` تحت `summary_audio_settings` مع `isPublic=false`.

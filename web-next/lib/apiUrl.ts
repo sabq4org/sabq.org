@@ -5,7 +5,7 @@ import { createHmac } from "node:crypto";
  * client/src/lib/queryClient.ts so both frontends address the backend the same
  * way.
  *
- *   - SSR (server side): always call the API origin directly. On Railway the
+ *   - SSR (server side): always call the API origin directly. On Render the
  *     Next service and the API service are separate origins, so a relative
  *     "/api/*" path would resolve to the Next server itself (which has no API).
  *     We therefore require API_ORIGIN (server env) to be set in production.

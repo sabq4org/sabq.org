@@ -11,7 +11,7 @@ vite.config.ts.*
 .env
 .env.local
 .env.*.local
-.env.railway
+.env.render
 .env.vercel
 
 # Replit-specific config
@@ -111,7 +111,7 @@ gulf-cup app ios/**/*.xcuserstate
 .env*
 # Templates stay tracked — only filled-in env files are secret.
 !.env.example
-!.env.railway.example
+!.env.render.example
 test-results/
 playwright-report/
 .playwright-artifacts*/

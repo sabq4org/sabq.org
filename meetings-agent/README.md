@@ -1,6 +1,6 @@
 # أمين المحضر — عامل تفريغ اجتماعات سبق
 
-خدمة Node.js مستقلة تعمل على Railway بجانب الخادم الرئيسي. تسجَّل لدى LiveKit
+خدمة Node.js مستقلة تعمل على Render (Background Worker `sabq-meetings-agent`) بجانب الخادم الرئيسي. تسجَّل لدى LiveKit
 Cloud باسم `sabq-minutes-agent` ولا تدخل أي غرفة إلا باستدعاء صريح (Agent
 Dispatch) من خادم سبق عند بدء اجتماع مفعَّل «أمين المحضر».
 
@@ -16,17 +16,16 @@ Dispatch) من خادم سبق عند بدء اجتماع مفعَّل «أمي�
 4. عند إغلاق الغرفة (إنهاء الاجتماع) يفرغ العامل ما تبقى ويخرج، والخادم
    الرئيسي يتولى توليد المحضر.
 
-## النشر على Railway (خدمة جديدة)
+## النشر على Render
 
-1. أنشئ خدمة جديدة من نفس المستودع، Root Directory = `meetings-agent`،
-   Builder = Dockerfile.
+1. الخدمة `sabq-meetings-agent` من نوع Background Worker، Root Directory = `meetings-agent`،
+   Docker، وBuild Filter = `meetings-agent/**`.
 2. المتغيرات:
    - `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` — نفس قيم الخادم الرئيسي
    - `OPENAI_API_KEY`
    - `SABQ_API_URL=https://api.sabq.org`
    - `MEETINGS_AGENT_SECRET` — سر عشوائي طويل (وأضف نفسه للخادم الرئيسي)
-3. لا يحتاج منفذاً عاماً — worker يتصل خارجياً فقط (عطّل healthcheck HTTP
-   أو اضبط Railway على النوع worker).
+3. لا يحتاج منفذاً عاماً — worker يتصل خارجياً فقط، لذلك نوعه Background Worker بلا healthcheck HTTP.
 
 ## على الخادم الرئيسي
 

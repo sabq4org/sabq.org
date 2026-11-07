@@ -20,10 +20,10 @@
 - **قوائم JSON المفهرسة رغم robots (2026-09-07):** `apiListingRobots.ts` يضيف `X-Robots-Tag: noindex, nofollow` إلى GET/HEAD لقائمتي `/api/articles` و`/api/v2/articles` فقط. robots يسمح بمساريهما التامين ومعاملات الاستعلام لرؤية الترويسة؛ التفاصيل وبقية API تبقى محظورة. تبقى بيانات JSON العامة وكاشها وصلاحياتها كما هي؛ قاعدة no-store أدناه تخص قوالب HTML الخاصة، ولا تستلزم إلغاء كاش قوائم API العامة.
 - **LCP صفحة القسم العربية (2026-09-26):** معالج `/category/:slug` (الصفحة الأولى فقط، لا `?page=`) يعلن `heroPreload` لصورة البطاقة ذات الأولوية: يعيد استعلام `/api/categories/:slug/articles` نفسه (الترتيب والشروط وحد 50، بما فيها الأقسام الذكية/الديناميكية) بأعمدة ضيقة، ثم `pickCategoryLandingLead` (آخر 30 يومًا، الأحدث، ترتيب مستقر) و`buildCardImagePreload` المشتركان مع `ArticleMedia`/`OptimizedImage` (عرض 640، جودة 85، `DEFAULT_IMAGE_SIZES_ATTR`). الإنفوجرافيك وقسم iFox غير AI بلا preload. `/api/categories/slug/:slug` صار في `getApiCacheTtl` بـ60ث للمجهول (صف فهرس عام بلا بيانات مستخدم). الحارس: `categoryCardPreload.test.ts`.
 - مسارات noindex → `Cache-Control: private, no-store`.
-- **Railway staging:** يجب ضبط `STAGING_NO_INDEX=true` على `web-next`؛ يضيف
+- **أي بيئة staging (لا توجد حالياً):** يجب ضبط `STAGING_NO_INDEX=true` على `web-next`؛ يضيف
   `X-Robots-Tag: noindex, nofollow, noarchive` وrobots meta ويمنع كاش CDN.
 - **تقييد staging:** وجود `STAGING_ACCESS_TOKEN` يفرض Basic Auth (المستخدم
-  `sabq`) على صفحات `web-next`، مع استثناء `/health` فقط لفحص Railway.
+  `sabq`) على صفحات `web-next`، مع استثناء `/health` فقط لفحص صحة المنصة.
 - `SSR_ROUTES=on/off` مفتاح تراجع فوري.
 - **`/api/edge/seo-meta` (2026-07-25):** كاش ذاكرة `edgeSeoMetaCache` (MATCH 5د / MISS 30ث) + single-flight لنفس المسار + تطبيع المسار (بدون `?utm_*`) + CDN `s-maxage=300, stale-while-revalidate=600` (كان 60ث فيعيد ضرب الأصل كل دقيقة — ظهر كـ APM بطيء بعد كل إقلاع).
 - **hreflang AR↔EN (2026-07-30):** الربط عبر `en_articles.seoMetadata.sourceArticleId`؛ وإلا لا يُرسل رابط لغة شقيقة مكسور. الترجمات **الجديدة** تفضّل نفس `englishSlug` العربي إن كان متاحاً (`/article/X` ↔ `/en/article/X`). IndexNow بعد الترجمة يستهدف `/en/article/...` ويُبطل كاش Redis لـ `__sitemapEnArticles*` + كاش `sitemap-news` في الذاكرة.
@@ -44,8 +44,8 @@
 
 ## ثقة بروكسي Pages وWorker
 - `functions/_middleware.js` يوقّع عنوان الزائر عند تمرير `/api/*` إلى `API_ORIGIN`، ويحذف أي ترويسات `X-Sabq-*` واردة من العميل قبل إعادة البناء.
-- `cloudflare-worker/wrangler.api.toml` يثبت route الإنتاج `api.sabq.org/*` مع `zone_name = "sabq.org"` بعد تحقق Railway والأصل. يبقى `EDGE_PROXY_SHARED_SECRET` binding مُداراً خارج الملف؛ غياب السر في Worker يفشل مغلقاً بـ503 ولا يمرر الطلبات. لا توجّه `API_ORIGIN` إلى `api.sabq.org` نفسه لتجنب الحلقة. بوابة قبول عنوان الوكيل الحساس (`EDGE_PROXY_GATE_REQUIRED`) تُدار في خدمة Railway API عبر `server/utils/trustedProxyIp.ts`، وليست متغيراً في Worker.
-- ترتيب التراجع: اضبط `EDGE_PROXY_GATE_REQUIRED=off` في خدمة Railway API وأعد نشرها، وتحقق من مرور الطلبات عبر المسار البديل، ثم أزل route إن لزم. لا تُزل route قبل تعطيل البوابة وإعادة نشر API، ولا تعِد تفعيل route دون secret وsmoke لـ`/health` وطلبات API للقراءة.
+- `cloudflare-worker/wrangler.api.toml` يثبت route الإنتاج `api.sabq.org/*` مع `zone_name = "sabq.org"` بعد تحقق الخادم والأصل. يبقى `EDGE_PROXY_SHARED_SECRET` binding مُداراً خارج الملف؛ غياب السر في Worker يفشل مغلقاً بـ503 ولا يمرر الطلبات. لا توجّه `API_ORIGIN` إلى `api.sabq.org` نفسه لتجنب الحلقة. بوابة قبول عنوان الوكيل الحساس (`EDGE_PROXY_GATE_REQUIRED`) تُدار في خدمة الـAPI على Render عبر `server/utils/trustedProxyIp.ts`، وليست متغيراً في Worker.
+- ترتيب التراجع: اضبط `EDGE_PROXY_GATE_REQUIRED=off` في خدمة الـAPI على Render وأعد نشرها، وتحقق من مرور الطلبات عبر المسار البديل، ثم أزل route إن لزم. لا تُزل route قبل تعطيل البوابة وإعادة نشر API، ولا تعِد تفعيل route دون secret وsmoke لـ`/health` وطلبات API للقراءة.
 - `web-next` يمرر طلبات SSR العامة إلى `NEXT_ORIGIN` ولا يُستخدم كمصدر عنوان زائر؛ مسارات GET لا تعتمد على Bearer-keying.
 
 ### تصحيح ارتباط خرائط الأرشيف — 2026-09-07
@@ -121,7 +121,7 @@
 
 - `GET/HEAD /mawaeed` يقدّم للزاحف HTML كاملاً من `functions/mawaeedPage.js` قبل قشرة SPA؛ الزائر يرى `MawaeedPage.tsx` داخل التطبيق. المسار مسجل في `spaTopLevelRoutes`. المسارات القديمة `/mawaeed/:slug` تحول 301 إلى صفحات الخدمة.
 - `GET/HEAD /services/:id` يتبع المقال في العرض: القارئ يأخذ قشرة SPA (`client/src/pages/ServiceDatePage.tsx`). الزاحف، مع `SSR_ROUTES=on`، يأخذ `web-next/app/services/[id]` ويُقبل الرد فقط إذا احتوى `h1` وJSON-LD. عند سقوط SSR تُحقن الميتا من `buildServicePageEdgeMeta`. صفحات الكتالوج الخمس عامة ومفهرسة منذ 2026-10-16 (`index, follow, max-image-preview:large`) وتظهر في `sitemap-mawaeed.xml` وروابط `/mawaeed`، مع كاش HTML يشمل المنطقة. المعرّف غير المعروف يعيد 404 مع noindex,nofollow. التفاصيل في [`docs/systems/mawaeed/SYSTEM.md`](../mawaeed/SYSTEM.md).
-- المصدر `GET /api/mawaeed` على Railway. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
+- المصدر `GET /api/mawaeed` على Render. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
 - كاش المتصفح `private, no-cache`. `CDN-Cache-Control: public, max-age=60`. مفتاح Workers يضم المنطقة ووسم النشر حتى لا تختلط نسخة الرياض بمكة. المسح العادي لا يفرغ مفاتيح Workers المخصصة.
 
 

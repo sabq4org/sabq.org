@@ -15,7 +15,7 @@ info:
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
-    description: Production (Railway)
+    description: Production (Render)
   - url: http://localhost:5000
     description: Local dev (npm run dev)
 security:
@@ -557,7 +557,7 @@ components:
     botToken:
       type: http
       scheme: bearer
-      description: توكن البوت من BOT_DRAFTS_API_TOKENS (Railway). يُخزَّن في مدير أسرار البوت باسم SABQ_BOT_DRAFTS_TOKEN.
+      description: توكن البوت من BOT_DRAFTS_API_TOKENS (Render). يُخزَّن في مدير أسرار البوت باسم SABQ_BOT_DRAFTS_TOKEN.
   schemas:
     DraftFields:
       type: object

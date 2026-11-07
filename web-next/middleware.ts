@@ -15,7 +15,7 @@ function withHiddenServiceRobots(request: NextRequest, response: NextResponse) {
 }
 
 export function middleware(request: NextRequest) {
-  // Railway needs an unauthenticated health endpoint to determine readiness.
+  // Render needs an unauthenticated health endpoint to determine readiness.
   if (request.nextUrl.pathname === "/health") {
     return NextResponse.next();
   }
@@ -32,11 +32,11 @@ export function middleware(request: NextRequest) {
     return withHiddenServiceRobots(request, NextResponse.next());
   }
 
-  return new NextResponse("Railway staging access is restricted.", {
+  return new NextResponse("Staging access is restricted.", {
     status: 401,
     headers: {
       ...NOINDEX_HEADERS,
-      "WWW-Authenticate": 'Basic realm="Sabq Railway staging", charset="UTF-8"',
+      "WWW-Authenticate": 'Basic realm="Sabq staging", charset="UTF-8"',
     },
   });
 }
