@@ -44,10 +44,22 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         ?: summary
         ?: ""
 
-    val resolvedImageUrl = imageUrl ?: thumbnailUrl
-    val absoluteImageUrl = resolvedImageUrl
-        ?.takeIf { it.isNotBlank() }
-        ?.let { if (it.startsWith("http")) it else webOrigin + (if (it.startsWith("/")) it else "/$it") }
+    val absolutize: (String?) -> String? = { raw ->
+        raw?.takeIf { it.isNotBlank() }
+            ?.let { if (it.startsWith("http")) it else webOrigin + (if (it.startsWith("/")) it else "/$it") }
+    }
+    val defaultImageUrl = absolutize(imageUrl ?: thumbnailUrl)
+    // الإنفوجرافيك: `/api/v1` يرسل الكامل في infographic_image_url وصورة الواجهة في
+    // image_url (القوائم). حمولة الويب ترسل الكامل في imageUrl والواجهة في
+    // infographicBannerUrl، فنضع الواجهة للبطاقات ونحفظ الكامل للتفاصيل.
+    val isInfographicType = articleType.equals("infographic", ignoreCase = true)
+    val explicitFull = absolutize(infographicImageUrl)
+    val absoluteInfographicUrl = if (isInfographicType) explicitFull ?: defaultImageUrl else null
+    val absoluteImageUrl = if (isInfographicType && explicitFull == null) {
+        absolutize(infographicBannerUrl) ?: defaultImageUrl
+    } else {
+        defaultImageUrl
+    }
 
     val focal = ImageFocalPoint.normalised(imageFocalPoint?.x, imageFocalPoint?.y)
 
@@ -116,6 +128,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         editorialModifiedAtIso = (seoMetadata?.editorialModifiedAt ?: editorialModifiedAt)?.takeIf { it.isNotBlank() },
         body = body?.takeIf { it.isNotBlank() },
         articleType = articleType,
+        infographicImageUrl = absoluteInfographicUrl,
         authorGender = authorGender,
         aiSummary = aiSummary?.trim()?.takeIf { it.isNotBlank() },
         tags = resolvedTags,

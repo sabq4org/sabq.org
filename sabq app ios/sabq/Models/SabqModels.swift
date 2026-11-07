@@ -549,6 +549,8 @@ struct Article: Identifiable, Equatable, Hashable {
     /// today (triggers the photo-pack gallery inside the detail view).
     /// Plain news articles leave this nil.
     var articleType: String? = nil
+    /// الإنفوجرافيك الطولي الكامل — يُعرض في التفاصيل بعد الموجز. nil لغير الإنفوجرافيك.
+    var infographicImageURL: String? = nil
     /// Photo packs for weekly-photos articles. Nil for everything else.
     var weeklyPhotos: [APIWeeklyPhoto]? = nil
     var mediaAssets: [APIMediaAsset]? = nil
@@ -606,6 +608,10 @@ struct Article: Identifiable, Equatable, Hashable {
     /// نافذة الخبر «الجديد» منذ نشره (10 دقائق): خلالها تظهر شارة «جديد» بدل الوقت،
     /// وبعد انقضائها يظهر الوقت الفعلي للنشر تلقائياً.
     static let freshPublishWindow: TimeInterval = 10 * 60
+
+    /// مادة إنفوجرافيك: البطاقة تُظهر ليبل «إنفوجرافيك» بجانب القسم، والتفاصيل
+    /// تعرض الموجز ثم الإنفوجرافيك كاملًا.
+    var isInfographic: Bool { articleType == "infographic" }
 
     func isFreshlyPublished(relativeTo now: Date = Date()) -> Bool {
         let age = now.timeIntervalSince(publishDate)
@@ -709,6 +715,7 @@ struct Article: Identifiable, Equatable, Hashable {
             articleURL: articleURL,
             viewsCount: api.viewsCount ?? 0,
             articleType: api.articleType,
+            infographicImageURL: api.infographicImageUrl,
             weeklyPhotos: api.weeklyPhotos,
             mediaAssets: api.mediaAssets,
             whatsappCta: api.whatsappCta,

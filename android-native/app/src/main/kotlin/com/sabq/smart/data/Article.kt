@@ -40,6 +40,8 @@ data class Article(
     /** العنوان الفرعي (`subtitle`) — يظهر تحت العنوان في صفحة الخبر كما في iOS والويب. */
     val subtitle: String? = null,
     val articleType: String? = null,
+    /** الإنفوجرافيك الطولي الكامل — يُعرض في التفاصيل بعد الموجز. null لغير الإنفوجرافيك. */
+    val infographicImageUrl: String? = null,
     val authorGender: String? = null,
     /** AI-generated summary string. Kept separate from [excerpt] so the
      *  Smart Summary card on the detail screen can prefer the AI text
@@ -86,6 +88,9 @@ data class Article(
      * the bare UUID `id` works only on the v1 detail path.
      */
     val bookmarkKey: String get() = slug?.takeIf { it.isNotBlank() } ?: id
+
+    /** مادة إنفوجرافيك: ليبل «إنفوجرافيك» في البطاقة، والتفاصيل تعرض الموجز ثم الصورة كاملة. */
+    val isInfographic: Boolean get() = articleType.equals("infographic", ignoreCase = true)
 
     /**
      * True when this article should render as an opinion piece —

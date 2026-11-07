@@ -170,21 +170,24 @@ struct ArticleDetailView: View {
                     // the reader expects to see the WHOLE image the
                     // editor uploaded, otherwise faces in tall portraits
                     // get chopped off the top.
-                    heroImage
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
-                            guard displayArticle.videoURL == nil,
-                                  displayArticle.imageURL?.isEmpty == false else { return }
-                            SabqHaptics.light()
-                            isHeroLightboxPresented = true
-                        }
-                        .aiImageBadgeOverlay(
-                            isVisible: displayArticle.isAiGeneratedImage,
-                            model: displayArticle.aiImageModel,
-                            inset: 12,
-                            corner: .topLeading
-                        )
+                    // الإنفوجرافيك لا يُعرض أعلى الصفحة: يأتي كاملًا بعد الموجز.
+                    if !displayArticle.isInfographic {
+                        heroImage
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
+                                guard displayArticle.videoURL == nil,
+                                      displayArticle.imageURL?.isEmpty == false else { return }
+                                SabqHaptics.light()
+                                isHeroLightboxPresented = true
+                            }
+                            .aiImageBadgeOverlay(
+                                isVisible: displayArticle.isAiGeneratedImage,
+                                model: displayArticle.aiImageModel,
+                                inset: 12,
+                                corner: .topLeading
+                            )
+                    }
 
                     VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         // Editorial column order (per user 2026-05-14):
@@ -224,6 +227,11 @@ struct ArticleDetailView: View {
                                     .animatedAppear(index: 3)
                                     .padding(.bottom, SabqLayout.space8)
                             }
+                        }
+
+                        // الإنفوجرافيك كاملًا بطوله الطبيعي بعد الموجز، والنقر يفتح التكبير.
+                        if displayArticle.isInfographic {
+                            infographicFullImage
                         }
 
                         articleBody
@@ -305,8 +313,8 @@ struct ArticleDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $isHeroLightboxPresented) {
             ImageLightbox(
-                url: displayArticle.imageURL.flatMap(URL.init(string:)),
-                placeholderImage: displayArticle.imageURL
+                url: heroLightboxURLString.flatMap(URL.init(string:)),
+                placeholderImage: heroLightboxURLString
                     .flatMap(URL.init(string:))
                     .flatMap { ImageCache.cachedAny($0) }
             )
@@ -631,6 +639,48 @@ struct ArticleDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// الصورة التي يفتحها التكبير: الإنفوجرافيك الكامل لمواد الإنفوجرافيك.
+    private var heroLightboxURLString: String? {
+        displayArticle.isInfographic
+            ? (displayArticle.infographicImageURL ?? displayArticle.imageURL)
+            : displayArticle.imageURL
+    }
+
+    /// الإنفوجرافيك الطولي كاملًا بعرض العمود وطوله الطبيعي (بلا قص).
+    private var infographicFullImage: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Group {
+                if let urlString = heroLightboxURLString, let url = URL(string: urlString) {
+                    CachedAsyncImage(url: url, contentMode: .fit) {
+                        heroPlaceholder
+                    }
+                } else {
+                    heroPlaceholder
+                        .environment(\.sabqImageLoadFailed, true)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(SabqTheme.primary.opacity(0.12), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard heroLightboxURLString?.isEmpty == false else { return }
+                SabqHaptics.light()
+                isHeroLightboxPresented = true
+            }
+            .accessibilityLabel("الإنفوجرافيك كاملًا")
+            .accessibilityHint("اضغط للتكبير")
+            .accessibilityAddTraits(.isButton)
+
+            Label("اضغط على الإنفوجرافيك للتكبير", systemImage: "arrow.up.left.and.arrow.down.right")
+                .font(SabqType.timestamp.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+        }
+    }
+
     private var heroPlaceholder: some View {
         Color.clear
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
@@ -672,6 +722,9 @@ struct ArticleDetailView: View {
             // من `displayArticle` لا `article`: الخبر المفتوح من إشعار أو رابط عميق
             // يبدأ بهيكل `Article.placeholder` قسمه الثابت «محليات» وبلا «عاجل».
             // والهيكل عنوانه فارغ، فلا تُرسم الشارة قبل وصول الحمولة الحقيقية.
+            if !displayArticle.title.isEmpty, displayArticle.isInfographic {
+                DetailLabelPill(title: "إنفوجرافيك", tint: SabqTheme.primary, icon: "chart.bar.fill")
+            }
             if !displayArticle.title.isEmpty {
                 DetailLabelPill(title: displayArticle.categoryTitle, tint: SabqTheme.primary)
             }
