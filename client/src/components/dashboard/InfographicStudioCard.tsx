@@ -144,7 +144,7 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
     (job?.status === "failed" ? job.error || "تعذر إكمال الإنفوجرافيك. حاول مجددًا." : null) ||
     (jobMissing ? "لم نعد نجد هذه العملية. ابدأ تصميمًا جديدًا." : null);
   const notConfigured = capabilities.data?.configured === false;
-  const tooShort = plainLength(content) < 80 || title.trim().length < 5;
+  const tooShort = plainLength(content) < 80;
 
   function run() {
     const requestId = crypto.randomUUID();
@@ -215,8 +215,8 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
             {notConfigured
               ? "خدمة صور GPT غير مفعّلة على الخادم."
               : tooShort
-                ? "اكتب عنوان الخبر ونصه أولًا (80 حرفًا على الأقل)."
-                : "يحتاج الخبر رقمين على الأقل. كل رقم يُنقل من النص كما هو. المدة نحو 3 دقائق."}
+                ? "اكتب نص الخبر أولًا (80 حرفًا على الأقل). العنوان اختياري."
+                : "يصلح لخبر الأرقام وللخبر التوعوي أو الحدث. كل رقم يُنقل من النص كما هو. المدة نحو 3 دقائق."}
           </p>
         )}
 
@@ -270,6 +270,16 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
                   data-testid="img-infographic-studio-wide"
                 />
               </a>
+              {result.points && result.points.length > 0 && (
+                <ol className="space-y-1 text-xs">
+                  {result.points.map((p, i) => (
+                    <li key={`${i}-${p.title}`}>
+                      <span className="font-bold">{p.title}</span>
+                      {p.text ? <span className="text-muted-foreground"> · {p.text}</span> : null}
+                    </li>
+                  ))}
+                </ol>
+              )}
               {result.figures.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {result.figures.map((f) => (

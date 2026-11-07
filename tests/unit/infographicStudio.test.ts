@@ -8,7 +8,7 @@ vi.mock("../../server/ai/gateway", () => ({
 }));
 
 import { INFOGRAPHIC_HEADLINE_PREFIX, infographicStudioRequestSchema, withInfographicPrefix } from "../../shared/infographicStudio";
-import { checkBrief, generateInfographicBrief, heroPrompt, salvageBrief } from "../../server/services/infographicStudio/brief";
+import { checkBrief, generateInfographicBrief, heroPrompt, numbersFromStory, salvageBrief } from "../../server/services/infographicStudio/brief";
 import {
   buildBodyHtml,
   buildVerticalHtml,
@@ -66,6 +66,7 @@ describe("request and headline", () => {
     expect(infographicStudioRequestSchema.safeParse(base).success).toBe(true);
     expect(infographicStudioRequestSchema.safeParse({ ...base, content: "قصير" }).success).toBe(false);
     expect(infographicStudioRequestSchema.safeParse({ ...base, publish: true }).success).toBe(false);
+    expect(infographicStudioRequestSchema.safeParse({ requestId: base.requestId, content: base.content }).success).toBe(true);
   });
 });
 
@@ -104,9 +105,89 @@ describe("generateInfographicBrief", () => {
     expect(retry).toMatch(/146/);
   });
 
-  it("refuses a story with no numbers without calling the model", async () => {
-    await expect(generateInfographicBrief({ title: "خبر", content: "<p>نص بلا أرقام إطلاقًا</p>" })).rejects.toThrow();
-    expect(completeMock).not.toHaveBeenCalled();
+  it("works without a title and plans points for a story without numbers", async () => {
+    completeMock.mockResolvedValueOnce({ content: JSON.stringify(pointsPlan()) });
+    const { brief } = await generateInfographicBrief({ title: "", content: `<p>${tips}</p>` });
+    expect(brief.mode).toBe("points");
+    expect(brief.hero).toBeNull();
+    expect(completeMock.mock.calls[0][0].messages[1].content).toMatch(/لا يوجد عنوان/);
+  });
+});
+
+const tips =
+  "ينصح أطباء التغذية بشرب الماء بانتظام خلال اليوم، وتناول الخضراوات الورقية في كل وجبة، " +
+  "وتقليل السكريات المضافة والمشروبات الغازية، والحرص على وجبة إفطار متوازنة قبل الخروج من المنزل.";
+
+const pointsPlan = () => ({
+  ...plan(),
+  mode: "points",
+  headline: "أربع عادات غذائية يومية لصحة أفضل",
+  titleLines: ["عاداتك اليومية", "على المائدة"],
+  highlight: "المائدة",
+  hero: null,
+  figures: [],
+  points: [
+    { title: "الماء أولًا", text: "اشربه بانتظام خلال اليوم" },
+    { title: "خضراوات ورقية", text: "في كل وجبة" },
+    { title: "سكر أقل", text: "قلّل المضاف والمشروبات الغازية" },
+    { title: "إفطار متوازن", text: "قبل الخروج من المنزل" },
+  ],
+  body: ["ينصح أطباء التغذية بعادات يومية بسيطة.", "أبرزها الماء والخضراوات وتقليل السكر."],
+  sourceLine: "المصدر: أطباء التغذية",
+});
+
+describe("numbers written as words and points mode", () => {
+  const falcons =
+    "بيعت ثلاثة صقور بمبلغ 310 آلاف ريال في الليلة الـ19 من ليالي مزاد المركز الوطني للصقور 2026. " +
+    "وعُرض فرخ شاهين اشترك في طرحه أربعة طواريح، وبيع بمبلغ 102 ألف ريال، واختُتمت الليلة بفرخ اشترك في طرحه ثمانية طواريح وبيع بمبلغ 106 آلاف ريال.";
+
+  it("counts Arabic number words and thousands as story numbers", () => {
+    const n = numbersFromStory(falcons);
+    for (const v of ["3", "4", "8", "310000", "310,000", "102,000"]) expect(n.split(/\s/)).toContain(v);
+    expect(numbersFromStory("يوم الثلاثاء")).not.toMatch(/\n3/);
+  });
+
+  it("accepts the falcon story's figures, including those written as words", () => {
+    const p = {
+      ...plan(),
+      headline: "3 صقور بـ310 آلاف ريال",
+      titleLines: ["3 صقور", "في ليلة واحدة"],
+      highlight: "3 صقور",
+      hero: { value: "310", unit: "ألف ريال", caption: "قيمة الصقور الثلاثة" },
+      figures: [
+        { value: "102", label: "ألف ريال" },
+        { value: "106", label: "ألف ريال" },
+        { value: "8", label: "طواريح" },
+      ],
+      body: ["بيعت 3 صقور بمبلغ 310,000 ريال.", "واشترك 4 طواريح في طرح أحدها."],
+    };
+    expect(checkBrief(p, falcons).problems).toEqual([]);
+  });
+
+  it("validates points mode and its numbers", () => {
+    expect(checkBrief(pointsPlan(), tips).problems).toEqual([]);
+    const bad = pointsPlan();
+    bad.points[0] = { title: "8 أكواب", text: "يوميًا" };
+    expect(checkBrief(bad, tips).problems.join()).toMatch(/8 أكواب/);
+    expect(checkBrief({ ...pointsPlan(), points: pointsPlan().points.slice(0, 2) }, tips).problems.join()).toMatch(/points mode/);
+  });
+
+  it("salvage falls back to points and keeps verified sentences", () => {
+    const p = checkBrief({ ...pointsPlan(), mode: "figures", hero: { value: "99", unit: "", caption: "x" }, body: ["جملة صحيحة. وجملة فيها 77 رقمًا."] }, tips).brief!;
+    const s = salvageBrief(p, tips)!;
+    expect(s.mode).toBe("points");
+    expect(s.hero).toBeNull();
+    expect(s.body).toEqual(["جملة صحيحة."]);
+  });
+
+  it("builds a points canvas without a hero number", () => {
+    const p = checkBrief(pointsPlan(), tips).brief!;
+    const v = buildVerticalHtml(p, assets);
+    expect(v.match(/data-qa="point"/g)).toHaveLength(4);
+    expect(v).not.toContain('data-qa="hero"');
+    expect(v).toContain(">01<");
+    expect(buildWideHtml(p, assets)).not.toContain('data-qa="hero"');
+    expect(heroPrompt(p, "vertical")).toMatch(/60%/);
   });
 });
 

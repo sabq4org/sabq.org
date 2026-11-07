@@ -118,21 +118,49 @@ html,body{width:${w}px;height:${h}px;background:#000}
 .hero .c{font:600 calc(32px*var(--s))/1.4 Plex;color:var(--ink);opacity:.92}
 .fig .v{font:900 calc(84px*var(--s))/1 Alex;color:var(--accent);direction:ltr;unicode-bidi:isolate;text-align:right}
 .fig .l{font:600 calc(28px*var(--s))/1.35 Plex;color:var(--ink);margin-top:8px}
+.pts{display:flex;flex-direction:column;gap:calc(26px*var(--s))}
+.pt{display:flex;gap:calc(22px*var(--s));align-items:flex-start}
+.pt .n{font:900 calc(46px*var(--s))/1.05 Alex;color:var(--accent);direction:ltr;unicode-bidi:isolate;flex:none;min-width:calc(64px*var(--s))}
+.pt .t{font:800 calc(44px*var(--s))/1.2 Alex;color:var(--ink)}
+.pt .x{font:600 calc(29px*var(--s))/1.45 Plex;color:var(--ink);opacity:.92;margin-top:4px}
 .ai{font:400 22px Plex;color:rgba(255,255,255,.82);text-shadow:0 1px 6px rgba(0,0,0,.7)}
 ${css}
 </style><script>${FIT_SCRIPT}</script></head><body><div class="canvas">${body}</div></body></html>`;
 }
 
+function heroHtml(b: InfographicBrief, wide: boolean): string {
+  if (!b.hero) return "";
+  const v = `<div class="v">${escapeHtml(b.hero.value)}</div>`;
+  const rest = `<div class="u">${escapeHtml(b.hero.unit)}</div><div class="c">${escapeHtml(b.hero.caption)}</div>`;
+  return `<div class="hero" data-qa="hero">${wide ? `${v}<div>${rest}</div>` : v + rest}</div>`;
+}
+
+/** Points mode: short numbered points; the order is the story's own, so 01–04 carry meaning. */
+function pointsHtml(b: InfographicBrief, max: number): string {
+  const items = b.points
+    .slice(0, max)
+    .map(
+      (p, i) =>
+        `<div class="pt" data-qa="point"><div class="n">${String(i + 1).padStart(2, "0")}</div><div><div class="t">${escapeHtml(p.title)}</div>${
+          p.text ? `<div class="x">${escapeHtml(p.text)}</div>` : ""
+        }</div></div>`,
+    )
+    .join("");
+  return `<div class="pts">${items}</div>`;
+}
+
 export function buildVerticalHtml(b: InfographicBrief, a: TemplateAssets): string {
   const { width, height } = INFOGRAPHIC_STUDIO_CANVAS.vertical;
   const top = b.textZone === "top";
+  const points = b.mode === "points";
+  const zoneH = points ? 1120 : 900;
   const shadow = b.theme === "dark" ? "text-shadow:0 2px 18px rgba(0,0,0,.6);" : "text-shadow:0 0 22px rgba(255,255,255,.35);";
   const css = `
-.scrim{position:absolute;left:0;right:0;${top ? "top:0" : "bottom:0"};height:1400px;background:linear-gradient(${top ? "180deg" : "0deg"},${washAt("--a1")} 0,${washAt("--a2")} 62%,rgba(var(--wash),0) 92%)}
+.scrim{position:absolute;left:0;right:0;${top ? "top:0" : "bottom:0"};height:${points ? 1560 : 1400}px;background:linear-gradient(${top ? "180deg" : "0deg"},${washAt("--a1")} 0,${washAt("--a2")} 62%,rgba(var(--wash),0) 92%)}
 .foot-scrim{position:absolute;left:0;right:0;bottom:0;height:260px;background:linear-gradient(0deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
 .logo-shade{top:-170px;right:-190px}
 .logo{top:60px;right:64px}
-.zone{position:absolute;right:64px;left:64px;${top ? "top:250px;height:900px" : "bottom:170px;height:900px"};display:flex;flex-direction:column;justify-content:${top ? "flex-start" : "flex-end"};gap:calc(30px*var(--s));overflow:hidden;${shadow}}
+.zone{position:absolute;right:64px;left:64px;${top ? `top:250px;height:${zoneH}px` : `bottom:170px;height:${zoneH}px`};display:flex;flex-direction:column;justify-content:${top ? "flex-start" : "flex-end"};gap:calc(30px*var(--s));overflow:hidden;${shadow}}
 .figs{display:flex;gap:calc(44px*var(--s));justify-content:flex-start}
 .fig{flex:1 1 0;min-width:0}
 .foot{position:absolute;right:64px;left:64px;bottom:52px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
@@ -149,8 +177,7 @@ export function buildVerticalHtml(b: InfographicBrief, a: TemplateAssets): strin
 <div class="zone" data-zone="main">
   <div class="kicker" data-qa="kicker">${escapeHtml(b.kicker)}</div>
   <div class="title" data-qa="title">${b.titleLines.map((l) => titleLineHtml(l, b.highlight)).join("<br>")}</div>
-  <div class="hero" data-qa="hero"><div class="v">${escapeHtml(b.hero.value)}</div><div class="u">${escapeHtml(b.hero.unit)}</div><div class="c">${escapeHtml(b.hero.caption)}</div></div>
-  <div class="figs">${figures}</div>
+  ${points ? pointsHtml(b, 4) : `${heroHtml(b, false)}<div class="figs">${figures}</div>`}
 </div>
 <div class="ai" data-qa="ai-label">${AI_IMAGE_LABEL}</div>
 <div class="foot"><div class="src" data-qa="source">${escapeHtml(b.sourceLine)}</div><div class="site">sabq.org</div></div>`;
@@ -174,7 +201,7 @@ export function buildWideHtml(b: InfographicBrief, a: TemplateAssets): string {
 <div class="logo" data-qa="logo">${a.logoWhiteSvg}</div>
 <div class="zone" data-zone="main">
   <div class="title" data-qa="title">${b.titleLines.map((l) => titleLineHtml(l, b.highlight)).join("<br>")}</div>
-  <div class="hero" data-qa="hero"><div class="v">${escapeHtml(b.hero.value)}</div><div><div class="u">${escapeHtml(b.hero.unit)}</div><div class="c">${escapeHtml(b.hero.caption)}</div></div></div>
+  ${b.hero ? heroHtml(b, true) : `<div class="kicker" data-qa="kicker">${escapeHtml(b.kicker)}</div>`}
 </div>
 <div class="ai" data-qa="ai-label">${AI_IMAGE_LABEL}</div>`;
   return base(a, b, width, height, css, body);
