@@ -142,9 +142,49 @@ function verifiedSentences(paragraph: string, source: string): string {
     .trim();
 }
 
+/** Cuts at the last word boundary that fits; a long field should shorten, not fail the whole plan. */
+function clip(value: unknown, max: number): unknown {
+  if (typeof value !== "string") return value;
+  const t = value.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const at = cut.lastIndexOf(" ");
+  return (at > max * 0.5 ? cut.slice(0, at) : cut).replace(/[\s،,:؛-]+$/, "");
+}
+
+const asRecord = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+
+/**
+ * Length and count limits are layout limits, not facts: a model answer that overshoots them is
+ * trimmed to fit instead of being refused. Numbers are still verified afterwards.
+ */
+export function normaliseRawBrief(raw: unknown): unknown {
+  const r = asRecord(raw);
+  if (!r) return raw;
+  const out: Record<string, unknown> = { ...r };
+  const lens: Record<string, number> = { headline: 120, kicker: 48, sourceLine: 90, metaphor: 220, imagePromptVertical: 1500, imagePromptWide: 1500, highlight: 26 };
+  for (const [k, n] of Object.entries(lens)) out[k] = clip(r[k], n);
+  if (typeof r.mode === "string") out.mode = r.mode.trim().toLowerCase();
+  if (Array.isArray(r.titleLines)) out.titleLines = r.titleLines.slice(0, 2).map((l) => clip(l, 26));
+  if (Array.isArray(r.body)) out.body = r.body.slice(0, 2).map((p) => clip(p, 480));
+  const hero = asRecord(r.hero);
+  if (hero) out.hero = { ...hero, unit: clip(hero.unit ?? "", 28), caption: clip(hero.caption, 70) };
+  if (Array.isArray(r.figures)) out.figures = r.figures.slice(0, 5).map((f) => { const x = asRecord(f); return x ? { ...x, label: clip(x.label, 44) } : f; });
+  if (Array.isArray(r.points)) out.points = r.points.slice(0, 6).map((p) => { const x = asRecord(p); return x ? { ...x, title: clip(x.title, 32), text: clip(x.text ?? "", 110) } : p; });
+  // Colours: expand #ABC, and fall back to the house palette rather than refusing a good plan.
+  const palette: Record<string, string> = { ink: "#1B2430", accent: "#8A5A12", wash: "#F2ECE2" };
+  for (const k of Object.keys(palette)) {
+    const v = typeof r[k] === "string" ? (r[k] as string).trim().toUpperCase() : "";
+    const short3 = v.match(/^#([0-9A-F])([0-9A-F])([0-9A-F])$/);
+    out[k] = short3 ? `#${short3[1]}${short3[1]}${short3[2]}${short3[2]}${short3[3]}${short3[3]}` : /^#[0-9A-F]{6}$/.test(v) ? v : palette[k];
+  }
+  if (r.theme !== "light" && r.theme !== "dark") out.theme = "light";
+  return out;
+}
+
 /** Pure validation used after each model answer (exported for unit tests). */
 export function checkBrief(raw: unknown, story: string): BriefCheck {
-  const parsed = infographicBriefSchema.safeParse(raw);
+  const parsed = infographicBriefSchema.safeParse(normaliseRawBrief(raw));
   if (!parsed.success) {
     return { brief: null, problems: parsed.error.issues.slice(0, 8).map((i) => `${i.path.join(".")}: ${i.message}`) };
   }
@@ -257,6 +297,8 @@ export async function generateInfographicBrief(
     );
   }
   const salvaged = last.brief ? salvageBrief(last.brief, source) : null;
+  // Validation messages only (field names, numbers from the story), so a refusal can be diagnosed.
+  if (!salvaged) console.warn("[infographic-studio] plan refused", JSON.stringify({ mode: last.brief?.mode ?? null, problems: last.problems.slice(0, 10) }));
   if (!salvaged) throw new InfographicBriefError("تعذر بناء خطة موثقة من نص الخبر. راجع النص وحاول مجددًا.");
   return { brief: salvaged, source };
 }
