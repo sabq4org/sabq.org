@@ -58,8 +58,13 @@ export function buildArticleHeroPreload(article: {
  * 3. Auto-derived video thumbnail from YouTube / Dailymotion if videoUrl exists
  * 4. thumbnailUrl
  * 5. infographicBannerUrl
+ *
+ * Infographics are the exception: cards use the designed 16:9 front image
+ * (`infographicBannerUrl`) first, because `imageUrl` holds the full vertical
+ * infographic that only the article page shows.
  */
 export interface ArticleImageFields {
+  articleType?: string | null;
   imageUrl?: string | null;
   videoThumbnailUrl?: string | null;
   thumbnailUrl?: string | null;
@@ -74,7 +79,15 @@ export interface ArticleImageFields {
 // category-card preload resolves the same source image the card renders.
 export function getArticleDisplayImageUrl(article: ArticleImageFields | null | undefined): string | null {
   if (!article) return null;
-  
+
+  if (
+    article.articleType === 'infographic' &&
+    typeof article.infographicBannerUrl === 'string' &&
+    article.infographicBannerUrl.trim()
+  ) {
+    return article.infographicBannerUrl.trim();
+  }
+
   if (typeof article.imageUrl === 'string' && article.imageUrl.trim()) {
     return article.imageUrl.trim();
   }

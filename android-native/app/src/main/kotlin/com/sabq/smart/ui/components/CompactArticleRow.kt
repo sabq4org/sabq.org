@@ -82,6 +82,9 @@ fun CompactArticleRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                if (article.isInfographic) {
+                    SabqCategoryPill(title = "إنفوجرافيك", fillAlpha = 0.12f)
+                }
                 if (showsCategory) {
                     SabqCategoryPill(title = article.categoryLabel.ifBlank { article.category.title })
                 }

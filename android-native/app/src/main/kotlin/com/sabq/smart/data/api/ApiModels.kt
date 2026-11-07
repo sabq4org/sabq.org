@@ -136,6 +136,12 @@ data class ApiArticle(
 
     @JsonNames("image_url", "imageUrl", "image")
     val imageUrl: String? = null,
+    /** الإنفوجرافيك الطولي الكامل من `/api/v1` — في القوائم يحمل imageUrl صورة الواجهة. */
+    @JsonNames("infographic_image_url", "infographicImageUrl")
+    val infographicImageUrl: String? = null,
+    /** صورة واجهة الإنفوجرافيك 16:9 كما ترسلها حمولة الويب (`/api/articles`). */
+    @JsonNames("infographicBannerUrl", "infographic_banner_url")
+    val infographicBannerUrl: String? = null,
 
     @JsonNames("thumbnail_url", "thumbnailUrl")
     val thumbnailUrl: String? = null,

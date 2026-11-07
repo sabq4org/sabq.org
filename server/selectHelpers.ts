@@ -53,6 +53,7 @@ export const articleCardSelect = {
   excerpt: articles.excerpt,
   imageUrl: articles.imageUrl,
   thumbnailUrl: articles.thumbnailUrl,
+  infographicBannerUrl: articles.infographicBannerUrl,
   imageFocalPoint: articles.imageFocalPoint,
   categoryId: articles.categoryId,
   authorId: articles.authorId,

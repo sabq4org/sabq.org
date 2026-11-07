@@ -1376,6 +1376,25 @@ struct StatusChip: View {
 
 /// Detail-page label pill — matches the clean, compact, borderless capsule
 /// style used on the home hero card (`FeaturedArticleCard`).
+/// ليبل «إنفوجرافيك» في سطر الليبلات تحت العنوان، بنفس شكل كبسولة القسم.
+struct InfographicPill: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "chart.bar.fill")
+                .font(SabqType.timestamp.font.weight(.semibold))
+                .accessibilityHidden(true)
+            Text("إنفوجرافيك")
+                .font(SabqType.tag.font)
+        }
+        .foregroundStyle(SabqTheme.primary)
+        .lineLimit(1)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2.5)
+        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.12)))
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 struct DetailLabelPill: View {
     let title: String
     let tint: Color
@@ -1465,6 +1484,7 @@ struct FeaturedArticleCard: View {
                 .padding(.bottom, SabqLayout.space16)
 
             HStack(alignment: .center, spacing: 8) {
+                if article.isInfographic { InfographicPill() }
                 Text(article.categoryTitle)
                     .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.primary)
@@ -1631,6 +1651,7 @@ struct FeaturedCarousel: View {
                     .padding(.vertical, 2.5)
                     .background(Capsule(style: .continuous).fill(SabqTheme.breaking.opacity(0.1)))
                 } else {
+                    if article.isInfographic { InfographicPill() }
                     Text(article.categoryTitle)
                         .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.primary)
@@ -1876,6 +1897,9 @@ struct CompactArticleRow: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let showNew = isNew || article.isFreshlyPublished(relativeTo: context.date)
             HStack(alignment: .center, spacing: 6) {
+                if article.isInfographic {
+                    InfographicPill()
+                }
                 if showsCategory {
                     categoryPill
                 }

@@ -29,6 +29,7 @@ import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 
 import { InfographicViewerDialog } from "@/components/infographic/InfographicViewerDialog";
+import { ArticleSummary } from "@/components/public/ArticleSummary";
 
 interface InfographicDetailProps {
   article: ArticleWithDetails;
@@ -37,6 +38,13 @@ interface InfographicDetailProps {
   hasReacted?: boolean;
   isBookmarked?: boolean;
   shortLink?: { shortCode: string } | null;
+  /** صوت الموجز من صفحة الخبر (useArticleSummaryAudio) — نفس زر «استمع» في الأخبار. */
+  summaryAudio?: {
+    provider: string | null;
+    isLoadingAudio: boolean;
+    isPlaying: boolean;
+    onPlayAudio: () => void;
+  };
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null, email?: string | null): string {
@@ -56,6 +64,7 @@ export function InfographicDetail({
   hasReacted,
   isBookmarked,
   shortLink,
+  summaryAudio,
 }: InfographicDetailProps) {
   const { toast } = useToast();
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -127,6 +136,7 @@ export function InfographicDetail({
 
   const imageUrl = getCacheBustedImageUrl(article.imageUrl, article.updatedAt);
   const keywords: string[] = article.seo?.keywords || [];
+  const summaryText = article.aiSummary?.trim() || article.excerpt?.trim() || "";
 
   const resolvedAuthor = article.articleType === 'opinion' ? article.opinionAuthor : article.author;
   const authorName = resolvedAuthor?.firstName && resolvedAuthor?.lastName
@@ -242,6 +252,18 @@ export function InfographicDetail({
               )}
             </div>
 
+            {/* الموجز الذكي و«استمع» قبل الإنفوجرافيك، كما في صفحة الخبر */}
+            {summaryText && (
+              <ArticleSummary
+                key={article.id}
+                text={summaryText}
+                audioProvider={summaryAudio?.provider ?? null}
+                isLoadingAudio={summaryAudio?.isLoadingAudio ?? false}
+                isPlaying={summaryAudio?.isPlaying ?? false}
+                onPlayAudio={summaryAudio?.onPlayAudio ?? (() => {})}
+              />
+            )}
+
             {/* Infographic Image - Clickable to open lightbox */}
             {imageUrl && (
               <div className="bg-card border rounded-lg overflow-hidden">
@@ -309,23 +331,6 @@ export function InfographicDetail({
                       <Download className="h-4 w-4" />
                       <span className="hidden sm:inline">تحميل</span>
                     </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Smart Summary - Compact (Same pattern as ArticleDetail) */}
-            {(article.aiSummary || article.excerpt) && (
-              <div className="bg-muted/30 border rounded-lg p-4">
-                <div className="flex items-start gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold mb-2">الموجز الذكي</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-ai-summary">
-                      {article.aiSummary || article.excerpt}
-                    </p>
                   </div>
                 </div>
               </div>

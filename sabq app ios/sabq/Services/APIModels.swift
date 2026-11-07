@@ -166,6 +166,9 @@ nonisolated struct APIArticle: Decodable {
     let editorialModifiedAt: String?
     var keywords: [String]?
     let imageUrl: String?
+    /// الإنفوجرافيك الطولي الكامل (`infographic_image_url` من `/api/v1`). في
+    /// القوائم يحمل `imageUrl` صورة الواجهة 16:9، وصفحة التفاصيل تعرض هذا.
+    let infographicImageUrl: String?
     /// Editorial focal point shipped by the backend as
     /// `image_focal_point: { x, y }` (percentages 0–100 from top-left).
     /// Mirrors the web's `imageFocalPoint` field — drives
@@ -328,14 +331,28 @@ nonisolated struct APIArticle: Decodable {
         else if let v = try? c.decode(String.self, forKey: FlexKey("image")) { rawImage = v }
         else if let v = try? c.decode(String.self, forKey: FlexKey("thumbnailUrl")) { rawImage = v }
 
-        if let raw = rawImage {
-            if raw.hasPrefix("http") {
-                imageUrl = raw
+        let absolute: (String?) -> String? = { raw in
+            guard let raw, !raw.isEmpty else { return nil }
+            return raw.hasPrefix("http") ? raw : "https://sabq.org" + raw
+        }
+        let resolvedImage = absolute(rawImage)
+        // الإنفوجرافيك: `/api/v1` يرسل الكامل في `infographic_image_url`. حمولة
+        // الويب (`/api/articles`) ترسل الكامل في `imageUrl` وصورة الواجهة في
+        // `infographicBannerUrl`، فنضع صورة الواجهة للبطاقات ونحفظ الكامل.
+        let explicitFull = absolute((try? c.decode(String.self, forKey: FlexKey("infographic_image_url")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("infographicImageUrl"))))
+        let webBanner = absolute(try? c.decode(String.self, forKey: FlexKey("infographicBannerUrl")))
+        if articleType == "infographic" {
+            if let explicitFull {
+                infographicImageUrl = explicitFull
+                imageUrl = resolvedImage
             } else {
-                imageUrl = "https://sabq.org" + raw
+                infographicImageUrl = resolvedImage
+                imageUrl = webBanner ?? resolvedImage
             }
         } else {
-            imageUrl = nil
+            infographicImageUrl = nil
+            imageUrl = resolvedImage
         }
 
         imageFocalPoint = Self.decodeFocalPoint(in: c)

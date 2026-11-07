@@ -514,16 +514,19 @@ private fun ArticleBody(
             // app the user reads on Play Store today and the iOS
             // ArticleDetailView. Don't reintroduce a fixed 300dp box
             // here — portrait photos lose the subject's face.
-            item {
-                HeroImage(
-                    article = article,
-                    onTap = {
-                        if (!article.imageUrl.isNullOrBlank()) {
-                            haptics.light()
-                            lightboxUrl = article.imageUrl
-                        }
-                    },
-                )
+            // الإنفوجرافيك لا يُعرض أعلى الصفحة: يأتي كاملًا بعد الموجز (البند 5ب).
+            if (!article.isInfographic) {
+                item {
+                    HeroImage(
+                        article = article,
+                        onTap = {
+                            if (!article.imageUrl.isNullOrBlank()) {
+                                haptics.light()
+                                lightboxUrl = article.imageUrl
+                            }
+                        },
+                    )
+                }
             }
 
             // Everything else lives in the 20 dp horizontal column.
@@ -551,6 +554,22 @@ private fun ArticleBody(
             // 5. Smart Summary Card.
             if (!isFocusMode) {
                 item { SmartSummaryCard(article = article) }
+            }
+
+            // 5ب. الإنفوجرافيك كاملًا بطوله الطبيعي، والنقر يفتح التكبير.
+            if (article.isInfographic) {
+                val fullUrl = article.infographicImageUrl ?: article.imageUrl
+                if (!fullUrl.isNullOrBlank()) {
+                    item(key = "infographic-full") {
+                        InfographicFullImage(
+                            url = fullUrl,
+                            onTap = {
+                                haptics.light()
+                                lightboxUrl = fullUrl
+                            },
+                        )
+                    }
+                }
             }
 
             // 6. Divider.
@@ -844,6 +863,51 @@ private fun ArticleBody(
 // HERO
 // ============================================================
 
+/** الإنفوجرافيك الطولي كاملًا بعرض العمود (بلا قص) — مطابق لـ iOS `infographicFullImage`. */
+@Composable
+private fun InfographicFullImage(url: String, onTap: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val context = LocalContext.current
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(context).data(url).crossfade(250).build(),
+            contentDescription = "الإنفوجرافيك كاملًا",
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .border(0.75.dp, SabqTheme.colors.separator, shape)
+                .pointerInput(url) { detectTapGestures(onTap = { onTap() }) },
+            contentScale = ContentScale.FillWidth,
+            loading = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp)
+                        .background(SabqTheme.colors.paleFill),
+                )
+            },
+            error = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .background(SabqTheme.colors.paleFill),
+                )
+            },
+        )
+        Text(
+            text = "اضغط على الإنفوجرافيك للتكبير",
+            style = SabqTheme.typography.metaSmall,
+            color = SabqTheme.colors.tertiaryInk,
+        )
+    }
+}
+
 @Composable
 private fun HeroImage(article: Article, onTap: () -> Unit) {
     // Natural aspect ratio: image fills width, height follows the
@@ -974,6 +1038,9 @@ private fun LabelsRow(
         if (article.isOpinion) {
             OpinionMarkerPill()
         } else {
+            if (article.isInfographic) {
+                com.sabq.smart.ui.components.SabqCategoryPill(title = "إنفوجرافيك", fillAlpha = 0.12f)
+            }
             // iOS DetailLabelPill: القسم سياق لا خطورة — كبسولة بلون الأساس.
             com.sabq.smart.ui.components.SabqCategoryPill(
                 title = article.categoryLabel.ifBlank { article.category.title },

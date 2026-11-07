@@ -1092,6 +1092,7 @@ export default function ArticleDetail() {
             hasReacted={article.hasReacted}
             isBookmarked={article.isBookmarked}
             shortLink={shortLink}
+            summaryAudio={{ provider: audioProvider, isLoadingAudio, isPlaying, onPlayAudio: handlePlayAudio }}
           />
         </Suspense>
         

@@ -187,8 +187,10 @@ export default tseslint.config(
     // RATCHETED DOWN 2026-10-31 (iPhone dashboards save safety): resubmit +
     // admin PATCH logic moved to services/mobileArticleWriteService.ts. File is
     // now 9742 lines.
+    // RATCHETED DOWN 2026-11-07 (infographic in apps): formatArticleForMobile +
+    // text helpers moved to services/mobileArticleFormat.ts. File is now 9670 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 9742 }] },
+    rules: { "max-lines": ["error", { max: 9670 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

@@ -750,6 +750,7 @@ private fun FeaturedSlide(
             if (article.isBreaking) {
                 SabqCategoryPill(title = "عاجل", tint = SabqTheme.colors.breaking, fillAlpha = 0.1f)
             } else {
+                if (article.isInfographic) SabqCategoryPill(title = "إنفوجرافيك", fillAlpha = 0.12f)
                 SabqCategoryPill(title = article.categoryLabel.ifBlank { article.category.title })
             }
             Text(

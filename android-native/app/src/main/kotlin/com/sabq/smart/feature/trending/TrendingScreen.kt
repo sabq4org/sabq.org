@@ -250,6 +250,9 @@ private fun TrendingRow(index: Int, article: Article, onClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                if (article.isInfographic) {
+                    com.sabq.smart.ui.components.SabqCategoryPill(title = "إنفوجرافيك", fillAlpha = 0.12f)
+                }
                 com.sabq.smart.ui.components.SabqCategoryPill(title = article.categoryLabel.ifBlank { article.category.title })
                 Text(
                     text = article.dateFormatted,
