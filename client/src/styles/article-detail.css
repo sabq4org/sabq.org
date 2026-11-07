@@ -838,3 +838,6 @@
   .article-sheet .article-sheet-share button:active { transform: none; }
 }
 
+
+/* ليبل «إنفوجرافيك» بعد ليبل القسم — نفس لون ليبل البطاقات */
+.article-detail .article-infographic-label { background: #e6f5fe; color: #0b6fa8; border: 0; }
