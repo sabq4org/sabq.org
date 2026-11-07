@@ -25,7 +25,7 @@ import { INLINE_NEWSLETTER_SIGNUP_ENABLED } from "@/config/newsletter";
 import { HeroCarousel } from "@/components/HeroCarousel";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { AdSlot } from "@/components/AdSlot";
-import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
+import { DmsLeaderboardAd, useAdTracking } from "@/components/DmsAdSlot";
 
 // الإعلان البارز أعلى الصفحة الرئيسية (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
 const SHOW_TOP_ADS = true;
@@ -490,9 +490,9 @@ export default function Home({ showInfathCard = false }: { showInfathCard?: bool
           {/* الإعلان البارز أسفل الهيدر — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_ADS بقي كقاطع طوارئ في الكود. */}
           {SHOW_TOP_ADS && (
             <>
-              {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
+              {/* DMS Leaderboard - تحت الكاروسيل. إعلان MPU الكبير (300×250) أُزيل
+                  من رئيسية الجوال بطلب التحرير (2026-11-07)؛ بقية الصفحات كما هي. */}
               <DmsLeaderboardAd />
-              <DmsMpuAd topSlot />
 
               {/* Ad Banner Slot - Below Featured News */}
               <AdSlot slotId="header-banner" className="w-full" />

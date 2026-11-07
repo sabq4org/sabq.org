@@ -52,6 +52,80 @@ interface HeroCarouselProps {
   articles: ArticleWithDetails[];
 }
 
+// Mobile hero (below md): the full 16:9 image with nothing drawn over it, and
+// the category, relative time and title in a white panel under it, matching
+// the iOS app. Text over the photo clashed with infographic lettering.
+function MobileHeroCard({
+  article,
+  priority,
+  preferMedium = false,
+}: {
+  article: ProcessedHeroArticle;
+  priority: boolean;
+  preferMedium?: boolean;
+}) {
+  const relativeTime = article.publishedAt
+    ? formatArticleTimestamp(article.publishedAt, { format: "relative", locale: "ar" })
+    : "";
+  return (
+    <Link href={`/article/${article.englishSlug || article.slug}`}>
+      <article
+        className="cursor-pointer group bg-card rounded-2xl overflow-hidden shadow-sm hover-elevate active-elevate-2"
+        role="article"
+        aria-label={article.title}
+      >
+        <div className="relative aspect-[16/9] overflow-hidden">
+          {article.displayImage ? (
+            <OptimizedImage
+              src={article.displayImage}
+              alt={article.title}
+              className="w-full h-full object-cover"
+              objectPosition={article.objectPosition}
+              priority={priority}
+              {...(preferMedium ? { preferSize: "medium" as const, aspectRatio: "16/9" } : {})}
+              sizes={HERO_SIZES_ATTR}
+              quality={HERO_QUALITY}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
+          )}
+        </div>
+        <div className="px-4 pt-3 pb-4 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+            {article.newsType === "breaking" && (
+              <Badge variant="destructive" className="shrink-0 rounded-full text-xs gap-1">
+                <Zap className="h-3 w-3" />
+                عاجل
+              </Badge>
+            )}
+            {article.newsType !== "breaking" && article.isNew && (
+              <Badge className="shrink-0 rounded-full bg-emerald-50 text-emerald-700 border-0 hover:bg-emerald-50 text-xs gap-1 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <Flame className="h-3 w-3" />
+                جديد
+              </Badge>
+            )}
+            {article.category && (
+              <span className="rounded-full bg-primary/10 text-primary font-semibold px-3 py-0.5 text-xs">
+                {article.category.nameAr}
+              </span>
+            )}
+            {article.isReading && (
+              <Badge className="rounded-full text-[10px] px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1 font-medium">
+                <BookOpen className="h-2.5 w-2.5" />
+                قراءة
+              </Badge>
+            )}
+            {relativeTime && <span>{relativeTime}</span>}
+          </div>
+          <h1 className="text-lg font-bold leading-relaxed text-foreground">
+            {article.title}
+          </h1>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
 // Simple fade carousel for iOS Safari (no transforms)
 function SafariHeroCarousel({ articles }: HeroCarouselProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -89,84 +163,8 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
     <>
       {/* Mobile: Hero + 2 Secondary Articles Layout */}
       <div className="md:hidden space-y-2" dir="rtl">
-        {/* Main Hero Article */}
-        <Link href={`/article/${heroArticle.englishSlug || heroArticle.slug}`}>
-          <article className="relative cursor-pointer group" role="article" aria-label={heroArticle.title}>
-            <div className="relative aspect-[16/9] rounded-lg overflow-hidden">
-              {heroArticle.displayImage ? (
-                <OptimizedImage
-                  src={heroArticle.displayImage}
-                  alt={heroArticle.title}
-                  className="w-full h-full object-cover"
-                  objectPosition={heroArticle.objectPosition}
-                  priority={isMobile}
-                  sizes={HERO_SIZES_ATTR}
-                  quality={HERO_QUALITY}
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
-              )}
-              
-              {/* Bottom Gradient Overlay - Red for breaking, Black for normal */}
-              <div className={`absolute inset-0 bg-gradient-to-t ${
-                heroArticle.newsType === "breaking" 
-                  ? "from-red-900/85 via-red-800/50 to-transparent" 
-                  : "from-black/80 via-black/40 to-transparent"
-              }`} />
-              
-              {/* Content Overlay at Bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                {/* Breaking/New Badge only */}
-                {heroArticle.newsType === "breaking" && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="destructive" className="shrink-0 text-xs gap-1">
-                      <Zap className="h-3 w-3" />
-                      عاجل
-                    </Badge>
-                  </div>
-                )}
-                {heroArticle.newsType !== "breaking" && heroArticle.isNew && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 text-xs gap-1">
-                      <Flame className="h-3 w-3" />
-                      جديد
-                    </Badge>
-                  </div>
-                )}
-                
-                {/* Title */}
-                <h1 className="text-lg font-bold line-clamp-2 text-white drop-shadow-lg">
-                  {heroArticle.title}
-                </h1>
-                {/* Category and Date */}
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {heroArticle.category && (
-                    <Badge 
-                      variant="outline" 
-                      className="text-[10px] px-2 py-0.5 border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"
-                    >
-                      {heroArticle.category.nameAr}
-                    </Badge>
-                  )}
-                  {heroArticle.isReading && (
-                    <Badge 
-                      className="text-[10px] px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1 font-medium shadow-sm"
-                    >
-                      <BookOpen className="h-2.5 w-2.5" />
-                      قراءة
-                    </Badge>
-                  )}
-                  {heroArticle.formattedDate && (
-                    <span className="flex items-center gap-1 text-[10px] text-white/80">
-                      <Clock className="h-3 w-3" />
-                      {heroArticle.formattedDate}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </article>
-        </Link>
+        {/* Main Hero Article: full image, caption below (like the iOS app) */}
+        <MobileHeroCard article={heroArticle} priority={isMobile} />
 
         {/* Two Secondary Articles - Horizontal Layout (like Smart News cards) */}
         {mobileSecondaryArticles.length > 0 && (
@@ -502,86 +500,8 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
     <>
       {/* Mobile: Hero + 2 Secondary Articles Layout */}
       <div className="md:hidden space-y-2" dir="rtl">
-        {/* Main Hero Article */}
-        <Link href={`/article/${heroArticle.englishSlug || heroArticle.slug}`}>
-          <article className="relative cursor-pointer group" role="article" aria-label={heroArticle.title}>
-            <div className="relative aspect-[16/9] rounded-lg overflow-hidden">
-              {heroArticle.displayImage ? (
-                <OptimizedImage
-                  src={heroArticle.displayImage}
-                  alt={heroArticle.title}
-                  className="w-full h-full object-cover"
-                  objectPosition={heroArticle.objectPosition}
-                  priority={isMobile}
-                  preferSize="medium"
-                  aspectRatio="16/9"
-                  sizes={HERO_SIZES_ATTR}
-                  quality={HERO_QUALITY}
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
-              )}
-              
-              {/* Bottom Gradient Overlay - Red for breaking, Black for normal */}
-              <div className={`absolute inset-0 bg-gradient-to-t ${
-                heroArticle.newsType === "breaking" 
-                  ? "from-red-900/85 via-red-800/50 to-transparent" 
-                  : "from-black/80 via-black/40 to-transparent"
-              }`} />
-              
-              {/* Content Overlay at Bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                {/* Breaking/New Badge only */}
-                {heroArticle.newsType === "breaking" && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="destructive" className="shrink-0 text-xs gap-1">
-                      <Zap className="h-3 w-3" />
-                      عاجل
-                    </Badge>
-                  </div>
-                )}
-                {heroArticle.newsType !== "breaking" && heroArticle.isNew && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 text-xs gap-1">
-                      <Flame className="h-3 w-3" />
-                      جديد
-                    </Badge>
-                  </div>
-                )}
-                
-                {/* Title */}
-                <h1 className="text-lg font-bold line-clamp-2 text-white drop-shadow-lg">
-                  {heroArticle.title}
-                </h1>
-                {/* Category and Date */}
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {heroArticle.category && (
-                    <Badge 
-                      variant="outline" 
-                      className="text-[10px] px-2 py-0.5 border-white/40 text-white/90 bg-black/20 backdrop-blur-sm"
-                    >
-                      {heroArticle.category.nameAr}
-                    </Badge>
-                  )}
-                  {heroArticle.isReading && (
-                    <Badge 
-                      className="text-[10px] px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1 font-medium shadow-sm"
-                    >
-                      <BookOpen className="h-2.5 w-2.5" />
-                      قراءة
-                    </Badge>
-                  )}
-                  {heroArticle.formattedDate && (
-                    <span className="flex items-center gap-1 text-[10px] text-white/80">
-                      <Clock className="h-3 w-3" />
-                      {heroArticle.formattedDate}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </article>
-        </Link>
+        {/* Main Hero Article: full image, caption below (like the iOS app) */}
+        <MobileHeroCard article={heroArticle} priority={isMobile} preferMedium />
 
         {/* Two Secondary Articles - Horizontal Layout (like Smart News cards) */}
         {mobileSecondaryArticles.length > 0 && (
