@@ -180,6 +180,7 @@ import { InfographicAiDialog } from "@/components/InfographicAiDialog";
 import { InfographicDataEditor } from "@/components/dashboard/InfographicDataEditor";
 import { InfographicBannerCropDialog } from "@/components/dashboard/InfographicBannerCropDialog";
 import { InfographicFrontImageCard } from "@/components/dashboard/InfographicFrontImageCard";
+import { InfographicStudioCard } from "@/components/dashboard/InfographicStudioCard";
 import { StoryCardsGenerator } from "@/components/StoryCardsGenerator";
 import { AutoImageGenerator } from "@/components/AutoImageGenerator";
 import { ThumbnailGenerator } from "@/components/ThumbnailGenerator";
@@ -3816,6 +3817,30 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </CardContent>
             </Card>
+
+            {/* «إنفو للموقع»: العمودي + الواجهة + العنوان + النص من نص الخبر */}
+            {canUseInfographics && isInfographicMode && (
+              <InfographicStudioCard
+                articleId={article?.id}
+                title={title}
+                content={content}
+                disabled={isLockedByOther}
+                onApply={(r) => {
+                  // التصميم صوري: نوع «بياني» قديم كان سيعرض الرسوم القديمة للقارئ.
+                  setInfographicType("image");
+                  setImageUrl(r.infographicUrl);
+                  setIsAiGeneratedImage(true);
+                  setHeroImageMediaId(null);
+                  setImageFocalPoint(null);
+                  setInfographicBannerUrl(r.bannerUrl);
+                  setIsAiGeneratedInfographicBanner(true);
+                  setTitle(r.headline);
+                  if (editorInstance) editorInstance.commands.setContent(r.bodyHtml);
+                  setContent(r.bodyHtml);
+                  toast({ title: "طُبّق الإنفوجرافيك على الخبر", description: "راجع الحقول ثم احفظ." });
+                }}
+              />
+            )}
 
             {/* صورة الواجهة للإنفوجرافيك (16:9) — بجانب الإنفوجرافيك الكامل */}
             {canUseInfographics && isInfographicMode && (
