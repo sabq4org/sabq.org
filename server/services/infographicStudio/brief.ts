@@ -84,32 +84,47 @@ export interface BriefCheck {
   problems: string[];
 }
 
-const AR_NUMBER_WORDS: Array<[RegExp, number]> = [
-  [/واحد|واحدة/, 1],
-  [/اثنان|اثنين|اثنتان|اثنتين/, 2],
-  [/ثلاث|ثلاثة/, 3],
-  [/أربع|أربعة|اربع|اربعة/, 4],
-  [/خمس|خمسة/, 5],
-  [/ست|ستة/, 6],
-  [/سبع|سبعة/, 7],
-  [/ثمان|ثماني|ثمانية/, 8],
-  [/تسع|تسعة/, 9],
-  [/عشر|عشرة/, 10],
-];
-const AR_LETTER = "\u0621-\u064A";
+const AR_NUMBER_WORDS: Record<string, number> = {
+  واحد: 1, واحدة: 1,
+  اثنان: 2, اثنين: 2, اثنتان: 2, اثنتين: 2,
+  ثلاث: 3, ثلاثة: 3,
+  أربع: 4, أربعة: 4, اربع: 4, اربعة: 4,
+  خمس: 5, خمسة: 5,
+  ست: 6, ستة: 6,
+  سبع: 7, سبعة: 7,
+  ثمان: 8, ثماني: 8, ثمانية: 8,
+  تسع: 9, تسعة: 9,
+  عشر: 10, عشرة: 10,
+};
+/** Words that make a neighbouring unit part of a bigger number («ثلاثة عشر»، «خمسة وعشرون»، «ثلاثة آلاف»). */
+const AR_COMPOUND = /^(?:عشر|عشرة|عشرون|عشرين|ثلاثون|ثلاثين|أربعون|أربعين|اربعون|اربعين|خمسون|خمسين|ستون|ستين|سبعون|سبعين|ثمانون|ثمانين|تسعون|تسعين|مائة|مئة|مائتان|مائتين|مئتان|مئتين|ألف|آلاف|الف|ألفان|ألفين|مليون|ملايين|مليار|مليارات)$/;
+
+function unitWord(token: string): number | undefined {
+  const bare = token.replace(/^[وفبل]?(?:ال)?/, "");
+  return AR_NUMBER_WORDS[token] ?? AR_NUMBER_WORDS[bare];
+}
+
+function isNumberWord(token: string | undefined): boolean {
+  if (!token) return false;
+  const t = token.replace(/^و/, "");
+  return unitWord(token) !== undefined || AR_COMPOUND.test(t);
+}
 
 /**
- * The story plus the digit forms it implies, for checking only: «ثلاثة صقور» also counts as 3, and
- * «310 آلاف» also counts as 310,000. Nothing here is shown to readers.
+ * The story plus the digit forms it implies, for checking only: a standalone «ثلاثة صقور» also counts
+ * as 3, and «310 آلاف» / «8.5 ألف» as 310,000 / 8,500. Compound number words («ثلاثة عشر») add nothing,
+ * so they cannot vouch for a wrong unit. Nothing here is shown to readers.
  */
 export function numbersFromStory(source: string): string {
   const extra: string[] = [];
-  for (const [word, n] of AR_NUMBER_WORDS) {
-    const re = new RegExp(`(?:^|[^${AR_LETTER}])(?:[وفبل]?(?:ال)?)(?:${word.source})(?=$|[^${AR_LETTER}])`, "u");
-    if (re.test(source)) extra.push(String(n));
-  }
-  for (const m of source.matchAll(/(\d+)\s*(?:ألف|آلاف|الف)/g)) {
-    const v = Number(m[1]) * 1000;
+  const tokens = source.split(/[^\u0621-\u064A]+/).filter(Boolean);
+  tokens.forEach((token, i) => {
+    const n = unitWord(token);
+    if (n === undefined || isNumberWord(tokens[i - 1]) || isNumberWord(tokens[i + 1])) return;
+    extra.push(String(n));
+  });
+  for (const m of source.matchAll(/(?<![\d.,٫٬])(\d+(?:\.\d+)?)\s*(?:ألف|آلاف|الف)/g)) {
+    const v = Math.round(Number(m[1]) * 1000);
     extra.push(String(v), v.toLocaleString("en-US"));
   }
   return extra.length ? `${source}\n${extra.join(" ")}` : source;

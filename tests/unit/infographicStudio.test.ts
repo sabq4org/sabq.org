@@ -145,6 +145,13 @@ describe("numbers written as words and points mode", () => {
     const n = numbersFromStory(falcons);
     for (const v of ["3", "4", "8", "310000", "310,000", "102,000"]) expect(n.split(/\s/)).toContain(v);
     expect(numbersFromStory("يوم الثلاثاء")).not.toMatch(/\n3/);
+    // Compound words and decimals never vouch for a wrong number.
+    expect(numbersFromStory("شارك ثلاثة عشر متسابقًا").split(/\s/)).not.toContain("3");
+    expect(numbersFromStory("شارك ثلاثة عشر متسابقًا").split(/\s/)).not.toContain("10");
+    expect(numbersFromStory("خمسة وعشرون طالبًا وثلاثة آلاف زائر").split(/\s/)).not.toContain("5");
+    const dec = numbersFromStory("بلغت القيمة 8.5 ألف ريال").split(/\s/);
+    expect(dec).toContain("8,500");
+    expect(dec).not.toContain("5000");
   });
 
   it("accepts the falcon story's figures, including those written as words", () => {
