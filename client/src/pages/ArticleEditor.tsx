@@ -639,9 +639,13 @@ export default function ArticleEditor() {
     currentUserId: user?.id ?? null,
   });
 
-  // التنقل بين «خبر جديد» و«مقال رأي جديد» يبقى على نفس الصفحة؛ نطبّق ?type= الجديد.
+  // التنقل بين «خبر جديد» و«مقال رأي جديد» يبقى على نفس الصفحة؛ عند تغيّر ?type=
+  // (بما فيه إزالته) نطبّق النوع الجديد، والافتراضي خبر. أول تحميل يتولاه تأثير التصفير.
+  const lastTypeParamRef = useRef(typeParam);
   useEffect(() => {
-    if (isNewArticle && typeParam) setArticleType(typeParam);
+    if (lastTypeParamRef.current === typeParam) return;
+    lastTypeParamRef.current = typeParam;
+    if (isNewArticle) setArticleType(typeParam || "news");
   }, [isNewArticle, typeParam]);
 
   // Opinion author restrictions: force articleType to "opinion" and auto-set author
