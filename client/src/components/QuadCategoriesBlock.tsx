@@ -9,6 +9,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { isAICategory } from "@/utils/filterAICategories";
 import { getObjectPosition } from "@/lib/imageUtils";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { expandShortAge } from "@/lib/shortAge";
 
 // Icon mapper
 const getIcon = (iconName: string) => {
@@ -191,96 +192,102 @@ function CategoryColumn({ data, index }: { data: CategoryColumnData; index: numb
 }
 
 // Mobile Compact List Component
-const getIconComponent = (iconName: string) => {
-  return getLucideIcon(iconName, Folder);
-};
-
 function MobileCompactList({ items }: { items: CategoryColumnData[] }) {
+  // Category colours come from the categories list the homepage already
+  // caches; the quad endpoint itself carries no colour. Fallback: Sabq blue.
+  const { data: categoriesRaw } = useQuery<Array<{ slug: string; color?: string | null }>>({
+    queryKey: ["/api/categories", "withStats"],
+    enabled: false,
+  });
+  const colorBySlug = useMemo(() => {
+    const map = new Map<string, string>();
+    if (Array.isArray(categoriesRaw)) {
+      for (const c of categoriesRaw) if (c?.slug && c.color) map.set(c.slug, c.color);
+    }
+    return map;
+  }, [categoriesRaw]);
 
   return (
-    <div className="space-y-4" data-testid="mobile-compact-list">
+    <div className="space-y-3" data-testid="mobile-compact-list">
       {items.map((item, index) => {
-        const Icon = getIconComponent(item.category.icon);
-        
+        const accent = colorBySlug.get(item.category.slug) || "hsl(var(--primary))";
         return (
           <motion.div
             key={item.category.slug}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, delay: index * 0.03 }}
-            className="bg-card shadow-sm border border-border dark:border-card-border rounded-lg p-3"
+            className="bg-card shadow-sm border border-border dark:border-card-border rounded-2xl p-3.5"
             data-testid={`mobile-category-${item.category.slug}`}
           >
-            {/* Compact Header - Single Row */}
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Icon className="w-4 h-4 text-primary flex-shrink-0" />
-                <h3 className="text-sm font-bold">{item.category.name}</h3>
-              </div>
-              <Badge variant="secondary" className="text-xs px-1.5 py-0.5 whitespace-nowrap">
-                {item.stats.value.toLocaleString('en-US')} {item.stats.label}
-              </Badge>
+            {/* Header: category colour bar + name, link to the category */}
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="w-1 h-[18px] rounded-full flex-shrink-0" style={{ backgroundColor: accent }} aria-hidden="true" />
+              <h3 className="text-base font-bold flex-1 min-w-0 truncate">{item.category.name}</h3>
+              <Link
+                href={`/category/${item.category.slug}`}
+                className="text-xs font-semibold text-primary whitespace-nowrap py-1"
+                data-testid={`mobile-category-more-${item.category.slug}`}
+              >
+                {item.stats.value > 0
+                  ? `${item.stats.value.toLocaleString('en-US')} ${item.stats.label === "أخبار اليوم" ? "اليوم" : item.stats.label} · `
+                  : ""}الكل ‹
+              </Link>
             </div>
 
-            {/* Featured Article - Horizontal Layout */}
+            {/* Featured Article */}
             <Link href={item.featured.href}>
-              <div className="flex gap-3 mb-2 group" data-testid={`mobile-featured-${item.featured.id}`}>
-                {/* Wider Thumbnail */}
-                <div className="relative flex-shrink-0 w-28 h-20 rounded overflow-hidden">
+              <div className="flex gap-3 group" data-testid={`mobile-featured-${item.featured.id}`}>
+                <div className="relative flex-shrink-0 w-[118px] aspect-video rounded-lg overflow-hidden">
                   {(item.featured.image || item.featured.thumbnailUrl) ? (
                     <OptimizedImage
                       src={item.featured.image || item.featured.thumbnailUrl || ''}
                       alt={item.featured.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      className="w-full h-full object-cover"
                       objectPosition={getObjectPosition(item.featured)}
                       preferSize="small"
-                      aspectRatio="16/9"
-                      sizes="112px"
+                      sizes="118px"
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50" />
                   )}
-                  {item.featured.meta.badge && (
-                    <Badge 
-                      variant={item.featured.meta.badge === "عاجل" ? "destructive" : "secondary"}
-                      className="absolute top-1 right-1 text-[10px] px-1 py-0"
-                    >
-                      {item.featured.meta.badge}
-                    </Badge>
-                  )}
                 </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+                <div className="flex-1 min-w-0 flex flex-col gap-1">
+                  <h4 className="text-sm font-bold leading-relaxed line-clamp-3 group-hover:text-primary transition-colors">
                     {item.featured.title}
                   </h4>
-                  <div className="flex items-center gap-2 text-[10px] font-medium text-foreground/65">
-                    <span className="flex items-center gap-0.5">
-                      <Clock className="w-2.5 h-2.5" />
-                      {item.featured.meta.age}
-                    </span>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    {item.featured.meta.badge && (
+                      <Badge
+                        variant={item.featured.meta.badge === "عاجل" ? "destructive" : "secondary"}
+                        className="text-[10px] px-1.5 py-0"
+                      >
+                        {item.featured.meta.badge}
+                      </Badge>
+                    )}
+                    <span>{expandShortAge(item.featured.meta.age)}</span>
                   </div>
                 </div>
               </div>
             </Link>
 
-            {/* Top 3 Headlines - Ultra Compact */}
-            <div className="space-y-1.5 pt-2 border-t border-border dark:border-border/60">
-              {item.list.slice(0, 3).map((article, idx) => (
-                <Link key={article.id} href={article.href}>
-                  <div 
-                    className="group flex items-start gap-1.5 py-1"
-                    data-testid={`mobile-list-item-${idx}`}
-                  >
-                    <span className="text-[10px] font-medium text-foreground/65 mt-0.5 flex-shrink-0">•</span>
-                    <h5 className="text-xs font-medium line-clamp-1 flex-1 group-hover:text-primary transition-colors">
-                      {article.title}
-                    </h5>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            {/* Headlines: full two lines, thin dividers */}
+            {item.list.length > 0 && (
+              <ul className="mt-2.5">
+                {item.list.slice(0, 3).map((article, idx) => (
+                  <li key={article.id} className="border-t border-border/70 dark:border-border/50">
+                    <Link href={article.href}>
+                      <h5
+                        className="text-[13px] leading-relaxed font-medium line-clamp-2 py-2.5 hover:text-primary transition-colors"
+                        data-testid={`mobile-list-item-${idx}`}
+                      >
+                        {article.title}
+                      </h5>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </motion.div>
         );
       })}
