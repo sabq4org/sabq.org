@@ -679,6 +679,7 @@ export function buildPublishedBotContentPatch(
     patch.aiBulletsGeneratedAt = null;
   }
   if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
+  if (input.infographicBannerUrl !== undefined) patch.infographicBannerUrl = input.infographicBannerUrl;
   if (input.sourceUrl !== undefined) patch.sourceUrl = input.sourceUrl;
   if (input.keywords !== undefined) {
     patch.seo = { ...(existing.seo ?? {}), keywords: input.keywords };
@@ -718,6 +719,7 @@ function publishedChangeLabels(input: BotDraftUpdateInput): string[] {
   if (input.categoryId !== undefined || input.categorySlug !== undefined) labels.push("التصنيف");
   if (input.excerpt !== undefined) labels.push("الملخص");
   if (input.imageUrl !== undefined) labels.push("الصورة");
+  if (input.infographicBannerUrl !== undefined) labels.push("بانر الإنفوجرافيك");
   if (input.sourceUrl !== undefined) labels.push("المصدر");
   if (input.keywords !== undefined) labels.push("الكلمات المفتاحية");
   if (input.seoTitle !== undefined) labels.push("عنوان SEO");
@@ -793,6 +795,8 @@ export function toBotDraftResponse(
     categoryId: row.categoryId ?? null,
     categorySlug,
     imageUrl: row.imageUrl ?? null,
+    articleType: row.articleType || "news",
+    infographicBannerUrl: row.infographicBannerUrl ?? null,
     bodyImageUrls: extractBodyImageUrls(row.content),
     sourceUrl: row.sourceUrl ?? null,
     keywords: Array.isArray(row.seo?.keywords) ? row.seo!.keywords! : [],
@@ -934,7 +938,7 @@ export function isPersonalBotNewspaperNews(
   bot: BotIdentity | null | undefined,
   row: Pick<ArticleRow, "articleType" | "authorId" | "reporterId">,
 ): boolean {
-  if (!bot?.personal || row.articleType !== "news") return false;
+  if (!bot?.personal || (row.articleType !== "news" && row.articleType !== "infographic")) return false;
   return (row.reporterId || row.authorId) === SABQ_NEWSPAPER_ACCOUNT_ID;
 }
 
@@ -1135,7 +1139,9 @@ export async function createBotDraft(
         isPublisherNews: Boolean(bot.personal.publisherId),
         publisherSubmittedAt: bot.personal.publisherId ? now : null,
       } : {}),
-      articleType: "news",
+      articleType: input.infographic ? "infographic" : "news",
+      ...(input.infographic ? { infographicType: "image" } : {}),
+      infographicBannerUrl: input.infographicBannerUrl ?? null,
       newsType: "regular",
       publishType: "instant",
       status: BOT_DRAFT_STATUS,
@@ -1396,6 +1402,11 @@ export async function updateBotDraft(
     patch.aiBulletsGeneratedAt = null;
   }
   if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
+  if (input.infographic !== undefined) {
+    patch.articleType = input.infographic ? "infographic" : "news";
+    if (input.infographic) patch.infographicType = "image";
+  }
+  if (input.infographicBannerUrl !== undefined) patch.infographicBannerUrl = input.infographicBannerUrl;
   if (input.sourceUrl !== undefined) patch.sourceUrl = input.sourceUrl;
   if (category) patch.categoryId = category.id;
   if (input.keywords !== undefined) {

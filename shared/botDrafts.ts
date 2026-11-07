@@ -130,6 +130,7 @@ export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
   "seoDescription",
   "riskLabel",
   "updateReason",
+  "infographicBannerUrl",
 ] as const;
 
 export type BotDraftPublishedContentField = (typeof BOT_DRAFT_PUBLISHED_CONTENT_FIELDS)[number];
@@ -174,6 +175,14 @@ const updateReason = z.string().trim().max(500, "سبب التحديث يتجا�
 /** مفاتيح SEO القانونية في articles.seo؛ null أو النص الفارغ يمسح القيمة القائمة. */
 const seoTitle = z.string().trim().max(70, "عنوان SEO يتجاوز 70 حرفاً").nullable();
 const seoDescription = z.string().trim().max(160, "وصف SEO يتجاوز 160 حرفاً").nullable();
+/**
+ * مادة إنفوجرافيك (مفتاح «إنفوجرافيك» في محرر اللوحة): `articleType='infographic'`
+ * و`infographicType='image'`. عندها `imageUrl` هو الإنفوجرافيك العمودي نفسه،
+ * و`infographicBannerUrl` البانر العرضي 16:9 الذي يظهر في البطاقات والرئيسية.
+ * `articleType` نفسه يبقى ممنوعاً في الجسم؛ هذا العلم هو الطريق الوحيد إليه.
+ */
+const infographic = z.boolean();
+const infographicBannerUrl = httpsUrl.nullable();
 
 /** POST /api/internal/bot-drafts */
 export const botDraftCreateSchema = z
@@ -194,6 +203,8 @@ export const botDraftCreateSchema = z
     clientReference: clientReference.optional(),
     notes: notes.optional(),
     riskLabel: riskLabel.optional(),
+    infographic: infographic.optional(),
+    infographicBannerUrl: infographicBannerUrl.optional(),
   })
   .strict();
 
@@ -217,6 +228,8 @@ export const botDraftUpdateSchema = z
     notes: notes.optional(),
     riskLabel: riskLabel.optional(),
     updateReason: updateReason.optional(),
+    infographic: infographic.optional(),
+    infographicBannerUrl: infographicBannerUrl.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "لا توجد حقول للتحديث" });
@@ -406,6 +419,10 @@ export interface BotDraftResponse {
   categoryId: string | null;
   categorySlug: string | null;
   imageUrl: string | null;
+  /** `news` أو `infographic` (وأنواع اللوحة الأخرى عند قراءة خبر منشور). */
+  articleType: string;
+  /** البانر العرضي 16:9 لمادة الإنفوجرافيك، وإلا null. */
+  infographicBannerUrl: string | null;
   /**
    * روابط صور المتن بالترتيب (وسوم `img`)، بلا نص المقال.
    * الغلاف `imageUrl` لا يُنسخ إلى هنا إلا إذا وُضع أيضاً داخل المتن.

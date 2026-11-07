@@ -83,6 +83,8 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | `categoryId` أو `categorySlug` | string | اختياري | تصنيف منشور للقرّاء (`status=visible` في الإنتاج، ويُقبل `active` تاريخياً) من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود أو `inactive` → `422 category_not_found`. |
 | `imageUrl` | https URL \| null | اختياري | صورة **الغلاف** فقط (أعلى الخبر). ارفع عبر `POST /images` ثم ضع `deliveryUrl`. لا يُنسخ تلقائياً إلى المتن. |
 | `imageUrls` | https URL[] ≤20 | اختياري | صور **المتن**. كل عنصر `deliveryUrl` من `POST /images`. الخادم يلحقها أسفل الجسم بترتيب المصفوفة كعقدة TipTap `img` (انظر «صور المتن»). الرابط الموجود أصلاً داخل المتن لا يُكرَّر. |
+| `infographic` | boolean | اختياري | `true` = مادة إنفوجرافيك (مفتاح «إنفوجرافيك» في المحرر): `articleType='infographic'` و`infographicType='image'`. عندها `imageUrl` هو الإنفوجرافيك العمودي نفسه ولا يُكرَّر في `imageUrls`. `false` يعيدها خبراً. على المسودة فقط؛ الخبر المنشور يرفضه 422. `articleType` نفسه يبقى ممنوعاً. |
+| `infographicBannerUrl` | https URL \| null | اختياري | البانر العرضي 16:9 لمادة الإنفوجرافيك (البطاقات والرئيسية). ارفعه عبر `POST /images`. مسموح على المنشور أيضاً. |
 | `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` وتبقى عند تحديث حقول SEO الأخرى |
 | `sourceUrl` | http(s) URL \| null | اختياري | المصدر الأصلي |
 | `clientReference` | string ≤120 | اختياري | معرّف البوت الداخلي للمادة (يُعاد في الرد للمطابقة) |
