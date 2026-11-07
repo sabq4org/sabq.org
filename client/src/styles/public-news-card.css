@@ -43,13 +43,38 @@
   border-radius: 12px;
 }
 .public-news-compact-list--hero .public-news-card-compact .public-card-media-compact {
-  width: 136px;
+  width: 144px;
   height: auto;
   aspect-ratio: 16 / 9;
   border-radius: 8px;
 }
+/* Keep the text block about as tall as the 16:9 thumbnail (no empty band under it). */
+.public-news-compact-list--hero .public-news-card-compact .public-card-link {
+  align-items: center;
+  padding: 10px;
+}
 .public-news-compact-list--hero .public-labels {
-  margin-bottom: 6px;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.public-news-compact-list--hero .public-label {
+  min-height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 18px;
+}
+.public-news-compact-list--hero .public-news-card-compact .public-card-title {
+  font-size: 14px;
+  line-height: 1.45;
+}
+.public-news-compact-list--hero .public-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.public-news-compact-list--hero .public-meta svg {
+  width: 12px;
+  height: 12px;
 }
 .public-news-compact-list--hero .public-label-category {
   background: #e5e5e6;
