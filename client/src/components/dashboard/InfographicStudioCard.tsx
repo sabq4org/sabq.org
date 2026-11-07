@@ -33,6 +33,7 @@ interface InfographicStudioCardProps {
 
 const VISIBLE_STEPS: InfographicStudioStep[] = ["brief", "images", "render", "upload"];
 const JOB_ID = /^[0-9a-f-]{36}$/i;
+const JOB_NOT_FOUND = "العملية غير موجودة.";
 
 function htmlToText(html: string): string {
   return html
@@ -72,14 +73,30 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
   const [body, setBody] = useState("");
   const [applied, setApplied] = useState(false);
   const shownResult = useRef<string | null>(null);
+  const prevKey = useRef<string | null>(null);
+  const jobIdRef = useRef<string | null>(null);
+  jobIdRef.current = jobId;
 
   useEffect(() => {
+    const from = prevKey.current;
+    prevKey.current = storageKey;
+    let stored: string | null = null;
     try {
-      const id = sessionStorage.getItem(storageKey);
-      setJobId(id && JOB_ID.test(id) ? id : null);
+      stored = sessionStorage.getItem(storageKey);
     } catch {
-      setJobId(null);
+      /* optional */
     }
+    // A new story gets its permanent id from the first autosave; keep the running job with it.
+    if (!stored && from?.endsWith("-new") && jobIdRef.current) {
+      stored = jobIdRef.current;
+      try {
+        sessionStorage.setItem(storageKey, stored);
+        sessionStorage.removeItem(from);
+      } catch {
+        /* optional */
+      }
+    }
+    setJobId(stored && JOB_ID.test(stored) ? stored : null);
   }, [storageKey]);
 
   const capabilities = useQuery<{ configured: boolean }>({
@@ -93,7 +110,10 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
     queryKey: ["/api/infographic-studio/jobs", jobId],
     queryFn: () => apiRequest(`/api/infographic-studio/jobs/${jobId}`),
     enabled: Boolean(jobId),
-    refetchInterval: (query) => (query.state.error || (query.state.data && query.state.data.status !== "processing") ? false : 3000),
+    // A network error or 503 does not stop the job on the server: keep polling the same job.
+    // Only an explicit 404 lets the card forget it.
+    refetchInterval: (query) =>
+      (query.state.data && query.state.data.status !== "processing") || query.state.error?.message === JOB_NOT_FOUND ? false : 3000,
     retry: false,
   });
 
@@ -116,11 +136,13 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
     }
   }, [result, job?.id]);
 
-  const working = start.isPending || (Boolean(jobId) && (!job || job.status === "processing") && !status.isError);
+  const jobMissing = status.isError && (status.error as Error).message === JOB_NOT_FOUND;
+  const working = start.isPending || (Boolean(jobId) && (!job || job.status === "processing") && !jobMissing);
+  const pollTrouble = working && status.isError;
   const failedMessage =
     (start.error as Error | null)?.message ||
     (job?.status === "failed" ? job.error || "تعذر إكمال الإنفوجرافيك. حاول مجددًا." : null) ||
-    (status.isError && !working ? (status.error as Error).message : null);
+    (jobMissing ? "لم نعد نجد هذه العملية. ابدأ تصميمًا جديدًا." : null);
   const notConfigured = capabilities.data?.configured === false;
   const tooShort = plainLength(content) < 80 || title.trim().length < 5;
 
@@ -201,6 +223,7 @@ export function InfographicStudioCard({ articleId, title, content, disabled, onA
         {working && (
           <div className="space-y-3" role="status" aria-live="polite" data-testid="infographic-studio-progress">
             <Progress value={percent} className="h-1.5" />
+            {pollTrouble && <p className="text-xs text-amber-700 dark:text-amber-300">تعذر جلب الحالة مؤقتًا، نعيد المحاولة…</p>}
             <ol className="space-y-2">
               {VISIBLE_STEPS.map((step, i) => {
                 const done = stepIndex > i;

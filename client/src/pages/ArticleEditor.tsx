@@ -3826,6 +3826,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 content={content}
                 disabled={isLockedByOther}
                 onApply={(r) => {
+                  // التصميم صوري: نوع «بياني» قديم كان سيعرض الرسوم القديمة للقارئ.
+                  setInfographicType("image");
                   setImageUrl(r.infographicUrl);
                   setIsAiGeneratedImage(true);
                   setHeroImageMediaId(null);
