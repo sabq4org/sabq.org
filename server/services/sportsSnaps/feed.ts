@@ -20,6 +20,7 @@ import {
 } from "./config";
 import { personalizeForFavorite, personalizeForViewedMatch, type TemplateSnap } from "./templates";
 import { getRecentViewedTeamIds } from "./engagement";
+import { findPostponedFixtureIds, isPreMatchSnapKind } from "./postponedGuard";
 
 const ICON_BY_KIND: Record<SportsSnapKind, string> = {
   upcoming_match: "calendar",
@@ -226,8 +227,13 @@ export async function getUserFeed(userId: string): Promise<SnapDto[]> {
     }
   }
 
+  const postponed = await findPostponedFixtureIds(
+    items.filter((i) => isPreMatchSnapKind(i.kind) && i.fixtureId != null).map((i) => i.fixtureId as number),
+  ).catch(() => new Set<number>());
+
   const deduped = new Map<string, SnapDto>();
   for (const item of items) {
+    if (isPreMatchSnapKind(item.kind) && item.fixtureId != null && postponed.has(item.fixtureId)) continue;
     const key = `${item.kind}:${item.fixtureId ?? item.teamId ?? item.id}`;
     if (!deduped.has(key)) deduped.set(key, item);
   }
