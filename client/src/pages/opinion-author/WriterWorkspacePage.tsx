@@ -239,7 +239,9 @@ export default function WriterWorkspacePage() {
         updatedAt: article.updatedAt || article.createdAt,
         createdAt: article.createdAt,
       }));
-  const needsChanges = trackedArticles.filter((article) => article.reviewStatus === "needs_changes");
+  // منشور/مؤرشف/مرفوض حالة نهائية: review_status القديم فيه لا يجعله «بانتظار» أو «يحتاج إجراءك».
+  const isOpenInPipeline = (article: TrackingArticle) => !["published", "archived", "rejected"].includes(article.status);
+  const needsChanges = trackedArticles.filter((article) => isOpenInPipeline(article) && article.reviewStatus === "needs_changes");
   const firstName = user?.firstName || "كاتبنا";
 
   const activePipelineArticle = useMemo(() => {
@@ -368,12 +370,12 @@ export default function WriterWorkspacePage() {
   };
 
   const trackingCounts = useMemo(() => ({
-    pending: trackedArticles.filter((article) => article.reviewStatus === "pending_review").length,
-    action: trackedArticles.filter((article) => article.reviewStatus === "needs_changes").length,
+    pending: trackedArticles.filter((article) => isOpenInPipeline(article) && article.reviewStatus === "pending_review").length,
+    action: needsChanges.length,
     scheduled: trackedArticles.filter((article) => article.status === "scheduled").length,
     declined: trackedArticles.filter((article) => article.reviewStatus === "rejected" || article.status === "rejected").length,
     completed: trackedArticles.filter((article) => article.status === "published").length,
-  }), [trackedArticles]);
+  }), [trackedArticles, needsChanges]);
 
   return (
     <DashboardLayout>
