@@ -89,6 +89,7 @@ import {
   ImageDown,
   Download,
   ExternalLink,
+  Maximize2,
   Play,
   Paperclip,
   Star,
@@ -177,6 +178,8 @@ import { OpenAIImageGeneratorDialog } from "@/components/OpenAIImageGeneratorDia
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
 import { InfographicAiDialog } from "@/components/InfographicAiDialog";
 import { InfographicDataEditor } from "@/components/dashboard/InfographicDataEditor";
+import { InfographicBannerCropDialog } from "@/components/dashboard/InfographicBannerCropDialog";
+import { InfographicFrontImageCard } from "@/components/dashboard/InfographicFrontImageCard";
 import { StoryCardsGenerator } from "@/components/StoryCardsGenerator";
 import { AutoImageGenerator } from "@/components/AutoImageGenerator";
 import { ThumbnailGenerator } from "@/components/ThumbnailGenerator";
@@ -264,6 +267,11 @@ export default function ArticleEditor() {
   const [isUploadingInfographicBanner, setIsUploadingInfographicBanner] = useState(false);
   const [bannerUploadProgress, setBannerUploadProgress] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
   const [isGeneratingInfographicBanner, setIsGeneratingInfographicBanner] = useState(false);
+  const [showInfographicCropDialog, setShowInfographicCropDialog] = useState(false);
+  // آخر إنفوجرافيك رُفع من الجهاز (مع رابطه) — يغني نافذة الاقتطاع عن تحميل الرابط
+  const [heroLocalFile, setHeroLocalFile] = useState<{ file: File; url: string } | null>(null);
+  // أبعاد الإنفوجرافيك الكامل كما تحمّلت في المعاينة
+  const [heroNaturalSize, setHeroNaturalSize] = useState<{ w: number; h: number } | null>(null);
   
   // Debug: Track reporterId changes
   useEffect(() => {
@@ -577,6 +585,8 @@ export default function ArticleEditor() {
   const canUseSmartLinks = user && hasPermission(user, PERMISSION_CODES.ARTICLES_SMART_LINKS);
   const canGenerateImages = user && hasPermission(user, PERMISSION_CODES.ARTICLES_GENERATE_IMAGES);
   const canUseInfographics = user && hasPermission(user, PERMISSION_CODES.ARTICLES_INFOGRAPHICS);
+  // وضع الإنفوجرافيك: الصورة البارزة = الإنفوجرافيك الكامل (بلا قص)، وصورة الواجهة 16:9 بجانبها
+  const isInfographicMode = articleType === "infographic" && !isOpinionAuthor;
   const canUseNewsType = user && hasPermission(user, PERMISSION_CODES.ARTICLES_NEWS_TYPE);
   const canUseComprehensiveEdit = user && hasPermission(user, PERMISSION_CODES.ARTICLES_COMPREHENSIVE_EDIT);
   const canUseContentTypeSelector = user && hasPermission(user, PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR);
@@ -1399,6 +1409,7 @@ export default function ArticleEditor() {
       setImageUrl(uploaded.url);
       setIsAiGeneratedImage(false);
       setHeroImageMediaId(uploaded.id);
+      setHeroLocalFile({ file: declaredFile, url: uploaded.url });
 
       if (uploaded.duplicateOf) {
         toast({
@@ -1460,6 +1471,7 @@ export default function ArticleEditor() {
   // Handler for uploading infographic banner image (horizontal 16:9 for card displays)
   const handleInfographicBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -1480,6 +1492,11 @@ export default function ArticleEditor() {
       return;
     }
 
+    await uploadInfographicBannerFile(file);
+  };
+
+  // رفع صورة الواجهة (16:9) — من الجهاز أو من نافذة «اقتطاع من الإنفوجرافيك»
+  const uploadInfographicBannerFile = async (file: File): Promise<boolean> => {
     setIsUploadingInfographicBanner(true);
     setBannerUploadProgress({ phase: "preparing", percent: 0 });
 
@@ -1493,16 +1510,18 @@ export default function ArticleEditor() {
       setIsAiGeneratedInfographicBanner(false);
 
       toast({
-        title: "تم رفع البانر بنجاح",
-        description: "تم رفع بانر الإنفوجرافيك الأفقي",
+        title: "تم رفع صورة الواجهة",
+        description: "ستظهر في الرئيسية والبطاقات وعند المشاركة",
       });
+      return true;
     } catch (error) {
       console.error("Error uploading infographic banner:", error);
       toast({
         title: "خطأ",
-        description: "فشل رفع البانر",
+        description: "فشل رفع صورة الواجهة",
         variant: "destructive",
       });
+      return false;
     } finally {
       setIsUploadingInfographicBanner(false);
     }
@@ -3446,7 +3465,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             {/* Media panel — مباشرة بعد العنوان وقبل المحتوى */}
             <div className="order-[40] space-y-3.5 lg:order-none" data-editor-panel="media" id="editor-section-media">
             {/* Featured Image */}
-            {!isOpinionAuthor && showFeaturedImageHint && (
+            {isInfographicMode && (
+              <div
+                className="flex items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-xs leading-6 text-foreground"
+                role="note"
+                data-testid="infographic-mode-note"
+              >
+                <BarChart3 className="h-4 w-4 shrink-0 text-primary" />
+                <p className="min-w-0 flex-1">
+                  <span className="font-semibold">وضع الإنفوجرافيك:</span> ارفع الإنفوجرافيك الكامل ليظهر داخل المادة، وصورة عرضية للواجهة والبطاقات.
+                </p>
+              </div>
+            )}
+            {!isOpinionAuthor && !isInfographicMode && showFeaturedImageHint && (
               <div
                 className="flex items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2 text-xs"
                 role="note"
@@ -3469,12 +3500,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </Button>
               </div>
             )}
+            <div className={cn(isInfographicMode && "grid items-start gap-3.5 2xl:grid-cols-2")}>
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="flex items-center gap-2">
                     <ImageIcon className="h-4 w-4 text-primary" />
-                    <span>الصورة البارزة</span>
+                    {isInfographicMode ? (
+                      <span><span className="text-primary">1</span> · الإنفوجرافيك الكامل</span>
+                    ) : (
+                      <span>الصورة البارزة</span>
+                    )}
                   </CardTitle>
                   <span
                     className={cn(
@@ -3487,11 +3523,14 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     {imageUrl ? (isAiGeneratedImage ? "مرفقة · AI" : "مرفقة") : "غير محددة"}
                   </span>
                 </div>
+                {isInfographicMode && (
+                  <p className="text-xs text-muted-foreground">يظهر داخل المادة بطوله كاملًا، دون قص</p>
+                )}
               </CardHeader>
               <CardContent className="space-y-3.5">
                 {/* شريط الاقتراح التلقائي: لا صورة بعد + عنوان مكتوب → أفضل صور
                     الأرشيف ملاءمةً للخبر، باختيار بنقرة واحدة */}
-                {!imageUrl && !isOpinionAuthor && (
+                {!imageUrl && !isOpinionAuthor && !isInfographicMode && (
                   <HeroImageSuggestions
                     articleTitle={title}
                     articleContent={content}
@@ -3520,7 +3559,37 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   );
                 })()}
-                {imageUrl && (
+                {imageUrl && isInfographicMode && (
+                  <div className="relative flex max-h-[680px] w-full justify-center overflow-y-auto rounded-xl border bg-muted/30 p-3">
+                    <img
+                      src={imageUrl}
+                      alt="الإنفوجرافيك الكامل"
+                      className="h-auto max-h-[650px] w-auto max-w-full rounded-md object-contain shadow-sm"
+                      onLoad={(e) => setHeroNaturalSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                      data-testid="img-preview"
+                    />
+                    {heroNaturalSize && (
+                      <span
+                        dir="ltr"
+                        className="absolute left-2 top-2 rounded-full bg-background/90 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                        data-testid="text-infographic-size"
+                      >
+                        {heroNaturalSize.w} × {heroNaturalSize.h}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {imageUrl && isInfographicMode && (
+                  <div className="flex justify-start">
+                    <Button asChild type="button" variant="outline" size="sm" className="no-min-touch-size h-8 gap-2 rounded-full">
+                      <a href={imageUrl} target="_blank" rel="noopener noreferrer" data-testid="link-infographic-full-size">
+                        <Maximize2 className="h-4 w-4" />
+                        عرض بالحجم الكامل
+                      </a>
+                    </Button>
+                  </div>
+                )}
+                {imageUrl && !isInfographicMode && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-muted/20">
                     <img
                       src={imageUrl}
@@ -3557,7 +3626,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         <ImagePlus className="h-4 w-4 text-primary" />
                       </div>
                       <p className="min-w-0 flex-1 leading-relaxed">
-                        اختر صورة جاهزة من المكتبة أو جهازك، أو استخدم بلك توليد الصور بالذكاء الاصطناعي أدناه.
+                        {isInfographicMode
+                          ? "ارفع الإنفوجرافيك الطولي كاملًا من جهازك أو اختره من المكتبة. يظهر للقارئ داخل المادة دون قص."
+                          : "اختر صورة جاهزة من المكتبة أو جهازك، أو استخدم بلك توليد الصور بالذكاء الاصطناعي أدناه."}
                       </p>
                     </div>
                   )}
@@ -3595,7 +3666,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       )}
                       {isOpinionAuthor ? (imageUrl ? "تغيير الصورة" : "رفع صورة") : "رفع من الجهاز"}
                     </Button>
-                    {!isOpinionAuthor && (
+                    {!isOpinionAuthor && !isInfographicMode && (
                       <Button
                         type="button"
                         variant="outline"
@@ -3627,7 +3698,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         </Button>
                       </span>
                     )}
-                    {!isOpinionAuthor && canGenerateImages && (
+                    {!isOpinionAuthor && !isInfographicMode && canGenerateImages && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -3746,8 +3817,47 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </CardContent>
             </Card>
 
+            {/* صورة الواجهة للإنفوجرافيك (16:9) — بجانب الإنفوجرافيك الكامل */}
+            {canUseInfographics && isInfographicMode && (
+              <InfographicFrontImageCard
+                bannerUrl={infographicBannerUrl}
+                isAiGenerated={isAiGeneratedInfographicBanner}
+                isUploading={isUploadingInfographicBanner}
+                isGenerating={isGeneratingInfographicBanner}
+                canGenerate={!!canGenerateImages}
+                hasInfographic={!!imageUrl}
+                title={title}
+                progress={
+                  isUploadingInfographicBanner ? (
+                    <div className="space-y-2" role="status" aria-live="polite" data-testid="banner-upload-progress">
+                      <p className="text-xs text-muted-foreground">{newsImageUploadLabel(bannerUploadProgress)}</p>
+                      <Progress value={bannerUploadProgress.percent} className="h-1.5" />
+                    </div>
+                  ) : null
+                }
+                onUploadClick={() => document.getElementById("infographic-banner-upload")?.click()}
+                onCropClick={() => setShowInfographicCropDialog(true)}
+                onGenerateClick={handleGenerateInfographicBanner}
+                onDelete={() => {
+                  setInfographicBannerUrl("");
+                  setIsAiGeneratedInfographicBanner(false);
+                  toast({ title: "تم حذف صورة الواجهة" });
+                }}
+              />
+            )}
+            </div>
+            {canUseInfographics && isInfographicMode && (
+              <input
+                id="infographic-banner-upload"
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                onChange={handleInfographicBannerUpload}
+                className="hidden"
+              />
+            )}
+
             {/* Focal Point Picker - Collapsible */}
-            {imageUrl && !isOpinionAuthor && (
+            {imageUrl && !isOpinionAuthor && !isInfographicMode && (
               <Collapsible open={focalPointOpen} onOpenChange={setFocalPointOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -3843,111 +3953,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </Card>
               </Collapsible>
             )}
-
-            {/* Infographic Banner Section - Only for infographic articles */}
-            {canUseInfographics && articleType === "infographic" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <LayoutGrid className="h-4 w-4" />
-                    بانر الإنفوجرافيك (للبطاقات)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    صورة أفقية بنسبة 16:9 تُستخدم لعرض الإنفوجرافيك في البطاقات والصور المصغرة. 
-                    الصورة الرئيسية تحتوي على الإنفوجرافيك الكامل (عمودي)، بينما هذا البانر للعرض في القوائم.
-                  </p>
-                  
-                  {infographicBannerUrl && (
-                    <div className="relative w-full overflow-hidden rounded-lg border" style={{ aspectRatio: '16/9' }}>
-                      <img
-                        src={infographicBannerUrl}
-                        alt="بانر الإنفوجرافيك"
-                        className="h-full w-full object-cover"
-                        data-testid="img-infographic-banner-preview"
-                      />
-                      {isAiGeneratedInfographicBanner && (
-                        <Badge variant="secondary" className="absolute top-2 right-2 text-xs">
-                          <Sparkles className="h-3 w-3 ml-1" />
-                          مُولّد بالذكاء الاصطناعي
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                  
-                  {isUploadingInfographicBanner && (
-                    <div className="space-y-2" role="status" aria-live="polite" data-testid="banner-upload-progress">
-                      <p className="text-xs text-muted-foreground">{newsImageUploadLabel(bannerUploadProgress)}</p>
-                      <Progress value={bannerUploadProgress.percent} className="h-1.5" />
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => document.getElementById("infographic-banner-upload")?.click()}
-                      disabled={isUploadingInfographicBanner || isGeneratingInfographicBanner}
-                      className="gap-2"
-                      data-testid="button-upload-infographic-banner"
-                    >
-                      {isUploadingInfographicBanner ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <ImagePlus className="h-4 w-4" />
-                      )}
-                      {infographicBannerUrl ? "تغيير البانر" : "رفع بانر"}
-                    </Button>
-                    <input
-                      id="infographic-banner-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleInfographicBannerUpload}
-                      className="hidden"
-                    />
-                    {canGenerateImages && (
-                      <Button
-                        variant="outline"
-                        onClick={handleGenerateInfographicBanner}
-                        disabled={isGeneratingInfographicBanner || isUploadingInfographicBanner || !title.trim()}
-                        className="gap-2"
-                        data-testid="button-ai-generate-infographic-banner"
-                        title={!title.trim() ? "يجب إدخال عنوان المقال أولاً" : "توليد بانر تجريدي باستخدام الذكاء الاصطناعي"}
-                      >
-                        {isGeneratingInfographicBanner ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4" />
-                        )}
-                        توليد بالذكاء الاصطناعي
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {infographicBannerUrl && (
-                    <div className="flex justify-end">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => {
-                          setInfographicBannerUrl("");
-                          setIsAiGeneratedInfographicBanner(false);
-                          toast({
-                            title: "تم حذف البانر",
-                            description: "تم حذف بانر الإنفوجرافيك بنجاح",
-                          });
-                        }}
-                        className="gap-2"
-                        data-testid="button-delete-infographic-banner"
-                      >
-                        <X className="h-4 w-4" />
-                        حذف البانر
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
 
             {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
             {!isNewArticle && !isOpinionAuthor && (
@@ -4743,6 +4748,20 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                             </Label>
                           </div>
                         </RadioGroup>
+                        <div className="divide-y divide-border/60 rounded-lg border border-border/60 px-2.5" data-testid="infographic-readiness">
+                          {[
+                            { label: "العنوان", ok: !!title.trim(), okText: "مكتمل", missing: "اكتب العنوان" },
+                            { label: "الإنفوجرافيك الكامل", ok: !!imageUrl, okText: "مرفوع", missing: "ارفعه" },
+                            { label: "صورة الواجهة", ok: !!infographicBannerUrl, okText: "مرفوعة", missing: "ناقصة" },
+                          ].map((row) => (
+                            <div key={row.label} className="flex items-center justify-between py-2 text-xs">
+                              <span>{row.label}</span>
+                              <span className={row.ok ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+                                {row.ok ? row.okText : row.missing}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -5763,6 +5782,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }}
         onCancel={() => setRightsGateMediaId(null)}
       />
+
+      {/* اقتطاع صورة الواجهة (16:9) من الإنفوجرافيك الكامل */}
+      {isInfographicMode && (
+        <InfographicBannerCropDialog
+          open={showInfographicCropDialog}
+          onOpenChange={setShowInfographicCropDialog}
+          sourceUrl={imageUrl}
+          localFile={heroLocalFile && heroLocalFile.url === imageUrl ? heroLocalFile.file : null}
+          onCropped={uploadInfographicBannerFile}
+        />
+      )}
 
       {/* Logo Composer Dialog - fit/merge logos on white 16:9 canvas */}
       <LogoComposerDialog
