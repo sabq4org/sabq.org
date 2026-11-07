@@ -35,6 +35,26 @@
 .public-news-compact-list .public-news-card:focus-within {
   background: var(--public-card-hover, #eaf5fc);
 }
+
+/* Homepage «آخر الأخبار» on phones: same look as the two cards under the hero
+   (shaded rounded card, 16:9 thumbnail, grey category label). */
+.public-news-compact-list--hero .public-news-card {
+  background: #f3f7fa;
+  border-radius: 12px;
+}
+.public-news-compact-list--hero .public-news-card-compact .public-card-media-compact {
+  width: 136px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+}
+.public-news-compact-list--hero .public-labels {
+  margin-bottom: 6px;
+}
+.public-news-compact-list--hero .public-label-category {
+  background: #e5e5e6;
+  color: #000;
+}
 .public-card-link {
   display: block;
   min-width: 0;
@@ -259,4 +279,12 @@
   .public-news-card-list {
     padding: 10px;
   }
+}
+
+.dark .public-news-compact-list--hero .public-news-card {
+  background: hsl(var(--card));
+}
+.dark .public-news-compact-list--hero .public-label-category {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
 }
