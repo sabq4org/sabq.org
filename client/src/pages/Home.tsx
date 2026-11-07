@@ -179,6 +179,14 @@ export default function Home({ showInfathCard = false }: { showInfathCard?: bool
   const isMobile = useIsMobile();
   const [, navigate] = useLocation();
 
+  // Marks the homepage so dms-top-ads.css can hide the 300x250 MPU that the
+  // DMS GTM container injects under the Mawaeed strip on phones (owner ask,
+  // 2026-11-07). Our own <DmsMpuAd topSlot /> was already removed in #2118.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-sabq-home", "");
+    return () => document.documentElement.removeAttribute("data-sabq-home");
+  }, []);
+
   // DMS Ad tracking for homepage
   useAdTracking('Homepage');
   
