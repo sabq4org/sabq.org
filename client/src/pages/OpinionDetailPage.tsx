@@ -10,7 +10,6 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { Footer } from "@/components/Footer";
 import { CommentSection } from "@/components/CommentSection";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
-import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
 import { RecentNewsSection } from "@/components/RecentNewsSection";
 import { ImageWithCaption } from "@/components/ImageWithCaption";
 import { SocialShareBar } from "@/components/SocialShareBar";
@@ -1362,9 +1361,6 @@ export default function OpinionDetailPage() {
                   </div>
                 </section>
               )}
-
-              {/* AI-Powered Smart Recommendations */}
-              {slug && <AIRecommendationsBlock articleSlug={slug} />}
 
               {/* Recent News - Not opinions */}
               <RecentNewsSection

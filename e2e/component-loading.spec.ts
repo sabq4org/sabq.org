@@ -9,7 +9,6 @@ const runtimeErrors = new Map<Page, string[]>();
 test.afterEach(async ({ page }) => { expect(runtimeErrors.get(page) ?? []).toEqual([]); runtimeErrors.delete(page); });
 const article = { id: "local-test", slug: "loading-test", title: "خبر اختبار تحميل المكونات", content: "<p>نص تجريبي لقياس تحميل المكونات بالتوازي.</p>", status: "published", articleType: "news", publishedAt: "2026-09-05T12:00:00Z", views: 100, aiSummary: "موجز الاختبار المحلي.", category: { id: "sport", nameAr: "رياضة", slug: "sports" }, author: { id: "author", name: "صحيفة سبق" }, tags: [] };
 const insights = { avgReadTime: 60, totalReads: 100, totalReactions: 7, totalComments: 2, totalViews: 100, engagementRate: 30, completionRate: 70, totalInteractions: 9 };
-const recommendations = [{ id: "rec", title: "توصية اختبار متاحة", slug: "recommendation", aiMetadata: { reason: "خبر مرتبط", icon: "Brain", aiLabel: "مقترح", relevanceScore: 90 } }];
 const fixture = { id: 1, date: "2026-09-05T12:00:00Z", timestamp: 1788609600, round: "دور الستة عشر", status: { code: "1H", label: "مباشر", elapsed: 30, live: true, finished: false }, home: { id: 1, name: "الهلال", logo: "" }, away: { id: 2, name: "النصر", logo: "" }, goals: { home: 2, away: 1 }, competitionSlug: "kings-cup" };
 
 test.beforeAll(async ({}, workerInfo) => {
@@ -19,7 +18,6 @@ test.beforeAll(async ({}, workerInfo) => {
       ...(baselineDir ? {
         "@/pages/ArticleDetail": path.join(baselineDir, "ArticleDetail.tsx"),
         "@/components/AiArticleStats": path.join(baselineDir, "AiArticleStats.tsx"),
-        "@/components/AIRecommendationsBlock": path.join(baselineDir, "AIRecommendationsBlock.tsx"),
       } : {}),
       "@": path.resolve("client/src"), "@shared": path.resolve("shared"), "@assets": path.resolve("attached_assets"),
     } },
@@ -37,7 +35,6 @@ async function mockPage(page: Page, signedIn = false) {
     if (url.pathname === "/api/auth/user") return route.fulfill({ status: signedIn ? 200 : 401, json: signedIn ? { id: "first-user", name: "اختبار" } : { message: "guest" } });
     if (/\/api\/articles\/[^/]+$/.test(url.pathname)) return route.fulfill({ json: { ...article, slug: url.pathname.split("/").pop() } });
     if (url.pathname.endsWith("/ai-insights")) return route.fulfill({ json: insights });
-    if (url.pathname.endsWith("/ai-recommendations")) return route.fulfill({ json: recommendations });
     if (url.pathname === "/api/sports/competitions") return route.fulfill({ json: { competitions: [{ slug: "kings-cup", name: "كأس الملك", category: "saudi" }] } });
     if (url.pathname.startsWith("/api/opinion/related/")) return route.fulfill({ json: { articles: [] } });
     if (url.pathname === "/api/ads/slots/active") return route.fulfill({ json: { slotIds: [], generatedAt: new Date().toISOString() } });
@@ -65,10 +62,11 @@ async function mockPage(page: Page, signedIn = false) {
           await new Promise(r => setTimeout(r, 1_500)); articleFinished = true; await route.fulfill({ json: article });
         });
         await page.goto(`${base}e2e/fixtures/component-loading.html`);
-        await expect(page.getByTestId("card-ai-recommendations")).toBeVisible();
+        await expect(page.getByTestId("ai-stats-panel")).toBeVisible();
         await expect(page.getByText("خبر اختبار تحميل المكونات", { exact: true }).first()).toBeVisible();
         expect(early.filter(url => url.includes("ai-insights"))).toHaveLength(baselineDir ? 0 : 1);
-        expect(early.filter(url => url.includes("ai-recommendations"))).toHaveLength(baselineDir ? 0 : 1);
+        // بلوك «توصيات الذكاء الاصطناعي» أُزيل — الصفحة لا تطلبه أبدًا
+        expect(timings.filter(t => t.component === "ai-recommendations")).toHaveLength(0);
         await expect(page.getByTestId("ai-stats-loading")).toHaveCount(0);
         await expect(page.getByTestId("ai-stats-panel")).toBeVisible();
         const result = { baseline: !!baselineDir, browser: info.project.name, signedIn, articleDelayMs: 1500, sidebarRequestsBeforeArticle: early.length, timings };
@@ -79,31 +77,19 @@ async function mockPage(page: Page, signedIn = false) {
 
     test("slow API stops skeletons at the deadline and manual retry recovers", async ({ page }) => {
       await mockPage(page); let hanging = true; let requests = 0;
-      await page.route(/\/api\/articles\/[^/]+\/ai-(insights|recommendations)/, async route => {
+      await page.route(/\/api\/articles\/[^/]+\/ai-insights/, async route => {
         requests++;
         if (hanging) return; // Intentionally leave response pending until client aborts.
-        await route.fulfill({ json: route.request().url().endsWith("ai-insights") ? insights : recommendations });
+        await route.fulfill({ json: insights });
       });
       await page.goto(`${base}e2e/fixtures/component-loading.html`);
-      await expect(page.getByText("تعذّر تحميل التوصيات الآن.")).toBeVisible({ timeout: 9_000 });
-      await expect(page.getByText("تعذّر تحميل إحصائيات الخبر الآن.")).toBeVisible();
+      await expect(page.getByText("تعذّر تحميل إحصائيات الخبر الآن.")).toBeVisible({ timeout: 9_000 });
       await expect(page.getByTestId("ai-stats-loading")).toHaveCount(0);
-      expect(requests).toBe(2); hanging = false;
+      expect(requests).toBe(1); hanging = false;
       await page.getByRole("status").filter({ hasText: "تعذّر تحميل إحصائيات الخبر الآن." }).getByRole("button", { name: "إعادة المحاولة" }).click();
-      await page.getByRole("status").filter({ hasText: "تعذّر تحميل التوصيات الآن." }).getByRole("button", { name: "إعادة المحاولة" }).click();
-      await expect(page.getByTestId("card-ai-recommendations")).toBeVisible();
+      await expect(page.getByTestId("ai-stats-panel")).toBeVisible();
       await expect(page.getByText("تعذّر تحميل إحصائيات الخبر الآن.")).toHaveCount(0);
-      expect(requests).toBe(4);
-    });
-
-    test("personal recommendations are isolated when switching accounts", async ({ page }) => {
-      await mockPage(page, true); let calls = 0;
-      await page.route("**/ai-recommendations", route => { calls++; return route.fulfill({ json: [{ ...recommendations[0], title: calls === 1 ? "توصية الحساب الأول" : "توصية الحساب الثاني" }] }); });
-      await page.goto(`${base}e2e/fixtures/component-loading.html`);
-      await expect(page.getByText("توصية الحساب الأول", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "تبديل حساب الاختبار" }).click();
-      await expect(page.getByText("توصية الحساب الثاني", { exact: true })).toBeVisible();
-      await expect(page.getByText("توصية الحساب الأول", { exact: true })).toHaveCount(0); expect(calls).toBe(2);
+      expect(requests).toBe(2);
     });
 
     test("sports fallback shows timestamp, suppresses live status and honors hiding", async ({ page }, info) => {
@@ -129,10 +115,10 @@ test("a stalled session has a bounded recovery state and never fetches as a gues
   page.on("request", req => { if (/ai-(insights|recommendations)/.test(req.url())) sidebarRequests++; });
   await page.route("**/api/auth/user", () => {});
   await page.goto(`${base}e2e/fixtures/component-loading.html`);
-  await expect(page.getByText("تعذّر تحميل التوصيات الآن.")).toBeVisible({ timeout: 9_000 });
+  await expect(page.getByText("تعذّر تحميل إحصائيات الخبر الآن.")).toBeVisible({ timeout: 9_000 });
   await expect(page.getByTestId("ai-stats-loading")).toHaveCount(0);
   expect(sidebarRequests).toBe(0);
-  await page.getByRole("status").filter({ hasText: "تعذّر تحميل التوصيات الآن." }).getByRole("button", { name: "إعادة المحاولة" }).click();
+  await page.getByRole("status").filter({ hasText: "تعذّر تحميل إحصائيات الخبر الآن." }).getByRole("button", { name: "إعادة المحاولة" }).click();
   expect(sidebarRequests).toBe(0);
 });
 
