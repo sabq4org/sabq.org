@@ -367,6 +367,7 @@
         "tests/unit/openaiImagesProvider.test.ts",
         "tests/unit/editorialImages.integration.test.ts",
         "shared/infographicStudio.ts",
+        "client/src/components/dashboard/InfographicStudioCard.tsx",
         "server/routes/infographicStudio.ts",
         "server/services/infographicStudio/**",
         "server/fonts/infographic/**",
