@@ -72,6 +72,7 @@ import {
   Bot,
   Radio,
   Gavel,
+  PenTool,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -115,6 +116,16 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/articles/new",
         icon: PlusCircle,
         roles: ["reporter"],
+      },
+      // صاحب الدورين (مراسل + كاتب رأي): مدخل مباشر لمقال الرأي بجانب «خبر جديد».
+      {
+        id: "reporter_new_opinion",
+        labelKey: "nav.new_article",
+        labelAr: "مقال رأي جديد",
+        path: "/dashboard/articles/new?type=opinion",
+        icon: PenTool,
+        roles: ["reporter"],
+        requireAllRoles: ["reporter", "opinion_author"],
       },
       {
         id: "reporter_my_services",

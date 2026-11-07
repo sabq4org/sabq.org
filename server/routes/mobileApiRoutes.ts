@@ -33,6 +33,7 @@ import {
 } from "../services/opinionWritersService";
 import { scheduleOpinionResubmitNotification } from "../services/opinionResubmitNotify";
 import { parseExpectedVersion, resubmitMobileArticle, saveMobileAdminArticle } from "../services/mobileArticleWriteService";
+import { resolveContributorSubmissionKind } from "@shared/effectiveRoles";
 import {
   isOwnSubmissionImageUrl,
   loadMobileSubmitter,
@@ -4577,7 +4578,7 @@ function toMobileArticleHTML(raw: string): string {
 //                                  writer, author
 //   News (up to 10 images, first is hero, rest go into albumImages):
 //                                  reporter, correspondent, journalist
-//   Admin / editor roles can submit either by passing `kind`.
+//   Admin / editor roles, and writer+reporter accounts, choose via `kind`.
 //
 // Images come as base64 data URIs (same shape as /members/profile/image)
 // and are uploaded to Cloudflare Images. The endpoint never re-encodes the
@@ -4639,20 +4640,8 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       }
     }
 
-    // Decide article kind. Explicit `kind` wins for admin-likes; otherwise
-    // derive from role: writers always submit opinion, reporters always
-    // submit news.
-    let kind: "opinion" | "news";
-    if (data.kind && isAdminLike) {
-      kind = data.kind;
-    } else if (isWriter) {
-      kind = "opinion";
-    } else if (isReporter) {
-      kind = "news";
-    } else {
-      // admin without explicit kind — default to news
-      kind = data.kind || "news";
-    }
+    // نوع المادة: الكاتب فقط → مقال، والمراسل فقط → خبر، وصاحب الدورين أو الإداري يُحترم `kind` الذي اختاره.
+    const kind = resolveContributorSubmissionKind({ isWriter, isReporter, isAdminLike, requested: data.kind });
 
     // بوابة يوم النشر: كاتب الرأي لا يرسل مقالاً قبل اختيار يومه الأسبوعي.
     // الواجهة تعرض منتقي اليوم قبل الإرسال، لكن الخادم هو الحكم النهائي —

@@ -31,6 +31,8 @@ export interface NavItem {
    * ودون wildcard الصلاحيات. إن وُجدت تُقدَّم على permissions و roles.
    */
   requireRoles?: string[];
+  /** يظهر فقط لمن يحمل كل هذه الأدوار الخام معاً (مثل مراسل + كاتب رأي)، ثم تُطبّق بقية الفحوص. */
+  requireAllRoles?: string[];
   permissions?: string[]; // Required permissions (any of these grants access)
   featureFlags?: string[];
   badge?: NavBadge;

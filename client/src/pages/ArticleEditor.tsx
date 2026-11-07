@@ -12,7 +12,7 @@ import { useArticleServerAutosave } from "@/hooks/useArticleServerAutosave";
    during the article-editor-split refactor; remove this disable at the end. */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useParams, useLocation } from "wouter";
+import { Link, useParams, useLocation, useSearch } from "wouter";
 import {
   DndContext,
   closestCenter,
@@ -117,7 +117,7 @@ import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
-import { isContributorRoleOnly } from "@shared/effectiveRoles";
+import { isContributorRoleOnly, isOpinionAndNewsContributor, isOpinionOnlyContributor } from "@shared/effectiveRoles";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
 import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
@@ -209,6 +209,8 @@ const HERO_RIGHTS_GATE_ENABLED = false;
 export default function ArticleEditor() {
   const params = useParams<{ id: string }>();
   const [location, navigate] = useLocation();
+  // wouter v3 يستبعد ?query من location — نقرأها من useSearch (مثل ?type=opinion في القائمة)
+  const search = useSearch();
   
   // Extract pathname without query string
   const pathname = location.split('?')[0].replace(/\/+$/, '');
@@ -219,7 +221,7 @@ export default function ArticleEditor() {
   const id = (!isNewArticle && rawId && rawId !== 'new' && rawId !== 'articles') ? rawId : undefined;
   
   // Extract query parameters from URL
-  const queryParams = new URLSearchParams(location.split('?')[1] || '');
+  const queryParams = new URLSearchParams(search || location.split('?')[1] || '');
   const typeParam = queryParams.get('type') as "news" | "opinion" | "analysis" | "column" | "infographic" | "weekly_photos" | null;
   
   console.log('[ArticleEditor] params:', params);
@@ -465,8 +467,11 @@ export default function ArticleEditor() {
   // Check if user is a reporter-only - reporters without supervisory roles have restricted AI features
   const isReporter = isContributorRoleOnly(user, "reporter");
   
-  // Check if user is an opinion author-only - opinion authors without supervisory roles have restricted editor interface
-  const isOpinionAuthor = isContributorRoleOnly(user, "opinion_author");
+  // صاحب الدورين (كاتب رأي + مراسل) يختار بين خبر ومقال رأي؛ ولا تُفرض عليه واجهة كاتب الرأي
+  // إلا حين يكتب مقال رأي. كاتب الرأي فقط تبقى واجهته مقيدة كما هي.
+  const isOpinionAndReporter = isOpinionAndNewsContributor(user);
+  const isOpinionAuthor =
+    isOpinionOnlyContributor(user) || (isOpinionAndReporter && articleType === "opinion");
 
   const {
     createBlocked,
@@ -633,6 +638,15 @@ export default function ArticleEditor() {
     articleSummary: presenceSummary,
     currentUserId: user?.id ?? null,
   });
+
+  // التنقل بين «خبر جديد» و«مقال رأي جديد» يبقى على نفس الصفحة؛ عند تغيّر ?type=
+  // (بما فيه إزالته) نطبّق النوع الجديد، والافتراضي خبر. أول تحميل يتولاه تأثير التصفير.
+  const lastTypeParamRef = useRef(typeParam);
+  useEffect(() => {
+    if (lastTypeParamRef.current === typeParam) return;
+    lastTypeParamRef.current = typeParam;
+    if (isNewArticle) setArticleType(typeParam || "news");
+  }, [isNewArticle, typeParam]);
 
   // Opinion author restrictions: force articleType to "opinion" and auto-set author
   useEffect(() => {
@@ -3229,6 +3243,32 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 <WriterEditorialNoticesMobile />
               </div>
             )}
+            {/* صاحب الدورين (كاتب رأي + مراسل): يختار خبراً أو مقال رأي ما دامت المادة مسودة */}
+            {isOpinionAndReporter && (isNewArticle || article?.status === "draft") && (
+              <div
+                className="order-[5] flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm lg:order-none"
+                data-testid="dual-role-type-picker"
+              >
+                <span className="text-sm font-semibold">ماذا تكتب؟</span>
+                <RadioGroup
+                  value={articleType === "opinion" ? "opinion" : "news"}
+                  onValueChange={(value: "news" | "opinion") => {
+                    setArticleType(value);
+                    setPreviousArticleType(value);
+                  }}
+                  className="flex gap-2"
+                >
+                  <Label htmlFor="dual-type-news" className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm">
+                    <RadioGroupItem value="news" id="dual-type-news" data-testid="dual-type-news" />
+                    خبر
+                  </Label>
+                  <Label htmlFor="dual-type-opinion" className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm">
+                    <RadioGroupItem value="opinion" id="dual-type-opinion" data-testid="dual-type-opinion" />
+                    مقال رأي
+                  </Label>
+                </RadioGroup>
+              </div>
+            )}
             {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-card dark:border-border p-4 space-y-3">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
@@ -4693,7 +4733,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </div>
 
                 {/* Article Type - Hidden for opinion authors and users without content type permission */}
-                {!isOpinionAuthor && canUseContentTypeSelector && (
+                {!isOpinionAuthor && !isOpinionAndReporter && canUseContentTypeSelector && (
                   <div className="space-y-3 pt-3 border-t border-border/60">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-semibold text-muted-foreground">نوع المحتوى</Label>
