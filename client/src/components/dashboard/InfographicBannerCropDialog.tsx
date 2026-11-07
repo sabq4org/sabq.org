@@ -48,6 +48,9 @@ export function InfographicBannerCropDialog({
   const { toast } = useToast();
   const [source, setSource] = useState<SourceState>({ status: "loading" });
   const [pickedFile, setPickedFile] = useState<File | null>(null);
+  // المتصفح عجز عن فك الملف المحلي (مثل HEIC في كروم) — نرجع إلى الرابط المحوَّل
+  const [skipLocal, setSkipLocal] = useState(false);
+  const [usingLocal, setUsingLocal] = useState(false);
   const [crop, setCrop] = useState<Crop>();
   const [pixelCrop, setPixelCrop] = useState<PixelCrop | null>(null);
   const [isApplying, setIsApplying] = useState(false);
@@ -63,7 +66,8 @@ export function InfographicBannerCropDialog({
     setCrop(undefined);
     setPixelCrop(null);
 
-    const fileToUse = pickedFile ?? localFile;
+    const fileToUse = pickedFile ?? (skipLocal ? null : localFile);
+    setUsingLocal(!!fileToUse && !pickedFile);
     if (fileToUse) {
       objectUrl = URL.createObjectURL(fileToUse);
       setSource({ status: "ready", objectUrl });
@@ -90,11 +94,26 @@ export function InfographicBannerCropDialog({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [open, sourceUrl, localFile, pickedFile]);
+  }, [open, sourceUrl, localFile, pickedFile, skipLocal]);
 
   useEffect(() => {
-    if (!open) setPickedFile(null);
+    if (!open) {
+      setPickedFile(null);
+      setSkipLocal(false);
+    }
   }, [open]);
+
+  const handleImageError = () => {
+    if (usingLocal && sourceUrl) {
+      setSkipLocal(true);
+      return;
+    }
+    if (pickedFile) {
+      setPickedFile(null);
+      toast({ title: "صيغة الملف غير مدعومة في هذا المتصفح", description: "اختر نسخة JPEG أو PNG أو WEBP.", variant: "destructive" });
+    }
+    setSource({ status: "needs-file" });
+  };
 
   const handleImageLoad = () => {
     const img = imgRef.current;
@@ -227,6 +246,7 @@ export function InfographicBannerCropDialog({
                 alt="الإنفوجرافيك الكامل"
                 className="h-auto max-h-[60vh] w-auto max-w-full"
                 onLoad={handleImageLoad}
+                onError={handleImageError}
                 data-testid="img-infographic-crop-source"
               />
             </ReactCrop>
