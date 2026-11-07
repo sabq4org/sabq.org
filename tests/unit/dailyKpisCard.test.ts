@@ -86,6 +86,12 @@ describe('daily KPI card: pulse windows', () => {
     expect(stats.engagement).toMatchObject({ readsToday: 7, readsYesterday: 7, averageTimeOnSite: 7 });
     expect(stats.reactions).toMatchObject({ todayCount: 7, yesterdayCount: 7 });
 
+    // 06:06Z: current bucket 06:00Z is 60% done → yesterday adds 60% of its 06:00Z bucket.
+    const yesterday = sqlOf(mocks.captured.find((f) => 'yesterday' in f && 'today' in f)!.yesterday);
+    const yParams = yesterday.params.map((p) => (p instanceof Date ? p.toISOString() : String(p)));
+    expect(yParams.filter((p) => p.startsWith('2026-11-06T06:00:00'))).toHaveLength(2);
+    expect(yParams).toContain('0.6');
+
     const avg = sqlOf(mocks.captured.find((f) => 'avgDurationToday' in f)!.avgDurationToday).sql;
     expect(avg).toContain('between 1 and 3600');
   });

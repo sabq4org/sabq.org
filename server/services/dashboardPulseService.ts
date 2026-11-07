@@ -11,6 +11,7 @@ import {
   userEvents,
   users,
 } from "@shared/schema";
+import { OPEN_BUCKET_MS, openBucketStart } from "./articleOpenBuckets";
 
 export interface DashboardPulseStats {
   articles: {
@@ -248,12 +249,17 @@ async function loadViews(
     sql<string>`to_char(date_trunc('hour', ${col} AT TIME ZONE 'Asia/Riyadh'), 'HH24:00')`;
   const riyadhHourUtc = (col: unknown) =>
     sql<string>`to_char(date_trunc('hour', (${col} AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Riyadh'), 'HH24:00')`;
+  // خانة اليوم الجارية ناقصة: تُقابَل بالجزء نفسه (نسبةً) من خانة أمس المقابلة لا بكاملها.
+  const nowMs = todayStart.getTime() + (yesterdayComparableEnd.getTime() - yesterdayStart.getTime());
+  const currentBucket = openBucketStart(nowMs);
+  const yesterdayCut = new Date(yesterdayStart.getTime() + (currentBucket - todayStart.getTime()));
+  const partialFraction = (nowMs - currentBucket) / OPEN_BUCKET_MS;
   try {
     const [[totals], hourly] = await Promise.all([
       db
         .select({
           today: sql<number>`coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} >= ${todayStart}), 0)`,
-          yesterday: sql<number>`coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} < ${yesterdayComparableEnd}), 0)`,
+          yesterday: sql<number>`round(coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} < ${yesterdayCut}), 0) + coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} = ${yesterdayCut}), 0) * ${partialFraction}::float8)`,
         })
         .from(articleOpenBuckets)
         .where(gte(articleOpenBuckets.bucketStart, yesterdayStart)),
