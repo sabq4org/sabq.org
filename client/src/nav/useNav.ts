@@ -266,6 +266,11 @@ function itemPassesAccessCheck(
     }
   }
 
+  if (item.requireAllRoles && item.requireAllRoles.length > 0) {
+    const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
+    if (!item.requireAllRoles.every((r) => roles.includes(r))) return false;
+  }
+
   // requireRoles: raw role names only (e.g. system_admin) — bypasses
   // resolveUserRole mapping and permission wildcards so regular admin
   // with "*" cannot see system_admin-only items.
@@ -298,7 +303,7 @@ function itemPassesAccessCheck(
  * 5. Items WITH paths MUST pass their own access check - they have navigable routes
  * 6. When parent fails but children pass, children are promoted to parent level
  */
-function filterNavTree(
+export function filterNavTree(
   items: NavItem[],
   role: UserRole,
   flags: Record<string, boolean>,

@@ -189,8 +189,10 @@ export default tseslint.config(
     // now 9742 lines.
     // RATCHETED DOWN 2026-11-07 (infographic in apps): formatArticleForMobile +
     // text helpers moved to services/mobileArticleFormat.ts. File is now 9670 lines.
+    // RATCHETED DOWN 2026-11-07 (writer+reporter accounts): submit kind logic
+    // moved to shared/effectiveRoles.ts. File is now 9659 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 9670 }] },
+    rules: { "max-lines": ["error", { max: 9659 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

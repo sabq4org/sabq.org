@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   hasSupervisoryStaffRole,
   isContributorRoleOnly,
+  isOpinionAndNewsContributor,
+  isOpinionOnlyContributor,
+  resolveContributorSubmissionKind,
   isReaderLikeRole,
   isRoleExcluded,
   isStaffRole,
@@ -141,5 +144,41 @@ describe("isRoleExcluded (nav & ProtectedRoute excludeRoles helper)", () => {
     expect(
       isRoleExcluded(["content_manager", "reporter"], ["content_manager"]),
     ).toBe(true);
+  });
+});
+
+describe("writer + reporter accounts (dual contributor)", () => {
+  const dual = { role: "opinion_author", roles: ["opinion_author", "reporter"] };
+
+  it("detects opinion_author + reporter without a supervisory role", () => {
+    expect(isOpinionAndNewsContributor(dual)).toBe(true);
+    expect(isOpinionAndNewsContributor(["opinion_author", "correspondent"])).toBe(true);
+    expect(isOpinionAndNewsContributor(["opinion_author"])).toBe(false);
+    expect(isOpinionAndNewsContributor(["reporter"])).toBe(false);
+    expect(isOpinionAndNewsContributor(["opinion_author", "reporter", "editor"])).toBe(false);
+  });
+
+  it("forces opinion only on opinion-only writers", () => {
+    expect(isOpinionOnlyContributor(["opinion_author"])).toBe(true);
+    expect(isOpinionOnlyContributor({ role: "opinion_author", roles: [] })).toBe(true);
+    expect(isOpinionOnlyContributor(dual)).toBe(false);
+    expect(isOpinionOnlyContributor(["opinion_author", "admin"])).toBe(false);
+    expect(isOpinionOnlyContributor(["reporter"])).toBe(false);
+  });
+
+  it("mobile submit honours the chosen kind for dual accounts", () => {
+    const both = { isWriter: true, isReporter: true, isAdminLike: false };
+    expect(resolveContributorSubmissionKind({ ...both, requested: "news" })).toBe("news");
+    expect(resolveContributorSubmissionKind({ ...both, requested: "opinion" })).toBe("opinion");
+    expect(resolveContributorSubmissionKind(both)).toBe("opinion");
+  });
+
+  it("mobile submit keeps single-role behaviour and ignores a forged kind", () => {
+    const writer = { isWriter: true, isReporter: false, isAdminLike: false };
+    const reporter = { isWriter: false, isReporter: true, isAdminLike: false };
+    expect(resolveContributorSubmissionKind({ ...writer, requested: "news" })).toBe("opinion");
+    expect(resolveContributorSubmissionKind({ ...reporter, requested: "opinion" })).toBe("news");
+    expect(resolveContributorSubmissionKind({ isWriter: false, isReporter: false, isAdminLike: true, requested: "opinion" })).toBe("opinion");
+    expect(resolveContributorSubmissionKind({ isWriter: false, isReporter: false, isAdminLike: true })).toBe("news");
   });
 });

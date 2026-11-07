@@ -274,3 +274,43 @@ export function pickPrimaryRoleRecord<T extends { name?: string | null; roleName
   }
   return best;
 }
+
+/** أدوار كتابة الخبر لدى المساهم (المراسل وما يعادله). */
+export const NEWS_CONTRIBUTOR_ROLE_KEYS = new Set(["reporter", "correspondent", "journalist"]);
+
+/**
+ * مساهم يحمل دور «كاتب رأي» ودور «مراسل» معاً دون دور إشرافي:
+ * يختار بنفسه بين خبر ومقال رأي بدل أن يُفرض عليه أحدهما.
+ */
+export function isOpinionAndNewsContributor(
+  userOrRoles: Parameters<typeof collectNormalizedUserRoles>[0],
+): boolean {
+  const roles = collectNormalizedUserRoles(userOrRoles);
+  if (roles.some((r) => isSupervisoryStaffRole(r))) return false;
+  return roles.includes("opinion_author") && roles.some((r) => NEWS_CONTRIBUTOR_ROLE_KEYS.has(r));
+}
+
+/** كاتب رأي فقط (بلا دور مراسل ولا دور إشرافي) — تُفرض عليه مادة «مقال رأي». */
+export function isOpinionOnlyContributor(
+  userOrRoles: Parameters<typeof collectNormalizedUserRoles>[0],
+): boolean {
+  return isContributorRoleOnly(userOrRoles, "opinion_author") && !isOpinionAndNewsContributor(userOrRoles);
+}
+
+/**
+ * نوع المادة التي يرسلها المساهم من التطبيق (POST /api/v1/articles/submit).
+ * كاتب الرأي فقط → opinion، والمراسل فقط → news، ومن يحمل الدورين (أو الإداري)
+ * يُحترم اختياره `kind`؛ بلا اختيار يبقى السلوك القديم (الكاتب → مقال).
+ */
+export function resolveContributorSubmissionKind(input: {
+  isWriter: boolean;
+  isReporter: boolean;
+  isAdminLike: boolean;
+  requested?: "opinion" | "news" | null;
+}): "opinion" | "news" {
+  const { isWriter, isReporter, isAdminLike, requested } = input;
+  if (requested && (isAdminLike || (isWriter && isReporter))) return requested;
+  if (isWriter) return "opinion";
+  if (isReporter) return "news";
+  return requested || "news";
+}

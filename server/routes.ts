@@ -95,9 +95,9 @@ import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
 import { createOAuthTokenErrorHandler, createOAuthWebCompletion } from "./oauthWebCompletion";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getUserRoleNames, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
-import { isReaderLikeRole, mergeRoleSignals, pickPrimaryRoleRecord, primaryRoleKey } from "@shared/effectiveRoles";
+import { isOpinionOnlyContributor, isReaderLikeRole, mergeRoleSignals, pickPrimaryRoleRecord, primaryRoleKey } from "@shared/effectiveRoles";
 import { inferStaffRolesFromWork } from "./services/staffRoleInference";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
@@ -7565,8 +7565,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Convert date strings to Date objects before validation
       const requestData = { ...req.body };
 
-      // Auto-set articleType='opinion' for opinion authors
-      if (req.user?.role === 'opinion_author') {
+      // كاتب الرأي فقط تُفرض عليه «مقال رأي»؛ من يحمل دور المراسل أيضاً يختار بنفسه.
+      if (isOpinionOnlyContributor(await getUserRoleNames(authorId))) {
         requestData.articleType = 'opinion';
         console.log(`[CREATE ARTICLE] Opinion author detected, setting articleType='opinion' for user ${req.user.id}`);
       }
