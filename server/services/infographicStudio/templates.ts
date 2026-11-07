@@ -158,17 +158,31 @@ function fontFaces(a: TemplateAssets): string {
 @font-face{font-family:Plex;src:url(${a.fonts.plexRegular}) format("truetype");font-weight:400}`;
 }
 
-/** Page-side fitter: shrinks --s until no [data-qa] block overflows its zone (min 0.7). */
+/**
+ * Page-side fitter: shrinks --s until no [data-zone] overflows (min 0.7). A zone that still
+ * overflows (model CSS with fixed px sizes) gets its own text scaled down, to 0.55 at most.
+ */
 const FIT_SCRIPT = `
 window.__fit = function(){
-  var root=document.documentElement, s=1;
+  var root=document.documentElement, s=1, k=1;
+  function overZone(z){ return z.scrollHeight>z.clientHeight+1||z.scrollWidth>z.clientWidth+1; }
   function over(){
     var zones=document.querySelectorAll('[data-zone]');
-    for(var i=0;i<zones.length;i++){var z=zones[i]; if(z.scrollHeight>z.clientHeight+1||z.scrollWidth>z.clientWidth+1) return true;}
+    for(var i=0;i<zones.length;i++){ if(overZone(zones[i])) return true; }
     return false;
   }
   while(over() && s>0.7){ s=Math.round((s-0.04)*100)/100; root.style.setProperty('--s', String(s)); }
-  return s;
+  var zones=document.querySelectorAll('[data-zone]');
+  for(var i=0;i<zones.length;i++){
+    var z=zones[i], f=1, els=[z].concat(Array.prototype.slice.call(z.querySelectorAll('*')));
+    els.forEach(function(el){ el.dataset.fs=String(parseFloat(getComputedStyle(el).fontSize)); });
+    while(overZone(z) && f>0.55){
+      f=Math.round((f-0.03)*100)/100;
+      els.forEach(function(el){ el.style.fontSize=(parseFloat(el.dataset.fs)*f)+'px'; });
+    }
+    if(f<k) k=f;
+  }
+  return s*k;
 };`;
 
 function base(a: TemplateAssets, b: InfographicBrief, w: number, h: number, css: string, body: string): string {
