@@ -52,12 +52,12 @@ export function NewsArticleCard({
   const resolvedMode = compact ? "compact" : viewMode;
   const labels = (
     <div className="public-labels flex flex-wrap items-center gap-2">
-      <InfographicLabel article={article} locale={locale} />
       <ContentLabel
         article={article}
         locale={locale}
         hideCategory={hideCategory}
       />
+      <InfographicLabel article={article} locale={locale} />
       <ContentStateLabels article={article} locale={locale} />
     </div>
   );

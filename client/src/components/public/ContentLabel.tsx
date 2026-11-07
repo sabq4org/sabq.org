@@ -80,7 +80,7 @@ export function ContentLabel({
   return null;
 }
 
-/** ليبل «إنفوجرافيك» — يظهر قبل ليبل القسم في سطر الليبلات تحت الصورة. */
+/** ليبل «إنفوجرافيك» — يظهر بعد ليبل القسم في سطر الليبلات تحت الصورة. */
 export function InfographicLabel({
   article,
   locale = "ar",

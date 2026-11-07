@@ -722,11 +722,11 @@ struct ArticleDetailView: View {
             // من `displayArticle` لا `article`: الخبر المفتوح من إشعار أو رابط عميق
             // يبدأ بهيكل `Article.placeholder` قسمه الثابت «محليات» وبلا «عاجل».
             // والهيكل عنوانه فارغ، فلا تُرسم الشارة قبل وصول الحمولة الحقيقية.
-            if !displayArticle.title.isEmpty, displayArticle.isInfographic {
-                DetailLabelPill(title: "إنفوجرافيك", tint: SabqTheme.primary, icon: "chart.bar.fill")
-            }
             if !displayArticle.title.isEmpty {
                 DetailLabelPill(title: displayArticle.categoryTitle, tint: SabqTheme.primary)
+            }
+            if !displayArticle.title.isEmpty, displayArticle.isInfographic {
+                DetailLabelPill(title: "إنفوجرافيك", tint: SabqTheme.primary, icon: "chart.bar.fill")
             }
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).

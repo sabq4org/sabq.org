@@ -49,6 +49,7 @@ import {
   Zap,
   BookOpen,
   Eye,
+  BarChart3,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -96,9 +97,6 @@ const StoryTimeline = lazy(() => import("@/components/StoryTimeline"));
 const FollowStoryButton = lazy(() => import("@/components/FollowStoryButton"));
 const VideoPlayer = lazy(() =>
   import("@/components/VideoPlayer").then(module => ({ default: module.VideoPlayer }))
-);
-const InfographicDetail = lazy(() =>
-  import("@/components/InfographicDetail").then(module => ({ default: module.InfographicDetail }))
 );
 const DataInfographicPage = lazy(() =>
   import("@/components/data-infographic/DataInfographicPage").then(module => ({ default: module.DataInfographicPage }))
@@ -314,7 +312,7 @@ export default function ArticleDetail() {
 
   const { data: bylineProfile } = useQuery<{ title?: string | null }>({
     queryKey: ["/api/reporters", article?.staff?.slug],
-    enabled: !!article?.staff?.slug && article?.articleType !== "infographic",
+    enabled: !!article?.staff?.slug,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -1078,48 +1076,22 @@ export default function ArticleDetail() {
       );
     }
     
-    // Image-based infographic (صوري) - uses traditional visual infographic viewer
-    return (
-      <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
-        <Header user={user} />
-        
-        {/* Full-width Infographic Detail with integrated carousel */}
-        <Suspense fallback={<Skeleton className="h-96 w-full" />}>
-          <InfographicDetail
-            article={article}
-            onReact={handleReact}
-            onBookmark={handleBookmark}
-            hasReacted={article.hasReacted}
-            isBookmarked={article.isBookmarked}
-            shortLink={shortLink}
-            summaryAudio={{ provider: audioProvider, isLoadingAudio, isPlaying, onPlayAudio: handlePlayAudio }}
-          />
-        </Suspense>
-        
-        {/* Article Poll */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
-          <DeferredArticleSection minHeight={80}>
-            <ArticlePoll articleId={article.id} />
-          </DeferredArticleSection>
-        </div>
-
-        {/* Comments Section */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-          <Separator className="mb-8" />
-          <DeferredArticleSection minHeight={200}>
-            <CommentSection
-              articleId={article.id}
-              comments={comments}
-              currentUser={user}
-              onSubmitComment={handleComment}
-              onLikeComment={handleLikeComment}
-              likedCommentIds={likedCommentIds}
-            />
-          </DeferredArticleSection>
-        </div>
-      </div>
-    );
+    // Image-based infographic (صوري) renders inside the regular news layout below.
   }
+
+  // إنفوجرافيك صوري: نفس قالب صفحة الخبر، مع الموجز قبل الإنفوجرافيك الكامل (بلا قص)
+  const isImageInfographic = article.articleType === "infographic";
+  const summaryBlock = (summaryText || (shouldFetchBullets && isLoadingBullets)) ? (
+    <ArticleSummary
+      key={article.id}
+      text={summaryText}
+      loading={!summaryText && shouldFetchBullets && isLoadingBullets}
+      audioProvider={audioProvider}
+      isLoadingAudio={isLoadingAudio}
+      isPlaying={isPlaying}
+      onPlayAudio={handlePlayAudio}
+    />
+  ) : null;
 
   return (
     <div
@@ -1158,6 +1130,16 @@ export default function ArticleDetail() {
                     data-testid="badge-article-category"
                   >
                     {article.category.icon} {article.category.nameAr}
+                  </Badge>
+                )}
+                {isImageInfographic && (
+                  <Badge
+                    variant="secondary"
+                    className="article-category-label article-infographic-label gap-1"
+                    data-testid="badge-article-infographic"
+                  >
+                    <BarChart3 className="h-3 w-3" aria-hidden="true" />
+                    إنفوجرافيك
                   </Badge>
                 )}
                 {/*
@@ -1280,6 +1262,8 @@ export default function ArticleDetail() {
               </div>
             </header>
 
+            {isImageInfographic && summaryBlock}
+
             {/* Featured Image or Video */}
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
               <Suspense fallback={<Skeleton className="aspect-video w-full rounded-xl" />}>
@@ -1303,10 +1287,10 @@ export default function ArticleDetail() {
                 ? `${heroW} / ${heroH}`
                 : undefined;
 
-              return (
+              const heroFigure = (
                 <ImageWithCaption
                   imageUrl={heroImageUrl ?? article.imageUrl}
-                  altText={heroImageAsset?.altText || article.title}
+                  altText={heroImageAsset?.altText || (isImageInfographic ? `إنفوجرافيك: ${article.title}` : article.title)}
                   captionHtml={heroImageAsset?.captionHtml}
                   captionPlain={heroImageAsset?.captionPlain || heroImageAsset?.altText || article.title}
                   sourceName={heroImageAsset?.sourceName}
@@ -1321,19 +1305,23 @@ export default function ArticleDetail() {
                   objectPosition={getObjectPosition(article)}
                 />
               );
+
+              // الإنفوجرافيك يُفتح بحجمه الكامل في تبويب جديد للتكبير
+              return isImageInfographic ? (
+                <a
+                  href={heroImageUrl ?? article.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block cursor-zoom-in"
+                  aria-label="عرض الإنفوجرافيك بالحجم الكامل"
+                  data-testid="link-infographic-full"
+                >
+                  {heroFigure}
+                </a>
+              ) : heroFigure;
             })()}
 
-            {(summaryText || (shouldFetchBullets && isLoadingBullets)) && (
-              <ArticleSummary
-                key={article.id}
-                text={summaryText}
-                loading={!summaryText && shouldFetchBullets && isLoadingBullets}
-                audioProvider={audioProvider}
-                isLoadingAudio={isLoadingAudio}
-                isPlaying={isPlaying}
-                onPlayAudio={handlePlayAudio}
-              />
-            )}
+            {!isImageInfographic && summaryBlock}
 
             <div className="article-detail-toolbar" data-testid="article-top-share">
               <div className="article-detail-toolbar-row">

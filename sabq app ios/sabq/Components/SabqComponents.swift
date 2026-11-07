@@ -1376,7 +1376,7 @@ struct StatusChip: View {
 
 /// Detail-page label pill — matches the clean, compact, borderless capsule
 /// style used on the home hero card (`FeaturedArticleCard`).
-/// ليبل «إنفوجرافيك» في سطر الليبلات تحت العنوان، بنفس شكل كبسولة القسم.
+/// ليبل «إنفوجرافيك» بعد كبسولة القسم في سطر الليبلات، بنفس شكلها.
 struct InfographicPill: View {
     var body: some View {
         HStack(spacing: 3) {
@@ -1484,7 +1484,6 @@ struct FeaturedArticleCard: View {
                 .padding(.bottom, SabqLayout.space16)
 
             HStack(alignment: .center, spacing: 8) {
-                if article.isInfographic { InfographicPill() }
                 Text(article.categoryTitle)
                     .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.primary)
@@ -1494,6 +1493,7 @@ struct FeaturedArticleCard: View {
                         Capsule(style: .continuous)
                             .fill(SabqTheme.primary.opacity(0.07))
                     )
+                if article.isInfographic { InfographicPill() }
                 if article.isFreshlyPublished {
                     Text("جديد")
                         .font(SabqType.tag.font)
@@ -1651,13 +1651,13 @@ struct FeaturedCarousel: View {
                     .padding(.vertical, 2.5)
                     .background(Capsule(style: .continuous).fill(SabqTheme.breaking.opacity(0.1)))
                 } else {
-                    if article.isInfographic { InfographicPill() }
                     Text(article.categoryTitle)
                         .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.primary)
                         .padding(.horizontal, SabqLayout.space8)
                         .padding(.vertical, 2.5)
                         .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                    if article.isInfographic { InfographicPill() }
                 }
                 if article.isFreshlyPublished {
                     Text("جديد")
@@ -1897,11 +1897,11 @@ struct CompactArticleRow: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let showNew = isNew || article.isFreshlyPublished(relativeTo: context.date)
             HStack(alignment: .center, spacing: 6) {
-                if article.isInfographic {
-                    InfographicPill()
-                }
                 if showsCategory {
                     categoryPill
+                }
+                if article.isInfographic {
+                    InfographicPill()
                 }
                 if showNew {
                     newPill

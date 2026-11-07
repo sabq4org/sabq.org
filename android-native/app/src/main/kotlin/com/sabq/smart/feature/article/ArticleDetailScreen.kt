@@ -1038,14 +1038,14 @@ private fun LabelsRow(
         if (article.isOpinion) {
             OpinionMarkerPill()
         } else {
-            if (article.isInfographic) {
-                com.sabq.smart.ui.components.SabqCategoryPill(title = "إنفوجرافيك", fillAlpha = 0.12f)
-            }
             // iOS DetailLabelPill: القسم سياق لا خطورة — كبسولة بلون الأساس.
             com.sabq.smart.ui.components.SabqCategoryPill(
                 title = article.categoryLabel.ifBlank { article.category.title },
                 fillAlpha = 0.08f,
             )
+            if (article.isInfographic) {
+                com.sabq.smart.ui.components.SabqCategoryPill(title = "إنفوجرافيك", fillAlpha = 0.12f)
+            }
             if (article.isReading) {
                 com.sabq.smart.ui.components.SabqCategoryPill(title = "قراءة", tint = SabqTheme.colors.success, fillAlpha = 0.08f)
             }
