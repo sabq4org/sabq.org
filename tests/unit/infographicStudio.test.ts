@@ -292,3 +292,28 @@ function hex(h: string): number[] {
   const n = parseInt(h.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+
+describe("plan normalisation", () => {
+  it("trims over-long layout fields instead of refusing the plan", () => {
+    const raw = {
+      ...plan(),
+      kicker: "المركز الوطني للصقور ".repeat(5),
+      titleLines: ["ليلة مزاد الصقور التاسعة عشرة في الرياض", "ثلاثة صقور", "سطر ثالث"],
+      wash: "#fe9",
+      theme: "warm",
+    };
+    const c = checkBrief(raw, source);
+    expect(c.brief).not.toBeNull();
+    expect(c.brief!.kicker.length).toBeLessThanOrEqual(48);
+    expect(c.brief!.titleLines).toHaveLength(2);
+    expect(c.brief!.titleLines[0].length).toBeLessThanOrEqual(26);
+    expect(c.brief!.titleLines[0].endsWith(" ")).toBe(false);
+    expect(c.brief!.wash).toBe("#FFEE99");
+    expect(c.brief!.theme).toBe("light");
+  });
+
+  it("still refuses a number that is not in the story after trimming", () => {
+    const c = checkBrief({ ...plan(), hero: { value: "999", unit: "", caption: "رقم مخترع" } }, source);
+    expect(c.problems.join(" ")).toMatch(/999/);
+  });
+});
