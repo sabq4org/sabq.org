@@ -105,9 +105,23 @@ function MobileHeroCard({
               </Badge>
             )}
             {article.category && (
-              <span className="rounded-full bg-primary/10 text-primary font-semibold px-3 py-0.5 text-xs">
+              <Badge
+                variant="secondary"
+                className="text-xs h-5 text-black"
+                style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
+              >
                 {article.category.nameAr}
-              </span>
+              </Badge>
+            )}
+            {article.articleType === "infographic" && (
+              <Badge
+                variant="secondary"
+                className="text-xs h-5 text-black"
+                style={{ backgroundColor: '#e5e5e6' }}
+                data-testid="badge-hero-infographic"
+              >
+                إنفوجرافيك
+              </Badge>
             )}
             {article.isReading && (
               <Badge className="rounded-full text-[10px] px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1 font-medium">

@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useState, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { 
   Facebook,
   Instagram,
@@ -47,6 +47,16 @@ export function Footer() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Show the scroll-to-top button only after the reader has scrolled more
+  // than a screen, so it doesn't cover the first stories.
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > window.innerHeight * 1.5);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ['/api/categories'],
@@ -329,8 +339,12 @@ export function Footer() {
       {/* Scroll to Top */}
       <button
         onClick={scrollToTop}
-        className="fixed bottom-6 left-6 z-50 w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors flex items-center justify-center"
+        className={`fixed bottom-6 left-6 z-50 w-10 h-10 rounded-full bg-white text-primary border border-border/60 shadow-md hover:bg-white/90 dark:bg-card transition-all duration-200 flex items-center justify-center ${
+          showScrollTop ? "opacity-100" : "opacity-0 pointer-events-none translate-y-2"
+        }`}
         aria-label="العودة إلى الأعلى"
+        aria-hidden={!showScrollTop}
+        tabIndex={showScrollTop ? 0 : -1}
         data-testid="scroll-to-top"
       >
         <ArrowUp className="h-4 w-4" />
