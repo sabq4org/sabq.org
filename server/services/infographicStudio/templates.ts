@@ -32,9 +32,6 @@ function rgb(hex: string): string {
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 }
 
-/** Scrim alpha is a CSS variable so the renderer can strengthen it when text sits on a busy area. */
-const washAt = (alphaVar: string) => `rgba(var(--wash),var(${alphaVar}))`;
-
 function channels(hex: string): number[] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -70,11 +67,74 @@ export function withSafeColours<T extends { ink: string; accent: string; wash: s
   return { ...b, ink: ensureContrast(b.ink, b.wash, 7), accent: ensureContrast(b.accent, b.wash, 4.5) };
 }
 
-/** Title line with the highlight word wrapped once, everything escaped. */
+const AR_LETTER = /[\u0621-\u064A]/;
+const AR_MARK = /[\u064B-\u065F\u0670]/;
+/** Letters that never join the letter after them: a kashida after them would float. */
+const NON_JOINING = new Set(Array.from("اأإآٱدذرزوؤةءى"));
+const ALEF = new Set(Array.from("اأإآٱ"));
+const KASHIDA = "ـــ";
+const MAX_STRETCHED_PER_LINE = 2;
+const MIN_STRETCH_LETTERS = 4;
+
+/**
+ * House kashida («شبكـــة»، «الحـــوار»): one stretch per word, as late in the word as the joins allow,
+ * never after the first letter, never inside lam-alef. Diacritics stay with their letter.
+ */
+export function stretchWord(word: string): string {
+  const chars = Array.from(word);
+  const letters: number[] = [];
+  chars.forEach((c, i) => {
+    if (AR_LETTER.test(c)) letters.push(i);
+  });
+  if (letters.length < MIN_STRETCH_LETTERS || word.includes("ـ")) return word;
+  for (let k = letters.length - 2; k >= 1; k--) {
+    const cur = chars[letters[k]];
+    const next = chars[letters[k + 1]];
+    if (NON_JOINING.has(cur) || (cur === "ل" && ALEF.has(next))) continue;
+    if (letters[k + 1] !== letters[k] + 1 && !chars.slice(letters[k] + 1, letters[k + 1]).every((c) => AR_MARK.test(c))) continue;
+    let at = letters[k] + 1;
+    while (at < chars.length && AR_MARK.test(chars[at])) at++;
+    return chars.slice(0, at).join("") + KASHIDA + chars.slice(at).join("");
+  }
+  return word;
+}
+
+/** The longest stretchable words of a title line (up to two), so the stretch reads as rhythm, not noise. */
+export function wordsToStretch(line: string): Set<string> {
+  const words = Array.from(new Set(line.split(/\s+/).filter((w) => stretchWord(w) !== w)));
+  const count = (w: string) => Array.from(w).filter((c) => AR_LETTER.test(c)).length;
+  return new Set(words.sort((a, b) => count(b) - count(a)).slice(0, MAX_STRETCHED_PER_LINE));
+}
+
+function stretchText(text: string, chosen: Set<string>): string {
+  return text
+    .split(/(\s+)/)
+    .map((w) => (chosen.has(w) ? stretchWord(w) : w))
+    .join("");
+}
+
+/** Title line with house kashida and the highlight word wrapped once, everything escaped. */
 export function titleLineHtml(line: string, highlight: string): string {
-  if (!highlight || !line.includes(highlight)) return escapeHtml(line);
+  const chosen = wordsToStretch(line);
+  const out = (t: string) => escapeHtml(stretchText(t, chosen));
+  if (!highlight || !line.includes(highlight)) return out(line);
   const i = line.indexOf(highlight);
-  return `${escapeHtml(line.slice(0, i))}<span class="hl">${escapeHtml(highlight)}</span>${escapeHtml(line.slice(i + highlight.length))}`;
+  return `${out(line.slice(0, i))}<span class="hl">${out(highlight)}</span>${out(line.slice(i + highlight.length))}`;
+}
+
+/** «102 ألف ريال» → big «102» + small «ألف ريال». A value without leading digits stays whole. */
+export function splitFigureValue(value: string): { num: string; unit: string } {
+  const m = value.trim().match(/^([+\-−]?[\d٠-٩][\d٠-٩.,٫٬]*\s*[%٪]?)\s*(.*)$/);
+  return m ? { num: m[1].trim(), unit: m[2].trim() } : { num: value.trim(), unit: "" };
+}
+
+/** Photo panel sizes. The text sits on a solid wash; the photo never runs under it. */
+export const VERTICAL_PHOTO_HEIGHT = { figures: 800, points: 660 } as const;
+export const WIDE_PHOTO_WIDTH = 860;
+export const PHOTO_FADE = 240;
+
+export function verticalPhotoHeight(b: Pick<InfographicBrief, "mode">): number {
+  return VERTICAL_PHOTO_HEIGHT[b.mode === "points" ? "points" : "figures"];
 }
 
 function fontFaces(a: TemplateAssets): string {
@@ -106,7 +166,9 @@ ${fontFaces(a)}
 body.bg-only .zone,body.bg-only .foot,body.bg-only .ai,body.bg-only .logo{visibility:hidden}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:${w}px;height:${h}px;background:#000}
-.canvas{position:relative;width:${w}px;height:${h}px;overflow:hidden;background:${b.wash} url(${a.heroDataUri}) center/cover no-repeat}
+.canvas{position:relative;width:${w}px;height:${h}px;overflow:hidden;background:${b.wash}}
+.photo{position:absolute;background:${b.wash} url(${a.heroDataUri}) center/cover no-repeat}
+.photo::after{content:"";position:absolute;inset:0}
 .logo-shade{position:absolute;width:640px;height:540px;border-radius:50%;background:radial-gradient(closest-side,rgba(20,28,40,.55),rgba(20,28,40,0));pointer-events:none}
 .logo{position:absolute;width:170px;height:auto}
 .logo svg{width:100%;height:auto;display:block}
@@ -116,7 +178,8 @@ html,body{width:${w}px;height:${h}px;background:#000}
 .hero .v{font:900 calc(168px*var(--s))/1 Alex;color:var(--accent);direction:ltr;unicode-bidi:isolate;text-align:right}
 .hero .u{font:800 calc(46px*var(--s))/1.15 Alex;color:var(--ink)}
 .hero .c{font:600 calc(32px*var(--s))/1.4 Plex;color:var(--ink);opacity:.92}
-.fig .v{font:900 calc(84px*var(--s))/1 Alex;color:var(--accent);direction:ltr;unicode-bidi:isolate;text-align:right}
+.fig .v{font:900 calc(88px*var(--s))/1 Alex;color:var(--accent);direction:ltr;unicode-bidi:isolate;text-align:right;white-space:nowrap}
+.fig .vu{font:800 calc(30px*var(--s))/1.25 Alex;color:var(--accent);margin-top:6px}
 .fig .l{font:600 calc(28px*var(--s))/1.35 Plex;color:var(--ink);margin-top:8px}
 .pts{display:flex;flex-direction:column;gap:calc(26px*var(--s))}
 .pt{display:flex;gap:calc(22px*var(--s));align-items:flex-start}
@@ -149,58 +212,70 @@ function pointsHtml(b: InfographicBrief, max: number): string {
   return `<div class="pts">${items}</div>`;
 }
 
+function figureHtml(f: { value: string; label: string }): string {
+  const { num, unit } = splitFigureValue(f.value);
+  return `<div class="fig" data-qa="figure"><div class="v">${escapeHtml(num)}</div>${unit ? `<div class="vu">${escapeHtml(unit)}</div>` : ""}<div class="l">${escapeHtml(f.label)}</div></div>`;
+}
+
+function titleHtml(b: InfographicBrief): string {
+  return `<div class="title" data-qa="title">${b.titleLines.map((l) => titleLineHtml(l, b.highlight)).join("<br>")}</div>`;
+}
+
+/**
+ * Vertical 1080×1920: text on a solid wash in the upper part, the photo in its own panel at the
+ * bottom, fading into the wash. The photo never runs under the text.
+ */
 export function buildVerticalHtml(b: InfographicBrief, a: TemplateAssets): string {
   const { width, height } = INFOGRAPHIC_STUDIO_CANVAS.vertical;
-  const top = b.textZone === "top";
   const points = b.mode === "points";
-  const zoneH = points ? 1120 : 900;
-  const shadow = b.theme === "dark" ? "text-shadow:0 2px 18px rgba(0,0,0,.6);" : "text-shadow:0 0 22px rgba(255,255,255,.35);";
+  const photoH = verticalPhotoHeight(b);
+  const zoneTop = 250;
+  const zoneH = height - zoneTop - photoH + 40;
   const css = `
-.scrim{position:absolute;left:0;right:0;${top ? "top:0" : "bottom:0"};height:${points ? 1560 : 1400}px;background:linear-gradient(${top ? "180deg" : "0deg"},${washAt("--a1")} 0,${washAt("--a2")} 62%,rgba(var(--wash),0) 92%)}
+.photo{left:0;right:0;bottom:0;height:${photoH}px}
+.photo::after{background:linear-gradient(180deg,rgb(var(--wash)) 0,rgba(var(--wash),.6) ${Math.round(PHOTO_FADE * 0.45)}px,rgba(var(--wash),0) ${PHOTO_FADE}px)}
 .foot-scrim{position:absolute;left:0;right:0;bottom:0;height:260px;background:linear-gradient(0deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
 .logo-shade{top:-170px;right:-190px}
 .logo{top:60px;right:64px}
-.zone{position:absolute;right:64px;left:64px;${top ? `top:250px;height:${zoneH}px` : `bottom:170px;height:${zoneH}px`};display:flex;flex-direction:column;justify-content:${top ? "flex-start" : "flex-end"};gap:calc(30px*var(--s));overflow:hidden;${shadow}}
-.figs{display:flex;gap:calc(44px*var(--s));justify-content:flex-start}
+.zone{position:absolute;right:64px;left:64px;top:${zoneTop}px;height:${zoneH}px;display:flex;flex-direction:column;justify-content:center;gap:calc(${points ? 34 : 40}px*var(--s));overflow:hidden}
+.figs{display:flex;gap:calc(40px*var(--s));justify-content:flex-start;margin-top:calc(6px*var(--s))}
 .fig{flex:1 1 0;min-width:0}
 .foot{position:absolute;right:64px;left:64px;bottom:52px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
-.src{font:400 25px/1.45 Plex;color:rgba(255,255,255,.88);text-shadow:0 1px 8px rgba(0,0,0,.6);max-width:640px}
+.src{font:400 25px/1.45 Plex;color:rgba(255,255,255,.9);text-shadow:0 1px 8px rgba(0,0,0,.6);max-width:640px}
 .site{font:600 27px Alex;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.6)}
-.ai{position:absolute;left:64px;${top ? "bottom:118px" : "top:72px"}}`;
-  const figures = b.figures
-    .slice(0, 3)
-    .map((f) => `<div class="fig" data-qa="figure"><div class="v">${escapeHtml(f.value)}</div><div class="l">${escapeHtml(f.label)}</div></div>`)
-    .join("");
+.ai{position:absolute;left:64px;bottom:118px}`;
+  const figures = b.figures.slice(0, 3).map(figureHtml).join("");
   const body = `
-<div class="scrim"></div><div class="foot-scrim"></div><div class="logo-shade"></div>
+<div class="photo"></div><div class="foot-scrim"></div><div class="logo-shade"></div>
 <div class="logo" data-qa="logo">${a.logoWhiteSvg}</div>
 <div class="zone" data-zone="main">
   <div class="kicker" data-qa="kicker">${escapeHtml(b.kicker)}</div>
-  <div class="title" data-qa="title">${b.titleLines.map((l) => titleLineHtml(l, b.highlight)).join("<br>")}</div>
-  ${points ? pointsHtml(b, 4) : `${heroHtml(b, false)}<div class="figs">${figures}</div>`}
+  ${titleHtml(b)}
+  ${points ? pointsHtml(b, 4) : `${heroHtml(b, false)}${figures ? `<div class="figs">${figures}</div>` : ""}`}
 </div>
 <div class="ai" data-qa="ai-label">${AI_IMAGE_LABEL}</div>
 <div class="foot"><div class="src" data-qa="source">${escapeHtml(b.sourceLine)}</div><div class="site">sabq.org</div></div>`;
   return base(a, b, width, height, css, body);
 }
 
+/** Wide 1920×1080 cover: photo panel on the left fading into the wash, title and one number on the right. */
 export function buildWideHtml(b: InfographicBrief, a: TemplateAssets): string {
   const { width, height } = INFOGRAPHIC_STUDIO_CANVAS.wide;
-  const shadow = b.theme === "dark" ? "text-shadow:0 2px 18px rgba(0,0,0,.6);" : "text-shadow:0 0 22px rgba(255,255,255,.35);";
   const css = `
-.scrim{position:absolute;top:0;bottom:0;right:0;width:1240px;background:linear-gradient(270deg,${washAt("--a1")} 0,${washAt("--a2")} 45%,rgba(var(--wash),0) 100%)}
+.photo{left:0;top:0;bottom:0;width:${WIDE_PHOTO_WIDTH}px}
+.photo::after{background:linear-gradient(270deg,rgb(var(--wash)) 0,rgba(var(--wash),.6) ${Math.round(PHOTO_FADE * 0.45)}px,rgba(var(--wash),0) ${PHOTO_FADE}px)}
 .logo-shade{top:-170px;right:-190px}
 .logo{top:56px;right:70px}
-.zone{position:absolute;top:150px;bottom:110px;right:300px;width:980px;display:flex;flex-direction:column;justify-content:center;gap:calc(34px*var(--s));overflow:hidden;${shadow}}
-.title{font-size:calc(124px*var(--s))}
+.zone{position:absolute;top:240px;bottom:110px;right:110px;left:${WIDE_PHOTO_WIDTH - 20}px;display:flex;flex-direction:column;justify-content:center;gap:calc(34px*var(--s));overflow:hidden}
+.title{font-size:calc(112px*var(--s))}
 .hero{display:flex;align-items:baseline;gap:28px}
-.hero .v{font-size:calc(170px*var(--s))}
+.hero .v{font-size:calc(160px*var(--s))}
 .ai{position:absolute;left:40px;bottom:30px}`;
   const body = `
-<div class="scrim"></div><div class="logo-shade"></div>
+<div class="photo"></div><div class="logo-shade"></div>
 <div class="logo" data-qa="logo">${a.logoWhiteSvg}</div>
 <div class="zone" data-zone="main">
-  <div class="title" data-qa="title">${b.titleLines.map((l) => titleLineHtml(l, b.highlight)).join("<br>")}</div>
+  ${titleHtml(b)}
   ${b.hero ? heroHtml(b, true) : `<div class="kicker" data-qa="kicker">${escapeHtml(b.kicker)}</div>`}
 </div>
 <div class="ai" data-qa="ai-label">${AI_IMAGE_LABEL}</div>`;
