@@ -22,7 +22,7 @@ export const infographicStudioRequestSchema = z
   .object({
     requestId: z.string().guid(),
     articleId: z.string().trim().max(64).nullish(),
-    title: z.string().trim().min(5, "اكتب عنوان الخبر").max(300),
+    title: z.string().trim().max(300).optional().default(""),
     content: z.string().trim().min(80, "نص الخبر قصير جدًا لصنع إنفوجرافيك").max(60_000),
   })
   .strict();
@@ -33,7 +33,7 @@ export type InfographicStudioStep = "queued" | "brief" | "images" | "render" | "
 
 export const INFOGRAPHIC_STUDIO_STEP_LABELS: Record<InfographicStudioStep, string> = {
   queued: "في الانتظار",
-  brief: "قراءة الخبر واختيار الفكرة والأرقام",
+  brief: "قراءة الخبر واختيار الفكرة",
   images: "توليد الصورة البطلة",
   render: "بناء التصميم وفحصه",
   upload: "حفظ الملفات",
@@ -53,7 +53,10 @@ export interface InfographicStudioResult {
   /** Two short paragraphs as safe HTML (`<p>` only). */
   bodyHtml: string;
   metaphor: string;
+  /** Numbers mode: the hero then the supporting figures. Empty in points mode. */
   figures: InfographicStudioFigure[];
+  /** Points mode (stories without enough numbers): 3–4 short points. */
+  points?: Array<{ title: string; text: string }>;
   /** Layout warnings the automatic check could not fix. The editor reviews them before applying. */
   warnings: string[];
 }

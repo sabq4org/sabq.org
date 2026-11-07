@@ -1,8 +1,10 @@
 /**
- * «إنفو للموقع» — the creative brief. One model call reads the story and returns the idea, the figures,
- * the copy and two image prompts as JSON. Every figure, and every number in the copy, must appear
- * verbatim in the story (`valueAppearsInSource`); one corrective retry is allowed, then figures that
- * still fail are dropped. Fewer than two verified figures fails the job: no invented numbers.
+ * «إنفو للموقع» — the creative brief. One model call reads the story and returns the idea, the copy
+ * and two image prompts as JSON, in one of two modes:
+ * - `figures`: a hero number and 2–3 supporting numbers (stories built on data);
+ * - `points`: 3–4 short points (awareness, events, food, how-to: stories without enough numbers).
+ * Every number anywhere in the plan must appear in the story, as digits or as an Arabic number word
+ * (`numbersFromStory`); one corrective retry is allowed, then what still fails is dropped.
  */
 import { z } from "zod";
 import { aiGateway } from "../../ai/gateway";
@@ -15,17 +17,21 @@ const BRIEF_TIMEOUT_MS = 90_000;
 const MAX_SOURCE_CHARS = 9000;
 const MIN_FIGURES = 2;
 const MAX_FIGURES = 3;
+const MIN_POINTS = 3;
+const MAX_POINTS = 4;
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const short = (max: number) => z.string().trim().min(1).max(max);
 
 export const infographicBriefSchema = z.object({
+  mode: z.enum(["figures", "points"]).default("figures"),
   headline: short(120),
   kicker: short(48),
   titleLines: z.array(short(26)).min(1).max(2),
   highlight: z.string().trim().max(26).optional().default(""),
-  hero: z.object({ value: short(14), unit: z.string().trim().max(28).default(""), caption: short(70) }),
-  figures: z.array(z.object({ value: short(14), label: short(44) })).min(MIN_FIGURES).max(5),
+  hero: z.object({ value: short(14), unit: z.string().trim().max(28).default(""), caption: short(70) }).nullish(),
+  figures: z.array(z.object({ value: short(14), label: short(44) })).max(5).default([]),
+  points: z.array(z.object({ title: short(32), text: z.string().trim().max(110).default("") })).max(6).default([]),
   body: z.array(short(480)).min(1).max(2),
   sourceLine: short(90),
   metaphor: short(220),
@@ -47,17 +53,22 @@ export const BRIEF_SYSTEM_PROMPT = `أنت مصمم إنفوجرافيك تحر�
 - لا تكرر الاستعارات المستهلكة: الدرع، الميزان النحاسي، الكرة الأرضية المخيطة، الأنهار التي تصب في بحر.
 - ملاءمة ثقافية سعودية: لا سوائل في كؤوس بساق أو أكواب تشبه الخمر، ولا أحذية في موضوع روحاني أو ديني، ولا احتفالات أو ألعاب نارية في خبر رسوم أو أسعار أو ضحايا. لا ترسم الحرمين ولا وجوه أشخاص حقيقيين. المواضيع الصحية بخلفية فاتحة.
 - العنوان يسمّي الموضوع صراحة، في سطرين قصيرين على الأكثر، وكلمة مفتاحية واحدة تُبرز (highlight يجب أن يكون جزءًا حرفيًا من أحد السطرين).
-- رقم بطل واحد (hero) ثم 2 إلى 3 أرقام داعمة (figures). كل رقم منقول حرفيًا من نص الخبر بنفس أرقامه، دون تقريب أو حساب أو تحويل. لا تخترع رقمًا أو مصدرًا أو اقتباسًا.
+- اختر النمط (mode):
+  - "figures" إن كان الخبر قائمًا على ثلاثة أرقام مهمة أو أكثر: رقم بطل واحد (hero) ثم 2 إلى 3 أرقام داعمة (figures).
+  - "points" للأخبار التوعوية والنصائح والأطعمة والأحداث وما ليس فيه أرقام كافية: 3 إلى 4 نقاط (points) قصيرة من الخبر نفسه، كل نقطة {title: عنوان من 2–4 كلمات, text: جملة قصيرة تشرحها}. hero اختياري هنا: ضعه فقط إن كان في الخبر رقم واحد بارز، وإلا اجعله null، واجعل figures [].
+- كل رقم تكتبه منقول من نص الخبر كما هو، دون تقريب أو حساب أو تحويل. إن كتب الخبر العدد بالحروف («ثلاثة») فاكتبه بالحروف أو بالأرقام. لا تخترع رقمًا أو مصدرًا أو اقتباسًا أو معلومة ليست في الخبر.
 - الألقاب الملكية تبقى كما في الخبر. لا تستخدم «قتيل/قتلى/مقتل» للضحايا؛ استخدم «وفاة/متوفون/ضحايا».
 - العربية الفصحى، جمل قصيرة واضحة، بلا مبالغة ولا رموز تعبيرية.
 
 الحقول:
-- headline: عنوان الخبر في الموقع دون كلمة «إنفوجرافيك»، يبدأ بالرقم الأبرز أو بالفكرة (حتى 110 حرفًا).
+- headline: عنوان الخبر في الموقع دون كلمة «إنفوجرافيك»، يبدأ بالرقم الأبرز أو بالفكرة (حتى 110 حرفًا). إن لم يُعطَ عنوان للخبر فاكتبه أنت من النص.
 - kicker: سطر تمهيدي قصير فوق العنوان (الجهة أو المجال).
 - titleLines: سطران قصيران للعنوان على التصميم (حتى 22 حرفًا للسطر).
-- hero: {value: الرقم بأرقام لاتينية كما في الخبر, unit: الوحدة, caption: سطر يربط الرقم بالموضوع}.
-- figures: 2–3 عناصر {value, label} قصيرة.
-- body: فقرتان قصيرتان للنشر مع الإنفوجرافيك في الموقع، الأولى تلخّص الخبر ومصدره، والثانية بقية الأرقام. كل رقم فيهما من الخبر.
+- mode: "figures" أو "points".
+- hero: {value: الرقم بأرقام لاتينية كما في الخبر, unit: الوحدة, caption: سطر يربط الرقم بالموضوع}، أو null في نمط النقاط.
+- figures: 2–3 عناصر {value, label} قصيرة في نمط الأرقام، و[] في نمط النقاط.
+- points: 3–4 عناصر {title, text} في نمط النقاط، و[] في نمط الأرقام.
+- body: فقرتان قصيرتان للنشر مع الإنفوجرافيك في الموقع، الأولى تلخّص الخبر ومصدره، والثانية بقية التفاصيل. كل رقم فيهما من الخبر.
 - sourceLine: «المصدر: ...» بالجهة أو المتحدث كما في الخبر.
 - metaphor: جملة عربية تشرح الفكرة البصرية.
 - textZone: "top" إن كان الجزء العلوي من المشهد هادئًا للنص، أو "bottom".
@@ -73,21 +84,83 @@ export interface BriefCheck {
   problems: string[];
 }
 
+const AR_NUMBER_WORDS: Record<string, number> = {
+  واحد: 1, واحدة: 1,
+  اثنان: 2, اثنين: 2, اثنتان: 2, اثنتين: 2,
+  ثلاث: 3, ثلاثة: 3,
+  أربع: 4, أربعة: 4, اربع: 4, اربعة: 4,
+  خمس: 5, خمسة: 5,
+  ست: 6, ستة: 6,
+  سبع: 7, سبعة: 7,
+  ثمان: 8, ثماني: 8, ثمانية: 8,
+  تسع: 9, تسعة: 9,
+  عشر: 10, عشرة: 10,
+};
+/** Words that make a neighbouring unit part of a bigger number («ثلاثة عشر»، «خمسة وعشرون»، «ثلاثة آلاف»). */
+const AR_COMPOUND = /^(?:عشر|عشرة|عشرون|عشرين|ثلاثون|ثلاثين|أربعون|أربعين|اربعون|اربعين|خمسون|خمسين|ستون|ستين|سبعون|سبعين|ثمانون|ثمانين|تسعون|تسعين|مائة|مئة|مائتان|مائتين|مئتان|مئتين|ألف|آلاف|الف|ألفان|ألفين|مليون|ملايين|مليار|مليارات)$/;
+
+function unitWord(token: string): number | undefined {
+  const bare = token.replace(/^[وفبل]?(?:ال)?/, "");
+  return AR_NUMBER_WORDS[token] ?? AR_NUMBER_WORDS[bare];
+}
+
+function isNumberWord(token: string | undefined): boolean {
+  if (!token) return false;
+  const t = token.replace(/^و/, "");
+  return unitWord(token) !== undefined || AR_COMPOUND.test(t);
+}
+
+/**
+ * The story plus the digit forms it implies, for checking only: a standalone «ثلاثة صقور» also counts
+ * as 3, and «310 آلاف» / «8.5 ألف» as 310,000 / 8,500. Compound number words («ثلاثة عشر») add nothing,
+ * so they cannot vouch for a wrong unit. Nothing here is shown to readers.
+ */
+export function numbersFromStory(source: string): string {
+  const extra: string[] = [];
+  const tokens = source.split(/[^\u0621-\u064A]+/).filter(Boolean);
+  tokens.forEach((token, i) => {
+    const n = unitWord(token);
+    if (n === undefined || isNumberWord(tokens[i - 1]) || isNumberWord(tokens[i + 1])) return;
+    extra.push(String(n));
+  });
+  for (const m of source.matchAll(/(?<![\d.,٫٬])(\d+(?:\.\d+)?)\s*(?:ألف|آلاف|الف)/g)) {
+    const v = Math.round(Number(m[1]) * 1000);
+    extra.push(String(v), v.toLocaleString("en-US"));
+  }
+  return extra.length ? `${source}\n${extra.join(" ")}` : source;
+}
+
 function numbersOk(text: string, source: string): boolean {
   return !/[0-9٠-٩۰-۹]/.test(text) || valueAppearsInSource(text, source);
 }
 
+/** Keeps the sentences whose numbers all come from the story. */
+function verifiedSentences(paragraph: string, source: string): string {
+  return paragraph
+    .split(/(?<=[.!؟])\s+/)
+    .filter((sentence) => numbersOk(sentence, source))
+    .join(" ")
+    .trim();
+}
+
 /** Pure validation used after each model answer (exported for unit tests). */
-export function checkBrief(raw: unknown, source: string): BriefCheck {
+export function checkBrief(raw: unknown, story: string): BriefCheck {
   const parsed = infographicBriefSchema.safeParse(raw);
   if (!parsed.success) {
     return { brief: null, problems: parsed.error.issues.slice(0, 8).map((i) => `${i.path.join(".")}: ${i.message}`) };
   }
+  const source = numbersFromStory(story);
   const brief = parsed.data;
   const problems: string[] = [];
-  if (!valueAppearsInSource(brief.hero.value, source)) problems.push(`hero.value "${brief.hero.value}" not in the story`);
-  const badFigures = brief.figures.filter((f) => !valueAppearsInSource(f.value, source));
-  for (const f of badFigures) problems.push(`figure "${f.value}" not in the story`);
+  if (brief.mode === "figures") {
+    if (!brief.hero) problems.push("hero is required in figures mode");
+    if (brief.figures.length < MIN_FIGURES) problems.push(`figures mode needs at least ${MIN_FIGURES} figures; use points mode instead`);
+  } else if (brief.points.length < MIN_POINTS) {
+    problems.push(`points mode needs ${MIN_POINTS}–${MAX_POINTS} points`);
+  }
+  if (brief.hero && !valueAppearsInSource(brief.hero.value, source)) problems.push(`hero.value "${brief.hero.value}" not in the story`);
+  for (const f of brief.figures.filter((f) => !valueAppearsInSource(f.value, source))) problems.push(`figure "${f.value}" not in the story`);
+  for (const p of brief.points.filter((p) => !numbersOk(`${p.title} ${p.text}`, source))) problems.push(`point "${p.title}" has a number not in the story`);
   if (!numbersOk(brief.headline, source)) problems.push("headline has a number not in the story");
   if (!brief.titleLines.every((l) => numbersOk(l, source))) problems.push("titleLines have a number not in the story");
   if (!brief.body.every((p) => numbersOk(p, source))) problems.push("body has a number not in the story");
@@ -95,18 +168,35 @@ export function checkBrief(raw: unknown, source: string): BriefCheck {
   return { brief, problems };
 }
 
-/** After the retry: drop what is still unverified, keep the job alive when enough remains. */
-export function salvageBrief(brief: InfographicBrief, source: string): InfographicBrief | null {
+/**
+ * After the retry: drop what is still unverified and keep the job alive when enough remains.
+ * A figures plan without enough verified numbers falls back to points when it has them.
+ */
+export function salvageBrief(brief: InfographicBrief, story: string): InfographicBrief | null {
+  const source = numbersFromStory(story);
+  const hero = brief.hero && valueAppearsInSource(brief.hero.value, source) ? brief.hero : null;
   const figures = brief.figures.filter((f) => valueAppearsInSource(f.value, source)).slice(0, MAX_FIGURES);
-  if (!valueAppearsInSource(brief.hero.value, source) || figures.length < MIN_FIGURES) return null;
-  const body = brief.body.filter((p) => numbersOk(p, source));
+  const points = brief.points.filter((p) => numbersOk(`${p.title} ${p.text}`, source)).slice(0, MAX_POINTS);
+  let mode = brief.mode;
+  if (mode === "figures" && (!hero || figures.length < MIN_FIGURES)) {
+    if (points.length < MIN_POINTS) return null;
+    mode = "points";
+  }
+  if (mode === "points" && points.length < MIN_POINTS) return null;
+  const body = brief.body.map((p) => verifiedSentences(p, source)).filter(Boolean);
   if (body.length === 0) return null;
+  const titleLines = brief.titleLines.filter((l) => numbersOk(l, source));
+  if (titleLines.length === 0) return null;
   return {
     ...brief,
-    figures,
+    mode,
+    hero,
+    figures: mode === "figures" ? figures : [],
+    points: mode === "points" ? points : [],
     body,
-    headline: numbersOk(brief.headline, source) ? brief.headline : brief.titleLines.join(" "),
-    highlight: brief.titleLines.some((l) => l.includes(brief.highlight)) ? brief.highlight : "",
+    titleLines,
+    headline: numbersOk(brief.headline, source) ? brief.headline : titleLines.join(" "),
+    highlight: titleLines.some((l) => l.includes(brief.highlight)) ? brief.highlight : "",
   };
 }
 
@@ -114,7 +204,7 @@ export function salvageBrief(brief: InfographicBrief, source: string): Infograph
 export function heroPrompt(brief: InfographicBrief, kind: "vertical" | "wide"): string {
   const zone =
     kind === "vertical"
-      ? `Vertical portrait frame. Keep the ${brief.textZone === "top" ? "upper" : "lower"} 45% of the frame calm, soft and low in detail (sky, plain wall, soft gradient or out-of-focus surface) so text can sit on it; put the hero object in the other part.`
+      ? `Vertical portrait frame. Keep the ${brief.textZone === "top" ? "upper" : "lower"} ${brief.mode === "points" ? "60" : "45"}% of the frame calm, soft and low in detail (sky, plain wall, soft gradient or out-of-focus surface) so text can sit on it; put the hero object in the other part.`
       : "Wide 16:9 frame. Put the hero object in the left third; keep the right 55% calm, soft and low in detail so text can sit on it.";
   const prompt = kind === "vertical" ? brief.imagePromptVertical : brief.imagePromptWide;
   return [
@@ -139,12 +229,12 @@ export async function generateInfographicBrief(
   userId?: string,
 ): Promise<{ brief: InfographicBrief; source: string }> {
   const body = stripHtml(input.content).slice(0, MAX_SOURCE_CHARS);
-  const source = `${input.title}\n${body}`;
-  if (!/[0-9٠-٩۰-۹]/.test(source)) throw new InfographicBriefError("الخبر لا يحتوي أرقامًا يُبنى عليها إنفوجرافيك.");
+  const title = input.title.trim();
+  const source = title ? `${title}\n${body}` : body;
 
   const messages: ChatMessage[] = [
     { role: "system", content: BRIEF_SYSTEM_PROMPT },
-    { role: "user", content: `عنوان الخبر: ${input.title}\n\nنص الخبر:\n${body}` },
+    { role: "user", content: `${title ? `عنوان الخبر: ${title}` : "لا يوجد عنوان؛ اكتبه من النص."}\n\nنص الخبر:\n${body}` },
   ];
   let last: BriefCheck = { brief: null, problems: [] };
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -167,11 +257,11 @@ export async function generateInfographicBrief(
       { role: "assistant", content: response.content || "" },
       {
         role: "user",
-        content: `صحّح الخطة وأعد JSON كاملًا. المشكلات:\n- ${last.problems.join("\n- ")}\nكل رقم يجب أن يظهر حرفيًا في نص الخبر.`,
+        content: `صحّح الخطة وأعد JSON كاملًا. المشكلات:\n- ${last.problems.join("\n- ")}\nكل رقم يجب أن يظهر في نص الخبر. إن لم تكفِ الأرقام فاستخدم نمط النقاط.`,
       },
     );
   }
   const salvaged = last.brief ? salvageBrief(last.brief, source) : null;
-  if (!salvaged) throw new InfographicBriefError("تعذر استخراج أرقام موثقة كافية من الخبر. راجع النص وحاول مجددًا.");
+  if (!salvaged) throw new InfographicBriefError("تعذر بناء خطة موثقة من نص الخبر. راجع النص وحاول مجددًا.");
   return { brief: salvaged, source };
 }

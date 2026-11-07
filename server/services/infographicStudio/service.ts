@@ -199,7 +199,11 @@ export async function runInfographicStudioJob(userId: string, input: Infographic
       headline: withInfographicPrefix(brief.headline),
       bodyHtml: buildBodyHtml(brief.body),
       metaphor: brief.metaphor,
-      figures: [{ value: brief.hero.value, label: [brief.hero.unit, brief.hero.caption].filter(Boolean).join(" ") }, ...brief.figures],
+      figures: [
+        ...(brief.hero ? [{ value: brief.hero.value, label: [brief.hero.unit, brief.hero.caption].filter(Boolean).join(" ") }] : []),
+        ...brief.figures,
+      ],
+      points: brief.points,
       warnings,
     };
     await db

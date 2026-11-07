@@ -98,9 +98,12 @@ interface TextBox {
 async function measureLayout(page: Page) {
   return page.evaluate(async () => {
     const w = window as unknown as { __fit: () => number };
+    // Faces load lazily: a canvas without a heavy number (points mode, wide) never asks for Alex 900.
+    const faces = ["900 40px HC", "900 40px Alex", "600 20px Plex"];
+    await Promise.all(faces.map((f) => document.fonts.load(f).catch(() => [])));
     await document.fonts.ready;
     const scale = w.__fit();
-    const fontsLoaded = ["900 40px HC", "900 40px Alex", "600 20px Plex"].every((f) => document.fonts.check(f));
+    const fontsLoaded = faces.every((f) => document.fonts.check(f));
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
     const overflow: string[] = [];
