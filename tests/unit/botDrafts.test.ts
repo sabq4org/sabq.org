@@ -105,7 +105,10 @@ import {
   BOT_DRAFTS_IMAGE_PURPOSE,
   BOT_DRAFTS_IMAGES_PATH,
   findForbiddenBotDraftFields,
+  botDraftCreateSchema,
+  botDraftUpdateSchema,
 } from "../../shared/botDrafts";
+import { SABQ_NEWSPAPER_ACCOUNT_ID } from "../../shared/sabqNewspaper";
 import { isCsrfExemptRequest } from "../../server/csrf";
 import sharp from "sharp";
 
@@ -1356,5 +1359,40 @@ describe("personal publisher token routing", () => {
     expect(state.verdict).not.toHaveBeenCalled();
     expect((await uploadCall(undefined, "a.jpg", "botpub_valid_personal_credential")).status).toBe(403);
     expect(state.uploadImage).not.toHaveBeenCalled();
+  });
+});
+
+describe("infographic drafts", () => {
+  it("accepts the infographic flag and a 16:9 banner, keeps articleType forbidden", () => {
+    const body = {
+      title: "إنفوجرافيك| ثلاثة شواهين في مزاد الصقور",
+      content: "بيعت ثلاثة صقور بمبلغ 310 آلاف ريال في الليلة الـ19.",
+      imageUrl: "https://media.sabq.org/news/vertical.webp",
+      infographic: true,
+      infographicBannerUrl: "https://media.sabq.org/news/banner.webp",
+    };
+    expect(botDraftCreateSchema.safeParse(body).success).toBe(true);
+    expect(botDraftUpdateSchema.safeParse({ infographic: false }).success).toBe(true);
+    expect(botDraftCreateSchema.safeParse({ ...body, infographicBannerUrl: "http://x.test/a.png" }).success).toBe(false);
+    expect(findForbiddenBotDraftFields({ ...body, articleType: "infographic" })).toEqual(["articleType"]);
+  });
+
+  it("lets a published row change only the banner, not the type", () => {
+    expect(findDisallowedPublishedContentFields({ infographicBannerUrl: null })).toEqual([]);
+    expect(findDisallowedPublishedContentFields({ infographic: true })).toEqual(["infographic"]);
+    const patch = buildPublishedBotContentPatch(
+      { seo: null },
+      { infographicBannerUrl: "https://media.sabq.org/news/banner.webp" },
+      new Date("2026-11-07T12:00:00.000Z"),
+    );
+    expect(patch.infographicBannerUrl).toBe("https://media.sabq.org/news/banner.webp");
+    expect(patch).not.toHaveProperty("articleType");
+  });
+
+  it("treats a personal-token infographic with the newspaper byline like news", () => {
+    const bot = { name: "p", personal: { userId: "u", tokenId: "t" } } as any;
+    const row = { authorId: SABQ_NEWSPAPER_ACCOUNT_ID, reporterId: SABQ_NEWSPAPER_ACCOUNT_ID };
+    expect(isPersonalBotNewspaperNews(bot, { ...row, articleType: "infographic" })).toBe(true);
+    expect(isPersonalBotNewspaperNews(bot, { ...row, articleType: "opinion" })).toBe(false);
   });
 });
