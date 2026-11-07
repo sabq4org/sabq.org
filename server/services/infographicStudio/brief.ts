@@ -36,8 +36,9 @@ export const infographicBriefSchema = z.object({
   sourceLine: short(90),
   metaphor: short(220),
   imagePromptVertical: short(1500),
-  imagePromptWide: short(1500),
-  textZone: z.enum(["top", "bottom"]),
+  /** Older plans had a separate wide prompt and a text zone; both canvases now share one photo panel. */
+  imagePromptWide: z.string().trim().max(1500).optional().default(""),
+  textZone: z.enum(["top", "bottom"]).optional().default("top"),
   theme: z.enum(["light", "dark"]),
   ink: hex,
   accent: hex,
@@ -52,7 +53,7 @@ export const BRIEF_SYSTEM_PROMPT = `أنت مصمم إنفوجرافيك تحر�
 - فكرة بصرية واحدة كبيرة من عالم الخبر نفسه: جسم حقيقي واحد يملأ المشهد ويحمل المعنى (نخلة جذورها تمتد إلى الدول، عدّاد ماء، ميزان، قطعة شطرنج...). لا أيقونات، ولا خرائط مسطحة، ولا رسوم خطية، ولا مخططات. الصورة فوتوغرافية واقعية مولّدة.
 - لا تكرر الاستعارات المستهلكة: الدرع، الميزان النحاسي، الكرة الأرضية المخيطة، الأنهار التي تصب في بحر.
 - ملاءمة ثقافية سعودية: لا سوائل في كؤوس بساق أو أكواب تشبه الخمر، ولا أحذية في موضوع روحاني أو ديني، ولا احتفالات أو ألعاب نارية في خبر رسوم أو أسعار أو ضحايا. لا ترسم الحرمين ولا وجوه أشخاص حقيقيين. المواضيع الصحية بخلفية فاتحة.
-- العنوان يسمّي الموضوع صراحة، في سطرين قصيرين على الأكثر، وكلمة مفتاحية واحدة تُبرز (highlight يجب أن يكون جزءًا حرفيًا من أحد السطرين).
+- العنوان يسمّي الموضوع صراحة، في سطرين قصيرين على الأكثر، وكلمة مفتاحية واحدة تُبرز (highlight يجب أن يكون جزءًا حرفيًا من أحد السطرين). لا تكتب في titleLines رقم البطل؛ الرقم يظهر كبيرًا تحته، فتكراره في العنوان يضعف التصميم. لا تكتب المدّة (ـ) بنفسك؛ القالب يضيفها.
 - اختر النمط (mode):
   - "figures" إن كان الخبر قائمًا على ثلاثة أرقام مهمة أو أكثر: رقم بطل واحد (hero) ثم 2 إلى 3 أرقام داعمة (figures).
   - "points" للأخبار التوعوية والنصائح والأطعمة والأحداث وما ليس فيه أرقام كافية: 3 إلى 4 نقاط (points) قصيرة من الخبر نفسه، كل نقطة {title: عنوان من 2–4 كلمات, text: جملة قصيرة تشرحها}. hero اختياري هنا: ضعه فقط إن كان في الخبر رقم واحد بارز، وإلا اجعله null، واجعل figures [].
@@ -66,16 +67,14 @@ export const BRIEF_SYSTEM_PROMPT = `أنت مصمم إنفوجرافيك تحر�
 - titleLines: سطران قصيران للعنوان على التصميم (حتى 22 حرفًا للسطر).
 - mode: "figures" أو "points".
 - hero: {value: الرقم بأرقام لاتينية كما في الخبر, unit: الوحدة, caption: سطر يربط الرقم بالموضوع}، أو null في نمط النقاط.
-- figures: 2–3 عناصر {value, label} قصيرة في نمط الأرقام، و[] في نمط النقاط.
+- figures: 2–3 عناصر {value, label} قصيرة في نمط الأرقام، و[] في نمط النقاط. value يبدأ بالرقم ثم وحدته القصيرة إن وجدت («102 ألف ريال»)، وlabel وصف قصير من 2–5 كلمات.
 - points: 3–4 عناصر {title, text} في نمط النقاط، و[] في نمط الأرقام.
 - body: فقرتان قصيرتان للنشر مع الإنفوجرافيك في الموقع، الأولى تلخّص الخبر ومصدره، والثانية بقية التفاصيل. كل رقم فيهما من الخبر.
 - sourceLine: «المصدر: ...» بالجهة أو المتحدث كما في الخبر.
 - metaphor: جملة عربية تشرح الفكرة البصرية.
-- textZone: "top" إن كان الجزء العلوي من المشهد هادئًا للنص، أو "bottom".
-- imagePromptVertical: وصف إنجليزي لصورة فوتوغرافية عمودية للجسم البطل، يذكر صراحة أن ${"`"}textZone${"`"} من الإطار (نحو 45%) فارغ هادئ قليل التفاصيل لوضع النص، وأن الصورة بلا نصوص ولا حروف ولا شعارات ولا وجوه.
-- imagePromptWide: المشهد نفسه بإطار عرضي 16:9، الجسم البطل في الثلث الأيسر والجزء الأيمن (نحو 55%) هادئ فارغ للنص.
-- theme: "light" إن كانت منطقة النص فاتحة، أو "dark".
-- ink: لون النص (#RRGGBB) متباين مع منطقة النص، accent: لون الكلمة المبرزة والأرقام، wash: لون التظليل خلف النص (قريب من لون منطقة النص في الصورة).
+- imagePromptVertical: وصف إنجليزي لصورة فوتوغرافية مربعة للجسم البطل وحده في وسط الإطار، كاملًا مع هامش حوله، بخلفية بسيطة غير مزدحمة، وبلا نصوص ولا حروف ولا شعارات ولا وجوه. الصورة تُعرض في لوحة مستقلة أسفل التصميم العمودي ويسار الغلاف العرضي، والنص لا يقع فوقها.
+- theme: "light" إن كانت الخلفية فاتحة، أو "dark".
+- wash: لون الخلفية المصمتة التي يقع عليها النص (#RRGGBB)، قريب من لون خلفية الصورة لتذوب الصورة فيه. ink: لون النص متباين بقوة مع wash. accent: لون الكلمة المبرزة والأرقام.
 
 أعد كائن JSON واحدًا فقط بهذه الحقول، بلا شرح.`;
 
@@ -201,16 +200,12 @@ export function salvageBrief(brief: InfographicBrief, story: string): Infographi
 }
 
 /** Fixed framing rules appended to the model's prompt so the text zone stays calm. */
-export function heroPrompt(brief: InfographicBrief, kind: "vertical" | "wide"): string {
-  const zone =
-    kind === "vertical"
-      ? `Vertical portrait frame. Keep the ${brief.textZone === "top" ? "upper" : "lower"} ${brief.mode === "points" ? "60" : "45"}% of the frame calm, soft and low in detail (sky, plain wall, soft gradient or out-of-focus surface) so text can sit on it; put the hero object in the other part.`
-      : "Wide 16:9 frame. Put the hero object in the left third; keep the right 55% calm, soft and low in detail so text can sit on it.";
-  const prompt = kind === "vertical" ? brief.imagePromptVertical : brief.imagePromptWide;
+/** One square photo serves both canvases: it sits in its own panel, never under the text. */
+export function heroPrompt(brief: InfographicBrief): string {
   return [
     "Photorealistic editorial photograph, natural subject colours, cinematic soft light, high detail.",
-    prompt,
-    zone,
+    brief.imagePromptVertical,
+    `Square frame. The hero object sits in the centre, fully visible with a clear margin on every side; it will be cropped slightly to a landscape panel and to a portrait panel, so nothing important touches the edges. Simple uncluttered background whose tone is close to ${brief.wash}, so the photo can fade into a flat ${brief.wash} colour along its edges.`,
     "No text, letters, numbers, logos, watermarks or flags. No recognisable real people. No religious holy sites.",
   ].join("\n");
 }

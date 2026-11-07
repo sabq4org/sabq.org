@@ -15,8 +15,13 @@ import {
   buildWideHtml,
   ensureContrast,
   escapeHtml,
+  splitFigureValue,
+  stretchWord,
   titleLineHtml,
+  verticalPhotoHeight,
+  WIDE_PHOTO_WIDTH,
   withSafeColours,
+  wordsToStretch,
 } from "../../server/services/infographicStudio/templates";
 import { contrastRatio, isLegible, layoutProblems } from "../../server/services/infographicStudio/render";
 
@@ -194,14 +199,13 @@ describe("numbers written as words and points mode", () => {
     expect(v).not.toContain('data-qa="hero"');
     expect(v).toContain(">01<");
     expect(buildWideHtml(p, assets)).not.toContain('data-qa="hero"');
-    expect(heroPrompt(p, "vertical")).toMatch(/60%/);
   });
 });
 
 describe("templates", () => {
   it("escapes model text and wraps the highlight", () => {
     expect(escapeHtml(`<script>"x"</script>`)).toBe("&lt;script&gt;&quot;x&quot;&lt;/script&gt;");
-    expect(titleLineHtml("في 175 دولة", "175 دولة")).toBe('في <span class="hl">175 دولة</span>');
+    expect(titleLineHtml("في 175 دولة", "175 دولة")).toBe('في <span class="hl">175 دولـــة</span>');
     const p = checkBrief({ ...plan(), kicker: "<img src=x onerror=alert(1)>" }, source).brief!;
     const html = buildVerticalHtml(p, assets);
     expect(html).not.toContain("<img src=x");
@@ -228,11 +232,39 @@ describe("templates", () => {
     expect(contrastRatio(hex(safe.ink), [255, 255, 255])).toBeGreaterThanOrEqual(7);
   });
 
-  it("keeps the text zone calm in both image prompts", () => {
+  it("asks for one centred square photo that fades into the wash", () => {
     const p = checkBrief(plan(), source).brief!;
-    expect(heroPrompt(p, "vertical")).toMatch(/upper 45%/);
-    expect(heroPrompt(p, "wide")).toMatch(/right 55%/);
-    expect(heroPrompt(p, "wide")).toMatch(/No text/);
+    expect(heroPrompt(p)).toMatch(/Square frame/);
+    expect(heroPrompt(p)).toContain(p.wash);
+    expect(heroPrompt(p)).toMatch(/No text/);
+  });
+
+  it("stretches title words with house kashida where the letters join", () => {
+    expect(stretchWord("الحوار")).toBe("الحـــوار");
+    expect(stretchWord("الصقور")).toBe("الصقـــور");
+    expect(stretchWord("ليلة")).toBe("ليلـــة");
+    expect(stretchWord("ريال")).toBe("ريـــال");
+    expect(stretchWord("آلاف")).toBe("آلاف"); // never inside lam-alef, never after the first letter
+    expect(stretchWord("مزاد")).toBe("مزاد");
+    expect(stretchWord("في")).toBe("في");
+    expect(stretchWord("2026")).toBe("2026");
+    expect(stretchWord("تفكّك")).toBe("تفكّـــك"); // the shadda stays on its letter
+    expect(Array.from(wordsToStretch("ليلة مزاد الصقور الكبرى"))).toHaveLength(2);
+  });
+
+  it("splits a figure into a big number and a small unit", () => {
+    expect(splitFigureValue("102 ألف ريال")).toEqual({ num: "102", unit: "ألف ريال" });
+    expect(splitFigureValue("8.5%")).toEqual({ num: "8.5%", unit: "" });
+    expect(splitFigureValue("4,000")).toEqual({ num: "4,000", unit: "" });
+    expect(splitFigureValue("ثلاثة")).toEqual({ num: "ثلاثة", unit: "" });
+  });
+
+  it("keeps the photo in its own panel, never under the text", () => {
+    const p = checkBrief(plan(), source).brief!;
+    const v = buildVerticalHtml(p, assets);
+    expect(v).toContain(`.photo{left:0;right:0;bottom:0;height:${verticalPhotoHeight(p)}px}`);
+    expect(v).toMatch(/\.canvas\{[^}]*background:#[0-9A-F]{6}\}/i);
+    expect(buildWideHtml(p, assets)).toContain(`width:${WIDE_PHOTO_WIDTH}px`);
   });
 });
 

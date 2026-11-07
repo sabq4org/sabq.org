@@ -25,7 +25,7 @@ import {
 import { newsImageStorageService } from "../newsImageStorageService";
 import { areOpenAIImagesConfigured, EditorialImageError, generateOpenAIEditorialImage } from "../openaiImagesProvider";
 import { generateInfographicBrief, heroPrompt, InfographicBriefError, type InfographicBrief } from "./brief";
-import { buildBodyHtml, buildVerticalHtml, buildWideHtml, withSafeColours, type TemplateAssets } from "./templates";
+import { buildBodyHtml, buildVerticalHtml, buildWideHtml, verticalPhotoHeight, WIDE_PHOTO_WIDTH, withSafeColours, type TemplateAssets } from "./templates";
 import { layoutProblems, renderCanvases } from "./render";
 
 export const INFOGRAPHIC_STUDIO_JOB_TTL_MS = 12 * 60_000;
@@ -91,7 +91,7 @@ export async function createInfographicStudioJob(userId: string, input: Infograp
         model: INFOGRAPHIC_STUDIO_JOB_MODEL,
         aspectRatio: "9:16",
         imageSize: "2K",
-        numImages: 2,
+        numImages: 1,
         status: "processing",
         enableSearchGrounding: false,
         enableThinking: false,
@@ -173,18 +173,21 @@ export async function runInfographicStudioJob(userId: string, input: Infographic
     const brief = withSafeColours(generated.brief);
     await setStep(id, userId, "images", { brief });
 
-    const [tall, wide] = await Promise.all([
-      generateOpenAIEditorialImage({ requestId: randomUUID(), prompt: heroPrompt(brief, "vertical"), model: INFOGRAPHIC_STUDIO_IMAGE_MODEL, size: "1024x1536", quality: "high" }),
-      generateOpenAIEditorialImage({ requestId: randomUUID(), prompt: heroPrompt(brief, "wide"), model: INFOGRAPHIC_STUDIO_IMAGE_MODEL, size: "1536x864", quality: "high" }),
-    ]);
+    const photo = await generateOpenAIEditorialImage({
+      requestId: randomUUID(),
+      prompt: heroPrompt(brief),
+      model: INFOGRAPHIC_STUDIO_IMAGE_MODEL,
+      size: "1024x1024",
+      quality: "high",
+    });
     await setStep(id, userId, "render");
 
     const assets = loadAssets();
     const v = INFOGRAPHIC_STUDIO_CANVAS.vertical;
     const w = INFOGRAPHIC_STUDIO_CANVAS.wide;
     const [vertical, banner] = await renderCanvases([
-      { html: buildVerticalHtml(brief, { ...assets, heroDataUri: await coverDataUri(tall.buffer, v.width, v.height) }), ...v },
-      { html: buildWideHtml(brief, { ...assets, heroDataUri: await coverDataUri(wide.buffer, w.width, w.height) }), ...w },
+      { html: buildVerticalHtml(brief, { ...assets, heroDataUri: await coverDataUri(photo.buffer, v.width, verticalPhotoHeight(brief)) }), ...v },
+      { html: buildWideHtml(brief, { ...assets, heroDataUri: await coverDataUri(photo.buffer, WIDE_PHOTO_WIDTH, w.height) }), ...w },
     ]);
     const checks = [layoutProblems(vertical.report), layoutProblems(banner.report)];
     const hard = checks.flatMap((c) => c.hard);
@@ -214,7 +217,7 @@ export async function runInfographicStudioJob(userId: string, input: Infographic
         thumbnailUrl: bannerUrl,
         generationTime: Math.round((Date.now() - started) / 1000),
         updatedAt: new Date(),
-        metadata: sql`coalesce(${aiImageGenerations.metadata}, '{}'::jsonb) || ${JSON.stringify({ step: "done", result, imagePrompts: [tall.prompt, wide.prompt] })}::jsonb`,
+        metadata: sql`coalesce(${aiImageGenerations.metadata}, '{}'::jsonb) || ${JSON.stringify({ step: "done", result, imagePrompts: [photo.prompt] })}::jsonb`,
       })
       .where(filter);
   } catch (error) {
