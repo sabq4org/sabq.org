@@ -78,7 +78,7 @@ describe('statistics refresh load', () => {
 });
 
 
-it('coalesces eight dashboard pulse queries across fifty readers and TTL refresh', async () => {
+it('coalesces nine dashboard pulse queries across fifty readers and TTL refresh', async () => {
   let gate = deferred<object[]>();
   mocks.select.mockImplementation(() => {
     const chain: Record<string, unknown> = {};
@@ -89,14 +89,14 @@ it('coalesces eight dashboard pulse queries across fifty readers and TTL refresh
     return chain;
   });
   const readers = Array.from({ length: 50 }, () => getDashboardPulseStats());
-  expect(mocks.select).toHaveBeenCalledTimes(8);
+  expect(mocks.select).toHaveBeenCalledTimes(9);
   gate.resolve([{}]);
   const previous = (await Promise.all(readers))[0];
   vi.advanceTimersByTime(CACHE_TTL.SHORT + 1);
   gate = deferred<object[]>();
   const stale = await Promise.all(Array.from({ length: 50 }, () => getDashboardPulseStats()));
   expect(stale.every((r) => r === previous)).toBe(true);
-  expect(mocks.select).toHaveBeenCalledTimes(16);
+  expect(mocks.select).toHaveBeenCalledTimes(18);
   gate.resolve([{}]);
   await vi.advanceTimersByTimeAsync(0);
   expect((await getDashboardPulseStats()).generatedAt).not.toBe(previous.generatedAt);

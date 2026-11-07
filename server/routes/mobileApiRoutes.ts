@@ -5421,7 +5421,7 @@ router.post("/behavior/track", async (req: Request, res: Response) => {
       // /articles/:id/view so trending stays internally consistent).
       const boostOptions = [5, 6, 7, 8, 9, 10];
       const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-      bufferArticleViewIncrement(data.articleId, randomBoost);
+      bufferArticleViewIncrement(data.articleId, randomBoost, 0); // opens: counted by /articles/:id/view
 
       // Seed a reading_history row so insights/today and trending can
       // count this open. We do NOT upsert here — every open is a

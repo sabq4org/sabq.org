@@ -1,14 +1,17 @@
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { CACHE_TTL, withSWR } from "../memoryCache";
 import {
+  articleOpenBuckets,
   articles,
   categories,
   comments,
   readingHistory,
   reactions,
   userEvents,
+  users,
 } from "@shared/schema";
+import { OPEN_BUCKET_MS, openBucketStart } from "./articleOpenBuckets";
 
 export interface DashboardPulseStats {
   articles: {
@@ -19,15 +22,25 @@ export interface DashboardPulseStats {
     /** مسودات مفتوحة غير مرفوعة للمراجعة ولا معادة للتعديل. */
     draft: number;
     scheduled: number;
+    /** فتحات حقيقية لكل الزوار (ويب + تطبيقات، بلا زيادة) منذ منتصف ليل الرياض. */
+    viewsToday: number;
     viewsYesterday: number;
+    /** "opens" = article_open_buckets؛ "legacy" = user_events (أعضاء الويب فقط) قبل تنفيذ الجدول. */
+    viewsSource: "opens" | "legacy";
   };
+  users: { activeToday: number };
   comments: {
     receivedToday: number;
     moderatedToday: number;
     pendingOlderThanTwoHours: number;
   };
-  reactions: { yesterdayCount: number };
-  engagement: { readsYesterday: number };
+  reactions: { todayCount: number; yesterdayCount: number };
+  engagement: {
+    readsToday: number;
+    readsYesterday: number;
+    /** متوسط مدة القراءة اليوم بالثواني، دون القراءات الصفرية أو فوق ساعة. */
+    averageTimeOnSite: number;
+  };
   trendingArticles: Array<{
     id: string;
     title: string;
@@ -68,31 +81,24 @@ export function riyadhDayStart(now: Date): Date {
 
 async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
   const now = new Date();
-  // يوم الرياض: للمؤشرات التي يُحسب طرفاها (اليوم/أمس) هنا — المواد والتعليقات.
+  // كل أرقام «اليوم» و«أمس» في البطاقة على يوم الرياض (الخادم يعمل بتوقيت UTC).
   const todayStart = riyadhDayStart(now);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
   const yesterdayComparableEnd = new Date(
     yesterdayStart.getTime() + (now.getTime() - todayStart.getTime()),
-  );
-  // يوم الخادم: «أمس» للمشاهدات/القراءات/التفاعلات يقابل قيم «اليوم» في
-  // storage.getAdminDashboardStats (منتصف ليل الخادم) — يجب أن يبقى الطرفان على النافذة نفسها.
-  const serverTodayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const serverYesterdayStart = new Date(serverTodayStart.getTime() - 24 * 60 * 60 * 1000);
-  const serverYesterdayComparableEnd = new Date(
-    serverYesterdayStart.getTime() + (now.getTime() - serverTodayStart.getTime()),
   );
   const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
   const [
     [articleStats],
-    [viewsStats],
+    viewsBlock,
     [commentStats],
     [reactionStats],
     [readingStats],
+    [userStats],
     trendingArticles,
     upcomingSchedule,
-    hourlyViews,
   ] = await Promise.all([
     db
       .select({
@@ -106,12 +112,7 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
         scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled')`,
       })
       .from(articles),
-    db
-      .select({
-        viewsYesterday: sql<number>`count(*) filter (where ${userEvents.createdAt} >= ${serverYesterdayStart} and ${userEvents.createdAt} < ${serverYesterdayComparableEnd})`,
-      })
-      .from(userEvents)
-      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, serverYesterdayStart))),
+    loadViews(todayStart, yesterdayStart, yesterdayComparableEnd),
     db
       .select({
         receivedToday: sql<number>`count(*) filter (where ${comments.createdAt} >= ${todayStart})`,
@@ -121,14 +122,25 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .from(comments),
     db
       .select({
-        yesterdayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${serverYesterdayStart} and ${reactions.createdAt} < ${serverYesterdayComparableEnd})`,
+        todayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${todayStart})`,
+        yesterdayCount: sql<number>`count(*) filter (where ${reactions.createdAt} < ${yesterdayComparableEnd})`,
       })
-      .from(reactions),
+      .from(reactions)
+      .where(gte(reactions.createdAt, yesterdayStart)),
     db
       .select({
-        readsYesterday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${serverYesterdayStart} and ${readingHistory.readAt} < ${serverYesterdayComparableEnd})`,
+        readsToday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${todayStart})`,
+        readsYesterday: sql<number>`count(*) filter (where ${readingHistory.readAt} < ${yesterdayComparableEnd})`,
+        avgDurationToday: sql<number>`coalesce(avg(${readingHistory.readDuration}) filter (where ${readingHistory.readAt} >= ${todayStart} and ${readingHistory.readDuration} between 1 and 3600), 0)`,
       })
-      .from(readingHistory),
+      .from(readingHistory)
+      .where(gte(readingHistory.readAt, yesterdayStart)),
+    db
+      .select({
+        activeToday: sql<number>`count(*)`,
+      })
+      .from(users)
+      .where(and(gte(users.lastActivityAt, todayStart), isNull(users.deletedAt))),
     db
       .select({
         id: articles.id,
@@ -169,16 +181,8 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .where(and(eq(articles.status, "scheduled"), gte(articles.scheduledAt, now)))
       .orderBy(asc(articles.scheduledAt))
       .limit(8),
-    db
-      .select({
-        hour: sql<string>`to_char(date_trunc('hour', ${userEvents.createdAt}), 'HH24:00')`,
-        views: sql<number>`count(*)`,
-      })
-      .from(userEvents)
-      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, serverTodayStart)))
-      .groupBy(sql`date_trunc('hour', ${userEvents.createdAt})`)
-      .orderBy(sql`date_trunc('hour', ${userEvents.createdAt})`),
   ]);
+  const hourlyViews = viewsBlock.hourly;
 
   const result: DashboardPulseStats = {
     articles: {
@@ -188,15 +192,25 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       needsChanges: Number(articleStats.needsChanges),
       draft: Number(articleStats.draft),
       scheduled: Number(articleStats.scheduled),
-      viewsYesterday: Number(viewsStats.viewsYesterday),
+      viewsToday: viewsBlock.today,
+      viewsYesterday: viewsBlock.yesterday,
+      viewsSource: viewsBlock.source,
     },
+    users: { activeToday: Number(userStats.activeToday) },
     comments: {
       receivedToday: Number(commentStats.receivedToday),
       moderatedToday: Number(commentStats.moderatedToday),
       pendingOlderThanTwoHours: Number(commentStats.pendingOlderThanTwoHours),
     },
-    reactions: { yesterdayCount: Number(reactionStats.yesterdayCount) },
-    engagement: { readsYesterday: Number(readingStats.readsYesterday) },
+    reactions: {
+      todayCount: Number(reactionStats.todayCount),
+      yesterdayCount: Number(reactionStats.yesterdayCount),
+    },
+    engagement: {
+      readsToday: Number(readingStats.readsToday),
+      readsYesterday: Number(readingStats.readsYesterday),
+      averageTimeOnSite: Math.round(Number(readingStats.avgDurationToday)),
+    },
     trendingArticles: trendingArticles.map((article) => ({
       ...article,
       views: Number(article.views),
@@ -211,4 +225,87 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
   };
 
   return result;
+}
+
+interface ViewsBlock {
+  today: number;
+  yesterday: number;
+  hourly: Array<{ hour: string; views: number }>;
+  source: "opens" | "legacy";
+}
+
+/**
+ * «مرات فتح الأخبار»: من article_open_buckets (كل الزوار، بلا زيادة).
+ * قبل تنفيذ migrations/20261107_article_open_buckets.sql يرجع إلى user_events
+ * (أعضاء الويب فقط) حتى لا تسقط البطاقة.
+ */
+async function loadViews(
+  todayStart: Date,
+  yesterdayStart: Date,
+  yesterdayComparableEnd: Date,
+): Promise<ViewsBlock> {
+  // bucket_start = timestamptz؛ user_events.created_at = timestamp بقيمة UTC.
+  const riyadhHourTz = (col: unknown) =>
+    sql<string>`to_char(date_trunc('hour', ${col} AT TIME ZONE 'Asia/Riyadh'), 'HH24:00')`;
+  const riyadhHourUtc = (col: unknown) =>
+    sql<string>`to_char(date_trunc('hour', (${col} AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Riyadh'), 'HH24:00')`;
+  // خانة اليوم الجارية ناقصة: تُقابَل بالجزء نفسه (نسبةً) من خانة أمس المقابلة لا بكاملها.
+  const nowMs = todayStart.getTime() + (yesterdayComparableEnd.getTime() - yesterdayStart.getTime());
+  const currentBucket = openBucketStart(nowMs);
+  const yesterdayCut = new Date(yesterdayStart.getTime() + (currentBucket - todayStart.getTime()));
+  const partialFraction = (nowMs - currentBucket) / OPEN_BUCKET_MS;
+  try {
+    const [[totals], hourly] = await Promise.all([
+      db
+        .select({
+          today: sql<number>`coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} >= ${todayStart}), 0)`,
+          yesterday: sql<number>`round(coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} < ${yesterdayCut}), 0) + coalesce(sum(${articleOpenBuckets.opens}) filter (where ${articleOpenBuckets.bucketStart} = ${yesterdayCut}), 0) * ${partialFraction}::float8)`,
+        })
+        .from(articleOpenBuckets)
+        .where(gte(articleOpenBuckets.bucketStart, yesterdayStart)),
+      db
+        .select({
+          hour: riyadhHourTz(articleOpenBuckets.bucketStart),
+          views: sql<number>`sum(${articleOpenBuckets.opens})`,
+        })
+        .from(articleOpenBuckets)
+        .where(gte(articleOpenBuckets.bucketStart, todayStart))
+        .groupBy(sql`1`)
+        .orderBy(sql`1`),
+    ]);
+    return {
+      today: Number(totals?.today ?? 0),
+      yesterday: Number(totals?.yesterday ?? 0),
+      hourly: hourly.map((h) => ({ hour: h.hour, views: Number(h.views) })),
+      source: "opens",
+    };
+  } catch (err: any) {
+    const code = err?.cause?.code ?? err?.code;
+    if (code !== "42P01" && code !== "42501") throw err;
+  }
+
+  const [[totals], hourly] = await Promise.all([
+    db
+      .select({
+        today: sql<number>`count(*) filter (where ${userEvents.createdAt} >= ${todayStart})`,
+        yesterday: sql<number>`count(*) filter (where ${userEvents.createdAt} < ${yesterdayComparableEnd})`,
+      })
+      .from(userEvents)
+      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, yesterdayStart))),
+    db
+      .select({
+        hour: riyadhHourUtc(userEvents.createdAt),
+        views: sql<number>`count(*)`,
+      })
+      .from(userEvents)
+      .where(and(eq(userEvents.eventType, "view"), gte(userEvents.createdAt, todayStart)))
+      .groupBy(sql`1`)
+      .orderBy(sql`1`),
+  ]);
+  return {
+    today: Number(totals?.today ?? 0),
+    yesterday: Number(totals?.yesterday ?? 0),
+    hourly: hourly.map((h) => ({ hour: h.hour, views: Number(h.views) })),
+    source: "legacy",
+  };
 }
