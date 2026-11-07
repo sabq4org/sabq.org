@@ -3,7 +3,7 @@ import "@/styles/article-detail.css";
 import { ArticleSummary } from "@/components/public/ArticleSummary";
 import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
-import { useArticleInsights, useArticleRecommendations } from "@/hooks/useArticleSidebarData";
+import { useArticleInsights } from "@/hooks/useArticleSidebarData";
 import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
@@ -81,9 +81,6 @@ const ArticlePoll = lazy(() =>
 const RecommendationsWidget = lazy(() =>
   import("@/components/RecommendationsWidget").then(module => ({ default: module.RecommendationsWidget }))
 );
-const AIRecommendationsPanel = lazy(() =>
-  import("@/components/AIRecommendationsBlock").then(module => ({ default: module.AIRecommendationsPanel }))
-);
 const RelatedOpinionsSection = lazy(() =>
   import("@/components/RelatedOpinionsSection").then(module => ({ default: module.RelatedOpinionsSection }))
 );
@@ -125,7 +122,6 @@ export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>();
   // Start sidebar data before the article-loading return (the chart can stay lazy).
   const insightsQuery = useArticleInsights(slug);
-  const recommendationsQuery = useArticleRecommendations(slug);
   const { toast } = useToast();
   const { logBehavior } = useBehaviorTracking();
   const [, setLocation] = useLocation();
@@ -1638,13 +1634,6 @@ export default function ArticleDetail() {
 
             {/* Advertisement Slot - Article Sidebar */}
             <AdSlot slotId="sidebar" className="my-6" />
-
-            {/* AI-Powered Smart Recommendations */}
-            <div className="article-sidebar-recommendations">
-              <DeferredArticleSection minHeight={160}>
-                <AIRecommendationsPanel query={recommendationsQuery} />
-              </DeferredArticleSection>
-            </div>
 
             {/* Related Opinion Articles */}
             {article?.category && (
