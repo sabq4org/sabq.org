@@ -94,9 +94,9 @@ describe("checkBrief", () => {
   });
 
   it("salvage drops unverified figures and fails when fewer than two remain", () => {
-    const p = checkBrief({ ...plan(), figures: [{ value: "4,000", label: "a" }, { value: "113", label: "b" }, { value: "999", label: "c" }] }, source).brief!;
+    const p = checkBrief({ ...plan(), figures: [{ value: "4,000", label: "مشروع" }, { value: "113", label: "دولة" }, { value: "999", label: "رقم" }] }, source).brief!;
     expect(salvageBrief(p, source)?.figures.map((f) => f.value)).toEqual(["4,000", "113"]);
-    const q = checkBrief({ ...plan(), figures: [{ value: "4,000", label: "a" }, { value: "999", label: "c" }] }, source).brief!;
+    const q = checkBrief({ ...plan(), figures: [{ value: "4,000", label: "مشروع" }, { value: "999", label: "رقم" }] }, source).brief!;
     expect(salvageBrief(q, source)).toBeNull();
   });
 });
@@ -363,10 +363,26 @@ describe("art director step", () => {
     expect(html).toContain("صورة مولدة بالذكاء الاصطناعي");
     expect(html).not.toContain("{{");
     expect(html).toContain("width:1920px;height:1080px");
+    // Only the nonce'd fitter may run; inline handlers are blocked by the page policy.
+    const nonce = html.match(/script-src 'nonce-([^']+)'/)?.[1];
+    expect(nonce).toBeTruthy();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+  });
+
+  it("strips handlers separated by a slash instead of a space", () => {
+    expect(sanitizeDesignHtml('<details/open/ontoggle="window.probe=1">x</details>')).not.toMatch(/ontoggle|probe/);
+    expect(sanitizeDesignHtml("<a/href='javascript:x'>y</a>")).not.toMatch(/href|javascript/);
   });
 
   it("refuses a Latin placeholder in the design text", () => {
     const c = checkBrief({ ...plan(), titleLines: ["ليلة مزاد", "بـ highlight ريال"] }, source);
     expect(c.problems.join(" ")).toMatch(/Arabic only/);
+  });
+
+  it("drops a Latin placeholder when salvaging the plan for the fixed template", () => {
+    const p = { ...checkBrief(plan(), source).brief!, titleLines: ["ليلة مزاد", "بـ highlight ريال"], highlight: "highlight" };
+    const s = salvageBrief(p, source)!;
+    expect(s.titleLines).toEqual(["ليلة مزاد"]);
+    expect(s.highlight).toBe("");
   });
 });

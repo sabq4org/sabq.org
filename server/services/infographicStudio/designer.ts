@@ -99,8 +99,8 @@ export function sanitizeDesignHtml(html: string): string {
     .replace(/<\s*(script|style|iframe|object|embed|form|svg|math|template|noscript|video|audio|picture|title|textarea)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
     .replace(/<\s*\/?\s*(script|style|iframe|object|embed|link|meta|base|form|svg|math|template|noscript|video|audio|source|picture|title|textarea)\b[^>]*>/gi, "")
     .replace(/<\s*\/?\s*(img|input|button|textarea|select)\b[^>]*>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s(href|src|srcset|action|formaction|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/([\s/"'])on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "$1")
+    .replace(/([\s/"'])(href|src|srcset|action|formaction|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "$1")
     .replace(/javascript:/gi, "");
 }
 

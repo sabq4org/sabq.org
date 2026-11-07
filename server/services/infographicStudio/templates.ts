@@ -7,6 +7,7 @@
  * borders, one hero photo, an «AI-generated image» label, RTL. Every text block carries `data-qa`
  * so the renderer can measure overflow and overlaps on the exported page itself.
  */
+import { randomBytes } from "node:crypto";
 import { INFOGRAPHIC_STUDIO_CANVAS } from "@shared/infographicStudio";
 import type { InfographicBrief } from "./brief";
 
@@ -171,7 +172,10 @@ window.__fit = function(){
 };`;
 
 function base(a: TemplateAssets, b: InfographicBrief, w: number, h: number, css: string, body: string): string {
-  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
+  // Only our fitter runs: the nonce blocks any script or inline handler that slips into model-written markup.
+  const nonce = randomBytes(16).toString("base64");
+  const csp = `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'`;
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>
 ${fontFaces(a)}
 :root{--s:1;--ink:${b.ink};--accent:${b.accent};--wash:${rgb(b.wash)};--a1:0.8;--a2:0.5;--photo:url(${a.heroDataUri})}
 body.bg-only .zone,body.bg-only .foot,body.bg-only .ai,body.bg-only .logo,body.bg-only [data-qa]{visibility:hidden}
@@ -199,7 +203,7 @@ html,body{width:${w}px;height:${h}px;background:#000}
 .pt .x{font:600 calc(29px*var(--s))/1.45 Plex;color:var(--ink);opacity:.92;margin-top:4px}
 .ai{font:400 22px Plex;color:rgba(255,255,255,.82);text-shadow:0 1px 6px rgba(0,0,0,.7)}
 ${css}
-</style><script>${FIT_SCRIPT}</script></head><body><div class="canvas">${body}</div></body></html>`;
+</style><script nonce="${nonce}">${FIT_SCRIPT}</script></head><body><div class="canvas">${body}</div></body></html>`;
 }
 
 function heroHtml(b: InfographicBrief, wide: boolean): string {
