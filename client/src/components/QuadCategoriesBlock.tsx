@@ -229,7 +229,9 @@ function MobileCompactList({ items }: { items: CategoryColumnData[] }) {
                 className="text-xs font-semibold text-primary whitespace-nowrap py-1"
                 data-testid={`mobile-category-more-${item.category.slug}`}
               >
-                {item.stats.value > 0 ? `${item.stats.value.toLocaleString('en-US')} اليوم · ` : ""}الكل ‹
+                {item.stats.value > 0
+                  ? `${item.stats.value.toLocaleString('en-US')} ${item.stats.label === "أخبار اليوم" ? "اليوم" : item.stats.label} · `
+                  : ""}الكل ‹
               </Link>
             </div>
 
