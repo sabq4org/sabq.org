@@ -1,6 +1,6 @@
 # تشغيل المنصة والبنية المشتركة (`platform-runtime`)
 
-> آخر مراجعة: 2026-10-26 (مسار حيوية `/healthz` قبل Express ومهل keep-alive — حادثة فحص Render 2026-10-25) | المالك: platform
+> آخر مراجعة: 2026-11-08 (ملكية اشتراك Redis وإعادة محاولته بعد Upstash rate-limit) | المالك: platform
 
 ## الغرض والحدود
 الإقلاع، القيادة، انتهاء العملية، أدوات البناء والملفات المشتركة. `routes.ts` و`storage.ts` و`mobileApiRoutes.ts` و`schema.ts` مداخل مشتركة وليست ملكية لكل منطق أعمالها؛ يجب قراءة SYSTEM النظام المستهلك عند تعديل مساره أو جدوله. لا تغيير للبيانات أو Schema الإنتاج ضمن مراجعة سبتمبر.
@@ -16,6 +16,7 @@
 - فلتر Sentry يسقط `TypeError` ذي القيمة الدقيقة `Type error` من `unhandledrejection` فقط عند وجود رسالة breadcrumb المطابقة لـ`[deployRecovery] Stale build detected (vite:preloadError)` وbreadcrumb `fetch` آخر يبدأ رابطه حرفيًا بـ`https://cdn.sabq.org/assets/` ويثبت الفشل بمستوى `error` أو status لا يقل عن 400؛ أي TypeError آخر يبقى قابلًا للرصد، والتحليل لا يستخدم serialization لبيانات breadcrumb.
 - يضبط الخادم `requestDataIntegration` لمنع body/cookies/headers/ip/query مع `sendDefaultPii=false`، ثم يمرر `beforeSend` عبر `sanitizeServerEvent` لحذف `user` والحقول الحساسة، مع إبقاء method/path وURL بلا query ورؤوس آمنة محددة فقط.
 - بركتا PostgreSQL عبر `node-postgres` في الإنتاج (الرئيسة والاحتياطية للجلسات) تثبتان مستمع خطأ دائمًا على كل عميل عند اتصاله، إضافة إلى مستمع البركة. هذا يمنع انقطاع socket عابرًا أثناء استعارة العميل من التحول إلى `uncaughtException`، مع إزالة التكرار عندما تعيد البركة إرسال كائن الخطأ نفسه؛ البركة الرئيسة تعلّم الاتصال غير متاح وتبدأ فحص الاستعادة. مسار `NeonPool` القديم يبقي مستمع `error` فقط حتى لا يعطّل `poolQueryViaFetch` الاختياري.
+- مشتركا Redis في `server/memoryCache.ts` و`server/services/contentInvalidation.ts` يعطلان `autoResubscribe`؛ `server/utils/redisSubscription.ts` يملك الاشتراك Promise-based، يلتقط الفشل، ويعيد المحاولة بتأخير أسي محدود، ويعيد الاشتراك عند `ready`. تعكس الجاهزية نجاح الاشتراك فقط، وتصبح false عند الانقطاع أو الرفض؛ تبقى الإذاعة والإبطال المحليان best-effort مستقلين عن Redis.
 
 ## فحص الحيوية ومهل HTTP — 2026-10-26
 سببه حادثة 2026-10-25 (15:40–16:10 بتوقيت الرياض): فشل فحص Render على `/health` مرتين تحت ~4× ترافيك، فأوقف Render التوجيه للنسخة الوحيدة ثم أعاد تشغيلها (~110 ألف 502). التفاصيل في PR #2007.

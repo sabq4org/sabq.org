@@ -2,6 +2,7 @@ import Redis from "ioredis";
 import { memoryCache, sseConnectionManager } from "../memoryCache";
 import { purgeHomepage, purgeBreakingNews, purgeArticle } from "./cloudflarePurge";
 import { bumpSeoCacheGeneration } from "./seoCacheInvalidation";
+import { createRedisSubscription } from "../utils/redisSubscription";
 
 /**
  * Feed-style keys affected by ANY article publish/unpublish/schedule/approve —
@@ -89,7 +90,7 @@ function initPubSub(): void {
       lazyConnect: false,
     };
     pubClient = new Redis(url, opts);
-    subClient = new Redis(url, opts);
+    subClient = new Redis(url, { ...opts, autoResubscribe: false });
 
     pubClient.on("error", (err) => {
       console.error("[ContentInvalidation] pub redis error:", err.message);
@@ -98,16 +99,17 @@ function initPubSub(): void {
       console.error("[ContentInvalidation] sub redis error:", err.message);
     });
 
-    subClient.on("ready", () => {
-      subClient?.subscribe(CH_CACHE_INVALIDATE, (err) => {
-        if (err) {
-          console.error("[ContentInvalidation] subscribe failed:", err.message);
-          return;
-        }
-        pubsubReady = true;
-        console.log("[ContentInvalidation] ✅ Redis pub/sub ready (pod:", POD_ID, ")");
-      });
-    });
+    createRedisSubscription(subClient, {
+      channel: CH_CACHE_INVALIDATE,
+      onReadyChange(ready) {
+        pubsubReady = ready;
+        console.log(`[ContentInvalidation] subscriber ${ready ? "ready" : "not ready"} (pod: ${POD_ID})`);
+      },
+      onSubscribeError(error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[ContentInvalidation] subscribe failed:", message);
+      },
+    }).start();
 
     subClient.on("message", (channel, raw) => {
       if (channel !== CH_CACHE_INVALIDATE) return;

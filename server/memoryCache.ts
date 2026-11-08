@@ -2,6 +2,7 @@ import memoizee from 'memoizee';
 import type { Response } from 'express';
 import Redis from 'ioredis';
 import { isEnglishSports } from './services/sportsLang';
+import { createRedisSubscription } from './utils/redisSubscription';
 
 interface CacheEntry<T> {
   data: T;
@@ -221,7 +222,7 @@ export const sseConnectionManager = new SSEConnectionManager();
       lazyConnect: false,
     };
     _sseBroadcastPub = new Redis(url, opts);
-    _sseBroadcastSub = new Redis(url, opts);
+    _sseBroadcastSub = new Redis(url, { ...opts, autoResubscribe: false });
 
     _sseBroadcastPub.on('error', (err) => {
       console.error('[SSE Broadcast] pub redis error:', err.message);
@@ -234,21 +235,23 @@ export const sseConnectionManager = new SSEConnectionManager();
       _sseBroadcastPubReady = true;
     });
 
-    _sseBroadcastSub.on('ready', () => {
-      _sseBroadcastSub?.subscribe(SSE_BROADCAST_CHANNEL, (err) => {
-        if (err) {
-          console.error('[SSE Broadcast] subscribe failed:', err.message);
-          return;
-        }
+    createRedisSubscription(_sseBroadcastSub, {
+      channel: SSE_BROADCAST_CHANNEL,
+      onReadyChange(ready) {
         console.log(
-          '[SSE Broadcast] ✅ Redis pub/sub ready (pod:',
-          SSE_BROADCAST_POD_ID,
-          ')',
+          `[SSE Broadcast] subscriber ${ready ? 'ready' : 'not ready'} (pod: ${SSE_BROADCAST_POD_ID})`,
         );
-      });
-    });
+      },
+      onSubscribeError(error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[SSE Broadcast] subscribe failed:', message);
+      },
+    }).start();
 
     _sseBroadcastSub.on('message', (channel, raw) => {
+      // ioredis may emit a message from the same network chunk as the
+      // SUBSCRIBE acknowledgement, before the subscribe promise settles.
+      // Channel identity is the authoritative delivery guard here.
       if (channel !== SSE_BROADCAST_CHANNEL) return;
       try {
         const parsed: unknown = JSON.parse(raw);
