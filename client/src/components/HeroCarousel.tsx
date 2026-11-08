@@ -73,7 +73,7 @@ function MobileHeroCard({
       <article
         className={`cursor-pointer group rounded-2xl overflow-hidden shadow-sm hover-elevate active-elevate-2 ${
           isBreaking
-            ? "bg-red-50/80 dark:bg-red-950/25 ring-1 ring-destructive/15"
+            ? "bg-[#fdecec] dark:bg-red-950/35 ring-1 ring-red-600/20 dark:ring-red-400/25"
             : "bg-card"
         }`}
         role="article"
@@ -192,7 +192,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
               <Link key={art.id} href={`/article/${art.englishSlug || art.slug}`}>
                 <article 
                   className={`cursor-pointer group rounded-lg overflow-hidden ${
-                    art.newsType === "breaking" ? "bg-destructive/5" : "bg-card"
+                    art.newsType === "breaking" ? "bg-[#fdecec] dark:bg-red-950/35 ring-1 ring-red-600/20 dark:ring-red-400/25" : "bg-card"
                   }`} 
                   role="article" 
                   aria-label={art.title}
@@ -361,7 +361,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
               <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`} className="flex-1 min-h-0">
                 <article 
                   className={`cursor-pointer group rounded-lg overflow-hidden h-full ${
-                    article.newsType === "breaking" ? "bg-destructive/5" : "bg-card"
+                    article.newsType === "breaking" ? "bg-[#fdecec] dark:bg-red-950/35 ring-1 ring-red-600/20 dark:ring-red-400/25" : "bg-card"
                   }`} 
                   role="article" 
                   aria-label={article.title}
@@ -529,7 +529,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
               <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
                 <article 
                   className={`cursor-pointer group rounded-lg overflow-hidden ${
-                    article.newsType === "breaking" ? "bg-destructive/5" : "bg-card"
+                    article.newsType === "breaking" ? "bg-[#fdecec] dark:bg-red-950/35 ring-1 ring-red-600/20 dark:ring-red-400/25" : "bg-card"
                   }`} 
                   role="article" 
                   aria-label={article.title}
@@ -719,7 +719,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
               <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`} className="flex-1 min-h-0">
                 <article 
                   className={`cursor-pointer group rounded-lg overflow-hidden h-full ${
-                    article.newsType === "breaking" ? "bg-destructive/5" : "bg-card"
+                    article.newsType === "breaking" ? "bg-[#fdecec] dark:bg-red-950/35 ring-1 ring-red-600/20 dark:ring-red-400/25" : "bg-card"
                   }`} 
                   role="article" 
                   aria-label={article.title}
