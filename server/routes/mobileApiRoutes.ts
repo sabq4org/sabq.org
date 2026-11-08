@@ -1070,7 +1070,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       firstName: firstName?.trim(),
       lastName: lastName?.trim(),
       phoneNumber: normalizedRegisterPhone,
-      gender,
+      gender: gender === "male" || gender === "female" ? gender : null, // «غير ذلك» removed 2026-11-08
       city: city?.trim(),
       country: country || "SA",
       locale: locale || "ar",
@@ -1159,7 +1159,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
         firstName: firstName?.trim() ?? null,
         lastName: lastName?.trim() ?? null,
         phone: phone?.trim() ?? null,
-        gender: gender ?? null,
+        gender: gender === "male" || gender === "female" ? gender : null,
         city: city?.trim() ?? null,
         country: country || "SA",
         locale: locale || "ar",
@@ -2093,7 +2093,7 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       updates.lastName = lastName.trim();
     }
     if (typeof profileImageUrl === "string") updates.profileImageUrl = profileImageUrl.trim();
-    if (typeof gender === "string") updates.gender = gender;
+    if (gender === "male" || gender === "female" || gender === "") updates.gender = gender; // no «other»
     if (birthDate) updates.birthDate = new Date(birthDate);
     if (typeof bio === "string") updates.bio = bio.trim();
     if (typeof city === "string") updates.city = city.trim();

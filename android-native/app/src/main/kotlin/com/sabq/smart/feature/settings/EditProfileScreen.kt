@@ -74,7 +74,11 @@ fun EditProfileScreen(
     var lastName by remember(user?.id) { mutableStateOf(user?.lastName.orEmpty()) }
     var bio by remember(user?.id) { mutableStateOf(user?.bio.orEmpty()) }
     var city by remember(user?.id) { mutableStateOf(user?.city.orEmpty()) }
-    var gender by remember(user?.id) { mutableStateOf(user?.gender.orEmpty()) }
+    // Only male/female are offered; a legacy "other" shows nothing selected
+    // and is not re-sent on save (the server keeps the stored value).
+    var gender by remember(user?.id) {
+        mutableStateOf(user?.gender?.lowercase()?.takeIf { it == "male" || it == "female" }.orEmpty())
+    }
 
     // Names are write-once for comment-archive integrity. See
     // [[name-lock-policy]]. Once a non-empty value exists on the row the
@@ -409,7 +413,6 @@ private fun GenderPicker(selected: String, onChange: (String) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GenderChip("ذكر", "male", selected, onChange)
             GenderChip("أنثى", "female", selected, onChange)
-            GenderChip("غير ذلك", "other", selected, onChange)
         }
     }
 }
