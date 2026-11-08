@@ -4019,8 +4019,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
 
-            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
-            {!isNewArticle && !isOpinionAuthor && (
+            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي).
+                يظهر في الخبر الجديد أيضًا: الصور تُرفع دون رقم خبر وتُحفظ مع أول حفظ أو إرسال للمراجعة. */}
+            {!isOpinionAuthor && (
               <Collapsible open={albumOpen} onOpenChange={setAlbumOpen}>
               <Card data-testid="card-media-album">
                 <CollapsibleTrigger asChild>
@@ -4118,6 +4119,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
 
+                  {/* المرفقات تُربط برقم الخبر (/api/articles/:id/media-assets)، فتنتظر إنشاء المسودة */}
+                  {!isNewArticle && (
                   <div className="space-y-4 pt-4 border-t">
                     <div className="flex items-center justify-between gap-2">
                       <div className="space-y-1">
@@ -4182,6 +4185,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </div>
                     )}
                   </div>
+                  )}
                 </CardContent>
                 </CollapsibleContent>
               </Card>

@@ -91,9 +91,10 @@ data class ApiAvatarUploadResponse(
     val avatar: String? = null,
 )
 
-/** Article submission — opinion or news with up to N images encoded
- *  as base64 data URIs. Mirrors iOS `submitArticleDraft` at
- *  `APIClient.swift:867`. */
+/** Article submission — opinion or news with up to 10 images. `images`
+ *  holds the URLs returned by `POST /api/v1/articles/images` (one upload
+ *  per image, like iOS `uploadSubmissionImage`); the server still accepts
+ *  base64 data URIs but sending all photos in one body hits its 25 MB cap. */
 @Serializable
 data class ArticleSubmissionRequest(
     val title: String,
@@ -121,3 +122,19 @@ data class ApiArticleSubmissionResponse(
         val imagesUploaded: Int? = null,
     )
 }
+
+/** رفع صورة واحدة قبل إرسال الخبر: `POST /api/v1/articles/images`. */
+@Serializable
+data class SubmissionImageUploadRequest(
+    /** data:image/...;base64,... */
+    val image: String,
+    /** "hero" أو "album-N" */
+    val slot: String,
+)
+
+@Serializable
+data class SubmissionImageUploadResponse(
+    val success: Boolean = false,
+    val url: String? = null,
+    val message: String? = null,
+)

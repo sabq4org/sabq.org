@@ -64,7 +64,7 @@ enum class ArticleSubmissionKind { Opinion, News }
  * `ArticleSubmissionView.swift`.
  *   - Opinion: 1 optional image
  *   - News: up to 10 images, first becomes the hero ("الرئيسية" pill)
- *   - Submits as base64 data URIs → `POST /api/v1/articles/submit`
+ *   - Uploads each image via `POST /api/v1/articles/images`, then submits the URLs → `POST /api/v1/articles/submit`
  *
  * Validation matches iOS: title ≥ 3 chars, body ≥ 20 chars.
  */
