@@ -4119,6 +4119,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
 
+                  {/* المرفقات تُربط برقم الخبر (/api/articles/:id/media-assets)، فتنتظر إنشاء المسودة */}
+                  {!isNewArticle && (
                   <div className="space-y-4 pt-4 border-t">
                     <div className="flex items-center justify-between gap-2">
                       <div className="space-y-1">
@@ -4183,6 +4185,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </div>
                     )}
                   </div>
+                  )}
                 </CardContent>
                 </CollapsibleContent>
               </Card>
