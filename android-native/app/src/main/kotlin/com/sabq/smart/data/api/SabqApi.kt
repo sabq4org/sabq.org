@@ -425,6 +425,10 @@ interface SabqApi {
     @POST("api/v1/articles/submit")
     suspend fun submitArticle(@Body body: ArticleSubmissionRequest): ApiArticleSubmissionResponse
 
+    /** One image per request before [submitArticle] (iOS `uploadSubmissionImage`). */
+    @POST("api/v1/articles/images")
+    suspend fun uploadSubmissionImage(@Body body: SubmissionImageUploadRequest): SubmissionImageUploadResponse
+
     // -- editorial notifications -------------------------------------
 
     /**

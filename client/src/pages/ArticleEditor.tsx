@@ -4019,8 +4019,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
 
-            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
-            {!isNewArticle && !isOpinionAuthor && (
+            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي).
+                يظهر في الخبر الجديد أيضًا: الصور تُرفع دون رقم خبر وتُحفظ مع أول حفظ أو إرسال للمراجعة. */}
+            {!isOpinionAuthor && (
               <Collapsible open={albumOpen} onOpenChange={setAlbumOpen}>
               <Card data-testid="card-media-album">
                 <CollapsibleTrigger asChild>

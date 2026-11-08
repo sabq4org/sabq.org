@@ -10,6 +10,7 @@ import com.sabq.smart.data.api.NewsletterSubscribeRequest
 import com.sabq.smart.data.api.NewsletterUnsubscribeRequest
 import com.sabq.smart.data.api.ResetPasswordRequest
 import com.sabq.smart.data.api.SabqApi
+import com.sabq.smart.data.api.SubmissionImageUploadRequest
 import com.sabq.smart.data.api.UpdateProfileRequest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -160,17 +161,21 @@ class AccountRepository @Inject constructor(
         kind: String,
         images: List<Pair<ByteArray, String>>,
     ): ApiArticleSubmissionResult {
-        val dataUris = images.mapNotNull { (bytes, mime) ->
-            if (bytes.isEmpty()) return@mapNotNull null
-            val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-            "data:$mime;base64,$base64"
+        // كل صورة تُرفع وحدها أولًا (POST /articles/images) ثم يُرسل الخبر
+        // بروابطها، مثل iOS. إرسال الصور كلها base64 في طلب واحد كان يتجاوز
+        // سقف الخادم (25 ميغا) مع 4–5 صور جوال فيفشل الخبر كله.
+        // الترتيب محفوظ: الأولى رئيسية والباقي ألبوم.
+        val pictures = images.filter { (bytes, _) -> bytes.isNotEmpty() }
+        val imageUrls = pictures.mapIndexed { index, (bytes, mime) ->
+            val slot = if (index == 0) "hero" else "album-$index"
+            uploadSubmissionImage(bytes, mime, slot, index + 1, pictures.size)
         }
         val resp = api.submitArticle(
             ArticleSubmissionRequest(
                 title = title,
                 content = content,
                 kind = kind,
-                images = dataUris,
+                images = imageUrls,
             ),
         )
         if (!resp.success) {
@@ -182,6 +187,39 @@ class AccountRepository @Inject constructor(
             articleSlug = resp.article?.slug,
         )
     }
+
+    private suspend fun uploadSubmissionImage(
+        bytes: ByteArray,
+        mime: String,
+        slot: String,
+        position: Int,
+        total: Int,
+    ): String {
+        val label = if (total > 1) "الصورة $position من $total" else "الصورة"
+        val dataUri = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            "data:$mime;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        }
+        val resp = try {
+            api.uploadSubmissionImage(SubmissionImageUploadRequest(image = dataUri, slot = slot))
+        } catch (e: retrofit2.HttpException) {
+            val serverMessage = submissionErrorMessage(e.response()?.errorBody()?.string())
+            throw AccountException(e.code(), "تعذر رفع $label" + (serverMessage?.let { ": $it" } ?: ""))
+        }
+        val url = resp.url?.takeIf { it.startsWith("https://", ignoreCase = true) }
+        if (!resp.success || url == null) {
+            throw AccountException(0, "تعذر رفع $label" + (resp.message?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""))
+        }
+        return url
+    }
+}
+
+private fun submissionErrorMessage(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    return runCatching {
+        val element = kotlinx.serialization.json.Json.parseToJsonElement(raw)
+        ((element as? kotlinx.serialization.json.JsonObject)?.get("message")
+            as? kotlinx.serialization.json.JsonPrimitive)?.content
+    }.getOrNull()?.takeIf { it.isNotBlank() }
 }
 
 data class ApiArticleSubmissionResult(
