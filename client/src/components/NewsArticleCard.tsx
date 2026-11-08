@@ -133,9 +133,10 @@ export function NewsArticleCard({
         </div>
       </>
     );
+  const isBreaking = article.newsType === "breaking";
   return (
     <Card
-      className={`public-news-card public-news-card-${resolvedMode} group`}
+      className={`public-news-card public-news-card-${resolvedMode}${isBreaking ? " public-news-card-breaking" : ""} group`}
       data-testid={`card-article-${resolvedMode}-${article.id}`}
       role="article"
       onClick={() => onClick?.(article)}

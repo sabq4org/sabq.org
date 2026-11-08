@@ -318,3 +318,44 @@
   background: hsl(var(--muted));
   color: hsl(var(--foreground));
 }
+
+/* Breaking news card surface: soft light-red tint across grid, list, and mobile hero compact */
+.public-news-card.public-news-card-breaking,
+.public-news-compact-list--hero .public-news-card.public-news-card-breaking {
+  background: #fdecec;
+  border-color: rgb(220 38 38 / 0.22);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .public-news-card.public-news-card-breaking:hover,
+  .public-news-compact-list--hero .public-news-card.public-news-card-breaking:hover {
+    background: #fbdada;
+    border-color: rgb(220 38 38 / 0.35);
+  }
+}
+
+.public-news-card.public-news-card-breaking:focus-within,
+.public-news-compact-list--hero .public-news-card.public-news-card-breaking:focus-within {
+  background: #fbdada;
+  border-color: rgb(220 38 38 / 0.35);
+}
+
+.dark .public-news-card.public-news-card-breaking,
+.dark .public-news-compact-list--hero .public-news-card.public-news-card-breaking {
+  background: rgb(127 29 29 / 0.28);
+  border-color: rgb(248 113 113 / 0.28);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dark .public-news-card.public-news-card-breaking:hover,
+  .dark .public-news-compact-list--hero .public-news-card.public-news-card-breaking:hover {
+    background: rgb(127 29 29 / 0.38);
+    border-color: rgb(248 113 113 / 0.4);
+  }
+}
+
+.dark .public-news-card.public-news-card-breaking:focus-within,
+.dark .public-news-compact-list--hero .public-news-card.public-news-card-breaking:focus-within {
+  background: rgb(127 29 29 / 0.38);
+  border-color: rgb(248 113 113 / 0.4);
+}
