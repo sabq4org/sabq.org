@@ -575,7 +575,7 @@ export default function UsersManagement() {
     if (!g) return "—";
     if (g === "male") return "ذكر";
     if (g === "female") return "أنثى";
-    return g;
+    return "—";
   };
 
   // Status badge
