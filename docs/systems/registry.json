@@ -1559,6 +1559,10 @@
         "server/routes/mobileApiRoutes.ts",
         "server/utils/freshWindowCache.ts",
         "server/utils/postgresPoolErrors.ts",
+        "server/utils/redisSubscription.ts",
+        "server/memoryCache.ts",
+        "server/services/contentInvalidation.ts",
+        "tests/unit/redisSubscription.test.ts",
         "server/utils/livenessFastPath.ts",
         "tests/unit/livenessFastPath.test.ts",
         "server/services/mobileCommentTreeService.ts",
@@ -1578,7 +1582,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-26"
+      "lastReviewed": "2026-11-08"
     },
     {
       "id": "mobile-analytics",
