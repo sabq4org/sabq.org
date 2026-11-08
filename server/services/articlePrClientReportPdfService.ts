@@ -474,7 +474,7 @@ html,body{margin:0;padding:0;background:${BRAND.paper};color:${BRAND.ink};
 .client-row .k{color:${BRAND.muted}}
 .client-row .v{font-weight:700;color:${BRAND.ink}}
 h1{font-size:14px;line-height:1.45;margin:0 0 10px;font-weight:700;text-align:${titleAlign}}
-.hero{display:block;width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin:0 0 12px}
+.hero{display:block;width:100%;max-height:240px;object-fit:contain;background:${BRAND.soft};border:1px solid ${BRAND.line};border-radius:8px;margin:0 0 12px}
 .grid{display:grid;gap:0;border:1px solid ${BRAND.line};border-radius:8px;overflow:hidden;
   background:${BRAND.soft};margin:0 0 10px}
 .grid-3{grid-template-columns:1fr 1fr 1fr}
