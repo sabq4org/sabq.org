@@ -64,13 +64,18 @@ function MobileHeroCard({
   priority: boolean;
   preferMedium?: boolean;
 }) {
+  const isBreaking = article.newsType === "breaking";
   const relativeTime = article.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: "relative", locale: "ar" })
     : "";
   return (
     <Link href={`/article/${article.englishSlug || article.slug}`}>
       <article
-        className="cursor-pointer group bg-card rounded-2xl overflow-hidden shadow-sm hover-elevate active-elevate-2"
+        className={`cursor-pointer group rounded-2xl overflow-hidden shadow-sm hover-elevate active-elevate-2 ${
+          isBreaking
+            ? "bg-red-50/80 dark:bg-red-950/25 ring-1 ring-destructive/15"
+            : "bg-card"
+        }`}
         role="article"
         aria-label={article.title}
       >
