@@ -1802,6 +1802,15 @@ if (!(globalThis as any).__sabqServer) {
 
         setTimeout(async () => {
           try {
+            const { startStaffMorningDigestJob } = await import("./jobs/staffMorningDigestJob");
+            startStaffMorningDigestJob();
+          } catch (error) {
+            console.error("[Server] Error starting staff morning digest job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 82000);
+
+        setTimeout(async () => {
+          try {
             const { startPublisherAlertsJob } = await import("./jobs/publisherAlertsJob");
             startPublisherAlertsJob();
           } catch (error) {

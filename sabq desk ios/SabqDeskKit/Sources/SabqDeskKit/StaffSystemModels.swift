@@ -50,16 +50,18 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
     public var publisherNews: Bool
     /// A reporter's news waiting for a decision, or an edit request (server key `newsDrafts`).
     public var newsDrafts: Bool
+    /// One morning push summing what waits for a decision (server key `morningDigest`).
+    public var morningDigest: Bool
     public var quietHours: StaffQuietHours
 
     private enum CodingKeys: String, CodingKey {
-        case aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, newsDrafts, quietHours
+        case aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, newsDrafts, morningDigest, quietHours
     }
 
     public init(aiAlerts: Bool = true, adminAlerts: Bool = true,
                 writerMessages: Bool = true, socialProposals: Bool = true,
                 opinionDrafts: Bool = true, publisherNews: Bool = true, newsDrafts: Bool = true,
-                quietHours: StaffQuietHours = .off) {
+                morningDigest: Bool = true, quietHours: StaffQuietHours = .off) {
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
         self.writerMessages = writerMessages
@@ -67,6 +69,7 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
         self.opinionDrafts = opinionDrafts
         self.publisherNews = publisherNews
         self.newsDrafts = newsDrafts
+        self.morningDigest = morningDigest
         self.quietHours = quietHours
     }
 
@@ -79,6 +82,7 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
         opinionDrafts = try container.decodeIfPresent(Bool.self, forKey: .opinionDrafts) ?? true
         publisherNews = try container.decodeIfPresent(Bool.self, forKey: .publisherNews) ?? true
         newsDrafts = try container.decodeIfPresent(Bool.self, forKey: .newsDrafts) ?? true
+        morningDigest = try container.decodeIfPresent(Bool.self, forKey: .morningDigest) ?? true
         quietHours = (try? container.decodeIfPresent(StaffQuietHours.self, forKey: .quietHours)) ?? .off
     }
 }
@@ -92,12 +96,13 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
     public var opinionDrafts: Bool?
     public var publisherNews: Bool?
     public var newsDrafts: Bool?
+    public var morningDigest: Bool?
     public var quietHours: StaffQuietHours?
 
     public init(aiAlerts: Bool? = nil, adminAlerts: Bool? = nil,
                 writerMessages: Bool? = nil, socialProposals: Bool? = nil,
                 opinionDrafts: Bool? = nil, publisherNews: Bool? = nil, newsDrafts: Bool? = nil,
-                quietHours: StaffQuietHours? = nil) {
+                morningDigest: Bool? = nil, quietHours: StaffQuietHours? = nil) {
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
         self.writerMessages = writerMessages
@@ -105,6 +110,7 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
         self.opinionDrafts = opinionDrafts
         self.publisherNews = publisherNews
         self.newsDrafts = newsDrafts
+        self.morningDigest = morningDigest
         self.quietHours = quietHours
     }
 
@@ -118,6 +124,7 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
         if let opinionDrafts { out.opinionDrafts = opinionDrafts }
         if let publisherNews { out.publisherNews = publisherNews }
         if let newsDrafts { out.newsDrafts = newsDrafts }
+        if let morningDigest { out.morningDigest = morningDigest }
         if let quietHours { out.quietHours = quietHours }
         return out
     }

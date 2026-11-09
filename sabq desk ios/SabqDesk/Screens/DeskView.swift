@@ -113,11 +113,10 @@ struct DeskView: View {
                     // Nothing waiting: one quiet line, so the lists lead.
                     DeskCalmHero(title: "لا شيء بانتظارك", detail: calmDetail)
                 } else {
-                    DeskSummaryCard(systemImage: "tray.full", label: "بانتظارك الآن",
-                                    value: DeskCount.tasks(pendingTotal),
-                                    detail: pendingDetail,
-                                    note: upcoming.first == nil ? nil : "أقرب منشور",
-                                    noteValue: upcoming.first?.scheduledAt.map { RiyadhTime.timeString($0) })
+                    DeskPendingSummaryCard(total: DeskCount.tasks(pendingTotal),
+                                           cells: pendingCells,
+                                           note: upcoming.first == nil ? nil : "أقرب منشور",
+                                           noteValue: upcoming.first?.scheduledAt.map { RiyadhTime.timeString($0) })
                 }
             }
             .padding(.horizontal, DeskLayout.pageMargin + 4)
@@ -137,16 +136,19 @@ struct DeskView: View {
 
     /// Tweets waiting for a decision, plus open contributor messages when
     /// the member answers them.
+    private var showsOpinion: Bool { app.capabilities.canOpinion.view }
+
+    /// Tweets + opinion drafts + contributor messages, each only if the member sees its tab.
     private var pendingTotal: Int {
-        app.unread.social + (showsMessages ? app.unread.tickets : 0)
+        app.unread.social + (showsOpinion ? app.opinionPending : 0) + (showsMessages ? app.unread.tickets : 0)
     }
 
-    private var pendingDetail: String {
-        var parts: [String] = []
-        if app.unread.social > 0 { parts.append("\(DeskCount.tweets(app.unread.social)) بانتظار قرارك") }
-        if showsMessages, app.unread.tickets > 0 { parts.append("\(DeskCount.messages(app.unread.tickets)) من المساهمين") }
-        if parts.isEmpty { return "أنجزت كل شيء، وما يصل يظهر هنا." }
-        return parts.joined(separator: " · ")
+    private var pendingCells: [DeskPendingSummaryCard.Cell] {
+        var cells: [DeskPendingSummaryCard.Cell] = []
+        if app.capabilities.canSocial.view { cells.append(.init(id: "tweets", label: "تغريدات", count: app.unread.social)) }
+        if showsOpinion { cells.append(.init(id: "opinion", label: "مقالات رأي", count: app.opinionPending)) }
+        if showsMessages { cells.append(.init(id: "messages", label: "رسائل", count: app.unread.tickets)) }
+        return cells
     }
 
     private var calmDetail: String {

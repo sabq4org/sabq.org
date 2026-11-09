@@ -217,6 +217,8 @@ export interface StaffOpinionItem {
     submittedAt: string | null;
     scheduledAt: string | null;
     publishedAt: string | null;
+    /** عدّل المكتب عنوان المقال (علامة «عُدّل العنوان»). */
+    titleEdited?: boolean;
   } | null;
   deeplink: string | null;
 }
@@ -366,6 +368,8 @@ export interface StaffAlertPrefs {
   publisherNews: boolean;
   /** خبر من مراسل بانتظار القرار، أو طلب تعديل على خبر (منذ 2026-10-31). */
   newsDrafts: boolean;
+  /** ملخص الصباح: إشعار واحد 08:00 بتوقيت الرياض بما ينتظر قرار العضو (منذ 2026-11-09). */
+  morningDigest: boolean;
   quietHours: StaffQuietHours;
 }
 
@@ -377,6 +381,7 @@ export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
   opinionDrafts: true,
   publisherNews: true,
   newsDrafts: true,
+  morningDigest: true,
   quietHours: "off",
 };
 
@@ -388,7 +393,8 @@ export type StaffAlertKind =
   | "socialProposals"
   | "opinionDrafts"
   | "publisherNews"
-  | "newsDrafts";
+  | "newsDrafts"
+  | "morningDigest";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
@@ -399,6 +405,7 @@ export const staffAlertPrefsUpdateSchema = z
     opinionDrafts: z.boolean().optional(),
     publisherNews: z.boolean().optional(),
     newsDrafts: z.boolean().optional(),
+    morningDigest: z.boolean().optional(),
     quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();

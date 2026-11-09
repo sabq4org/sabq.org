@@ -20,6 +20,7 @@ const STAFF_ALERT_KINDS: StaffAlertKind[] = [
   "opinionDrafts",
   "publisherNews",
   "newsDrafts",
+  "morningDigest",
 ];
 
 function isQuietHours(value: unknown): value is StaffQuietHours {

@@ -82,6 +82,7 @@ import {
 import { staffDeskNotificationsQuerySchema } from "@shared/staffNotifications";
 import { registerStaffNewsRoutes } from "./staffNewsDesk";
 import { registerStaffDeskCountsRoutes } from "./staffDeskCounts";
+import { registerStaffOpinionTitleRoutes } from "./staffOpinionTitle";
 import {
   AiBalanceInputError,
   auditSnapshot as auditBalanceSnapshot,
@@ -1315,6 +1316,16 @@ subRouter.get(
     }
   },
 );
+
+// تعديل عنوان مقال الرأي قبل الجدولة — المسار في routes/staffOpinionTitle.ts.
+registerStaffOpinionTitleRoutes(subRouter, {
+  requireStaffAuth: requireStaffAuth as unknown as RequestHandler,
+  requireSchedule: requireOpinionCapability("schedule") as unknown as RequestHandler,
+  limiter: staffOpinionActionLimiter,
+  sendError,
+  handleError: handleOpinionError,
+  audit: auditStaffAppWrite,
+});
 
 // ── 5ب) تبويب «الأخبار» (/news) — 2026-10-31 ─────────────────────────
 // مسودات المراسلين والبريد وطلبات التعديل؛ المسارات في routes/staffNewsDesk.ts.

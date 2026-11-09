@@ -87,15 +87,18 @@ public struct StaffOpinionArticle: Codable, Sendable, Equatable, Hashable {
     public var submittedAt: Date?
     public var scheduledAt: Date?
     public var publishedAt: Date?
+    /// The desk edited the writer's title («عُدّل العنوان»). Absent on older servers.
+    public var titleEdited: Bool?
 
     public init(id: String, title: String, status: StaffOpinionStatus, submittedAt: Date? = nil,
-                scheduledAt: Date? = nil, publishedAt: Date? = nil) {
+                scheduledAt: Date? = nil, publishedAt: Date? = nil, titleEdited: Bool? = nil) {
         self.id = id
         self.title = title
         self.status = status
         self.submittedAt = submittedAt
         self.scheduledAt = scheduledAt
         self.publishedAt = publishedAt
+        self.titleEdited = titleEdited
     }
 }
 
@@ -498,4 +501,14 @@ public struct StaffArticleBlock: Sendable, Equatable, Hashable {
         text = text.replacingOccurrences(of: "[ \\t\u{00A0}]+", with: " ", options: .regularExpression)
         return text
     }
+}
+
+/// `PATCH /opinion/:id/title`: the saved title as the server normalized it.
+public struct StaffOpinionTitleResult: Codable, Sendable, Equatable {
+    public struct Article: Codable, Sendable, Equatable {
+        public var id: String
+        public var title: String
+        public var titleEdited: Bool?
+    }
+    public var article: Article
 }

@@ -258,7 +258,8 @@ struct OpinionView: View {
             scheduleFixed: { Task { await schedule(item, .fixedSlot, checked: false) } },
             changeTime: { scheduleTarget = item },
             preview: { previewTarget = item },
-            returnToWriter: { returnTarget = item })
+            returnToWriter: { returnTarget = item },
+            saveTitle: { title in await saveTitle(item, title) })
     }
 
     // MARK: - Focus
@@ -309,6 +310,19 @@ struct OpinionView: View {
             if !app.handle(error) {
                 errorText = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
             }
+        }
+    }
+
+    /// «تعديل العنوان» قبل الجدولة: يحفظ ثم يحدّث اللوحة. الخطأ يظهر تحت الحقل.
+    private func saveTitle(_ item: StaffOpinionItem, _ title: String) async -> String? {
+        guard let id = item.article?.id else { return "تعذر حفظ العنوان" }
+        do {
+            _ = try await app.client.updateOpinionTitle(id: id, title: title)
+            await reload()
+            return nil
+        } catch {
+            if app.handle(error) { return "انتهت الجلسة؛ سجّل الدخول من جديد" }
+            return (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
         }
     }
 
@@ -600,6 +614,8 @@ private struct OpinionCard: View {
         let changeTime: () -> Void
         let preview: () -> Void
         let returnToWriter: () -> Void
+        /// Saves an edited title; returns an error message, or nil on success.
+        let saveTitle: (String) async -> String?
     }
 
     let item: StaffOpinionItem
@@ -619,18 +635,10 @@ private struct OpinionCard: View {
         VStack(alignment: .leading, spacing: 0) {
             topLine
             if let article = item.article {
-                Button(action: actions.preview) {
-                    Text(article.title)
-                        .font(DeskFonts.app(size: 15, weight: .semibold, relativeTo: .subheadline))
-                        .lineSpacing(4)
-                        .foregroundStyle(DeskTheme.textPrimary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("يفتح استعراض المقال")
+                OpinionTitleRow(article: article,
+                                canEdit: caps.schedule && article.status.isPending && !isPreparing,
+                                onPreview: actions.preview,
+                                onSave: actions.saveTitle)
                 .padding(.top, DeskLayout.space8)
                 .padding(.bottom, 10)
                 actionArea
