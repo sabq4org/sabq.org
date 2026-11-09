@@ -388,6 +388,34 @@ Content-Type: application/json
 - **التعارض:** كل كتابة مشروطة بقفل التحرير ونسخة المادة. خبر نُشر أو أُرشف، أو مقفل لمحرر آخر، أو حُفظ بعد فتح المعاينة ← `409` (`already_published` / `ARTICLE_LOCKED` / `ARTICLE_CHANGED`).
 - **قبل SQL طلبات التعديل:** `editRequestsReady: false` وتختفي الطلبات من القائمة، ومساراتها ترد `503 EDIT_REQUESTS_NOT_READY`.
 
+### 14. العدّادات في طلب واحد `GET /api/v1/staff/counts` (منذ 2026-11-09)
+طلب واحد عند فتح التطبيق بدل `/unread-counts` و`/alerts` و`/opinion/board` و`/news` و`/notifications/unread` لمجرد العدّ. استعلامات `COUNT` فقط بلا تحميل اللوحات، تعمل بالتوازي. المصادقة نفسها (`requireStaffAuth`) بلا شرط صلاحية على المسار: **كل عدّاد محجوب بصلاحية مساره الأصلي، وبلا صلاحية يعود `0`** (و`latest: null`). مصدر يفشل يعود `0` ويُسجَّل، ولا يُسقط الرد. لا تخزين مؤقت (`Cache-Control: private, no-store`). المسار في `server/routes/staffDeskCounts.ts`، الاستعلامات في `server/services/staffDeskCountsService.ts`، والمنطق الخالص في `shared/staffDeskCounts.ts`.
+
+```json
+{
+  "inbox": { "tickets": 2, "social": 3, "total": 5 },
+  "opinionPending": 4,
+  "news": { "all": 8, "reporters": 5, "editRequests": 2, "email": 1 },
+  "notifications": { "unreadCount": 7, "latest": null },
+  "urgentAlerts": 1,
+  "badge": 20,
+  "generatedAt": "2026-11-09T07:00:00.000Z"
+}
+```
+
+| الحقل | يطابق | الصلاحية |
+|---|---|---|
+| `inbox.tickets` | `tickets` في `/unread-counts` | `canTickets` |
+| `inbox.social` | `social` في `/unread-counts` (مقترحات `draft`، حد 200) | `canSocial.view` |
+| `opinionPending` | `pendingCount` في `/opinion/board` (جديدة + قيد التجهيز، آخر 45 يوماً) | `canOpinion.view` |
+| `news.*` | `counts` في `/news` (المسودات حد 100، طلبات التعديل حد 200) | `canNews` |
+| `notifications` | `/notifications/unread` (`unreadCount` حد 99، و`latest` بشكل عنصر الجرس) | أي تبويب من مركز التنبيهات |
+| `urgentAlerts` | `urgentCount` في `/alerts` | `canAdminAlerts` |
+
+- **`badge` (رقم أيقونة التطبيق):** كل ما ينتظر قرار العضو = `inbox.tickets + inbox.social + opinionPending + news.all +` غير المقروء في الجرس **دون** نوعَي `tweet_draft` و`opinion_draft` (العنصر نفسه محسوب من مصدره، فلا يُعدّ مرتين). `urgentAlerts` خارج الرقم (له شارته على «النظام»).
+- **مع الإشعار:** كل دفع إلى حزمة الديسك وحدها على iOS (`desk.*` وتنبيهات المشرفين والتذاكر) يحمل `aps.badge` بالمجموع نفسه للمستلم (`getStaffDeskBadgeForUser`، يُحسب داخل `sendPushToUserApp`). فشل الحساب أو تجاوزه 3 ثوانٍ = إرسال بلا رقم. تطبيق القارئ وأندرويد لا يتأثران.
+- **قبل SQL طلبات التعديل:** `news.editRequests = 0`.
+
 ## 3) صيغة الأخطاء الموحدة (Error Format)
 
 تعيد جميع مسارات `/api/v1/staff/*` الأخطاء بصيغة JSON موحدة `{ code, message }`:
