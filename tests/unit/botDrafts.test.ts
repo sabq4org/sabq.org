@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   reschedule: vi.fn(),
   unschedule: vi.fn(),
   archive: vi.fn(),
+  restore: vi.fn(),
   visibility: vi.fn(),
   verdict: vi.fn(),
   regenerate: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   rescheduleBotDraft: state.reschedule,
   unscheduleBotDraft: state.unschedule,
   archiveBotDraft: state.archive,
+  restoreBotDraft: state.restore,
   updateBotDraftVisibility: state.visibility,
   recordBotReviewerVerdict: state.verdict,
   regenerateBotDraftExtras: state.regenerate,
@@ -80,12 +82,14 @@ import {
   botDraftPublicUrl,
   botDraftPublishBlockedMessage,
   botDraftPublishedBlock,
+  botDraftArchivedBlock,
   botDraftReadyBlockedMessage,
   botDraftReleaseBlock,
   botDraftScheduledBlock,
   buildBotDraftArchiveUpdate,
   buildBotDraftPublishUpdate,
   buildBotDraftRescheduleUpdate,
+  buildBotDraftRestoreUpdate,
   buildBotDraftScheduleUpdate,
   buildBotDraftUnscheduleUpdate,
   buildBotDraftVisibilityUpdate,
@@ -912,6 +916,31 @@ describe("post-publish bot draft controls", () => {
     expect(state.unschedule).toHaveBeenCalledTimes(2);
   });
 
+  it("restores an archived bot article to a draft without publishing it", async () => {
+    state.restore.mockResolvedValueOnce(draft({ status: "draft", updatable: true, scheduledAt: null }));
+    const response = await call("POST", "/api/internal/bot-drafts/art-1/restore", {});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "draft", updatable: true });
+    expect(state.restore).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.publish).not.toHaveBeenCalled();
+  });
+
+  it("rejects restoring a row that is not archived, a locked row, and a smuggled status", async () => {
+    state.restore.mockRejectedValueOnce(new BotDraftError(409, "not_archived", "ليست مؤرشفة", { status: "published" }));
+    const publishedRow = await call("POST", "/api/internal/bot-drafts/art-1/restore", {});
+    expect(publishedRow.status).toBe(409);
+    expect(await publishedRow.json()).toMatchObject({ code: "not_archived", details: { status: "published" } });
+    state.restore.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "مقفل", { editor: "علي" }));
+    expect((await call("POST", "/api/internal/bot-drafts/art-1/restore", {})).status).toBe(409);
+    state.restore.mockRejectedValueOnce(new BotDraftError(404, "not_found", "غير موجودة"));
+    expect((await call("POST", "/api/internal/bot-drafts/editor-1/restore", {})).status).toBe(404);
+    const forbidden = await call("POST", "/api/internal/bot-drafts/art-1/restore", { status: "published" });
+    expect(forbidden.status).toBe(422);
+    const extra = await call("POST", "/api/internal/bot-drafts/art-1/restore", { note: "x" });
+    expect(extra.status).toBe(400);
+    expect(state.restore).toHaveBeenCalledTimes(3);
+  });
+
   it("sets featured, breaking, and homepage visibility on a published article", async () => {
     state.visibility.mockResolvedValueOnce(
       published(),
@@ -1207,6 +1236,16 @@ describe("pure helpers", () => {
       updatedAt: now,
     });
     expect(draftAgain).not.toHaveProperty("id");
+    const restored = buildBotDraftRestoreUpdate(now);
+    expect(restored).toEqual({ status: "draft", publishType: "instant", scheduledAt: null, updatedAt: now });
+    expect(restored).not.toHaveProperty("publishedAt");
+    expect(botDraftArchivedBlock({ source: BOT_DRAFT_SOURCE, status: "archived" })).toBeNull();
+    expect(botDraftArchivedBlock({ source: BOT_DRAFT_SOURCE, status: "published" })).toMatchObject({
+      httpStatus: 409,
+      code: "not_archived",
+      details: { status: "published" },
+    });
+    expect(botDraftArchivedBlock(undefined)).toMatchObject({ httpStatus: 404, code: "not_found" });
     expect(buildBotDraftVisibilityUpdate({ isFeatured: true, newsType: "breaking" }, now)).toEqual({
       updatedAt: now,
       isFeatured: true,

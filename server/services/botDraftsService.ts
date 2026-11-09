@@ -504,7 +504,7 @@ export function buildBotDraftScheduleUpdate(publishAt: Date, now: Date): BotDraf
 
 export type BotDraftLifecycleBlock = {
   httpStatus: 404 | 409;
-  code: "not_found" | "not_published" | "not_scheduled";
+  code: "not_found" | "not_published" | "not_scheduled" | "not_archived";
   message: string;
   details?: { status: string };
 };
@@ -551,6 +551,24 @@ export function botDraftScheduledBlock(
   return null;
 }
 
+/** استعادة مادة `source=bot` المؤرشفة فقط. غيرها 404 أو 409. */
+export function botDraftArchivedBlock(
+  row: { source?: string | null; status: string } | null,
+): BotDraftLifecycleBlock | null {
+  if (!row || row.source !== BOT_DRAFT_SOURCE) {
+    return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
+  }
+  if (row.status !== "archived") {
+    return {
+      httpStatus: 409,
+      code: "not_archived",
+      message: "الاستعادة تعمل على مادة مؤرشفة فقط",
+      details: { status: row.status },
+    };
+  }
+  return null;
+}
+
 /**
  * أرشفة ناعمة مثل `POST /api/admin/articles/:id/archive`:
  * `status=archived` و`reviewStatus=null`. الصف يبقى ويمكن للمحرر استعادته لمسودة.
@@ -586,6 +604,25 @@ export function buildBotDraftRescheduleUpdate(
  * حتى لا يلتقطها `publishScheduledArticles`.
  */
 export function buildBotDraftUnscheduleUpdate(now: Date): {
+  status: "draft";
+  publishType: "instant";
+  scheduledAt: null;
+  updatedAt: Date;
+} {
+  return {
+    status: "draft",
+    publishType: "instant",
+    scheduledAt: null,
+    updatedAt: now,
+  };
+}
+
+/**
+ * استعادة المؤرشف مثل `POST /api/admin/articles/:id/restore`: تعود `draft` دائمًا
+ * ولو كانت منشورة قبل الأرشفة، فالنشر من جديد قرار صريح. `scheduledAt` يُصفَّر
+ * حتى لا يلتقطها `publishScheduledArticles`.
+ */
+export function buildBotDraftRestoreUpdate(now: Date): {
   status: "draft";
   publishType: "instant";
   scheduledAt: null;
@@ -2193,6 +2230,49 @@ export async function unscheduleBotDraft(
     existing!,
   );
   console.log(`[BotDrafts] unscheduled ${row.id} by bot=${bot.name}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
+/**
+ * استعادة مادة مؤرشفة إلى `draft`. نفس صلاحية الأرشفة، ولا تنشر شيئًا.
+ */
+export async function restoreBotDraft(
+  bot: BotIdentity,
+  articleId: string,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  assertPersonalCapability(bot, "archive");
+  const existing = await findBotArticle(articleId, bot);
+  throwLifecycleBlock(botDraftArchivedBlock(existing));
+  await throwIfEditLocked(articleId, bot, existing);
+
+  const now = new Date();
+  const patch = buildBotDraftRestoreUpdate(now);
+  const [row] = await db
+    .update(articles)
+    .set(patch)
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "archived"), personalOwnershipWhere(bot)))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_archived", "تغيّرت حالة المادة أثناء الاستعادة", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftRestoreEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftRestoreEffects(row, bot.name);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "updated",
+    `استعاد البوت «${bot.name}» الخبر من الأرشيف وأعاده مسودة`,
+    bot,
+    existing!.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing!,
+    "restored",
+  );
+  console.log(`[BotDrafts] restored ${row.id} by bot=${bot.name}`);
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
 
