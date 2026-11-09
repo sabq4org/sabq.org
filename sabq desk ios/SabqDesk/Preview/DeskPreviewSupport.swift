@@ -18,6 +18,8 @@ struct DeskPreviewTransport: HTTPTransport {
         switch url.path {
         case "/api/v1/staff/inbox": body = emptyInbox ? Self.emptyInboxJSON : Self.inboxJSON
         case "/api/v1/staff/unread-counts": body = #"{"tickets":2,"social":3,"total":5}"#
+        case "/api/v1/staff/counts":
+            body = #"{"inbox":{"tickets":2,"social":3,"total":5},"news":{"all":3,"reporters":1,"editRequests":1,"email":1},"badge":8}"#
         case "/api/v1/staff/system/health": body = Self.systemHealthJSON
         case "/api/v1/staff/alerts": body = Self.alertsJSON
         case "/api/v1/staff/me/alert-prefs": body = #"{"aiAlerts":true,"adminAlerts":true}"#

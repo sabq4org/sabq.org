@@ -220,6 +220,7 @@ struct OpinionPreviewSheet: View {
 
     private func load() async {
         errorText = nil
+        guard !articleID.isEmpty else { return }
         do {
             let loaded = try await app.client.opinionContent(id: articleID)
             content = loaded

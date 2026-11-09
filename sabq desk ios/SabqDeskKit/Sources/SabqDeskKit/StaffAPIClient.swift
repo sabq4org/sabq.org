@@ -109,6 +109,11 @@ public struct StaffAPIClient: Sendable {
         try await send("GET", "/api/v1/staff/unread-counts")
     }
 
+    /// Every badge in one request. Older servers answer 404 (`.notFound`).
+    public func counts() async throws -> StaffDeskCounts {
+        try await send("GET", "/api/v1/staff/counts")
+    }
+
     public func ticket(id: String) async throws -> StaffTicketDetail {
         try await send("GET", "/api/v1/staff/tickets/\(try pathID(id))")
     }

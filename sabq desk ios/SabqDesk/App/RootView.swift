@@ -27,6 +27,20 @@ struct RootView: View {
             .onChange(of: cover, initial: true) { _, cover in
                 lockWindow.update(cover, model: model, lock: appLock)
             }
+            // Badges stay fresh while the desk is on screen: every 60 seconds,
+            // stopped by backgrounding, the lock, or signing out.
+            .task(id: autoRefreshes) {
+                guard autoRefreshes else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    if Task.isCancelled { return }
+                    await model.refreshUnread()
+                }
+            }
+    }
+
+    private var autoRefreshes: Bool {
+        scenePhase == .active && !appLock.isLocked && model.me != nil
     }
 
     /// The optional local Face ID lock sits above everything (including the
