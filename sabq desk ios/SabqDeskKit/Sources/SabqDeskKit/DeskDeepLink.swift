@@ -24,6 +24,8 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
     case news(id: String)
     /// An edit request on «الأخبار» (`sabqdesk://news/edit-request/<id>`).
     case editRequest(id: String)
+    /// The morning digest push (`sabqdesk://morning-digest`): the member's first tab.
+    case morningDigest
 
     public static let scheme = "sabqdesk"
 
@@ -37,6 +39,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case .balances: return URL(string: "\(Self.scheme)://balances")!
         case .balance(let provider): return URL(string: "\(Self.scheme)://balances/\(provider)")!
         case .notifications: return URL(string: "\(Self.scheme)://notifications")!
+        case .morningDigest: return URL(string: "\(Self.scheme)://morning-digest")!
         case .news(let id): return URL(string: "\(Self.scheme)://news/\(id)")!
         case .editRequest(let id): return URL(string: "\(Self.scheme)://news/edit-request/\(id)")!
         }
@@ -61,6 +64,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
             case "alerts": self = .alerts
             case "balances": self = .balances
             case "notifications": self = .notifications
+            case "morning-digest": self = .morningDigest
             default: return nil
             }
             return
@@ -103,6 +107,9 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
             return
         case "desk.publisher_news":
             self = .notifications
+            return
+        case "desk.morning_digest":
+            self = .morningDigest
             return
         case "desk.news_draft":
             if let id = userInfo["articleId"] as? String, Self.isValidID(id) {

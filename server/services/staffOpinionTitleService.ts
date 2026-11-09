@@ -22,6 +22,8 @@ export async function editOpinionTitleFromDesk(input: {
   actorId: string;
   /** عنوان منظّف ومتحقق منه (staffOpinionTitleSchema). */
   title: string;
+  /** العنوان الذي رآه العضو عند بدء التعديل (اختياري للتوافق). */
+  expectedTitle?: string;
 }): Promise<StaffOpinionTitleResult> {
   const [before] = await db
     .select()
@@ -36,6 +38,13 @@ export async function editOpinionTitleFromDesk(input: {
       before.status === "published"
         ? "المقال منشور؛ عدّل عنوانه من لوحة التحكم"
         : "المقال مجدول؛ تعديل العنوان من المكتب متاح قبل الجدولة فقط",
+    );
+  }
+  if (input.expectedTitle !== undefined && input.expectedTitle !== before.title && before.title !== input.title) {
+    throw new StaffOpinionDeskError(
+      409,
+      "conflict",
+      "غيّر زميل العنوان قبل لحظات، فلم يُحفظ تعديلك. حدّث الصفحة وراجع العنوان الحالي.",
     );
   }
   if (before.title === input.title) {

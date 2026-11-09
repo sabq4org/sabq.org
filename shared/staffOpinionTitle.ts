@@ -22,6 +22,8 @@ export const staffOpinionTitleSchema = z
           .min(STAFF_OPINION_TITLE_MIN, `العنوان قصير جداً (${STAFF_OPINION_TITLE_MIN} أحرف على الأقل)`)
           .max(STAFF_OPINION_TITLE_MAX, `العنوان طويل جداً (${STAFF_OPINION_TITLE_MAX} حرفاً على الأكثر)`),
       ),
+    /** العنوان الذي بدأ العضو التعديل منه؛ إن تغيّر منذئذٍ يُرفض الحفظ بـ409. */
+    expectedTitle: z.string().max(1000).optional(),
   })
   .strict();
 

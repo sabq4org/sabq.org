@@ -54,6 +54,7 @@ export function registerStaffOpinionTitleRoutes(router: Router, deps: StaffOpini
           articleId: req.params.id,
           actorId: ctx.user.id,
           title: parsed.data.title,
+          expectedTitle: parsed.data.expectedTitle,
         });
         if (result.changed) {
           await deps.audit(req as StaffRequest, {

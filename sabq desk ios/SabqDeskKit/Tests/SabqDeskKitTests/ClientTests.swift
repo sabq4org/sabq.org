@@ -314,11 +314,15 @@ final class ClientTests: XCTestCase {
     func testUpdateOpinionTitleSendsOneCleanLine() async throws {
         let reply = #"{"article":{"id":"a1","title":"عنوان جديد للمقال","titleEdited":true}}"#
         let (client, transport, _) = makeClient([.init(status: 200, body: reply)], session: liveSession)
-        let result = try await client.updateOpinionTitle(id: "a1", title: "  عنوان جديد\n للمقال ")
+        let result = try await client.updateOpinionTitle(id: "a1", title: "  عنوان جديد\n للمقال ",
+                                                         expectedTitle: "عنوان الكاتب")
         XCTAssertEqual(transport.lastRequest?.httpMethod, "PATCH")
         XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/title")
         XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["title"] as? String, "عنوان جديد للمقال")
+        XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["expectedTitle"] as? String, "عنوان الكاتب")
         XCTAssertEqual(result.article.titleEdited, true)
+        XCTAssertEqual(DeskDeepLink(url: URL(string: "sabqdesk://morning-digest")!), .morningDigest)
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.morning_digest"]), .morningDigest)
     }
 
     func testUpdateOpinionTitleRejectsShortTitleLocally() async throws {

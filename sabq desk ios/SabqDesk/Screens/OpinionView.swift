@@ -317,7 +317,7 @@ struct OpinionView: View {
     private func saveTitle(_ item: StaffOpinionItem, _ title: String) async -> String? {
         guard let id = item.article?.id else { return "تعذر حفظ العنوان" }
         do {
-            _ = try await app.client.updateOpinionTitle(id: id, title: title)
+            _ = try await app.client.updateOpinionTitle(id: id, title: title, expectedTitle: item.article?.title)
             await reload()
             return nil
         } catch {

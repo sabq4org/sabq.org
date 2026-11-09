@@ -221,6 +221,10 @@ struct MainTabView: View {
         case .notifications?:
             model.pendingLink = nil
             if model.canOpenNotifications { model.showsNotifications = true }
+        case .morningDigest?:
+            // «موجز الصباح»: أول تبويب يراه العضو، حيث بطاقة ما ينتظره.
+            model.pendingLink = nil
+            tab = firstTab
         case nil: break
         }
     }
