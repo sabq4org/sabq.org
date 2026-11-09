@@ -134,6 +134,7 @@ function requireSportsAiEditor(...codes: PermissionCode[]) {
 }
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 import { bucketFixtures, compareByMatchPhase, isPostponedFixture } from "../services/sports/fixtureBuckets";
+import { hideFarFutureStart } from "../services/sports/officialSchedule";
 
 /**
  * موسم أرشيفي اختياري عبر ?season=YYYY — لإبقاء بيانات موسم منتهٍ (مثل 2025/2026)
@@ -227,7 +228,7 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const competitions = applyFilter(await listCompetitionsWithMeta());
+      const competitions = hideFarFutureStart(applyFilter(await listCompetitionsWithMeta()));
       res.json({ configured: true, competitions });
     } catch (error) {
       console.error("[Sports] competitions meta failed:", error);
