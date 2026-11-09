@@ -61,6 +61,18 @@ final class DeskAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         #endif
     }
 
+    /// Silent pushes (`content-available`): refresh the badges and the app icon.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task { @MainActor in
+            await AppModel.shared.refreshUnread()
+            completionHandler(.newData)
+        }
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,

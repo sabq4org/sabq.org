@@ -433,14 +433,36 @@ export async function getStaffDeskUnread(
   userId: string,
   now: Date = new Date(),
 ): Promise<StaffDeskUnreadResponse> {
+  const { unreadCount, latest } = await getStaffDeskUnreadDetailed(caps, userId, now);
+  return { unreadCount, latest };
+}
+
+/**
+ * مثل `getStaffDeskUnread` مع `unreadExcludingKinds`: غير المقروء دون أنواع
+ * بعينها. يستعمله عدّاد الأيقونة (/counts) ليستبعد تنبيهات «مسودة جديدة»
+ * التي تُحسب أصلًا من مصدرها (المقترحات ومسودات الرأي) فلا تُعدّ مرتين.
+ */
+export async function getStaffDeskUnreadDetailed(
+  caps: StaffCapabilities,
+  userId: string,
+  now: Date = new Date(),
+  excludeKinds: readonly StaffDeskEventKind[] = [],
+): Promise<StaffDeskUnreadResponse & { unreadExcludingKinds: number }> {
   const categories = visibleStaffDeskCategories(caps);
-  if (categories.length === 0) return { unreadCount: 0, latest: null };
+  if (categories.length === 0) return { unreadCount: 0, latest: null, unreadExcludingKinds: 0 };
+  const keptSql =
+    excludeKinds.length === 0
+      ? sql`true`
+      : sql`${staffDeskEvents.kind} not in (${sql.join(excludeKinds.map((kind) => sql`${kind}`), sql`, `)})`;
   const seen = await getSeenState(userId).catch((): SeenState => ({ seenAt: null, readIds: [] }));
   const since = unreadSince(seen.seenAt, now);
   const start = windowStart(now);
   const [[countRow], [latestRow]] = await Promise.all([
     db
-      .select({ unread: sql<number>`count(*)::int` })
+      .select({
+        unread: sql<number>`count(*)::int`,
+        kept: sql<number>`count(*) filter (where ${keptSql})::int`,
+      })
       .from(staffDeskEvents)
       .where(
         and(
@@ -461,6 +483,7 @@ export async function getStaffDeskUnread(
   return {
     unreadCount: Math.min(Number(countRow?.unread) || 0, STAFF_DESK_UNREAD_CAP),
     latest: latestRow ? toNotification(latestRow, since, new Set(seen.readIds), now) : null,
+    unreadExcludingKinds: Math.min(Number(countRow?.kept) || 0, STAFF_DESK_UNREAD_CAP),
   };
 }
 

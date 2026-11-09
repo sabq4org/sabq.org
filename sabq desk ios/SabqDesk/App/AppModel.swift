@@ -43,6 +43,9 @@ final class AppModel {
 
     let client: StaffAPIClient
     private var push = PushRegistrationState()
+    /// One counts refresh at a time; a request made meanwhile runs once after it.
+    @ObservationIgnored private var isRefreshingCounts = false
+    @ObservationIgnored private var countsRefreshQueued = false
 
     init(client: StaffAPIClient? = nil) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -129,7 +132,47 @@ final class AppModel {
         }
     }
 
+    /// Refreshes every badge (tabs, the bell, the app icon) with one request.
+    /// Never overlaps: a call made while one is in flight is folded into a
+    /// single follow-up run.
     func refreshUnread() async {
+        guard me != nil else { return }
+        if isRefreshingCounts {
+            countsRefreshQueued = true
+            return
+        }
+        isRefreshingCounts = true
+        defer { isRefreshingCounts = false }
+        repeat {
+            countsRefreshQueued = false
+            await loadCounts()
+        } while countsRefreshQueued && me != nil
+    }
+
+    private func loadCounts() async {
+        do {
+            let counts = try await client.counts()
+            // Signed out while the request was in flight: keep the cleared state.
+            guard me != nil else { return }
+            unread = counts.inbox
+            opinionPending = max(counts.opinionPending, 0)
+            newsPending = max(counts.news.all, 0)
+            notificationsUnread = max(counts.notifications.unreadCount, 0)
+            latestNotification = counts.notifications.latest
+            urgentAlerts = max(counts.urgentAlerts, 0)
+            try? await UNUserNotificationCenter.current().setBadgeCount(max(counts.badge, 0))
+        } catch {
+            // Older servers have no /counts: fall back to the separate calls.
+            if case .notFound? = error as? StaffAPIError {
+                await loadCountsLegacy()
+                return
+            }
+            handle(error)
+        }
+    }
+
+    /// The pre-`/counts` path: one request per badge.
+    private func loadCountsLegacy() async {
         guard let me else { return }
         if me.capabilities.canOpenInbox {
             do {

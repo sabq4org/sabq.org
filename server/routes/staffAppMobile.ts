@@ -81,6 +81,7 @@ import {
 } from "../services/staffDeskEventsService";
 import { staffDeskNotificationsQuerySchema } from "@shared/staffNotifications";
 import { registerStaffNewsRoutes } from "./staffNewsDesk";
+import { registerStaffDeskCountsRoutes } from "./staffDeskCounts";
 import {
   AiBalanceInputError,
   auditSnapshot as auditBalanceSnapshot,
@@ -1322,6 +1323,9 @@ registerStaffNewsRoutes(subRouter, {
   sendError,
   audit: auditStaffAppWrite,
 });
+
+// ── 5ج) العدّادات في طلب واحد (/counts) — المسار في routes/staffDeskCounts.ts.
+registerStaffDeskCountsRoutes(subRouter, { requireStaffAuth: requireStaffAuth as unknown as RequestHandler, sendError });
 
 // ── 6) مركز التنبيهات (/notifications) — 2026-10-29 ──────────────────
 // خط زمني لأحداث التغريدات ومقالات الرأي وأخبار «نشر سبق». كل عضو يرى

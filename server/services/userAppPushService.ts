@@ -38,6 +38,36 @@ export interface UserAppPushMessage {
   /** فئة إشعار APNs (أزرار iOS)؛ لا أثر لها على أندرويد. */
   category?: string;
   articleId?: string;
+  /**
+   * رقم أيقونة التطبيق (aps.badge، iOS فقط). إشعارات «مكتب سبق» تحسبه
+   * تلقائيًا عند غيابه؛ بقية التطبيقات لا ترسل رقمًا إلا إذا مُرِّر صراحة.
+   */
+  badge?: number;
+}
+
+const DESK_BADGE_TIMEOUT_MS = 3000;
+
+/**
+ * رقم أيقونة «مكتب سبق» للمستلم: مجموع GET /api/v1/staff/counts نفسه.
+ * استيراد متأخر (الخدمة تستورد staffAppService الذي يستورد هذا الملف).
+ * أي فشل أو تأخر = undefined، فيُرسل الإشعار بلا رقم ولا يتعطل.
+ */
+async function resolveDeskBadge(userId: string): Promise<number | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const { getStaffDeskBadgeForUser } = await import("./staffDeskCountsService");
+    const badge = await Promise.race([
+      getStaffDeskBadgeForUser(userId),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), DESK_BADGE_TIMEOUT_MS);
+      }),
+    ]);
+    return typeof badge === "number" ? badge : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export interface UserAppPushResult {
@@ -96,12 +126,16 @@ async function sendPushToUserApps(
 
   const apns = devices.filter((row) => row.provider === "apns");
   if (apns.length > 0) {
+    // «مكتب سبق» وحده: الرقم مع الإشعار يساوي مجموع /counts للمستلم.
+    const isDeskOnly = bundleIds.length === 1 && bundleIds[0] === SABQ_DESK_BUNDLE_ID;
+    const badge = message.badge ?? (isDeskOnly ? await resolveDeskBadge(userId) : undefined);
     const payload = createCustomNotificationPayload(message.title, message.body, {
       deeplink: message.deeplink,
       type: message.type,
       priority: message.interruptionLevel ?? "active",
       category: message.category,
       articleId: message.articleId,
+      ...(badge !== undefined ? { badge } : {}),
     });
     if (message.interruptionLevel === "passive") payload.aps.sound = undefined;
     Object.assign(payload, message.data ?? {});

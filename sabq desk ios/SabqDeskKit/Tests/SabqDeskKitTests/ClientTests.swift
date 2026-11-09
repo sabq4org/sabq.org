@@ -238,6 +238,16 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(meAfterEnable.twoFactorEnabled, true)
     }
 
+    func testCountsUsesTheContractPath() async throws {
+        let (client, transport, _) = makeClient([
+            .init(status: 200, body: #"{"inbox":{"tickets":1,"social":0,"total":1},"badge":1}"#),
+        ], session: liveSession)
+        let counts = try await client.counts()
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/counts")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(counts.badge, 1)
+    }
+
     func testSystemEndpointsUseTheContractPaths() async throws {
         let (client, transport, _) = makeClient([
             .init(status: 200, body: Fixtures.systemHealth),

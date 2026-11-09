@@ -20,8 +20,6 @@ public enum DeskTheme {
         })
     }
 
-    /// سماوي سبق — للشعار والزخرفة فقط؛ لا يصلح لنص على الأبيض.
-    public static let brandSky = Color(red: 76 / 255.0, green: 188 / 255.0, blue: 253 / 255.0)
     public static let primary = adaptive(0x096EBD, 0x5CC4FF)
     public static let actionFill = adaptive(0x096EBD, 0x1A6FA8)
     public static let onAction = Color.white
@@ -64,10 +62,7 @@ public enum DeskTheme {
 
     // Semantic roles for the grouped desk screens, built from the palette above.
 
-    /// Page behind cards and grouped lists: muted sky in light, the page colour in dark.
-    public static let groupedBackground = adaptive(0xF4F7FB, 0x0B121A)
     public static let cardBackground = surface
-    public static let cardOutline = skyOutline
 
     // Fixed spec colours of the bot-style desk (typography spec 2026-10-25,
     // light theme only). `DeskInk` in the app forwards to these.

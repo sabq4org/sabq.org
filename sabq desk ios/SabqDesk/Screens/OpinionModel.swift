@@ -46,6 +46,8 @@ final class OpinionModel {
 
     /// Makes sure `articleID` can be shown: on the board, or fetched alone.
     func ensureVisible(articleID: String) async {
+        // A link without an article id has nothing to fetch.
+        guard !articleID.isEmpty else { return }
         if board?.item(articleID: articleID) != nil { return }
         do {
             linked = try await client.opinionItem(id: articleID).item

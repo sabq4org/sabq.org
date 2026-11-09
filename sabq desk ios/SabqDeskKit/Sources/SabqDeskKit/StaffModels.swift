@@ -318,6 +318,48 @@ public struct StaffUnreadCounts: Codable, Sendable, Equatable {
     }
 }
 
+/// `GET /api/v1/staff/counts`: every tab badge and the app icon number in one
+/// response. The server zeroes whatever the member may not see.
+public struct StaffDeskCounts: Codable, Sendable, Equatable {
+    public var inbox: StaffUnreadCounts
+    public var opinionPending: Int
+    public var news: StaffNewsBoard.Counts
+    public var notifications: StaffNotificationsUnread
+    public var urgentAlerts: Int
+    /// The number for the app icon.
+    public var badge: Int
+    public var generatedAt: Date?
+
+    public init(inbox: StaffUnreadCounts = StaffUnreadCounts(), opinionPending: Int = 0,
+                news: StaffNewsBoard.Counts = StaffNewsBoard.Counts(),
+                notifications: StaffNotificationsUnread = StaffNotificationsUnread(),
+                urgentAlerts: Int = 0, badge: Int = 0, generatedAt: Date? = nil) {
+        self.inbox = inbox
+        self.opinionPending = opinionPending
+        self.news = news
+        self.notifications = notifications
+        self.urgentAlerts = urgentAlerts
+        self.badge = badge
+        self.generatedAt = generatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        inbox = try container.decodeIfPresent(StaffUnreadCounts.self, forKey: .inbox) ?? StaffUnreadCounts()
+        opinionPending = try container.decodeIfPresent(Int.self, forKey: .opinionPending) ?? 0
+        news = try container.decodeIfPresent(StaffNewsBoard.Counts.self, forKey: .news) ?? StaffNewsBoard.Counts()
+        notifications = try container.decodeIfPresent(StaffNotificationsUnread.self, forKey: .notifications)
+            ?? StaffNotificationsUnread()
+        urgentAlerts = try container.decodeIfPresent(Int.self, forKey: .urgentAlerts) ?? 0
+        badge = try container.decodeIfPresent(Int.self, forKey: .badge) ?? 0
+        generatedAt = try? container.decodeIfPresent(Date.self, forKey: .generatedAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inbox, opinionPending, news, notifications, urgentAlerts, badge, generatedAt
+    }
+}
+
 public struct StaffInboxQuery: Sendable, Equatable {
     public var type: StaffInboxFilter
     public var status: String?

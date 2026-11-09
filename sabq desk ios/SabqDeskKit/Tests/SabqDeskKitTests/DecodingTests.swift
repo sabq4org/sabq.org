@@ -132,6 +132,32 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(counts, StaffUnreadCounts(tickets: 3, social: 2, total: 5))
     }
 
+    func testDeskCountsDecodeEveryBadge() throws {
+        let json = #"""
+        {"inbox":{"tickets":2,"social":3,"total":5},"opinionPending":4,
+         "news":{"all":8,"reporters":5,"editRequests":2,"email":1},
+         "notifications":{"unreadCount":7,"latest":null},"urgentAlerts":1,"badge":20,
+         "generatedAt":"2026-11-09T07:00:00.000Z"}
+        """#
+        let counts = try decoder.decode(StaffDeskCounts.self, from: json.data)
+        XCTAssertEqual(counts.inbox, StaffUnreadCounts(tickets: 2, social: 3, total: 5))
+        XCTAssertEqual(counts.opinionPending, 4)
+        XCTAssertEqual(counts.news, StaffNewsBoard.Counts(all: 8, reporters: 5, editRequests: 2, email: 1))
+        XCTAssertEqual(counts.notifications.unreadCount, 7)
+        XCTAssertNil(counts.notifications.latest)
+        XCTAssertEqual(counts.urgentAlerts, 1)
+        XCTAssertEqual(counts.badge, 20)
+        XCTAssertNotNil(counts.generatedAt)
+    }
+
+    func testDeskCountsTolerateMissingSections() throws {
+        let counts = try decoder.decode(StaffDeskCounts.self, from: #"{"badge":3}"#.data)
+        XCTAssertEqual(counts.badge, 3)
+        XCTAssertEqual(counts.inbox, StaffUnreadCounts())
+        XCTAssertEqual(counts.news.all, 0)
+        XCTAssertEqual(counts.notifications.unreadCount, 0)
+    }
+
     func testTicketDetailDecodesThread() throws {
         let detail = try decoder.decode(StaffTicketDetail.self, from: Fixtures.ticketDetail.data)
         XCTAssertEqual(detail.ticket.status, .open)
