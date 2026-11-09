@@ -40,4 +40,16 @@ describe("AI moderation with article context", () => {
     expect(out.classification).toBe("low_value");
     expect(complete.mock.calls[0][0].messages[1].content).toContain("عنوان الخبر: خبر");
   });
+
+  it("reads Claude's fenced JSON instead of sending the comment to human review", async () => {
+    complete.mockResolvedValue({
+      content: '```json\n{"score":92,"classification":"safe","detected":[],"reason":"سليم","sentiment":"positive","sentimentConfidence":0.9}\n```',
+      provider: "anthropic",
+      modelId: "claude-haiku-5-5",
+    });
+    const result = await moderateComment("رحمه الله");
+    expect(result.classification).toBe("safe");
+    expect(result.score).toBe(92);
+    expect(result.modelId).toBe("claude-haiku-5-5");
+  });
 });

@@ -2,6 +2,7 @@
 import OpenAI from "openai";
 import { retryWithBackoff } from "./utils/retryWithBackoff";
 import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
+import { completeEditorText, parseModelJson } from "./ai/editorGatewayText";
 import {
   SABQ_LANGUAGE_STANDARDS_AR,
   SABQ_HEADLINE_STANDARDS_AR,
@@ -130,42 +131,24 @@ export async function summarizeArticle(text: string): Promise<string> {
     console.log("[Summarize] Clean text length:", cleanText.length);
     console.log("[Summarize] Clean text preview:", cleanText.substring(0, 100) + "...");
     
-    const response = await trackedOpenAICompletion(openai, "editor-summarize", {
-      model: "gpt-5.1",
-      messages: [
-        {
-          role: "system",
-          content: `أنت محرر صحفي خبير في صحيفة سبق الإلكترونية، متخصص في كتابة الموجز الذكي للأخبار.
+    const response = await completeEditorText("editor-summarize", {
+      system: `أنت محرر صحفي خبير في صحيفة سبق الإلكترونية، متخصص في كتابة الموجز الذكي للأخبار.
 
 ${SABQ_LANGUAGE_STANDARDS_AR}
 
 ${SABQ_SUMMARY_STANDARDS_AR}`,
-        },
-        {
-          role: "user",
-          content: `قم بتلخيص المقال التالي في 2-3 جمل:\n\n${cleanText}`,
-        },
-      ],
-      max_completion_tokens: 1024,  // Increased for better results
-    }, { deduplicate: true });
+      user: `قم بتلخيص المقال التالي في 2-3 جمل:\n\n${cleanText}`,
+      maxTokens: 1024,
+      cacheSystemPrompt: true,
+      deduplicate: true,
+    });
 
-    console.log("[Summarize] ✅ OpenAI response received");
-    console.log("[Summarize] Response structure:", JSON.stringify({
-      hasChoices: !!response.choices,
-      choicesLength: response.choices?.length,
-      firstChoice: response.choices?.[0] ? {
-        hasMessage: !!response.choices[0].message,
-        hasContent: !!response.choices[0].message?.content,
-        contentLength: response.choices[0].message?.content?.length,
-        finishReason: response.choices[0].finish_reason,
-      } : null,
-    }));
-    
-    const content = response.choices?.[0]?.message?.content;
-    
+    console.log(`[Summarize] ✅ Response received from ${response.provider}/${response.modelId}`);
+
+    const content = response.content.trim();
+
     if (!content) {
-      console.warn("[Summarize] ⚠️ Empty response from OpenAI!");
-      console.warn("[Summarize] Full response:", JSON.stringify(response, null, 2));
+      console.warn("[Summarize] ⚠️ Empty response from model!");
       return "";
     }
     
@@ -292,46 +275,27 @@ ${cleanContent}`
     console.log("[GenerateTitles] Calling OpenAI API with full content...");
     console.log("[GenerateTitles] Full content length being sent:", cleanContent.length);
     
-    const response = await trackedOpenAICompletion(openai, "editor-headlines", {
-      model: "gpt-5.1",
-      messages: [
-        {
-          role: "system",
-          content: SYSTEM_PROMPTS[language],
-        },
-        {
-          role: "user",
-          content: USER_PROMPTS[language],
-        },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 1024,
-      temperature: 0.8,  // Higher temperature for varied outputs on regeneration
+    const response = await completeEditorText("editor-headlines", {
+      system: SYSTEM_PROMPTS[language],
+      user: USER_PROMPTS[language],
+      json: true,
+      maxTokens: 2048,
+      temperature: 0.8, // Varied outputs on regeneration (GPT only; Claude 5.5 ignores it)
+      cacheSystemPrompt: true,
     });
 
-    console.log("[GenerateTitles] ✅ OpenAI response received");
-    console.log("[GenerateTitles] Response structure:", JSON.stringify({
-      hasChoices: !!response.choices,
-      choicesLength: response.choices?.length,
-      firstChoice: response.choices?.[0] ? {
-        hasMessage: !!response.choices[0].message,
-        hasContent: !!response.choices[0].message?.content,
-        contentLength: response.choices[0].message?.content?.length,
-        finishReason: response.choices[0].finish_reason,
-      } : null,
-    }));
-    
-    const messageContent = response.choices?.[0]?.message?.content;
-    
-    if (!messageContent) {
-      console.warn("[GenerateTitles] ⚠️ Empty response from OpenAI!");
-      console.warn("[GenerateTitles] Full response:", JSON.stringify(response, null, 2));
+    console.log(`[GenerateTitles] ✅ Response received from ${response.provider}/${response.modelId}`);
+
+    const messageContent = response.content;
+
+    if (!messageContent.trim()) {
+      console.warn("[GenerateTitles] ⚠️ Empty response from model!");
       return [];
     }
-    
+
     console.log("[GenerateTitles] Raw message content:", messageContent);
-    
-    const result = JSON.parse(messageContent);
+
+    const result = parseModelJson<{ titles?: string[] }>(messageContent);
     console.log("[GenerateTitles] Parsed JSON result:", JSON.stringify(result, null, 2));
     
     const titles = result.titles || [];
@@ -659,23 +623,15 @@ export async function analyzeSEO(
 ${excerpt ? `المقدمة: ${excerpt}\n\n` : ''}المحتوى (أول 2000 حرف):
 ${content.substring(0, 2000)}`;
 
-    const response = await trackedOpenAICompletion(openai, "editor-seo-analysis", {
-      model: "gpt-5.1",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 1536,
-    }, { deduplicate: true });
+    const response = await completeEditorText("editor-seo-analysis", {
+      system: systemPrompt,
+      user: userContent,
+      json: true,
+      maxTokens: 2048,
+      deduplicate: true,
+    });
 
-    const result = JSON.parse(response.choices[0].message.content || "{}");
+    const result = parseModelJson<Record<string, any>>(response.content || "{}");
     
     return {
       seoTitle: result.seoTitle || title,
@@ -944,45 +900,36 @@ Translate this Arabic news to professional English and generate all required edi
     const systemPrompt = (systemPrompts as any)[promptKey];
     const userPrompt = (userPrompts as any)[promptKey];
 
-    console.log("[Smart Content] Generating smart content with GPT-5...");
+    console.log("[Smart Content] Generating smart content via AI gateway (Claude first)...");
     console.log("[Smart Content] Using prompt key:", promptKey);
     console.log("[Smart Content] Input content length:", newsContent.length);
     
-    const response = await trackedOpenAICompletion(openai, "editor-smart-content", {
-      model: "gpt-5.1",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 2048,
-      temperature: 0.8, // Higher temperature for varied outputs on regeneration
+    const response = await completeEditorText("editor-smart-content", {
+      system: systemPrompt,
+      user: userPrompt,
+      json: true,
+      // النص المترجم (en_translate) قد يطول؛ العربية أثقل توكنًا في Claude
+      maxTokens: needsTranslation ? 8000 : 4096,
+      temperature: 0.8, // Varied outputs on regeneration (GPT only; Claude 5.5 ignores it)
+      cacheSystemPrompt: true,
     });
 
-    console.log("[Smart Content] ✅ OpenAI response received");
-    console.log("[Smart Content] Finish reason:", response.choices[0].finish_reason);
-    console.log("[Smart Content] Message content length:", response.choices[0].message.content?.length || 0);
-    console.log("[Smart Content] Full message content:", response.choices[0].message.content);
-    
+    console.log(`[Smart Content] ✅ Response received from ${response.provider}/${response.modelId}`);
+    console.log("[Smart Content] Message content length:", response.content.length);
+
     // Check if response was cut off
-    if (response.choices[0].finish_reason === "length") {
+    if (response.truncated) {
       console.error("[Smart Content] ⚠️ Response was truncated due to token limit!");
-      throw new Error("Response truncated - increase max_completion_tokens");
+      throw new Error("Response truncated - increase maxTokens");
     }
-    
-    const messageContent = response.choices[0].message.content;
+
+    const messageContent = response.content;
     if (!messageContent || messageContent.trim() === "") {
-      console.error("[Smart Content] ❌ Empty response from OpenAI");
-      throw new Error("Empty response from OpenAI");
+      console.error("[Smart Content] ❌ Empty response from model");
+      throw new Error("Empty response from model");
     }
-    
-    const result = JSON.parse(messageContent);
+
+    const result = parseModelJson<Record<string, any>>(messageContent);
     
     console.log("[Smart Content] Parsed result:", {
       hasMainTitle: !!result.main_title,

@@ -32,6 +32,9 @@ export const DEFAULT_MODELS: DefaultModel[] = [
   // ── Anthropic ──
   { provider: "anthropic", modelId: "claude-opus-4-1", displayName: "Claude Opus 4.1", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 15, costPer1MOutput: 75, costPerUnit: 0, priority: 30 },
   { provider: "anthropic", modelId: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 3, costPer1MOutput: 15, costPerUnit: 0, priority: 10 },
+  // جيل 5.5: لا temperature والتفكير يُطفأ في المحوّل (claudeModelRules.ts). الأسعار من تسعير Anthropic الرسمي.
+  { provider: "anthropic", modelId: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 2, costPer1MOutput: 10, costPerUnit: 0, priority: 5 },
+  { provider: "anthropic", modelId: "claude-haiku-5-5", displayName: "Claude Haiku 5.5", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 0.1, costPer1MOutput: 0.5, costPerUnit: 0, priority: 15 },
   { provider: "anthropic", modelId: "claude-haiku-4-5", displayName: "Claude Haiku 4.5", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 1, costPer1MOutput: 5, costPerUnit: 0, priority: 20 },
 
   // ── Google Gemini ──
@@ -52,6 +55,8 @@ const GPT_4O: ModelRef = { provider: "openai", modelId: "gpt-4o" };
 const GPT_4O_MINI: ModelRef = { provider: "openai", modelId: "gpt-4o-mini" };
 const SONNET: ModelRef = { provider: "anthropic", modelId: "claude-sonnet-4-6" };
 const HAIKU: ModelRef = { provider: "anthropic", modelId: "claude-haiku-4-5" };
+const SONNET_5_5: ModelRef = { provider: "anthropic", modelId: "claude-sonnet-5-5" };
+const HAIKU_5_5: ModelRef = { provider: "anthropic", modelId: "claude-haiku-5-5" };
 const GEMINI_PRO: ModelRef = { provider: "gemini", modelId: "gemini-3-pro-preview" };
 const GEMINI_FLASH: ModelRef = { provider: "gemini", modelId: DEFAULT_GEMINI_FLASH_MODEL };
 const EMBED_LARGE: ModelRef = { provider: "openai", modelId: "text-embedding-3-large" };
@@ -63,6 +68,9 @@ const OPENAI_TTS: ModelRef = { provider: "openai", modelId: "tts-1" };
 const CHAIN_AFTER_GPT: ModelRef[] = [SONNET, GEMINI_PRO];
 const CHAIN_AFTER_SONNET: ModelRef[] = [GPT_5_1, GEMINI_PRO];
 const CHAIN_AFTER_MINI: ModelRef[] = [HAIKU, GEMINI_FLASH];
+// Claude أولًا وGPT احتياطي (2026-11-09: تقليل الاعتماد على GPT في التحرير).
+const CHAIN_AFTER_CLAUDE: ModelRef[] = [GPT_5_1, GEMINI_FLASH];
+const CHAIN_AFTER_CLAUDE_LIGHT: ModelRef[] = [GPT_4O_MINI, GEMINI_FLASH];
 
 export interface DefaultFeature {
   featureKey: string;
@@ -83,11 +91,11 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "audio-bulletin-script", displayName: "نص النشرة الصوتية", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 6000 },
   { featureKey: "newsletter-editorial", displayName: "تحرير سبق في ٣ دقائق", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 3000, temperature: 0.2 },
   // ترجمة الخبر العربي للنسخة الإنجليزية (زر الترجمة + الترجمة الآلية كل ساعتين).
-  { featureKey: "en-translate", displayName: "الترجمة للنسخة الإنجليزية", category: "editorial", primary: GPT_4O, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 8000, temperature: 0.3 },
+  { featureKey: "en-translate", displayName: "الترجمة للنسخة الإنجليزية", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE, maxTokens: 8000, temperature: 0.3 },
   { featureKey: "content-tools", displayName: "أدوات المحتوى الذكية", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
   // تُضبط في proofreadService (25ث) بدل الافتراضي.
-  { featureKey: "proofread", displayName: "التدقيق اللغوي", category: "editorial", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
+  { featureKey: "proofread", displayName: "التدقيق اللغوي", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
   { featureKey: "data-story", displayName: "قصص البيانات", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "deep-analysis", displayName: "التحليل العميق (عمق)", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "muqtarab-ai", displayName: "ذكاء مقترب", category: "editorial", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
@@ -115,8 +123,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "meeting-minutes", displayName: "أمين المحضر — محضر الاجتماعات", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 4000 },
   // التصنيف مهمة «اختيار من قائمة» لا تحتاج Sonnet (وسيطه 7.6ث مقابل 2.9ث لـgpt-5.1
   // في ai_usage_logs) — وهو الفرع الأبطأ في «التوليد الشامل» (تشخيص 2026-08-28).
-  { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
-  { featureKey: "en-auto-translate-select", displayName: "اختيار أخبار الترجمة الإنجليزية", category: "analysis", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH], maxTokens: 3000 },
+  { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "en-auto-translate-select", displayName: "اختيار أخبار الترجمة الإنجليزية", category: "analysis", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE, maxTokens: 3000 },
   { featureKey: "sentiment-analysis", displayName: "تحليل المشاعر", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "content-analyzer", displayName: "محلل الجودة التحريرية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "smart-categories", displayName: "التصنيفات الذكية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
@@ -130,14 +138,18 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "calendar-ai", displayName: "ذكاء التقويم", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "media-caption", displayName: "أوصاف الوسائط", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   // «جهّز وجدول» في تطبيق الديسك: موجز ونقاط وكلمات مفتاحية وSEO لمقال الرأي في نداء واحد
-  { featureKey: "opinion-desk-prepare", displayName: "تجهيز مقال الرأي (مكتب سبق)", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
+  { featureKey: "opinion-desk-prepare", displayName: "تجهيز مقال الرأي (مكتب سبق)", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "opinion-writer-ideas", displayName: "كتّاب الرأي — أفكار", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "opinion-writer-coach", displayName: "كتّاب الرأي — المدرب", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "opinion-writer-first-reader", displayName: "كتّاب الرأي — القارئ الأول", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "opinion-writer-style-profile", displayName: "كتّاب الرأي — بصمة الأسلوب", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
   { featureKey: "mobile-article-enrichment", displayName: "إثراء مقالات الجوال", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   { featureKey: "seo-generator", displayName: "مولّد SEO", category: "seo", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
 
   // ── Moderation / communications ──
-  { featureKey: "comment-moderation", displayName: "إشراف التعليقات", category: "moderation", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
-  { featureKey: "reply-polish", displayName: "تحرير ردود التواصل", category: "agents", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI, maxTokens: 800, temperature: 0.4 },
-  { featureKey: "social-post-suggest", displayName: "اقتراح منشور X", category: "agents", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI, maxTokens: 400, temperature: 0.6 },
+  { featureKey: "comment-moderation", displayName: "إشراف التعليقات", category: "moderation", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE_LIGHT },
+  { featureKey: "reply-polish", displayName: "تحرير ردود التواصل", category: "agents", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE_LIGHT, maxTokens: 800, temperature: 0.4 },
+  { featureKey: "social-post-suggest", displayName: "اقتراح منشور X", category: "agents", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE_LIGHT, maxTokens: 400, temperature: 0.6 },
 
   // ── Agents ──
   { featureKey: "whatsapp-agent", displayName: "وكيل واتساب", category: "agents", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
@@ -158,21 +170,21 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "editor-openai-images", displayName: "صور GPT — محرر الويب", category: "media", primary: { provider: "openai", modelId: "gpt-image-2.5-flare" }, fallbackChain: [], allowFailover: false },
   { featureKey: "image-generation", displayName: "توليد الصور", category: "media", primary: GPT_IMAGE, fallbackChain: [] },
   // وصف مشهد صور الأخبار التلقائية (نص قصير قبل توليد الصورة) — سريع ورخيص
-  { featureKey: "image-scene-brief", displayName: "وصف مشهد صور الأخبار", category: "media", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
+  { featureKey: "image-scene-brief", displayName: "وصف مشهد صور الأخبار", category: "media", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
   { featureKey: "nano-banana-images", displayName: "صور نانو بنانا", category: "media", primary: NANO_BANANA, fallbackChain: [] },
   { featureKey: "smart-thumbnail", displayName: "الصور المصغرة الذكية", category: "media", primary: GPT_4O, fallbackChain: [] },
   { featureKey: "visual-ai", displayName: "الذكاء البصري", category: "media", primary: GPT_4O, fallbackChain: [] },
-  { featureKey: "infographic-ai", displayName: "الإنفوجرافيك الذكي", category: "media", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
+  { featureKey: "infographic-ai", displayName: "الإنفوجرافيك الذكي", category: "media", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
 
   // ── Audio (voice/provider selection stays in ttsProviderRegistry) ──
   { featureKey: "audio-newsletter", displayName: "النشرات الصوتية", category: "audio", primary: OPENAI_TTS, fallbackChain: [] },
 
   // Legacy OpenAI transports: fixed caller model/payload; Hub disable switch + usage only.
-  { featureKey: "editor-summarize", displayName: "موجز المحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
-  { featureKey: "editor-headlines", displayName: "عناوين المحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-summarize", displayName: "موجز المحرر", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "editor-headlines", displayName: "عناوين المحرر", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
   { featureKey: "editor-credibility", displayName: "تقييم المصداقية", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
-  { featureKey: "editor-seo-analysis", displayName: "تحليل SEO للمحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
-  { featureKey: "editor-smart-content", displayName: "توليد العناصر التحريرية", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-seo-analysis", displayName: "تحليل SEO للمحرر", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
+  { featureKey: "editor-smart-content", displayName: "توليد العناصر التحريرية", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
   { featureKey: "editor-rewrite", displayName: "إعادة صياغة المحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
   { featureKey: "editor-media-keywords", displayName: "كلمات البحث عن الوسائط", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
   { featureKey: "editor-auto-format", displayName: "التنسيق الذكي", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },

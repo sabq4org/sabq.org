@@ -4,9 +4,35 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SABQ_LANGUAGE_STANDARDS_AR, SABQ_PRIMARY_EDITOR_MODEL } from "./ai/sabqEditorialPrompt";
 import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
 import { GEMINI_FLASH_MODEL } from "./ai/geminiModels";
+import { claudeRequestRules } from "./ai/gateway/claudeModelRules";
+import { getModel } from "./ai/gateway/configStore";
+import { computeCostUsd } from "./ai/gateway/costs";
+import { logUsage } from "./ai/gateway/usageLogger";
+
+/** يسجّل طلب Claude الناجح تحت seo-generator كما يفعل مسار OpenAI؛ فشل التسجيل لا يفشل الطلب. */
+function recordClaudeSeoUsage(model: string, inputTokens: number, outputTokens: number, latencyMs: number): void {
+  void (async () => {
+    try {
+      const entry = {
+        featureKey: "seo-generator",
+        provider: "anthropic" as const,
+        modelId: model,
+        operation: "complete" as const,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        status: "success" as const,
+      };
+      const resolved = await getModel({ provider: "anthropic", modelId: model });
+      logUsage({ ...entry, estimatedCostUsd: computeCostUsd(resolved, entry) });
+    } catch {
+      console.warn("[SEO] Claude usage recording failed");
+    }
+  })();
+}
 
 // SEO Generator for multilingual articles
-// Supports Arabic (Claude), English (GPT-4o), and Urdu (Gemini)
+// Arabic/English: Claude Haiku 5.5 then gpt-5.1; Urdu: Gemini then Claude
 
 interface SeoContent {
   metaTitle: string;
@@ -41,18 +67,19 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
-// Configuration: Primary and fallback models per language (Migrated to gpt-5.1)
+// Configuration: Primary and fallback models per language
 type SeoModelRef = { provider: "anthropic" | "openai" | "gemini"; model: string };
 const SEO_MODEL_CONFIG: Record<"ar" | "en" | "ur", { primary: SeoModelRef; fallback: SeoModelRef }> = {
-  // العربية: gpt-5.1 أولًا — Sonnet كان يجعل /api/seo/generate أبطأ فرع في
-  // «التوليد الشامل» (9.1ث حيًا) بينما بقية الفروع 1–5ث (تشخيص 2026-08-28).
+  // منذ 2026-11-09: Claude Haiku 5.5 أولًا (تقليل الاعتماد على GPT). اخترنا Haiku
+  // لا Sonnet لأن Sonnet 4.6 كان أبطأ فرع في «التوليد الشامل» (9.1ث، تشخيص
+  // 2026-08-28)؛ Haiku 5.5 سريع ورخيص، وgpt-5.1 يبقى بديلًا عند الفشل.
   ar: {
-    primary: { provider: "openai" as const, model: "gpt-5.1" },
-    fallback: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
+    primary: { provider: "anthropic" as const, model: "claude-haiku-5-5" },
+    fallback: { provider: "openai" as const, model: "gpt-5.1" },
   },
   en: {
-    primary: { provider: "openai" as const, model: "gpt-5.1" },
-    fallback: { provider: "gemini" as const, model: GEMINI_FLASH_MODEL },
+    primary: { provider: "anthropic" as const, model: "claude-haiku-5-5" },
+    fallback: { provider: "openai" as const, model: "gpt-5.1" },
   },
   ur: {
     primary: { provider: "gemini" as const, model: GEMINI_FLASH_MODEL },
@@ -216,10 +243,14 @@ async function generateWithClaude(
     baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
   });
 
+  // نماذج Claude 5.x ترفض temperature وتفكّر افتراضيًا؛ القواعد في claudeModelRules.
+  const rules = claudeRequestRules(model);
+  const startedAt = Date.now();
   const response = await client.messages.create({
     model: model,
     max_tokens: 2000,
-    temperature: 0.3, // Lower temperature for more consistent SEO output
+    ...(rules.sendTemperature ? { temperature: 0.3 } : {}),
+    ...(rules.thinking ? { thinking: rules.thinking } : {}),
     system: SYSTEM_PROMPTS[language],
     messages: [
       {
@@ -236,6 +267,10 @@ async function generateWithClaude(
   if (response.stop_reason === "max_tokens") {
     throw new Error("Claude SEO response truncated (stop_reason=max_tokens)");
   }
+  if ((response.stop_reason as string) === "refusal") {
+    throw new Error("Claude SEO response refused (stop_reason=refusal)");
+  }
+  recordClaudeSeoUsage(model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, Date.now() - startedAt);
 
   // Extract JSON from response
   const textContent = response.content.find((block) => block.type === "text");

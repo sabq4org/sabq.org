@@ -1,8 +1,9 @@
 // Anthropic adapter: text completion only.
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { AdapterCompleteParams, AdapterCompleteResult, ProviderAdapter } from "../types";
+import { AIGatewayError, type AdapterCompleteParams, type AdapterCompleteResult, type ProviderAdapter } from "../types";
 import { claudeJsonOutput } from "../../claudeStructuredOutputs";
+import { claudeRequestRules } from "../claudeModelRules";
 
 let client: Anthropic | null = null;
 
@@ -33,12 +34,14 @@ export const anthropicAdapter: ProviderAdapter = {
     const chat = params.messages
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+    const rules = claudeRequestRules(modelId);
 
     const response = await getClient().messages.create(
       {
         model: modelId,
         max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
-        ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
+        ...(params.temperature !== undefined && rules.sendTemperature ? { temperature: params.temperature } : {}),
+        ...(rules.thinking ? { thinking: rules.thinking } : {}),
         ...(systemParts.length
           ? {
               system: params.cacheSystemPrompt
@@ -51,6 +54,17 @@ export const anthropicAdapter: ProviderAdapter = {
       } as Anthropic.MessageCreateParamsNonStreaming,
       { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
+
+    // رفض أمان (Sonnet 5.5 وما بعده): لا نص يصلح. نرمي خطأً قابلًا للانتقال
+    // حتى تكمل البوابة على النموذج التالي في السلسلة بدل إعادة نص فارغ.
+    if (response.stop_reason === "refusal") {
+      throw new AIGatewayError(`anthropic/${modelId}: refusal`, {
+        code: "MODEL_ERROR",
+        provider: "anthropic",
+        modelId,
+        retryable: false,
+      });
+    }
 
     // Collect every text block: on models where thinking is on by default the first
     // block is a thinking block, and reading content[0] alone returns "" silently.
