@@ -1,6 +1,7 @@
-// Routed through the AI Hub ("comment-moderation" feature): gpt-4o-mini by
-// default with automatic failover to the mini-tier chain, dashboard-editable.
+// Routed through the AI Hub ("comment-moderation" feature): Claude Haiku 5.5 by
+// default (since 2026-11-09), then gpt-4o-mini / Gemini; dashboard-editable.
 import { aiGateway } from "./gateway";
+import { parseModelJson } from "./editorGatewayText";
 
 export type CommentSentiment = "positive" | "neutral" | "negative";
 
@@ -166,7 +167,8 @@ export async function moderateComment(
       return fallbackResult("لم يتمكن النظام من تحليل التعليق - يحتاج مراجعة بشرية");
     }
 
-    const result = JSON.parse(content) as ModerationResult & { sentiment_confidence?: number };
+    // Claude قد يغلّف JSON بأسوار كود؛ parseModelJson يزيلها.
+    const result = parseModelJson<ModerationResult & { sentiment_confidence?: number }>(content);
 
     // Validate and normalize the result
     const validClassifications = ["safe", "flagged", "spam", "harmful", "low_value"];

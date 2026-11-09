@@ -5,6 +5,31 @@ import { SABQ_LANGUAGE_STANDARDS_AR, SABQ_PRIMARY_EDITOR_MODEL } from "./ai/sabq
 import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
 import { GEMINI_FLASH_MODEL } from "./ai/geminiModels";
 import { claudeRequestRules } from "./ai/gateway/claudeModelRules";
+import { getModel } from "./ai/gateway/configStore";
+import { computeCostUsd } from "./ai/gateway/costs";
+import { logUsage } from "./ai/gateway/usageLogger";
+
+/** يسجّل طلب Claude الناجح تحت seo-generator كما يفعل مسار OpenAI؛ فشل التسجيل لا يفشل الطلب. */
+function recordClaudeSeoUsage(model: string, inputTokens: number, outputTokens: number, latencyMs: number): void {
+  void (async () => {
+    try {
+      const entry = {
+        featureKey: "seo-generator",
+        provider: "anthropic" as const,
+        modelId: model,
+        operation: "complete" as const,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        status: "success" as const,
+      };
+      const resolved = await getModel({ provider: "anthropic", modelId: model });
+      logUsage({ ...entry, estimatedCostUsd: computeCostUsd(resolved, entry) });
+    } catch {
+      console.warn("[SEO] Claude usage recording failed");
+    }
+  })();
+}
 
 // SEO Generator for multilingual articles
 // Arabic/English: Claude Haiku 5.5 then gpt-5.1; Urdu: Gemini then Claude
@@ -220,6 +245,7 @@ async function generateWithClaude(
 
   // نماذج Claude 5.x ترفض temperature وتفكّر افتراضيًا؛ القواعد في claudeModelRules.
   const rules = claudeRequestRules(model);
+  const startedAt = Date.now();
   const response = await client.messages.create({
     model: model,
     max_tokens: 2000,
@@ -244,6 +270,7 @@ async function generateWithClaude(
   if ((response.stop_reason as string) === "refusal") {
     throw new Error("Claude SEO response refused (stop_reason=refusal)");
   }
+  recordClaudeSeoUsage(model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, Date.now() - startedAt);
 
   // Extract JSON from response
   const textContent = response.content.find((block) => block.type === "text");

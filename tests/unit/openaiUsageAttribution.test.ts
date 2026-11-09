@@ -4,6 +4,18 @@ const state = vi.hoisted(() => ({
   calls: [] as Array<{ client: unknown; feature: string; body: any; options?: { deduplicate?: boolean } }>,
 }));
 
+// seo-generator يسجّل طلبات Claude مباشرة؛ نعزل القاعدة، ونجعل Claude يفشل لاختبار البديل.
+vi.mock("../../server/ai/gateway/usageLogger", () => ({ logUsage: vi.fn() }));
+vi.mock("../../server/ai/gateway/configStore", () => ({
+  getModel: vi.fn(async () => undefined),
+  getFeatureConfig: vi.fn(async () => ({ isEnabled: true })),
+}));
+vi.mock("@anthropic-ai/sdk", () => ({
+  default: class {
+    messages = { create: vi.fn(async () => { throw new Error("anthropic unavailable in test"); }) };
+  },
+}));
+
 vi.mock("../../server/ai/gateway/trackedOpenAI", () => ({
   trackedOpenAICompletion: vi.fn(async (client: unknown, feature: string, body: any, options?: { deduplicate?: boolean }) => {
     state.calls.push({ client, feature, body, options });

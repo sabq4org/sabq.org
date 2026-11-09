@@ -2,6 +2,7 @@
 // social-post-suggest (مسجل في defaults.ts وregistry.json تحت
 // نظام social-publishing). اقتراح فقط: المحرر يعدّل قبل النشر دائماً.
 import { aiGateway } from "../../ai/gateway";
+import { parseModelJson } from "../../ai/editorGatewayText";
 import { SABQ_LANGUAGE_STANDARDS_AR } from "../../ai/sabqEditorialPrompt";
 import { X_MAX_WEIGHTED_LENGTH } from "@shared/socialPostText";
 import { getArticleShareContext } from "./socialPublishingService";
@@ -46,7 +47,8 @@ export async function suggestSocialPostForArticle(input: {
   });
   if (res.truncated) throw new Error("اقتُطع اقتراح المنشور — أعد المحاولة");
 
-  const parsed = JSON.parse(res.content);
+  // Claude قد يغلّف JSON بأسوار كود؛ parseModelJson يزيلها.
+  const parsed = parseModelJson<{ post?: unknown; hashtags?: unknown }>(res.content);
   const post = typeof parsed?.post === "string" ? parsed.post.trim() : "";
   if (!post) throw new Error("تعذر توليد اقتراح صالح");
   const hashtags = Array.isArray(parsed?.hashtags)
