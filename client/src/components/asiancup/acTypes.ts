@@ -128,9 +128,9 @@ export function groupFixturesByDay(fixtures: AcFixture[]): AcDayGroup[] {
     }));
 }
 
-/** نافذة البطولة الرسمية (AFC): 7 يناير – 5 فبراير 2027. */
-export const AC_TOURNAMENT_STARTS_AT = "2027-01-07T17:00:00+03:00";
-export const AC_TOURNAMENT_ENDS_AT = "2027-02-05T21:00:00+03:00";
+/** نافذة البطولة الرسمية (AFC) بعد التأجيل: 23 ديسمبر 2027 – 21 يناير 2028. */
+export const AC_TOURNAMENT_STARTS_AT = "2027-12-23T17:00:00+03:00";
+export const AC_TOURNAMENT_ENDS_AT = "2028-01-21T21:00:00+03:00";
 
 /** نطاق تواريخ البطولة بصيغة مختصرة مع أصفار بادئة (07 يناير - 05 فبراير 2027). */
 export function formatDateRange(startIso: string | null, endIso: string | null): string {

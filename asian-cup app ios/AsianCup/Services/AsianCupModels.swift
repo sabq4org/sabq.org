@@ -577,8 +577,8 @@ nonisolated enum AsianCupConstants {
     static let tournamentName = "كأس آسيا 2027"
     static let tournamentNameEn = "AFC Asian Cup 2027"
     /// نافذة البطولة الرسمية (AFC) — لا تعتمد على آخر مباراة في الـ API.
-    static let tournamentStartsAt = "2027-01-07T17:00:00+03:00"
-    static let tournamentEndsAt = "2027-02-05T21:00:00+03:00"
+    static let tournamentStartsAt = "2027-12-23T17:00:00+03:00"
+    static let tournamentEndsAt = "2028-01-21T21:00:00+03:00"
 }
 
 // عدّ تنازلي من سلسلة ISO (تصل بإزاحة +03:00).

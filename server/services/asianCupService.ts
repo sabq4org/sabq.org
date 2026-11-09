@@ -56,6 +56,7 @@ import { apiFootballGet } from "./apiFootballClient";
 import { isEnglishSports } from "./sportsLang";
 import { isWithinLiveOverlayWindow, mergeLiveMatchProgress } from "./sportsMatchStatus";
 import pLimit from "p-limit";
+import { AC_OFFICIAL_START_ISO, AC_OFFICIAL_END_ISO } from "./sports/officialSchedule";
 import {
   getCommentary,
   getMatchFacts,
@@ -69,9 +70,9 @@ const SEASON = 2027; // كأس آسيا السعودية 2027
 const TIMEZONE = "Asia/Riyadh";
 const MATCH_FETCH_CONCURRENCY = 4;
 
-/** نافذة البطولة الرسمية (AFC): 7 يناير – 5 فبراير 2027. */
-const AC_OFFICIAL_START = "2027-01-07T17:00:00+03:00";
-const AC_OFFICIAL_END = "2027-02-05T21:00:00+03:00";
+/** نافذة البطولة الرسمية (AFC) بعد التأجيل: 23 ديسمبر 2027 – 21 يناير 2028. */
+const AC_OFFICIAL_START = AC_OFFICIAL_START_ISO;
+const AC_OFFICIAL_END = AC_OFFICIAL_END_ISO;
 
 // البطولة بعد أشهر — بيانات شبه ثابتة. كاش كريم، وتقصّ تلقائيًّا قرب المباريات.
 const TEAMS_TTL = 6 * 60 * 60 * 1000;
@@ -444,7 +445,7 @@ export async function getAcStandings(): Promise<AcGroup[]> {
 
 /** نظرة عامة: عدّ تنازلي + المضيف + الملاعب + تركيز السعودية + المباراة القادمة. */
 export async function getAcOverview(): Promise<AcOverview> {
-  return withSWR("ac:overview:v2", OVERVIEW_TTL, OVERVIEW_TTL * 3, async () => {
+  return withSWR("ac:overview:v3", OVERVIEW_TTL, OVERVIEW_TTL * 3, async () => {
     const [fixtures, standings] = await Promise.all([getAcFixtures(), getAcStandings()]);
     const teams = await getAcTeams();
 

@@ -96,6 +96,7 @@ import {
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 import { pickActiveRoundKey } from "./pickActiveRound";
+import { applyOfficialWindow } from "./sports/officialSchedule";
 import { correctSportsPlayerName, resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
 
 const TIMEZONE = "Asia/Riyadh";
@@ -268,7 +269,7 @@ export function listCompetitions() {
  * سابقًا كان هنا كاش `spl:season:*` مستقل يستدعي `leagues?current=true` ويلتقط
  * الخطأ داخل الـfetcher فيُخزّن `fallbackSeason` لـ6 ساعات. عند انتقال أغسطس
  * 2026 بقي دوري الأبطال/يوروبا على 2025 المنتهي (نتائج نهائية بلا قادمة) بينما
- * الميتا (`spl:compmeta:v3`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
+ * الميتا (`spl:compmeta:v4`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
  * لا تُعِد كاشًا منفصلًا ولا تُخزّن fallback عند فشل المزوّد.
  */
 async function seasonFor(comp: SaudiCompetition): Promise<number> {
@@ -4009,19 +4010,23 @@ export interface SplCompetitionMeta {
 
 export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
   try {
-    // المفتاح موسوم بنسخة (v3): تصحيح كأس لم يُحسم نهائيها بعد دور مبكر.
+    // المفتاح موسوم بنسخة (v4): تصحيح كأس لم يُحسم نهائيها بعد دور مبكر.
     // رفع النسخة يُبطل «منتهٍ» الكاذب فورًا بدل انتظار TTL.
     // ملاحظة مهمة: لا نلتقط الخطأ داخل الـ fetcher — نتركه يُرمى حتى لا يخزّن
     // withSWR نتيجة fallback خاطئة (start/end=null) لـ 6 ساعات عند فشل/تحديد
     // معدّل من API-Football (يحدث وقت النشر مع رشقة الطلبات المتوازية).
-    return await withSWR(`spl:compmeta:v3:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
+    return await withSWR(`spl:compmeta:v4:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
       const rows = await apiGet("leagues", { id: comp.id });
       if (!rows.length) throw new Error(`[SaudiLeague] no league data for ${comp.id}`);
       const lg = rows[0]?.league ?? {};
       const seasons: any[] = rows[0]?.seasons ?? [];
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
-      const start = typeof current?.start === "string" ? current.start : null;
-      const end = typeof current?.end === "string" ? current.end : null;
+      // الموعد الرسمي المعلن يتقدّم على تاريخ مزوّد لم يلحق بقرار تأجيل.
+      const { start, end } = applyOfficialWindow(
+        comp.slug,
+        typeof current?.start === "string" ? current.start : null,
+        typeof current?.end === "string" ? current.end : null,
+      );
       let status = computeSeasonDateStatus(start, end);
       // المزود قد يقصّر تاريخ النهاية إلى آخر مباراة نُشرت (كأس بعد دور الـ32)
       // أو يُبقي موسمًا قديمًا بعلم current. نصحّح قبل تثبيت الشارة.
