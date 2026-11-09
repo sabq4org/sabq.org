@@ -175,7 +175,7 @@ struct AdminAlertsView: View {
         case .balance(let provider)?:
             guard app.capabilities.canSystemHealth else { return nil }
             return { open(.balance(provider: provider)) }
-        case .systemHealth?, .alerts?, .notifications?, .news?, .editRequest?, nil:
+        case .systemHealth?, .alerts?, .notifications?, .news?, .editRequest?, .morningDigest?, nil:
             return nil
         }
     }

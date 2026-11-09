@@ -65,7 +65,7 @@ struct SystemView: View {
                     ModelBalancesView()
                 case .balance(let provider):
                     ProviderBalanceDetailView(provider: provider)
-                case .systemHealth, .alerts, .opinion, .notifications, .news, .editRequest:
+                case .systemHealth, .alerts, .opinion, .notifications, .news, .editRequest, .morningDigest:
                     // .opinion / .notifications / news links are routed by RootView.
                     EmptyView()
                 }
