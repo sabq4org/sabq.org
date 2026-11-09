@@ -293,6 +293,9 @@ export const botDraftArchiveSchema = z
 /** DELETE /api/internal/bot-drafts/:id/schedule — جسم فارغ. يعيد المسودة ولا يحذف الصف. */
 export const botDraftUnscheduleSchema = z.object({}).strict();
 
+/** POST /api/internal/bot-drafts/:id/restore — جسم فارغ. يعيد المادة المؤرشفة مسودة. */
+export const botDraftRestoreSchema = z.object({}).strict();
+
 /**
  * PATCH /api/internal/bot-drafts/:id/visibility.
  * نفس أعمدة محرر اللوحة: `isFeatured` (مميز)، `newsType` (`breaking` عاجل أو `regular`)،
@@ -506,6 +509,7 @@ export const BOT_DRAFT_ERROR_CODES = [
   "not_a_draft",
   "not_published",
   "not_scheduled",
+  "not_archived",
   "locked_by_editor",
   "draft_changed",
   "license_required",

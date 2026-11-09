@@ -20,6 +20,7 @@
  *   tsx scripts/bot-drafts-client.ts reschedule <id> --publish-at=2026-09-24T21:00:00+03:00
  *   tsx scripts/bot-drafts-client.ts unschedule <id>
  *   tsx scripts/bot-drafts-client.ts archive <id> [--reason="خبر مكرر"]
+ *   tsx scripts/bot-drafts-client.ts restore <id>
  *   tsx scripts/bot-drafts-client.ts visibility <id> [--featured=true|false] [--breaking=true|false] [--hide-from-homepage=true|false]
  *   tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg
  */
@@ -171,6 +172,11 @@ export class BotDraftsClient {
    */
   archive(id: string, reason?: string): Promise<BotDraft> {
     return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/archive`, reason ? { reason } : {});
+  }
+
+  /** استعادة مادة `archived` إلى `draft`. لا تنشر ولا تعيد موعداً قديماً. */
+  restore(id: string): Promise<BotDraft> {
+    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/restore`, {});
   }
 
   /**
@@ -330,6 +336,11 @@ async function main() {
       result = await client.archive(id, flags.reason);
       break;
     }
+    case "restore": {
+      if (!id) throw new Error("restore needs <id>");
+      result = await client.restore(id);
+      break;
+    }
     case "visibility": {
       if (!id) throw new Error("visibility needs <id>");
       const patch: { isFeatured?: boolean; newsType?: "breaking" | "regular"; hideFromHomepage?: boolean } = {};
@@ -348,7 +359,7 @@ async function main() {
       break;
     }
     default:
-      console.error("usage: bot-drafts-client.ts <create|update|get|ready|publish|schedule|reschedule|unschedule|archive|visibility|upload> [id] [--flags]  (see file header)");
+      console.error("usage: bot-drafts-client.ts <create|update|get|ready|publish|schedule|reschedule|unschedule|archive|restore|visibility|upload> [id] [--flags]  (see file header)");
       process.exit(2);
   }
   console.log(JSON.stringify(result, null, 2));

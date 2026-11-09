@@ -13,6 +13,7 @@
 // PATCH /api/internal/bot-drafts/:id/schedule تغيير موعد مادة مجدولة
 // DELETE /api/internal/bot-drafts/:id/schedule إلغاء الجدولة والعودة إلى draft
 // POST  /api/internal/bot-drafts/:id/archive  أرشفة ناعمة لمادة منشورة (لا حذف نهائي)
+// POST  /api/internal/bot-drafts/:id/restore  استعادة مادة مؤرشفة إلى draft (لا نشر)
 // PATCH /api/internal/bot-drafts/:id/visibility مميز / عاجل / إخفاء الرئيسية
 //
 // المصادقة: Authorization: Bearer <token> من BOT_DRAFTS_API_TOKENS (لكل بوت اسم
@@ -39,6 +40,7 @@ import {
   botDraftRegenerateExtrasSchema,
   botDraftVerdictSchema,
   botDraftReadySchema,
+  botDraftRestoreSchema,
   botDraftScheduleSchema,
   botDraftUnscheduleSchema,
   botDraftUpdateSchema,
@@ -67,6 +69,7 @@ import {
   recordBotReviewerVerdict,
   regenerateBotDraftExtras,
   rescheduleBotDraft,
+  restoreBotDraft,
   scheduleBotDraft,
   unscheduleBotDraft,
   updateBotDraft,
@@ -610,6 +613,29 @@ router.post(
   },
 );
 
+router.post(
+  `${BOT_DRAFTS_BASE_PATH}/:id/restore`,
+  requireBotToken,
+  botWriteLimiter,
+  rejectForbiddenFields,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botDraftRestoreSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "الاستعادة لا تقبل حقولاً — أرسل جسماً فارغاً",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const draft = await restoreBotDraft(req.bot!, req.params.id, requestContext(req));
+      res.json(draft);
+    } catch (error) {
+      handleError(res, error, "restore");
+    }
+  },
+);
+
 router.patch(
   `${BOT_DRAFTS_BASE_PATH}/:id/visibility`,
   requireBotToken,
@@ -638,7 +664,7 @@ router.all(`${BOT_DRAFTS_BASE_PATH}/:id/:action`, requireBotToken, (_req: Reques
   sendError(res, 403, {
     code: "forbidden_action",
     message:
-      "هذا الفعل غير متاح. النشر POST /publish، الجدولة POST /schedule، تغيير الموعد PATCH /schedule، إلغاء الجدولة DELETE /schedule، الأرشفة POST /archive، الظهور PATCH /visibility، الجاهزية PATCH /ready، الملحقات POST /regenerate-extras",
+      "هذا الفعل غير متاح. النشر POST /publish، الجدولة POST /schedule، تغيير الموعد PATCH /schedule، إلغاء الجدولة DELETE /schedule، الأرشفة POST /archive، الاستعادة POST /restore، الظهور PATCH /visibility، الجاهزية PATCH /ready، الملحقات POST /regenerate-extras",
   });
 });
 router.all(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, (_req: Request, res: Response) => {

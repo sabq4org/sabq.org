@@ -281,6 +281,15 @@ export function queueBotDraftUnscheduleEffects(article: BotDraftReleaseRow, botN
   }
 }
 
+/** الاستعادة من الأرشيف تعيد المادة مسودة. ليست على الموقع، فلا تدفئة. */
+export function queueBotDraftRestoreEffects(article: BotDraftReleaseRow, botName: string): void {
+  try {
+    invalidateArticleWrite(article, { reason: `bot-draft-restore:${botName}`, warm: false });
+  } catch (error) {
+    console.error("[BotDrafts] restore cache invalidation failed:", error);
+  }
+}
+
 /**
  * تعديل محتوى خبر منشور. نفس إبطال `PATCH /api/admin/articles/:id`:
  * `invalidateArticleWrite` يمسح كاش القوائم والمقال (بما فيه نافذة العشر ثوانٍ

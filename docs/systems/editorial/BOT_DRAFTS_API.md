@@ -10,7 +10,7 @@
 4. **جدولة:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/schedule` بجسم `{ "publishAt": "2026-09-24T18:30:00+03:00" }`. وقت الرياض يُرسل بإزاحة `+03:00` أو ما يعادله UTC (`Z`). الماضي يُرفض 400. الرد: `status: "scheduled"` و`scheduledAt` و`editUrl`.
 5. **تغيير الموعد:** `PATCH .../<id>/schedule` بنفس جسم `publishAt`، والمادة حالتها `scheduled` فقط.
 6. **إلغاء الجدولة:** `DELETE .../<id>/schedule` بجسم فارغ. تعود `draft` ولا تُحذف.
-7. **الأرشفة:** `POST .../<id>/archive` بجسم اختياري لا يحوي إلا `{ "reason": "…" }`. التطبيق يرسل سبب المستخدم فقط، والخادم يحفظه في ملاحظات الأرشفة وسجل التدقيق. أرشفة ناعمة (`archived`) مثل اللوحة. `DELETE /<id>` يبقى 405 ولا يحذف الصف.
+7. **الأرشفة:** `POST .../<id>/archive` بجسم اختياري لا يحوي إلا `{ "reason": "…" }`. التطبيق يرسل سبب المستخدم فقط، والخادم يحفظه في ملاحظات الأرشفة وسجل التدقيق. أرشفة ناعمة (`archived`) مثل اللوحة. `DELETE /<id>` يبقى 405 ولا يحذف الصف. **الاستعادة:** `POST .../<id>/restore` بجسم فارغ `{}` تعيد المادة المؤرشفة `draft` دون نشر.
 8. **الظهور بعد النشر:** `PATCH .../<id>/visibility` بحقول `isFeatured` و/أو `newsType` (`breaking`|`regular`) و/أو `hideFromHomepage`. تعليم العاجل لا يرسل إشعار القرّاء.
 9. **جاهز للمناوب (بدون نشر):** `PATCH .../<id>/ready` بجسم فارغ `{}`. الحالة `ready_to_publish`. محرر الوردية ينشر من اللوحة، أو البوت ينشر/يجدول لاحقاً.
 10. **رفع صورة:** `POST .../images` بنفس التوكن. `deliveryUrl` غلاف (`imageUrl`) أو متن (`imageUrls`).
@@ -51,6 +51,7 @@
 | `PATCH` | `/api/internal/bot-drafts/:id/schedule` | تغيير موعد مادة `scheduled`. نفس جسم `publishAt` |
 | `DELETE` | `/api/internal/bot-drafts/:id/schedule` | إلغاء الجدولة والعودة إلى `draft`. جسم فارغ. لا حذف للصف |
 | `POST` | `/api/internal/bot-drafts/:id/archive` | أرشفة ناعمة لمادة `published`. الجسم `{}` أو `{ "reason": "…" }` |
+| `POST` | `/api/internal/bot-drafts/:id/restore` | استعادة مادة `archived` إلى `draft`. جسم فارغ `{}`. لا نشر |
 | `PATCH` | `/api/internal/bot-drafts/:id/visibility` | مميز / عاجل / إخفاء الرئيسية لمادة `published` |
 | `POST` | `/api/internal/bot-drafts/:id/regenerate-extras` | إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت `draft` أو أي خبر `published` |
 | أي فعل آخر | `PATCH /:id/publish` و`DELETE /:id` و`PUT` و`/:id/submit-review` … | `403 forbidden_action` أو `405`. `DELETE /:id` لا يحذف ولا يؤرشف |
@@ -461,6 +462,19 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | `status` أو `reviewNotes` في الجسم | `422 forbidden_fields`. السبب اسمه `reason` |
 | `DELETE /:id` | `405 forbidden_action` — لا حذف |
 
+### استعادة مادة مؤرشفة — `POST /api/internal/bot-drafts/:id/restore`
+
+تعيد مادة البوت `archived` إلى `draft` حتى يكمل صاحبها تحريرها أو ينشرها بخطوة منفصلة. تطابق استعادة اللوحة (`POST /api/admin/articles/:id/restore`). لا تنشر، ولا تعيد موعد جدولة قديماً (`publishType=instant` و`scheduledAt=null`)، ولا تغيّر `publishedAt` ولا الرابط. تحتاج صلاحية الأرشفة نفسها، والتوكن الشخصي يبقى محصوراً في صفوفه.
+
+الجسم فارغ `{}`. أي حقل آخر → `400 validation_error`، وحقل ممنوع مثل `status` → `422 forbidden_fields`.
+
+| الحالة | النتيجة |
+|--------|---------|
+| `archived` وبلا قفل | `200` و`status: "draft"` و`updatable: true` |
+| قفل محرر | `409 locked_by_editor` |
+| ليست مؤرشفة | `409 not_archived` مع `details.status` |
+| ليست `source=bot` أو ليست لصاحب التوكن | `404 not_found` |
+
 ### الظهور — `PATCH /api/internal/bot-drafts/:id/visibility`
 
 لمادة `published` و`source=bot` فقط. الحقول هي أعمدة المحرر العربي نفسها، وحقل واحد على الأقل:
@@ -550,6 +564,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | 409 | `not_a_draft` | تحديث محتوى وصف البوت ليس `draft` ولا `published`، أو جاهزية والمادة ليست `draft`، أو نشر/جدولة أولى والمادة ليست `draft` ولا `ready_to_publish`. `details.status` = الحالة الحالية |
 | 409 | `not_published` | أرشفة أو ظهور والمادة ليست `published`. `details.status` = الحالة الحالية |
 | 409 | `not_scheduled` | تغيير موعد أو إلغاء جدولة والمادة ليست `scheduled`. `details.status` = الحالة الحالية |
+| 409 | `not_archived` | استعادة والمادة ليست `archived`. `details.status` = الحالة الحالية |
 | 409 | `locked_by_editor` | محرر يفتح المادة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
 | 409 | `draft_changed` | `regenerate-extras` والمادة عُدّلت أثناء التوليد (تغيّر `updated_at`). لم يُحفظ شيء؛ أعد الطلب |
 | 422 | `forbidden_fields` | وجود حقل ممنوع. `details.fields` = القائمة |
