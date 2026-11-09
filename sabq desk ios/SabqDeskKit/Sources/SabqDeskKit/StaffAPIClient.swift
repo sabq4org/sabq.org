@@ -213,6 +213,19 @@ public struct StaffAPIClient: Sendable {
                               body: OpinionNoteBody(note: String(trimmed.prefix(2000))))
     }
 
+    /// Edits a pending opinion draft's title before scheduling (5…200 characters).
+    /// The server answers 409 once the article is scheduled, published or locked.
+    /// `expectedTitle` is the title the member started from: the server answers
+    /// 409 when a colleague changed it meanwhile, so no edit is overwritten silently.
+    public func updateOpinionTitle(id: String, title: String,
+                                   expectedTitle: String? = nil) async throws -> StaffOpinionTitleResult {
+        let cleaned = title.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ")
+        guard cleaned.count >= 5 else { throw StaffAPIError.validation(message: "العنوان قصير جداً") }
+        guard cleaned.count <= 200 else { throw StaffAPIError.validation(message: "العنوان طويل جداً") }
+        return try await send("PATCH", "/api/v1/staff/opinion/\(try pathID(id))/title",
+                              body: OpinionTitleBody(title: cleaned, expectedTitle: expectedTitle))
+    }
+
     /// «جهّز وجدول»: starts the server-side preparation (202) and returns its
     /// state. `nil` schedules at the writer's fixed slot. A second call while
     /// one is running returns the same job.
@@ -504,6 +517,11 @@ private struct ScheduleBody: Encodable {
 
 private struct OpinionFixedSlotBody: Encodable {
     var mode = "fixed_slot"
+}
+
+private struct OpinionTitleBody: Encodable {
+    var title: String
+    var expectedTitle: String?
 }
 
 private struct OpinionNoteBody: Encodable {

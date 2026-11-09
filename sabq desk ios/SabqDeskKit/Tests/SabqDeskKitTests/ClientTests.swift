@@ -311,6 +311,31 @@ final class ClientTests: XCTestCase {
         XCTAssertNil(transport.lastRequest, "a blank note never reaches the server")
     }
 
+    func testUpdateOpinionTitleSendsOneCleanLine() async throws {
+        let reply = #"{"article":{"id":"a1","title":"عنوان جديد للمقال","titleEdited":true}}"#
+        let (client, transport, _) = makeClient([.init(status: 200, body: reply)], session: liveSession)
+        let result = try await client.updateOpinionTitle(id: "a1", title: "  عنوان جديد\n للمقال ",
+                                                         expectedTitle: "عنوان الكاتب")
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "PATCH")
+        XCTAssertEqual(transport.lastRequest?.url?.path, "/api/v1/staff/opinion/a1/title")
+        XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["title"] as? String, "عنوان جديد للمقال")
+        XCTAssertEqual(jsonObject(transport.lastRequest?.httpBody)["expectedTitle"] as? String, "عنوان الكاتب")
+        XCTAssertEqual(result.article.titleEdited, true)
+        XCTAssertEqual(DeskDeepLink(url: URL(string: "sabqdesk://morning-digest")!), .morningDigest)
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.morning_digest"]), .morningDigest)
+    }
+
+    func testUpdateOpinionTitleRejectsShortTitleLocally() async throws {
+        let (client, transport, _) = makeClient([], session: liveSession)
+        do {
+            _ = try await client.updateOpinionTitle(id: "a1", title: " ab ")
+            XCTFail("expected validation error")
+        } catch let error as StaffAPIError {
+            if case .validation = error {} else { XCTFail("\(error)") }
+        }
+        XCTAssertNil(transport.lastRequest, "a too-short title never reaches the server")
+    }
+
     func testPrepareStartsAndPollsTheJob() async throws {
         let running = #"{"job":{"articleId":"a1","status":"running","step":"image","stepLabel":"توليد صورة GPT","startedAt":"2026-10-28T06:00:00.000Z","finishedAt":null,"scheduledAt":null,"titleChanged":true,"contentFixes":3,"image":null,"message":null}}"#
         let done = #"{"job":{"articleId":"a1","status":"done","step":"schedule","stepLabel":"الحفظ والجدولة","startedAt":"2026-10-28T06:00:00.000Z","finishedAt":"2026-10-28T06:02:00.000Z","scheduledAt":"2026-11-01T06:00:00.000Z","titleChanged":true,"contentFixes":3,"image":"generated","message":null}}"#

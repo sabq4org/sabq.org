@@ -5,6 +5,7 @@
 import { and, desc, eq, gte, inArray, lt, ne, or } from "drizzle-orm";
 import { db } from "../db";
 import { draftLockMessageFor } from "./draftLockService";
+import { markEditedOpinionTitles } from "./staffOpinionTitleFlags";
 import { draftLockAllowsWriter } from "./articleWriteVersion";
 import { articles, categories, opinionWriterSchedules, users } from "@shared/schema";
 import {
@@ -164,12 +165,14 @@ export async function getStaffOpinionBoard(options: {
     [...schedules.map((s) => s.writerId), ...articleRows.map((a) => a.authorId)],
     schedules,
   );
-  return buildStaffOpinionBoard({
+  const board = buildStaffOpinionBoard({
     now,
     weekStart,
     writers,
     articles: articleRows as StaffOpinionArticleRow[],
   });
+  await markEditedOpinionTitles([...board.slots, ...board.unslotted]);
+  return board;
 }
 
 async function loadOpinionArticle(articleId: string): Promise<StaffOpinionArticleRow & {
@@ -216,16 +219,15 @@ export async function getStaffOpinionItem(articleId: string): Promise<{
         : writer.fixedSlot
           ? nextSlot
           : null;
-  return {
-    item: {
-      writer,
-      slotAt,
-      state: status === "scheduled" ? "scheduled" : status === "published" ? "published" : "arrived",
-      article: toStaffOpinionArticle(row, status),
-      deeplink: `sabqdesk://opinion/${row.id}`,
-    },
-    nextSlot,
+  const item: StaffOpinionItem = {
+    writer,
+    slotAt,
+    state: status === "scheduled" ? "scheduled" : status === "published" ? "published" : "arrived",
+    article: toStaffOpinionArticle(row, status),
+    deeplink: `sabqdesk://opinion/${row.id}`,
   };
+  await markEditedOpinionTitles([item]);
+  return { item, nextSlot };
 }
 
 /** نص المسودة وملحقاتها كما هي في المقال (قراءة فقط) — لبوت «مكتب سبق» الذي لا يرى الشاشة. */
