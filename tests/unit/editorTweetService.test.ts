@@ -242,6 +242,44 @@ describe("تغريدة المحرر من «نشر سبق» — حسب الصلا
     expect(direct).toMatchObject({ mode: "direct", linkUrl: null, imageUrl: null, text: "نص" });
   });
 
+  it("صور المحرر (حتى 4) تحل محل صورة الخبر، والرابط اختياري، ومصدر النص يُحفظ", async () => {
+    const own = ["https://media.sabq.org/news/a.webp", "https://media.sabq.org/news/b.webp"];
+    const deps = makeDeps();
+    await submitEditorTweet(
+      { ...input(false), includeLink: false, imageUrls: own, textSource: "ai" },
+      deps,
+    );
+    expect((deps.createDraftPost as any).mock.calls[0][0]).toMatchObject({
+      includeLink: false,
+      textSource: "ai",
+      imageSource: "none",
+      imageUrl: null,
+      mediaKind: "image",
+      mediaUrls: own,
+    });
+    const preview = await previewEditorTweet(
+      { articleId: "a1", text: "نص", includeLink: false, includeImage: true, imageUrls: own, canPublishNow: false },
+      deps,
+    );
+    expect(preview).toMatchObject({ imageUrls: own, imageUrl: own[0], imageSource: "upload", linkUrl: null });
+    const title = await previewEditorTweet(
+      { articleId: "a1", text: "نص", textSource: "title", includeLink: true, includeImage: true, canPublishNow: false },
+      deps,
+    );
+    expect(title).toMatchObject({ text: article.title, textSource: "title", imageSource: "article", imageUrls: [article.imageUrl] });
+  });
+
+  it("يرفض أكثر من 4 صور ورابط صورة من مضيف غير مسموح", async () => {
+    const five = [1, 2, 3, 4, 5].map((n) => `https://media.sabq.org/news/${n}.webp`);
+    expect(botDeskEditorTweetSchema.safeParse({ articleId: "a1", text: "نص", imageUrls: five }).success).toBe(false);
+    const deps = makeDeps();
+    await expect(submitEditorTweet({ ...input(false), imageUrls: five }, deps)).rejects.toThrow(/4/);
+    await expect(
+      submitEditorTweet({ ...input(false), imageUrls: ["https://evil.example.test/x.png"] }, deps),
+    ).rejects.toThrow(/مرفوض/);
+    expect(deps.createDraftPost).not.toHaveBeenCalled();
+  });
+
   it("يرفض معرّفًا ورابطًا لا يشيران إلى الخبر نفسه، وغياب الاثنين", async () => {
     const deps = makeDeps({ resolveArticleUrl: vi.fn(async () => "other") });
     await expect(

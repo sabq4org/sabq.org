@@ -60,6 +60,10 @@ const editorTweetTarget = {
   articleUrl: z.string().trim().min(1).max(2048).optional(),
   includeLink: z.boolean().default(true),
   includeImage: z.boolean().default(true),
+  /** صور يرفعها المحرر بدل صورة الخبر (حتى 4). وجودها يتجاوز includeImage. */
+  imageUrls: z.array(z.string().trim().url().max(2048)).max(4, "الصور 4 كحد أقصى").optional(),
+  /** مصدر النص كما في نموذج الويب: عنوان الخبر، نص المحرر، أو نص مولَّد. */
+  textSource: z.enum(["title", "custom", "ai"]).optional(),
 };
 const hasEditorTweetTarget = (v: { articleId?: string; articleUrl?: string }) =>
   Boolean(v.articleId || v.articleUrl);

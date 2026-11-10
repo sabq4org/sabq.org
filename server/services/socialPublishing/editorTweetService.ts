@@ -15,7 +15,10 @@ import { articles, socialPosts, type SocialPost } from "@shared/schema";
 import { db } from "../../db";
 import { BotSocialError } from "./botSocialLogic";
 import { resolveBotSocialArticleUrl } from "./botSocialService";
+import { assertSafeImageUrl } from "../../utils/safeImageUrl";
+import { absolutizeImageUrl } from "./imageResolver";
 import {
+  MAX_POST_IMAGES,
   SocialPublishValidationError,
   buildArticleUrl,
   claimPostForImmediatePublish,
@@ -36,6 +39,42 @@ export function isEditorTweetChannelEnabled(
 /** processing = طلب مطابق سابق ما زال قيد النشر؛ ليس تأكيد نشر. */
 export type EditorTweetMode = "published" | "processing" | "pending_approval" | "publish_failed";
 
+export type EditorTweetTextSource = "title" | "custom" | "ai";
+
+/** صور التغريدة كما تُخزَّن: صورة الخبر، أو صور المحرر (وسائط متعددة)، أو بلا صور. */
+interface EditorTweetMedia {
+  imageSource: "article" | "none";
+  imageUrl: string | null;
+  mediaKind: "none" | "image";
+  mediaUrls: string[];
+}
+
+export function resolveEditorTweetMedia(
+  input: { includeImage: boolean; imageUrls?: string[] },
+  articleImageUrl: string | null,
+): EditorTweetMedia {
+  const own = [...new Set((input.imageUrls ?? []).map((u) => u.trim()).filter(Boolean))];
+  if (own.length > MAX_POST_IMAGES) {
+    throw new SocialPublishValidationError(`الصور ${MAX_POST_IMAGES} كحد أقصى`);
+  }
+  if (own.length > 0) {
+    for (const url of own) {
+      try {
+        assertSafeImageUrl(absolutizeImageUrl(url));
+      } catch (err) {
+        throw new SocialPublishValidationError(
+          `رابط الصورة مرفوض: ${err instanceof Error ? err.message : "غير مسموح"}`,
+        );
+      }
+    }
+    return { imageSource: "none", imageUrl: null, mediaKind: "image", mediaUrls: own };
+  }
+  const imageUrl = input.includeImage ? articleImageUrl : null;
+  return imageUrl
+    ? { imageSource: "article", imageUrl, mediaKind: "none", mediaUrls: [] }
+    : { imageSource: "none", imageUrl: null, mediaKind: "none", mediaUrls: [] };
+}
+
 export interface EditorTweetInput {
   articleId?: string;
   /** رابط الخبر العام بديلاً عن المعرّف. */
@@ -43,6 +82,9 @@ export interface EditorTweetInput {
   text: string;
   includeLink: boolean;
   includeImage: boolean;
+  /** صور يرفعها المحرر (حتى 4) بدل صورة الخبر. */
+  imageUrls?: string[];
+  textSource?: EditorTweetTextSource;
   actorUserId: string;
   /** هل يملك صاحب التوكن صلاحية النشر الفوري على X؟ */
   canPublishNow: boolean;
@@ -85,8 +127,11 @@ export interface EditorTweetDeps {
     postId: string;
     text: string;
     linkUrl: string | null;
+    textSource: EditorTweetTextSource;
     imageSource: "article" | "none";
     imageUrl: string | null;
+    mediaKind: "none" | "image";
+    mediaUrls: string[];
     now: Date;
   }): Promise<SocialPost | null>;
   /** قفل مشترك بين النسخ يجعل «ابحث عن مطابق ثم أنشئ واحجز» خطوة واحدة. */
@@ -171,10 +216,10 @@ const defaultDeps: EditorTweetDeps = {
       .limit(1);
     return row ?? null;
   },
-  async updatePendingProposal({ postId, text, linkUrl, imageSource, imageUrl, now }) {
+  async updatePendingProposal({ postId, text, linkUrl, textSource, imageSource, imageUrl, mediaKind, mediaUrls, now }) {
     const [row] = await db
       .update(socialPosts)
-      .set({ text, linkUrl, imageSource, imageUrl, requestedAt: now, updatedAt: now })
+      .set({ text, linkUrl, textSource, imageSource, imageUrl, mediaKind, mediaUrls, requestedAt: now, updatedAt: now })
       .where(
         and(
           eq(socialPosts.id, postId),
@@ -229,7 +274,11 @@ export interface EditorTweetPreview {
   article: { id: string; title: string; url: string; imageUrl: string | null };
   text: string;
   linkUrl: string | null;
+  /** أول صورة (توافقًا مع العملاء الأقدم). القائمة الكاملة في imageUrls. */
   imageUrl: string | null;
+  imageUrls: string[];
+  imageSource: "article" | "upload" | "none";
+  textSource: EditorTweetTextSource;
   composedText: string;
   weightedLength: number;
   valid: boolean;
@@ -245,21 +294,29 @@ export async function previewEditorTweet(
     text?: string;
     includeLink: boolean;
     includeImage: boolean;
+    imageUrls?: string[];
+    textSource?: EditorTweetTextSource;
     canPublishNow: boolean;
   },
   overrides: Partial<EditorTweetDeps> = {},
 ): Promise<EditorTweetPreview> {
   const deps: EditorTweetDeps = { ...defaultDeps, ...overrides };
   const article = await loadTweetableArticle(input, deps);
-  const text = input.text?.trim() || article.title;
+  const useTitle = input.textSource === "title" || !input.text?.trim();
+  const text = useTitle ? article.title : input.text!.trim();
   const linkUrl = input.includeLink ? article.url : null;
   const validation = validateXPostText(text, linkUrl);
+  const media = resolveEditorTweetMedia(input, article.imageUrl);
+  const imageUrls = media.mediaUrls.length > 0 ? media.mediaUrls : media.imageUrl ? [media.imageUrl] : [];
   return {
     mode: input.canPublishNow ? "direct" : "approval",
     article: { id: article.id, title: article.title, url: article.url, imageUrl: article.imageUrl },
     text,
     linkUrl,
-    imageUrl: input.includeImage ? article.imageUrl : null,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+    imageSource: media.mediaUrls.length > 0 ? "upload" : media.imageUrl ? "article" : "none",
+    textSource: useTitle ? "title" : input.textSource ?? "custom",
     composedText: composeXPostText(text, linkUrl),
     weightedLength: validation.weightedLength,
     valid: validation.valid && !validation.empty,
@@ -277,10 +334,8 @@ export async function submitEditorTweet(
   const article = await loadTweetableArticle(input, deps);
   const lockKey = `editor-tweet:${input.actorUserId}:${article.id}`;
 
-  const imageUrl = input.includeImage ? article.imageUrl : null;
-  const image = imageUrl
-    ? { imageSource: "article" as const, imageUrl }
-    : { imageSource: "none" as const, imageUrl: null };
+  const image = resolveEditorTweetMedia(input, article.imageUrl);
+  const textSource: EditorTweetTextSource = input.textSource ?? "custom";
 
   if (input.canPublishNow) {
     // البحث عن مطابق + الإنشاء + الحجز تحت قفل واحد: طلبان متزامنان بالنص نفسه
@@ -297,7 +352,7 @@ export async function submitEditorTweet(
         const draft = await deps.createDraftPost({
           articleId: article.id,
           text,
-          textSource: "custom",
+          textSource,
           includeLink: input.includeLink,
           ...image,
           createdByUserId: input.actorUserId,
@@ -345,6 +400,7 @@ export async function submitEditorTweet(
           postId: pending.id,
           text,
           linkUrl,
+          textSource,
           ...image,
           now: deps.now(),
         })
@@ -353,7 +409,7 @@ export async function submitEditorTweet(
     const created = await deps.createDraftPost({
       articleId: article.id,
       text,
-      textSource: "custom",
+      textSource,
       includeLink: input.includeLink,
       ...image,
       createdByUserId: input.actorUserId,
