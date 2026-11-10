@@ -431,6 +431,18 @@ export async function sendDraftSubmittedNotification(
         ? "draft"
         : null;
     if (deskKind) {
+      // أثر في جرس «مكتب سبق» (2026-11-10): من فاته الإشعار يجده في مركز التنبيهات.
+      import("./services/staffDeskEventsService")
+        .then(({ recordNewsDeskItemEvent }) =>
+          recordNewsDeskItemEvent({
+            kind: deskKind,
+            articleId: article.id,
+            requestId: typeof meta.editRequestId === "string" ? meta.editRequestId : null,
+            title: article.title,
+            senderName: reporterName,
+            senderId: reporterId,
+          }))
+        .catch((error) => console.error("❌ [DRAFT-NOTIFY] desk timeline event failed:", error));
       import("./services/staffAppPushService")
         .then(({ notifyStaffDeskOfNewsItem }) =>
           notifyStaffDeskOfNewsItem({

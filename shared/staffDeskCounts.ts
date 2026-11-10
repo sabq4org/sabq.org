@@ -9,7 +9,14 @@ import type { StaffDeskEventKind, StaffDeskNotification } from "./staffNotificat
  * تنبيهات الجرس التي لا تدخل رقم الأيقونة: «مسودة جديدة» تُحسب أصلًا من
  * مصدرها (مقترحات التغريدات ومسودات الرأي)، فعدّها هنا يكرّر العنصر نفسه.
  */
-export const STAFF_BADGE_EXCLUDED_BELL_KINDS: readonly StaffDeskEventKind[] = ["tweet_draft", "opinion_draft"];
+export const STAFF_BADGE_EXCLUDED_BELL_KINDS: readonly StaffDeskEventKind[] = [
+  "tweet_draft",
+  "opinion_draft",
+  // منذ 2026-11-10: تُحسب من تبويب «الأخبار» وصندوق الرسائل. مسودة البوت (news_bot_draft) لا مصدر آخر يعدّها فتبقى.
+  "news_draft",
+  "news_edit_request",
+  "ticket_message",
+];
 
 /** الأعداد الخام قبل الحجب بالصلاحيات. null = فشل المصدر أو لم يُطلب. */
 export interface StaffDeskRawCounts {

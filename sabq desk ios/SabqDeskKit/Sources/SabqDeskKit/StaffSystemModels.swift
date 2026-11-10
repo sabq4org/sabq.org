@@ -52,16 +52,25 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
     public var newsDrafts: Bool
     /// One morning push summing what waits for a decision (server key `morningDigest`).
     public var morningDigest: Bool
+    /// Bot activity: a bot's news draft, published news or tweet (server key `botNews`).
+    public var botNews: Bool
+    /// FYI pushes when a tweet is scheduled or published, or an opinion article
+    /// is scheduled (server key `publishFollow`). OFF unless the member opts in.
+    public var publishFollow: Bool
     public var quietHours: StaffQuietHours
 
     private enum CodingKeys: String, CodingKey {
-        case aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, newsDrafts, morningDigest, quietHours
+        case aiAlerts, adminAlerts, writerMessages, socialProposals, opinionDrafts, publisherNews, newsDrafts, morningDigest
+        case botNews, publishFollow, quietHours
     }
 
     public init(aiAlerts: Bool = true, adminAlerts: Bool = true,
                 writerMessages: Bool = true, socialProposals: Bool = true,
                 opinionDrafts: Bool = true, publisherNews: Bool = true, newsDrafts: Bool = true,
-                morningDigest: Bool = true, quietHours: StaffQuietHours = .off) {
+                morningDigest: Bool = true, botNews: Bool = true, publishFollow: Bool = false,
+                quietHours: StaffQuietHours = .off) {
+        self.botNews = botNews
+        self.publishFollow = publishFollow
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
         self.writerMessages = writerMessages
@@ -83,6 +92,9 @@ public struct StaffAlertPrefs: Codable, Sendable, Equatable {
         publisherNews = try container.decodeIfPresent(Bool.self, forKey: .publisherNews) ?? true
         newsDrafts = try container.decodeIfPresent(Bool.self, forKey: .newsDrafts) ?? true
         morningDigest = try container.decodeIfPresent(Bool.self, forKey: .morningDigest) ?? true
+        botNews = try container.decodeIfPresent(Bool.self, forKey: .botNews) ?? true
+        // The one switch that defaults OFF: FYI pushes are opt-in.
+        publishFollow = try container.decodeIfPresent(Bool.self, forKey: .publishFollow) ?? false
         quietHours = (try? container.decodeIfPresent(StaffQuietHours.self, forKey: .quietHours)) ?? .off
     }
 }
@@ -97,12 +109,17 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
     public var publisherNews: Bool?
     public var newsDrafts: Bool?
     public var morningDigest: Bool?
+    public var botNews: Bool?
+    public var publishFollow: Bool?
     public var quietHours: StaffQuietHours?
 
     public init(aiAlerts: Bool? = nil, adminAlerts: Bool? = nil,
                 writerMessages: Bool? = nil, socialProposals: Bool? = nil,
                 opinionDrafts: Bool? = nil, publisherNews: Bool? = nil, newsDrafts: Bool? = nil,
-                morningDigest: Bool? = nil, quietHours: StaffQuietHours? = nil) {
+                morningDigest: Bool? = nil, botNews: Bool? = nil, publishFollow: Bool? = nil,
+                quietHours: StaffQuietHours? = nil) {
+        self.botNews = botNews
+        self.publishFollow = publishFollow
         self.aiAlerts = aiAlerts
         self.adminAlerts = adminAlerts
         self.writerMessages = writerMessages
@@ -125,6 +142,8 @@ public struct StaffAlertPrefsUpdate: Encodable, Sendable, Equatable {
         if let publisherNews { out.publisherNews = publisherNews }
         if let newsDrafts { out.newsDrafts = newsDrafts }
         if let morningDigest { out.morningDigest = morningDigest }
+        if let botNews { out.botNews = botNews }
+        if let publishFollow { out.publishFollow = publishFollow }
         if let quietHours { out.quietHours = quietHours }
         return out
     }

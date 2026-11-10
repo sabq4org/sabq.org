@@ -5,9 +5,10 @@
 // قبل تشغيل الترحيل) يُسجَّل في السجل فقط.
 import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articles, publishers, staffDeskEvents, systemSettings, users } from "@shared/schema";
+import { articles, publishers, socialPostBotKeys, staffDeskEvents, systemSettings, users } from "@shared/schema";
 import {
   STAFF_DESK_EVENTS_WINDOW_DAYS,
+  STAFF_DESK_EVENT_CATEGORIES,
   STAFF_DESK_EVENT_LABELS,
   STAFF_DESK_UNREAD_CAP,
   botDraftsPublisherDisplayName,
@@ -18,6 +19,7 @@ import {
   staffDeskEventCategory,
   staffDeskEventDedupeKey,
   staffDeskEventDeeplink,
+  staffDeskIncludesMessages,
   visibleStaffDeskCategories,
   type StaffDeskEventCategory,
   type StaffDeskEventKind,
@@ -133,12 +135,67 @@ export async function recordTweetDraftEvent(post: TweetLike): Promise<void> {
   });
 }
 
+/** اسم البوت المعروض إن كانت التغريدة من API البوت (social_post_bot_keys)، وإلا null. لا يرمي. */
+async function resolveTweetBotName(postId: string): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ botName: socialPostBotKeys.botName })
+      .from(socialPostBotKeys)
+      .where(eq(socialPostBotKeys.postId, postId))
+      .limit(1);
+    return row?.botName ? botDraftsPublisherDisplayName(row.botName) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** إشعار «للعلم» بعد تسجيل حدث جديد (بوت → نشاط البوتات، غيره → متابعة النشر). لا يرمي. */
+async function pushFollowEvent(input: {
+  event: "tweet_scheduled" | "tweet_published" | "opinion_scheduled";
+  targetId: string;
+  title: string;
+  actorName: string | null;
+  actorUserId: string | null;
+  scheduledAt?: Date | null;
+}): Promise<void> {
+  try {
+    const botName = input.event === "opinion_scheduled" ? null : await resolveTweetBotName(input.targetId);
+    const { notifyStaffDeskOfFollowEvent } = await import("./staffAppPushService");
+    await notifyStaffDeskOfFollowEvent({
+      event: input.event,
+      targetId: input.targetId,
+      title: input.title,
+      detail:
+        buildStaffDeskEventDetail({
+          kind: input.event,
+          // تغريدة البوت تُنسب للبوت في العنوان، لا لحساب الخدمة الذي يكتب باسمه.
+          actorName: botName ? null : input.actorName,
+          scheduledAt: input.scheduledAt ?? null,
+        }) || null,
+      botName,
+      excludeUserId: botName ? null : input.actorUserId,
+    });
+  } catch (err) {
+    console.error(`${LOG_PREFIX} إشعار المتابعة ${input.event} فشل:`, err);
+  }
+}
+
 export async function recordTweetScheduledEvent(post: TweetLike, actorUserId?: string | null): Promise<void> {
-  await recordStaffDeskEvent({
+  const actorName = await resolveStaffDeskUserName(actorUserId);
+  const created = await recordStaffDeskEvent({
     kind: "tweet_scheduled",
     targetId: post.id,
     title: post.text,
-    actorName: await resolveStaffDeskUserName(actorUserId),
+    actorName,
+    actorUserId: actorUserId ?? null,
+    scheduledAt: post.scheduledAt ?? null,
+  });
+  if (!created) return;
+  await pushFollowEvent({
+    event: "tweet_scheduled",
+    targetId: post.id,
+    title: post.text,
+    actorName,
     actorUserId: actorUserId ?? null,
     scheduledAt: post.scheduledAt ?? null,
   });
@@ -146,11 +203,20 @@ export async function recordTweetScheduledEvent(post: TweetLike, actorUserId?: s
 
 /** actorUserId غائب = نشرها العامل في موعدها. */
 export async function recordTweetPublishedEvent(post: TweetLike, actorUserId?: string | null): Promise<void> {
-  await recordStaffDeskEvent({
+  const actorName = await resolveStaffDeskUserName(actorUserId);
+  const created = await recordStaffDeskEvent({
     kind: "tweet_published",
     targetId: post.id,
     title: post.text,
-    actorName: await resolveStaffDeskUserName(actorUserId),
+    actorName,
+    actorUserId: actorUserId ?? null,
+  });
+  if (!created) return;
+  await pushFollowEvent({
+    event: "tweet_published",
+    targetId: post.id,
+    title: post.text,
+    actorName,
     actorUserId: actorUserId ?? null,
   });
 }
@@ -176,13 +242,93 @@ export async function recordOpinionScheduledEvent(input: {
   authorId: string | null;
   scheduledAt: Date;
 }): Promise<void> {
-  await recordStaffDeskEvent({
+  const actorName = await resolveStaffDeskUserName(input.authorId);
+  const created = await recordStaffDeskEvent({
     kind: "opinion_scheduled",
     targetId: input.articleId,
     title: input.title,
-    actorName: await resolveStaffDeskUserName(input.authorId),
+    actorName,
     actorUserId: input.authorId,
     scheduledAt: input.scheduledAt,
+  });
+  if (!created) return;
+  // actorUserId هنا كاتب المقال لا من جدوله، فلا يُستثنى أحد من فريق الرأي.
+  await pushFollowEvent({
+    event: "opinion_scheduled",
+    targetId: input.articleId,
+    title: input.title,
+    actorName,
+    actorUserId: null,
+    scheduledAt: input.scheduledAt,
+  });
+}
+
+/**
+ * مسودة خبر أضافها بوت وتنتظر قرار محرر (2026-11-10): تُسجَّل مرة واحدة لكل
+ * مسودة ثم يُرسل إشعار «نشاط البوتات». لا يرمي.
+ */
+export async function recordBotNewsDraftEvent(input: {
+  articleId: string;
+  title: string;
+  botName: string | null;
+  actorUserId?: string | null;
+}): Promise<void> {
+  const created = await recordStaffDeskEvent({
+    kind: "news_bot_draft",
+    targetId: input.articleId,
+    title: input.title,
+    actorName: input.botName,
+    actorUserId: input.actorUserId ?? null,
+  });
+  if (!created) return;
+  try {
+    const { notifyStaffDeskOfBotDraft } = await import("./staffAppPushService");
+    await notifyStaffDeskOfBotDraft({
+      articleId: input.articleId,
+      title: input.title,
+      botName: input.botName,
+      excludeUserId: input.actorUserId ?? null,
+    });
+  } catch (err) {
+    console.error(`${LOG_PREFIX} إشعار مسودة البوت فشل:`, err);
+  }
+}
+
+/** خبر مراسل بانتظار القرار أو طلب تعديل: أثر في الجرس (الإشعار يرسله notifyStaffDeskOfNewsItem). لا يرمي. */
+export async function recordNewsDeskItemEvent(input: {
+  kind: "draft" | "edit_request";
+  articleId: string;
+  requestId?: string | null;
+  title: string;
+  senderName: string | null;
+  senderId?: string | null;
+}): Promise<void> {
+  const isRequest = input.kind === "edit_request";
+  if (isRequest && !input.requestId) return;
+  await recordStaffDeskEvent({
+    kind: isRequest ? "news_edit_request" : "news_draft",
+    targetId: isRequest ? input.requestId! : input.articleId,
+    title: input.title,
+    actorName: input.senderName,
+    actorUserId: input.senderId ?? null,
+  });
+}
+
+/** رسالة أو استفسار من كاتب: أثر في تبويب «رسائل» (الإشعار يرسله notifyDeskOfWriterInquiry). لا يرمي. */
+export async function recordTicketMessageEvent(input: {
+  ticketId: string;
+  title: string;
+  writerName: string | null;
+  senderId?: string | null;
+  at?: Date;
+}): Promise<void> {
+  await recordStaffDeskEvent({
+    kind: "ticket_message",
+    targetId: input.ticketId,
+    title: input.title,
+    actorName: input.writerName,
+    actorUserId: input.senderId ?? null,
+    at: input.at,
   });
 }
 
@@ -202,6 +348,8 @@ export async function recordPublisherNewsEvent(input: {
   /** حساب وكالة: يُعرض اسم الوكالة بدل اسم صاحب التوكن. */
   publisherId?: string | null;
 }): Promise<void> {
+  // بلا صاحب توكن ولا وكالة = بوت بتوكن البيئة (قروك…): يتبع مفتاح «نشاط البوتات».
+  const fromBot = !input.publisherUserId && !input.publisherId;
   const linkUrl = publishedArticleUrl(input.article);
   const publisherName = (await resolvePublisherName(input.publisherId)) ?? input.publisherName;
   const created = await recordStaffDeskEvent({
@@ -220,6 +368,8 @@ export async function recordPublisherNewsEvent(input: {
       title: input.article.title,
       publisherName,
       excludeUserId: input.publisherUserId,
+      fromBot,
+      linkUrl,
     });
   } catch (err) {
     console.error(`${LOG_PREFIX} إشعار خبر «نشر سبق» فشل:`, err);
@@ -281,9 +431,35 @@ interface SeenState {
   seenAt: Date | null;
   /** تنبيهات فتحها العضو بعد آخر «تعليم الكل كمقروء» (أحدث 200). */
   readIds: string[];
+  /** «مسح الكل» لكل فئة: ما سُجّل حتى هذا الوقت لا يظهر لهذا العضو (2026-11-10). */
+  clearedAt: Partial<Record<StaffDeskEventCategory, Date>>;
+  /** تنبيهات مسحها العضو فرادى (أحدث 300). */
+  clearedIds: string[];
 }
 
 const MAX_READ_IDS = 200;
+const MAX_CLEARED_IDS = 300;
+const EMPTY_SEEN: SeenState = { seenAt: null, readIds: [], clearedAt: {}, clearedIds: [] };
+
+/** يقرأ القيمة المخزنة؛ أي حقل تالف يُهمل. دالة نقية للاختبار. */
+export function parseStaffDeskSeenState(raw: unknown): SeenState {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const date = typeof value.seenAt === "string" ? new Date(value.seenAt) : null;
+  const ids = (list: unknown, max: number) =>
+    Array.isArray(list) ? list.filter((id): id is string => typeof id === "string").slice(-max) : [];
+  const clearedAt: SeenState["clearedAt"] = {};
+  const cleared = value.cleared && typeof value.cleared === "object" ? (value.cleared as Record<string, unknown>) : {};
+  for (const category of STAFF_DESK_EVENT_CATEGORIES) {
+    const at = typeof cleared[category] === "string" ? new Date(cleared[category] as string) : null;
+    if (at && !Number.isNaN(at.getTime())) clearedAt[category] = at;
+  }
+  return {
+    seenAt: date && !Number.isNaN(date.getTime()) ? date : null,
+    readIds: ids(value.readIds, MAX_READ_IDS),
+    clearedAt,
+    clearedIds: ids(value.clearedIds, MAX_CLEARED_IDS),
+  };
+}
 
 async function getSeenState(userId: string): Promise<SeenState> {
   const [row] = await db
@@ -291,19 +467,34 @@ async function getSeenState(userId: string): Promise<SeenState> {
     .from(systemSettings)
     .where(eq(systemSettings.key, seenKey(userId)))
     .limit(1);
-  const value = (row?.value ?? {}) as { seenAt?: unknown; readIds?: unknown };
-  const date = typeof value.seenAt === "string" ? new Date(value.seenAt) : null;
-  const readIds = Array.isArray(value.readIds)
-    ? value.readIds.filter((id): id is string => typeof id === "string").slice(-MAX_READ_IDS)
-    : [];
-  return { seenAt: date && !Number.isNaN(date.getTime()) ? date : null, readIds };
+  return parseStaffDeskSeenState(row?.value);
 }
 
-async function saveSeenState(userId: string, state: { seenAt: string | null; readIds: string[] }, now: Date) {
+/** يدمج الحقول المرسلة في الصف ذرياً، فيبقى ما مسحه العضو عند «تعليم الكل كمقروء» والعكس. */
+async function mergeSeenState(userId: string, patch: Record<string, unknown>, now: Date) {
   await db
     .insert(systemSettings)
-    .values({ key: seenKey(userId), value: state, category: "staff_app", isPublic: false })
-    .onConflictDoUpdate({ target: systemSettings.key, set: { value: state, updatedAt: now } });
+    .values({ key: seenKey(userId), value: patch, category: "staff_app", isPublic: false })
+    .onConflictDoUpdate({
+      target: systemSettings.key,
+      set: {
+        value: sql`(CASE WHEN jsonb_typeof(${systemSettings.value}) = 'object' THEN ${systemSettings.value} ELSE '{}'::jsonb END) || ${JSON.stringify(patch)}::jsonb`,
+        updatedAt: now,
+      },
+    });
+}
+
+/** يستبعد ما مسحه العضو: فرادى، أو كل ما سبق «مسح الكل» في فئته. */
+function notClearedSql(seen: SeenState) {
+  const parts = [];
+  if (seen.clearedIds.length > 0) {
+    parts.push(sql`${staffDeskEvents.id} not in (${sql.join(seen.clearedIds.map((id) => sql`${id}`), sql`, `)})`);
+  }
+  for (const category of STAFF_DESK_EVENT_CATEGORIES) {
+    const at = seen.clearedAt[category];
+    if (at) parts.push(sql`not (${staffDeskEvents.category} = ${category} and ${staffDeskEvents.createdAt} <= ${at})`);
+  }
+  return parts.length === 0 ? sql`true` : sql.join(parts, sql` and `);
 }
 
 function notReadSql(readIds: string[]) {
@@ -348,12 +539,12 @@ function toNotification(
 export async function listStaffDeskNotifications(
   caps: StaffCapabilities,
   userId: string,
-  query: { category: "all" | StaffDeskEventCategory; cursor?: string; limit: number },
+  query: { category: "all" | StaffDeskEventCategory; cursor?: string; limit: number; v?: number },
   now: Date = new Date(),
 ): Promise<StaffDeskNotificationsResponse> {
-  const categories = visibleStaffDeskCategories(caps);
-  const empty = { all: 0, tweet: 0, opinion: 0, news: 0 };
-  const seen = await getSeenState(userId).catch((): SeenState => ({ seenAt: null, readIds: [] }));
+  const categories = visibleStaffDeskCategories(caps, { includeMessages: staffDeskIncludesMessages(query.v) });
+  const empty = { all: 0, tweet: 0, opinion: 0, news: 0, message: 0 };
+  const seen = await getSeenState(userId).catch((): SeenState => EMPTY_SEEN);
   const seenAt = seen.seenAt;
   if (categories.length === 0) {
     return { items: [], nextCursor: null, categories, counts: empty, unreadCount: 0, seenAt: seenAt?.toISOString() ?? null };
@@ -377,6 +568,7 @@ export async function listStaffDeskNotifications(
             and(
               inArray(staffDeskEvents.category, shown),
               gte(staffDeskEvents.createdAt, start),
+              notClearedSql(seen),
               cursor
                 ? or(
                     lt(staffDeskEvents.createdAt, new Date(cursor.createdAt)),
@@ -405,7 +597,7 @@ export async function listStaffDeskNotifications(
       unread: sql<number>`count(*) filter (where ${staffDeskEvents.createdAt} > ${since} and ${notReadSql(seen.readIds)})::int`,
     })
     .from(staffDeskEvents)
-    .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, start)))
+    .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, start), notClearedSql(seen)))
     .groupBy(staffDeskEvents.category);
 
   const counts = { ...empty };
@@ -415,7 +607,7 @@ export async function listStaffDeskNotifications(
     if (key in counts) counts[key] = Number(row.total) || 0;
     unread += Number(row.unread) || 0;
   }
-  counts.all = counts.tweet + counts.opinion + counts.news;
+  counts.all = counts.tweet + counts.opinion + counts.news + counts.message;
 
   return {
     items: page.map((row) => toNotification(row, since, new Set(seen.readIds), now)),
@@ -432,8 +624,9 @@ export async function getStaffDeskUnread(
   caps: StaffCapabilities,
   userId: string,
   now: Date = new Date(),
+  options: { v?: number } = {},
 ): Promise<StaffDeskUnreadResponse> {
-  const { unreadCount, latest } = await getStaffDeskUnreadDetailed(caps, userId, now);
+  const { unreadCount, latest } = await getStaffDeskUnreadDetailed(caps, userId, now, [], options);
   return { unreadCount, latest };
 }
 
@@ -447,14 +640,15 @@ export async function getStaffDeskUnreadDetailed(
   userId: string,
   now: Date = new Date(),
   excludeKinds: readonly StaffDeskEventKind[] = [],
+  options: { v?: number } = {},
 ): Promise<StaffDeskUnreadResponse & { unreadExcludingKinds: number }> {
-  const categories = visibleStaffDeskCategories(caps);
+  const categories = visibleStaffDeskCategories(caps, { includeMessages: staffDeskIncludesMessages(options.v) });
   if (categories.length === 0) return { unreadCount: 0, latest: null, unreadExcludingKinds: 0 };
   const keptSql =
     excludeKinds.length === 0
       ? sql`true`
       : sql`${staffDeskEvents.kind} not in (${sql.join(excludeKinds.map((kind) => sql`${kind}`), sql`, `)})`;
-  const seen = await getSeenState(userId).catch((): SeenState => ({ seenAt: null, readIds: [] }));
+  const seen = await getSeenState(userId).catch((): SeenState => EMPTY_SEEN);
   const since = unreadSince(seen.seenAt, now);
   const start = windowStart(now);
   const [[countRow], [latestRow]] = await Promise.all([
@@ -471,12 +665,13 @@ export async function getStaffDeskUnreadDetailed(
           gte(staffDeskEvents.createdAt, start),
           sql`${staffDeskEvents.createdAt} > ${since}`,
           notReadSql(seen.readIds),
+          notClearedSql(seen),
         ),
       ),
     db
       .select()
       .from(staffDeskEvents)
-      .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, start)))
+      .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, start), notClearedSql(seen)))
       .orderBy(desc(staffDeskEvents.createdAt), desc(staffDeskEvents.id))
       .limit(1),
   ]);
@@ -490,39 +685,74 @@ export async function getStaffDeskUnreadDetailed(
 /** «تعليم الكل كمقروء»: كل ما قبل الآن مقروء، وتُفرَّغ قائمة المقروء فرادى. */
 export async function markStaffDeskNotificationsSeen(userId: string, now: Date = new Date()): Promise<string> {
   const seenAt = now.toISOString();
-  await saveSeenState(userId, { seenAt, readIds: [] }, now);
+  await mergeSeenState(userId, { seenAt, readIds: [] }, now);
   return seenAt;
 }
 
-/** فتح تنبيه واحد يعلّمه مقروءاً دون غيره. */
-// تحديث ذري في قاعدة البيانات: طلبا قراءة متزامنان (أو قراءة مع «تعليم الكل») لا يلغي أحدهما الآخر،
-// لأن هذا المسار يلمس readIds وحدها ويبقي seenAt كما هي في الصف لحظة الكتابة.
-export async function markStaffDeskNotificationRead(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
+/**
+ * «مسح الكل» (2026-11-10): يخفي عن هذا العضو وحده كل ما سُجّل حتى الآن في الفئة
+ * المطلوبة، أو في كل فئاته المرئية عند "all". الأحداث نفسها تبقى لزملائه.
+ * يعيد الفئات التي مُسحت.
+ */
+export async function clearStaffDeskNotifications(
+  caps: StaffCapabilities,
+  userId: string,
+  category: "all" | StaffDeskEventCategory,
+  options: { v?: number } = {},
+  now: Date = new Date(),
+): Promise<StaffDeskEventCategory[]> {
+  const visible = visibleStaffDeskCategories(caps, { includeMessages: staffDeskIncludesMessages(options.v) });
+  const targets = category === "all" ? visible : visible.filter((c) => c === category);
+  if (targets.length === 0) return [];
+  const seen = await getSeenState(userId).catch((): SeenState => EMPTY_SEEN);
+  const cleared: Record<string, string> = {};
+  for (const [key, at] of Object.entries(seen.clearedAt)) if (at) cleared[key] = at.toISOString();
+  for (const target of targets) cleared[target] = now.toISOString();
+  // مسح كل الفئات يُفرغ قائمة الممسوح فرادى أيضاً: كلها أقدم من الآن.
+  const all = visible.every((c) => targets.includes(c));
+  await mergeSeenState(userId, { cleared, ...(all ? { clearedIds: [] } : {}) }, now);
+  return targets;
+}
+
+/** يلحق معرّفاً بقائمة في صف العضو ذرياً (أحدث `max`)، دون لمس بقية الحقول. */
+async function appendSeenStateId(userId: string, field: "readIds" | "clearedIds", eventId: string, max: number, now: Date) {
   const key = seenKey(userId);
-  const initial = JSON.stringify({ seenAt: null, readIds: [eventId] });
+  const initial = JSON.stringify({ seenAt: null, readIds: [], [field]: [eventId] });
   await db.execute(sql`
     INSERT INTO system_settings (key, value, category, is_public)
     VALUES (${key}, ${initial}::jsonb, 'staff_app', false)
     ON CONFLICT (key) DO UPDATE SET
       value = jsonb_set(
         system_settings.value,
-        '{readIds}',
+        ARRAY[${field}::text],
         (
           SELECT COALESCE(jsonb_agg(t.id ORDER BY t.ord), '[]'::jsonb)
           FROM (
             SELECT e.id, e.ord
             FROM jsonb_array_elements(
-              (CASE WHEN jsonb_typeof(system_settings.value->'readIds') = 'array'
-                    THEN system_settings.value->'readIds' ELSE '[]'::jsonb END)
+              (CASE WHEN jsonb_typeof(system_settings.value->(${field}::text)) = 'array'
+                    THEN system_settings.value->(${field}::text) ELSE '[]'::jsonb END)
               - ${eventId}::text
               || jsonb_build_array(${eventId}::text)
             ) WITH ORDINALITY AS e(id, ord)
             ORDER BY e.ord DESC
-            LIMIT ${MAX_READ_IDS}
+            LIMIT ${max}
           ) t
         ),
         true
       ),
       updated_at = ${now}
   `);
+}
+
+/** مسح تنبيه واحد عن هذا العضو وحده. */
+export async function clearStaffDeskNotification(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
+  await appendSeenStateId(userId, "clearedIds", eventId, MAX_CLEARED_IDS, now);
+}
+
+/** فتح تنبيه واحد يعلّمه مقروءاً دون غيره. */
+// تحديث ذري في قاعدة البيانات: طلبا قراءة متزامنان (أو قراءة مع «تعليم الكل») لا يلغي أحدهما الآخر،
+// لأن هذا المسار يلمس readIds وحدها ويبقي seenAt كما هي في الصف لحظة الكتابة.
+export async function markStaffDeskNotificationRead(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
+  await appendSeenStateId(userId, "readIds", eventId, MAX_READ_IDS, now);
 }

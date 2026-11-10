@@ -24,7 +24,7 @@ import {
 import { userHasPermission } from "../rbac";
 import { clipDeskAlertExcerpt } from "./deskBotAlerts";
 import { isOpinionTicketNotifyRecipient } from "./opinionTicketNotice";
-import { getStaffAlertPrefsForUsers } from "./staffAlertPrefsService";
+import { getStaffAlertPrefsForUsers, listStaffAlertOptInUserIds } from "./staffAlertPrefsService";
 import { sendPushToUserApp, type UserAppPushMessage } from "./userAppPushService";
 
 /**
@@ -388,6 +388,10 @@ export async function notifyStaffDeskOfPublisherNews(input: {
   title: string;
   publisherName: string | null;
   excludeUserId?: string | null;
+  /** نشره بوت بتوكن البيئة (قروك…) لا زميل ولا وكالة: يتبع مفتاح «نشاط البوتات». */
+  fromBot?: boolean;
+  /** رابط الخبر المنشور؛ التطبيق الأحدث يفتحه مباشرة بدل مركز التنبيهات. */
+  linkUrl?: string | null;
 }): Promise<number> {
   try {
     const recipientIds = await listStaffPermissionRecipientUserIds(
@@ -400,12 +404,13 @@ export async function notifyStaffDeskOfPublisherNews(input: {
     const body = clipDeskAlertExcerpt(input.title, 160);
     const results = await Promise.all(
       recipientIds.map(async (recipientId) => {
-        const message = applyStaffDeskPrefs(prefs.get(recipientId), "publisherNews", {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), input.fromBot ? "botNews" : "publisherNews", {
           title,
           body,
           type: "desk.publisher_news",
+          // النسخ الأقدم تفتح مركز التنبيهات؛ الأحدث تقرأ linkUrl أولاً.
           deeplink: "sabqdesk://notifications",
-          data: { articleId: input.articleId },
+          data: { articleId: input.articleId, ...(input.linkUrl ? { linkUrl: input.linkUrl } : {}) },
           collapseId: `desk-news-${input.articleId}`,
         });
         if (!message) return 0;
@@ -484,6 +489,156 @@ export async function notifyStaffDeskOfNewsItem(input: {
     return results.reduce((a, b) => a + b, 0);
   } catch (err) {
     console.error("[StaffAppPush] notifyStaffDeskOfNewsItem failed:", err);
+    return 0;
+  }
+}
+
+/**
+ * مسودة خبر أضافها بوت (قروك، «نشر سبق»…) وتنتظر قرار محرر (2026-11-10): إشعار
+ * لكل من يملك articles.publish، يحترم مفتاح «نشاط البوتات» (`botNews`) والساعات
+ * الهادئة، ويفتح المسودة في تبويب «الأخبار». collapseId نفسه الذي يستعمله إشعار
+ * «نُشر الخبر»، فإن نُشرت المسودة بعد لحظات حلّ إشعار النشر محل هذا. لا يرمي.
+ */
+export async function notifyStaffDeskOfBotDraft(input: {
+  articleId: string;
+  title: string;
+  botName: string | null;
+  excludeUserId?: string | null;
+}): Promise<number> {
+  try {
+    const recipientIds = await listStaffPermissionRecipientUserIds(
+      PERMISSION_CODES.ARTICLES_PUBLISH,
+      input.excludeUserId,
+    );
+    if (recipientIds.length === 0) return 0;
+    const prefs = await loadStaffDeskPrefs(recipientIds);
+    const title = input.botName ? `مسودة خبر من ${input.botName}` : "مسودة خبر من بوت";
+    const body = clipDeskAlertExcerpt(input.title, 160);
+    const results = await Promise.all(
+      recipientIds.map(async (recipientId) => {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), "botNews", {
+          title,
+          body,
+          type: "desk.bot_draft",
+          deeplink: `sabqdesk://news/${input.articleId}`,
+          data: { articleId: input.articleId },
+          collapseId: `desk-news-${input.articleId}`,
+        });
+        if (!message) return 0;
+        try {
+          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
+          return r.sent;
+        } catch (pushErr) {
+          console.error("[StaffAppPush] bot draft push to recipient failed:", pushErr);
+          return 0;
+        }
+      }),
+    );
+    return results.reduce((a, b) => a + b, 0);
+  } catch (err) {
+    console.error("[StaffAppPush] notifyStaffDeskOfBotDraft failed:", err);
+    return 0;
+  }
+}
+
+/**
+ * أعضاء فعّلوا صراحةً تفضيلاً افتراضيه مطفأ ويملكون إحدى الصلاحيات الآن.
+ * يبدأ من قائمة المفعِّلين (قصيرة) بدل فحص صلاحيات كل الطاقم.
+ */
+export async function listStaffOptInRecipientUserIds(
+  kind: StaffAlertKind,
+  permissionCodes: readonly string[],
+  excludeUserId?: string | null,
+): Promise<string[]> {
+  const optedIn = (await listStaffAlertOptInUserIds(kind)).filter((id) => id !== excludeUserId);
+  if (optedIn.length === 0) return [];
+  const active = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(inArray(users.id, optedIn), eq(users.status, "active")));
+  const out: string[] = [];
+  for (const row of active) {
+    for (const code of permissionCodes) {
+      if (await userHasPermission(row.id, code)) {
+        out.push(row.id);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+export type StaffDeskFollowEvent = "tweet_scheduled" | "tweet_published" | "opinion_scheduled";
+
+/** عنوان إشعار المتابعة. دالة نقية للاختبار. */
+export function staffDeskFollowTitle(event: StaffDeskFollowEvent, botName?: string | null): string {
+  if (event === "opinion_scheduled") return "جُدول مقال رأي";
+  const verb = event === "tweet_scheduled" ? "جُدولت" : "نُشرت";
+  return botName ? `${verb} تغريدة من ${botName}` : `${verb} تغريدة`;
+}
+
+/**
+ * إشعار «للعلم» (2026-11-10): تغريدة جُدولت أو نُشرت، أو مقال رأي جُدول.
+ *  - من بوت (`botName`): يصل كل من يملك الصلاحية ما لم يطفئ «نشاط البوتات».
+ *  - من زميل أو من العامل المجدول: يصل فقط من فعّل «متابعة النشر» (مطفأ افتراضياً).
+ * لا يرمي.
+ */
+export async function notifyStaffDeskOfFollowEvent(input: {
+  event: StaffDeskFollowEvent;
+  targetId: string;
+  title: string;
+  /** السطر الثاني الجاهز (من فعل ومتى)، يُلحق بالنص. */
+  detail?: string | null;
+  botName?: string | null;
+  excludeUserId?: string | null;
+}): Promise<number> {
+  try {
+    const isOpinion = input.event === "opinion_scheduled";
+    const permissionCodes: readonly string[] = isOpinion
+      ? OPINION_DESK_RECIPIENT_PERMISSIONS
+      : [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG];
+    const pref: StaffAlertKind = input.botName ? "botNews" : "publishFollow";
+    const recipientIds = input.botName
+      ? [
+          ...new Set(
+            (
+              await Promise.all(
+                permissionCodes.map((code) => listStaffPermissionRecipientUserIds(code, input.excludeUserId)),
+              )
+            ).flat(),
+          ),
+        ]
+      : await listStaffOptInRecipientUserIds("publishFollow", permissionCodes, input.excludeUserId);
+    if (recipientIds.length === 0) return 0;
+    const prefs = await loadStaffDeskPrefs(recipientIds);
+    const excerpt = clipDeskAlertExcerpt(input.title, 140);
+    const body = input.detail ? `${excerpt} — ${input.detail}` : excerpt;
+    const results = await Promise.all(
+      recipientIds.map(async (recipientId) => {
+        const message = applyStaffDeskPrefs(prefs.get(recipientId), pref, {
+          title: staffDeskFollowTitle(input.event, input.botName),
+          body,
+          type: `desk.${input.event}`,
+          deeplink: isOpinion ? `sabqdesk://opinion/${input.targetId}` : `sabqdesk://social/${input.targetId}`,
+          // بلا postId للرأي حتى لا تفسّره نسخة أقدم كتغريدة.
+          data: isOpinion ? { articleId: input.targetId } : { postId: input.targetId },
+          collapseId: `desk-follow-${input.targetId}`,
+          // للعلم لا للقرار: لا يقطع التركيز.
+          interruptionLevel: "passive",
+        });
+        if (!message) return 0;
+        try {
+          const r = await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, message);
+          return r.sent;
+        } catch (pushErr) {
+          console.error("[StaffAppPush] follow push to recipient failed:", pushErr);
+          return 0;
+        }
+      }),
+    );
+    return results.reduce((a, b) => a + b, 0);
+  } catch (err) {
+    console.error("[StaffAppPush] notifyStaffDeskOfFollowEvent failed:", err);
     return 0;
   }
 }

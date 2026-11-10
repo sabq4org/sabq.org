@@ -9,6 +9,7 @@ import {
   staffDeskEventCategory,
   staffDeskEventDedupeKey,
   staffDeskEventDeeplink,
+  staffDeskIncludesMessages,
   staffDeskNotificationsQuerySchema,
   visibleStaffDeskCategories,
 } from "@shared/staffNotifications";
@@ -80,7 +81,8 @@ describe("staff desk notifications (shared)", () => {
   });
 
   it("validates the list query", () => {
-    expect(staffDeskNotificationsQuerySchema.parse({})).toEqual({ category: "all", limit: 30 });
+    expect(staffDeskNotificationsQuerySchema.parse({})).toEqual({ category: "all", limit: 30, v: 1 });
+    expect(staffDeskNotificationsQuerySchema.parse({ category: "message", v: "2" })).toMatchObject({ category: "message", v: 2 });
     expect(staffDeskNotificationsQuerySchema.safeParse({ category: "sports" }).success).toBe(false);
     expect(staffDeskNotificationsQuerySchema.safeParse({ limit: "80" }).success).toBe(false);
   });
@@ -97,5 +99,62 @@ describe("staff desk notifications (shared)", () => {
     expect(buildStaffDeskEventDetail({ kind: "news_published", actorName: null, scheduledAt: null }, NOW)).toBe(
       "نُشر عبر بوت",
     );
+  });
+
+  // ── 2026-11-10: مسودات البوت، أخبار المراسلين، ورسائل الكتّاب في الجرس ──
+  it("files the new kinds under news and messages", () => {
+    expect(staffDeskEventCategory("news_bot_draft")).toBe("news");
+    expect(staffDeskEventCategory("news_draft")).toBe("news");
+    expect(staffDeskEventCategory("news_edit_request")).toBe("news");
+    expect(staffDeskEventCategory("ticket_message")).toBe("message");
+  });
+
+  it("opens the draft, the edit request, or the ticket", () => {
+    expect(staffDeskEventDeeplink("news_bot_draft", "a1")).toBe("sabqdesk://news/a1");
+    expect(staffDeskEventDeeplink("news_draft", "a1")).toBe("sabqdesk://news/a1");
+    expect(staffDeskEventDeeplink("news_edit_request", "r1")).toBe("sabqdesk://news/edit-request/r1");
+    expect(staffDeskEventDeeplink("ticket_message", "t1")).toBe("sabqdesk://ticket/t1");
+    // الخبر المنشور يبقى على مركز التنبيهات (يُفتح برابط linkUrl).
+    expect(staffDeskEventDeeplink("news_published", "a1")).toBe("sabqdesk://notifications");
+  });
+
+  it("shows «رسائل» only to an app that asks for it and holds tickets", () => {
+    const caps = { canSocial: { view: true }, canOpinion: { view: false }, canPublisherNews: true, canTickets: true };
+    // نسخة أقدم (v=1): لا فئة لا تعرفها، فلا رقم جرس بلا صفوف.
+    expect(visibleStaffDeskCategories(caps)).toEqual(["tweet", "news"]);
+    expect(visibleStaffDeskCategories(caps, { includeMessages: true })).toEqual(["tweet", "news", "message"]);
+    expect(visibleStaffDeskCategories({ ...caps, canTickets: false }, { includeMessages: true })).toEqual(["tweet", "news"]);
+    expect(staffDeskIncludesMessages(undefined)).toBe(false);
+    expect(staffDeskIncludesMessages(1)).toBe(false);
+    expect(staffDeskIncludesMessages(2)).toBe(true);
+  });
+
+  it("records a bot draft once, but each resubmission or ticket message anew", () => {
+    const t0 = new Date("2026-11-10T09:00:10Z");
+    const sameMinute = new Date("2026-11-10T09:00:50Z");
+    const later = new Date("2026-11-10T09:05:00Z");
+    // إنشاء ثم «جاهزة للنشر»: حدث واحد.
+    expect(staffDeskEventDedupeKey({ kind: "news_bot_draft", targetId: "a1", at: t0 })).toBe(
+      staffDeskEventDedupeKey({ kind: "news_bot_draft", targetId: "a1", at: later }),
+    );
+    for (const kind of ["news_draft", "ticket_message"] as const) {
+      expect(staffDeskEventDedupeKey({ kind, targetId: "x", at: t0 })).toBe(
+        staffDeskEventDedupeKey({ kind, targetId: "x", at: sameMinute }),
+      );
+      expect(staffDeskEventDedupeKey({ kind, targetId: "x", at: t0 })).not.toBe(
+        staffDeskEventDedupeKey({ kind, targetId: "x", at: later }),
+      );
+    }
+  });
+
+  it("writes the second line for the new kinds", () => {
+    expect(buildStaffDeskEventDetail({ kind: "news_bot_draft", actorName: "قروك بوت", scheduledAt: null }, NOW)).toBe(
+      "من: قروك بوت · بانتظار قرارك",
+    );
+    expect(buildStaffDeskEventDetail({ kind: "news_bot_draft", actorName: null, scheduledAt: null }, NOW)).toBe(
+      "مسودة بانتظار قرارك",
+    );
+    expect(buildStaffDeskEventDetail({ kind: "news_edit_request", actorName: "سالم", scheduledAt: null }, NOW)).toBe("طلبه: سالم");
+    expect(buildStaffDeskEventDetail({ kind: "ticket_message", actorName: null, scheduledAt: null }, NOW)).toBe("رسالة بانتظار الرد");
   });
 });

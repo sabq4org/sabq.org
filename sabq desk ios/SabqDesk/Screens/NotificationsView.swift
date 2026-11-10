@@ -1,6 +1,7 @@
 import SabqDeskDesign
 import SabqDeskKit
 import SwiftUI
+import UserNotifications
 
 /// «التنبيهات» (approved mockup 2026-10-29): the bell's timeline of tweets,
 /// opinion articles and news published from «نشر سبق», grouped by day, with
@@ -19,6 +20,7 @@ struct NotificationsView: View {
     @State private var isLoadingMore = false
     @State private var loadError: String?
     @State private var openedArticle: DeskWebPage?
+    @State private var confirmsClear = false
 
     var body: some View {
         ScrollView {
@@ -45,6 +47,17 @@ struct NotificationsView: View {
         .fullScreenCover(item: $openedArticle) { page in
             SafariView(url: page.url).ignoresSafeArea()
         }
+        .confirmationDialog(clearPrompt, isPresented: $confirmsClear, titleVisibility: .visible) {
+            Button("مسح", role: .destructive) { Task { await clearAll() } }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("تُمسح من قائمتك أنت فقط، ولا يتأثر زملاؤك.")
+        }
+    }
+
+    private var clearPrompt: String {
+        if let category = filter.category { return "مسح تنبيهات «\(category.title)»؟" }
+        return "مسح كل التنبيهات؟"
     }
 
     // MARK: - Header
@@ -74,6 +87,18 @@ struct NotificationsView: View {
                     .buttonStyle(.plain)
                     .frame(minHeight: DeskLayout.touchTarget)
                 }
+                if !items.isEmpty {
+                    Button { confirmsClear = true } label: {
+                        Text("مسح الكل")
+                            .deskText(DeskType.metaEmphasis)
+                            .foregroundStyle(DeskInk.strong)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 36)
+                            .background(Color.white, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minHeight: DeskLayout.touchTarget)
+                }
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(newSinceLine)
@@ -99,7 +124,7 @@ struct NotificationsView: View {
                 .padding(.top, 40)
         } else {
             ForEach(StaffNotificationTimeline.days(items)) { day in
-                NotificationDayGroup(day: day) { item in open(item) }
+                NotificationDayGroup(day: day, open: { item in open(item) }, clear: { item in clear(item) })
             }
             if nextCursor != nil {
                 ProgressView()
@@ -128,11 +153,11 @@ struct NotificationsView: View {
 
     private func open(_ item: StaffNotification) {
         markRead(item)
-        if item.category == .news {
+        // Published news has no screen in the app: it opens the live page.
+        guard let link = item.link else {
             if let url = item.articleURL { openedArticle = DeskWebPage(url: url) }
             return
         }
-        guard let link = item.link else { return }
         dismiss()
         // Routed after the sheet closes, so the tab switch and push are clean.
         Task {
@@ -147,6 +172,43 @@ struct NotificationsView: View {
         unread = max(unread - 1, 0)
         app.setNotificationsUnread(unread)
         Task { try? await app.client.markNotificationRead(id: item.id) }
+    }
+
+    /// «مسح» on one row: gone at once, restored if the server refuses.
+    private func clear(_ item: StaffNotification) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        let before = (items, unread, counts)
+        items.remove(at: index)
+        if item.isUnread { unread = max(unread - 1, 0) }
+        counts.all = max(counts.all - 1, 0)
+        app.setNotificationsUnread(unread)
+        Task {
+            do {
+                try await app.client.clearNotification(id: item.id)
+            } catch {
+                (items, unread, counts) = before
+                app.setNotificationsUnread(unread)
+                if !app.handle(error) {
+                    loadError = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// «مسح الكل» in the open tab; «الكل» also clears the phone's Notification Center.
+    private func clearAll() async {
+        let requested = filter
+        do {
+            try await app.client.clearNotifications(category: requested.category)
+            if requested.category == nil {
+                UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+            }
+            await load()
+        } catch {
+            if !app.handle(error) {
+                loadError = (error as? StaffAPIError)?.userMessage ?? error.localizedDescription
+            }
+        }
     }
 
     private func markAllSeen() async {
@@ -229,12 +291,14 @@ private enum NotificationFilter: Hashable, Identifiable {
         case .tweet?: return "لا تنبيهات تغريدات"
         case .opinion?: return "لا تنبيهات مقالات رأي"
         case .news?: return "لا أخبار جديدة"
+        case .message?: return "لا رسائل جديدة"
         }
     }
 
     var emptyMessage: String {
         switch category {
-        case .news?: return "حين ينشر زميل أو شريك خبرًا عبر «نشر سبق» يظهر هنا مع اسم الناشر."
+        case .news?: return "يظهر هنا خبر المراسل ومسودة البوت وطلب التعديل، وكل خبر يُنشر عبر «نشر سبق»."
+        case .message?: return "حين يرسل كاتب استفسارًا أو ردًا يظهر هنا."
         default: return "يظهر هنا كل ما يُضاف أو يُجدول أو يُنشر، بترتيب زمني."
         }
     }
@@ -251,6 +315,7 @@ enum NotifInk {
         case .tweet: return DeskTheme.softBlue
         case .opinion: return Color(red: 0xFF / 255, green: 0xF6 / 255, blue: 0xE5 / 255)
         case .news: return Color(red: 0xE8 / 255, green: 0xF6 / 255, blue: 0xEF / 255)
+        case .message: return DeskTheme.bubbleBlue
         }
     }
 
@@ -259,6 +324,7 @@ enum NotifInk {
         case .tweet: return DeskTheme.link
         case .opinion: return Color(red: 0x94 / 255, green: 0x60 / 255, blue: 0x00 / 255)
         case .news: return Color(red: 0x13 / 255, green: 0x73 / 255, blue: 0x4E / 255)
+        case .message: return DeskTheme.link
         }
     }
 }
@@ -267,6 +333,7 @@ enum NotifInk {
 private struct NotificationDayGroup: View {
     let day: StaffNotificationDay
     let open: (StaffNotification) -> Void
+    let clear: (StaffNotification) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -284,9 +351,8 @@ private struct NotificationDayGroup: View {
             .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) {
                 ForEach(Array(day.items.enumerated()), id: \.element.id) { index, item in
-                    NotificationRow(item: item, isFirst: index == 0, isLast: index == day.items.count - 1) {
-                        open(item)
-                    }
+                    NotificationRow(item: item, isFirst: index == 0, isLast: index == day.items.count - 1,
+                                    open: { open(item) }, clear: { clear(item) })
                 }
             }
             .padding(.horizontal, 16)
@@ -300,6 +366,7 @@ private struct NotificationRow: View {
     let isFirst: Bool
     let isLast: Bool
     let open: () -> Void
+    let clear: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -330,23 +397,36 @@ private struct NotificationRow: View {
                         .foregroundStyle(DeskTheme.textSecondary)
                         .lineLimit(1)
                 }
-                if hasAction {
-                    Button(action: open) {
-                        HStack(spacing: 4) {
-                            Text(item.actionLabel)
-                            Image(systemName: "chevron.backward")
-                                .font(.system(size: 10, weight: .bold))
-                                .accessibilityHidden(true)
+                HStack(spacing: 8) {
+                    if hasAction {
+                        Button(action: open) {
+                            HStack(spacing: 4) {
+                                Text(item.actionLabel)
+                                Image(systemName: "chevron.backward")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .accessibilityHidden(true)
+                            }
+                            .deskText(DeskType.tag)
+                            .foregroundStyle(NotifInk.ink(item.category))
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 32)
+                            .background(NotifInk.tint(item.category), in: Capsule())
                         }
-                        .deskText(DeskType.tag)
-                        .foregroundStyle(NotifInk.ink(item.category))
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 32)
-                        .background(NotifInk.tint(item.category), in: Capsule())
+                        .buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 4)
+                    Button(action: clear) {
+                        Text("مسح")
+                            .deskText(DeskType.tag)
+                            .foregroundStyle(DeskTheme.textSecondary)
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 32)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 4)
+                    .accessibilityLabel("مسح التنبيه")
                 }
+                .padding(.top, 4)
             }
         }
         .padding(.vertical, 14)
@@ -360,10 +440,11 @@ private struct NotificationRow: View {
         .onTapGesture { if hasAction { open() } }
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: Text(item.actionLabel)) { if hasAction { open() } }
+        .accessibilityAction(named: Text("مسح التنبيه")) { clear() }
     }
 
     private var hasAction: Bool {
-        item.category == .news ? item.articleURL != nil : item.link != nil
+        item.link != nil || item.articleURL != nil
     }
 
     /// The timeline rail runs through the tiles, from the first row to the last.
@@ -388,6 +469,14 @@ private struct NotificationRow: View {
                 Text(verbatim: "X").font(.system(size: 16, weight: .bold))
             case "opinion_draft":
                 Image(systemName: "doc.text")
+            case "ticket_message":
+                Image(systemName: "bubble.left")
+            case "news_bot_draft":
+                Image(systemName: "sparkles")
+            case "news_draft":
+                Image(systemName: "doc.text")
+            case "news_edit_request":
+                Image(systemName: "pencil.line")
             default:
                 Image(systemName: "newspaper")
             }

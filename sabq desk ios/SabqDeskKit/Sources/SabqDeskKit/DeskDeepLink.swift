@@ -90,6 +90,21 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         }
     }
 
+    /// A published article: only https links on sabq.org are opened.
+    public static func sabqArticleURL(_ raw: String?) -> URL? {
+        guard let raw, let url = URL(string: raw), url.scheme == "https",
+              let host = url.host?.lowercased(), host == "sabq.org" || host.hasSuffix(".sabq.org") else { return nil }
+        return url
+    }
+
+    /// «نُشر خبر» push (`desk.publisher_news`, server 2026-11-10+): the live
+    /// article to open directly instead of the notifications center. Nil for
+    /// any other push, or one from an older server without `linkUrl`.
+    public static func publishedArticleURL(pushPayload userInfo: [AnyHashable: Any]) -> URL? {
+        guard userInfo["type"] as? String == "desk.publisher_news" else { return nil }
+        return sabqArticleURL(userInfo["linkUrl"] as? String)
+    }
+
     /// Prefers the explicit `deeplink`, then the `type`s (`ai_status`,
     /// `admin_alert`, `desk.opinion_draft` + `articleId`), then falls back to the `ticketId` / `postId` fields the
     /// server sends alongside it.
@@ -111,7 +126,7 @@ public enum DeskDeepLink: Sendable, Equatable, Hashable {
         case "desk.morning_digest":
             self = .morningDigest
             return
-        case "desk.news_draft":
+        case "desk.news_draft", "desk.bot_draft":
             if let id = userInfo["articleId"] as? String, Self.isValidID(id) {
                 self = .news(id: id)
                 return

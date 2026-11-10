@@ -6,7 +6,8 @@ import Foundation
 
 /// The filter tabs above the timeline.
 public enum StaffNotificationCategory: String, Codable, Sendable, CaseIterable, Identifiable {
-    case tweet, opinion, news
+    /// `message` (writer tickets) is sent only to a client that asks with `v=2`.
+    case tweet, opinion, news, message
 
     public var id: String { rawValue }
 
@@ -15,6 +16,7 @@ public enum StaffNotificationCategory: String, Codable, Sendable, CaseIterable, 
         case .tweet: return "تغريدات"
         case .opinion: return "مقالات رأي"
         case .news: return "أخبار"
+        case .message: return "رسائل"
         }
     }
 }
@@ -58,23 +60,26 @@ public struct StaffNotification: Codable, Sendable, Equatable, Identifiable, Has
         self.isUnread = isUnread
     }
 
-    /// Where the row's button goes: the tweet or the opinion article inside
-    /// the app, or nil for news (opened from `articleURL`).
+    /// Where the row's button goes inside the app: the tweet, the opinion
+    /// article, the writer's ticket, a news draft (a bot's or a reporter's) or
+    /// an edit request. Nil for published news (opened from `articleURL`).
     public var link: DeskDeepLink? {
         guard DeskDeepLink.isValidID(targetId) else { return nil }
         switch category {
         case .tweet: return .social(id: targetId)
         case .opinion: return .opinion(id: targetId)
-        case .news: return nil
+        case .message: return .ticket(id: targetId)
+        case .news:
+            switch kind {
+            case "news_bot_draft", "news_draft": return .news(id: targetId)
+            case "news_edit_request": return .editRequest(id: targetId)
+            default: return nil
+            }
         }
     }
 
     /// The published news page; only https links on sabq.org are opened.
-    public var articleURL: URL? {
-        guard let linkUrl, let url = URL(string: linkUrl), url.scheme == "https",
-              let host = url.host?.lowercased(), host == "sabq.org" || host.hasSuffix(".sabq.org") else { return nil }
-        return url
-    }
+    public var articleURL: URL? { DeskDeepLink.sabqArticleURL(linkUrl) }
 }
 
 public struct StaffNotificationCounts: Codable, Sendable, Equatable {
@@ -82,12 +87,24 @@ public struct StaffNotificationCounts: Codable, Sendable, Equatable {
     public var tweet: Int
     public var opinion: Int
     public var news: Int
+    public var message: Int
 
-    public init(all: Int = 0, tweet: Int = 0, opinion: Int = 0, news: Int = 0) {
+    public init(all: Int = 0, tweet: Int = 0, opinion: Int = 0, news: Int = 0, message: Int = 0) {
         self.all = all
         self.tweet = tweet
         self.opinion = opinion
         self.news = news
+        self.message = message
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        all = try container.decodeIfPresent(Int.self, forKey: .all) ?? 0
+        tweet = try container.decodeIfPresent(Int.self, forKey: .tweet) ?? 0
+        opinion = try container.decodeIfPresent(Int.self, forKey: .opinion) ?? 0
+        news = try container.decodeIfPresent(Int.self, forKey: .news) ?? 0
+        // Missing on a server older than 2026-11-10.
+        message = try container.decodeIfPresent(Int.self, forKey: .message) ?? 0
     }
 
     public func count(_ category: StaffNotificationCategory?) -> Int {
@@ -96,6 +113,7 @@ public struct StaffNotificationCounts: Codable, Sendable, Equatable {
         case .tweet?: return tweet
         case .opinion?: return opinion
         case .news?: return news
+        case .message?: return message
         }
     }
 }

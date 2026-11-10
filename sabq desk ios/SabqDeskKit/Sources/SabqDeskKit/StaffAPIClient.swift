@@ -311,19 +311,35 @@ public struct StaffAPIClient: Sendable {
     public func notifications(category: StaffNotificationCategory? = nil, cursor: String? = nil,
                               limit: Int = 30) async throws -> StaffNotificationsPage {
         var query = [URLQueryItem(name: "category", value: category?.rawValue ?? "all"),
-                     URLQueryItem(name: "limit", value: String(limit))]
+                     URLQueryItem(name: "limit", value: String(limit)),
+                     Self.notificationsContract]
         if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
         return try await send("GET", "/api/v1/staff/notifications", query: query)
     }
 
     /// The bell's number and the latest notification (the home line).
     public func notificationsUnread() async throws -> StaffNotificationsUnread {
-        try await send("GET", "/api/v1/staff/notifications/unread")
+        try await send("GET", "/api/v1/staff/notifications/unread", query: [Self.notificationsContract])
     }
+
+    /// `v=2`: this build knows the «رسائل» tab, so the server may include it.
+    static let notificationsContract = URLQueryItem(name: "v", value: "2")
 
     /// «تعليم الكل كمقروء».
     public func markNotificationsSeen() async throws {
         let _: Ack = try await send("POST", "/api/v1/staff/notifications/seen", body: EmptyBody())
+    }
+
+    /// «مسح الكل»: hides everything recorded so far from this member only, in
+    /// one tab or (nil) in every tab they can see. Colleagues keep their rows.
+    public func clearNotifications(category: StaffNotificationCategory? = nil) async throws {
+        let _: Ack = try await send("POST", "/api/v1/staff/notifications/clear",
+                                    body: ClearNotificationsBody(category: category?.rawValue ?? "all", v: 2))
+    }
+
+    /// «مسح» on one row: hides it from this member only.
+    public func clearNotification(id: String) async throws {
+        let _: Ack = try await send("DELETE", "/api/v1/staff/notifications/\(try pathID(id))")
     }
 
     /// Opening one notification marks only it.
@@ -479,6 +495,11 @@ public struct StaffAPIClient: Sendable {
 // MARK: - Request bodies
 
 private struct EmptyBody: Encodable {}
+
+private struct ClearNotificationsBody: Encodable {
+    var category: String
+    var v: Int
+}
 private struct Ack: Decodable {}
 
 private struct DeviceInfo: Encodable {

@@ -21,6 +21,8 @@ const STAFF_ALERT_KINDS: StaffAlertKind[] = [
   "publisherNews",
   "newsDrafts",
   "morningDigest",
+  "botNews",
+  "publishFollow",
 ];
 
 function isQuietHours(value: unknown): value is StaffQuietHours {
@@ -70,6 +72,20 @@ export async function getStaffAlertPrefsForUsers(
     out.set(userId, normalizeStaffAlertPrefs(row.value));
   }
   return out;
+}
+
+/**
+ * الأعضاء الذين فعّلوا صراحةً تفضيلاً افتراضيه مطفأ (مثل publishFollow): قراءة
+ * واحدة بدل فحص صلاحيات كل الطاقم لإشعار لا يريده أغلبهم.
+ */
+export async function listStaffAlertOptInUserIds(kind: StaffAlertKind): Promise<string[]> {
+  const rows = await db
+    .select({ key: systemSettings.key })
+    .from(systemSettings)
+    .where(
+      sql`${systemSettings.key} like ${`${STAFF_ALERT_PREFS_KEY_PREFIX}%`} and jsonb_typeof(${systemSettings.value}) = 'object' and ${systemSettings.value} ->> ${kind} = 'true'`,
+    );
+  return rows.map((row) => row.key.slice(STAFF_ALERT_PREFS_KEY_PREFIX.length)).filter(Boolean);
 }
 
 /**

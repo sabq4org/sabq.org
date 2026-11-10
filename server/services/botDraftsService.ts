@@ -1137,6 +1137,20 @@ async function ensurePublishReceiptPrivileges(tx: any, needsReceipt: boolean): P
 // العمليات
 // ────────────────────────────────────────────────────────────────────
 
+/** مركز تنبيهات «مكتب سبق» + إشعار: مسودة بوت بانتظار قرار. مرة واحدة لكل مسودة، ولا يؤخّر الرد. */
+function notifyDeskOfBotDraft(bot: BotIdentity, row: { id: string; title: string }): void {
+  void import("./staffDeskEventsService")
+    .then(({ recordBotNewsDraftEvent }) =>
+      recordBotNewsDraftEvent({
+        articleId: row.id,
+        title: row.title,
+        botName: bot.personal?.name?.trim() || bot.personal?.label?.trim() || botDraftsPublisherDisplayName(bot.name),
+        actorUserId: bot.personal?.userId ?? null,
+      }),
+    )
+    .catch((error) => console.error("[BotDrafts] desk draft event failed:", error));
+}
+
 export async function createBotDraft(
   bot: BotIdentity,
   input: BotDraftCreateInput,
@@ -1209,6 +1223,11 @@ export async function createBotDraft(
   invalidateAdminListCaches();
   await recordEvent(row.id, authorId, "created", `أنشأ البوت «${bot.name}» مسودة`, bot, input.clientReference, ctx, row);
   console.log(`[BotDrafts] created draft ${row.id} by bot=${bot.name}`);
+  // بوت لا ينشر بنفسه (توكن البيئة مثل قروك، أو توكن شخصي بلا صلاحية نشر): المسودة
+  // تنتظر محرراً، فيُنبَّه المكتب الآن. من يملك النشر ينشر بعد لحظات ويصل إشعار النشر.
+  if (!bot.personal || !bot.personal.capabilities.includes("publish")) {
+    notifyDeskOfBotDraft(bot, row);
+  }
   return toBotDraftResponse(row, category?.slug ?? null);
 }
 
@@ -1769,6 +1788,8 @@ export async function markBotDraftReady(
     existing,
   );
   console.log(`[BotDrafts] marked ready ${row.id} by bot=${bot.name}`);
+  // «جاهزة للنشر» تسليم صريح للمحرر: يُنبَّه المكتب إن لم يُنبَّه عند الإنشاء (منع التكرار في الحدث).
+  notifyDeskOfBotDraft(bot, row);
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
 

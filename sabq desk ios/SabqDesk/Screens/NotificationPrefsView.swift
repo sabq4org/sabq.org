@@ -102,6 +102,8 @@ struct NotificationPrefsView: View {
         if caps.canOpinion.view { out.append(.opinionDrafts) }
         if caps.canNews { out.append(.newsDrafts) }
         if caps.canPublisherNews { out.append(.publisherNews) }
+        if caps.canPublisherNews || caps.canSocial.view { out.append(.botNews) }
+        if caps.canSocial.view || caps.canOpinion.view { out.append(.publishFollow) }
         if caps.canAdminAlerts { out.append(.adminAlerts) }
         if caps.canSystemHealth { out.append(.aiAlerts) }
         if caps.canTickets || caps.canSocial.view || caps.canOpinion.view || caps.canNews { out.append(.morningDigest) }
@@ -159,7 +161,8 @@ private enum PrefsType {
 // MARK: - Kinds
 
 private enum PushKind: Hashable {
-    case writerMessages, socialProposals, opinionDrafts, newsDrafts, publisherNews, adminAlerts, aiAlerts, morningDigest
+    case writerMessages, socialProposals, opinionDrafts, newsDrafts, publisherNews, botNews, publishFollow
+    case adminAlerts, aiAlerts, morningDigest
 
     var title: String {
         switch self {
@@ -168,6 +171,8 @@ private enum PushKind: Hashable {
         case .opinionDrafts: return "مقالات الرأي"
         case .newsDrafts: return "أخبار المراسلين"
         case .publisherNews: return "أخبار «نشر سبق»"
+        case .botNews: return "نشاط البوتات"
+        case .publishFollow: return "متابعة النشر"
         case .adminAlerts: return "تنبيهات الإدارة"
         case .aiAlerts: return "نماذج الذكاء الاصطناعي"
         case .morningDigest: return "موجز الصباح"
@@ -181,6 +186,8 @@ private enum PushKind: Hashable {
         case .opinionDrafts: return "مسودة رأي جديدة تنتظر المراجعة والجدولة"
         case .newsDrafts: return "خبر من مراسل بانتظار قرارك، أو طلب تعديل على خبر"
         case .publisherNews: return "خبر جديد نشره زميل أو شريك عبر التطبيق"
+        case .botNews: return "مسودة أو خبر أو تغريدة من بوت، مثل قروك"
+        case .publishFollow: return "للعلم فقط: تغريدة جُدولت أو نُشرت، أو مقال رأي جُدول"
         case .adminAlerts: return "فشل نشر تغريدة أو ما يحتاج تدخلك"
         case .aiAlerts: return "تعطل نموذج أو اقتراب الرصيد من نهايته"
         case .morningDigest: return "إشعار واحد الساعة 8:00 صباحًا بما ينتظر قرارك"
@@ -194,6 +201,8 @@ private enum PushKind: Hashable {
         case .opinionDrafts: return "مقال رأي جديد ينتظر مراجعتك وجدولته."
         case .newsDrafts: return "خبر جديد من مراسل ينتظر النشر أو الجدولة."
         case .publisherNews: return "خبر جديد عبر «نشر سبق»: الناشر والعنوان."
+        case .botNews: return "مسودة خبر من قروك بوت تنتظر قرارك."
+        case .publishFollow: return "نُشرت تغريدة في موعدها."
         case .adminAlerts: return "فشل نشر تغريدة، افتح التنبيهات لإعادة المحاولة."
         case .aiAlerts: return "أحد نماذج الذكاء الاصطناعي متوقف الآن."
         case .morningDigest: return "صباح الخير، بانتظار قرارك: 3 تغريدات، مقالا رأي، رسالة واحدة."
@@ -206,8 +215,8 @@ private enum PushKind: Hashable {
         case .socialProposals, .aiAlerts: return DeskTheme.chipGrey
         case .adminAlerts: return PrefsInk.amberTint
         case .opinionDrafts: return DeskTone.teal.fill
-        case .newsDrafts, .morningDigest: return DeskInk.soft
-        case .publisherNews: return PrefsInk.greenTint
+        case .newsDrafts, .morningDigest, .publishFollow: return DeskInk.soft
+        case .publisherNews, .botNews: return PrefsInk.greenTint
         }
     }
 
@@ -217,8 +226,8 @@ private enum PushKind: Hashable {
         case .socialProposals, .aiAlerts: return DeskTheme.navy
         case .adminAlerts: return PrefsInk.amberInk
         case .opinionDrafts: return DeskTheme.teal
-        case .newsDrafts, .morningDigest: return DeskTheme.link
-        case .publisherNews: return PrefsInk.greenInk
+        case .newsDrafts, .morningDigest, .publishFollow: return DeskTheme.link
+        case .publisherNews, .botNews: return PrefsInk.greenInk
         }
     }
 
@@ -229,6 +238,8 @@ private enum PushKind: Hashable {
         case .opinionDrafts: return prefs.opinionDrafts
         case .newsDrafts: return prefs.newsDrafts
         case .publisherNews: return prefs.publisherNews
+        case .botNews: return prefs.botNews
+        case .publishFollow: return prefs.publishFollow
         case .adminAlerts: return prefs.adminAlerts
         case .aiAlerts: return prefs.aiAlerts
         case .morningDigest: return prefs.morningDigest
@@ -242,6 +253,8 @@ private enum PushKind: Hashable {
         case .opinionDrafts: return StaffAlertPrefsUpdate(opinionDrafts: value)
         case .newsDrafts: return StaffAlertPrefsUpdate(newsDrafts: value)
         case .publisherNews: return StaffAlertPrefsUpdate(publisherNews: value)
+        case .botNews: return StaffAlertPrefsUpdate(botNews: value)
+        case .publishFollow: return StaffAlertPrefsUpdate(publishFollow: value)
         case .adminAlerts: return StaffAlertPrefsUpdate(adminAlerts: value)
         case .aiAlerts: return StaffAlertPrefsUpdate(aiAlerts: value)
         case .morningDigest: return StaffAlertPrefsUpdate(morningDigest: value)
@@ -392,6 +405,10 @@ private struct KindRow: View {
             Image(systemName: "doc.text").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
         case .publisherNews:
             Image(systemName: "newspaper").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
+        case .botNews:
+            Image(systemName: "sparkles").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
+        case .publishFollow:
+            Image(systemName: "checkmark.circle").font(.system(size: 18, weight: .medium)).foregroundStyle(kind.ink)
         case .adminAlerts:
             Image(systemName: "exclamationmark.triangle").font(.system(size: 17, weight: .medium)).foregroundStyle(kind.ink)
         case .aiAlerts:

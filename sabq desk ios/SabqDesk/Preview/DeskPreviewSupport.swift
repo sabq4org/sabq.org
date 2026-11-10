@@ -23,6 +23,8 @@ struct DeskPreviewTransport: HTTPTransport {
         case "/api/v1/staff/system/health": body = Self.systemHealthJSON
         case "/api/v1/staff/alerts": body = Self.alertsJSON
         case "/api/v1/staff/me/alert-prefs": body = #"{"aiAlerts":true,"adminAlerts":true}"#
+        case "/api/v1/staff/notifications": body = Self.notificationsJSON
+        case "/api/v1/staff/notifications/unread": body = #"{"unreadCount":3,"latest":null}"#
         case "/api/v1/staff/system/balances": body = Self.balancesJSON
         case "/api/v1/staff/opinion/board": body = Self.opinionBoardJSON(empty: emptyOpinion)
         case let path where path.hasPrefix("/api/v1/staff/opinion/"):
@@ -449,6 +451,38 @@ extension View {
     }
 }
 
+extension DeskPreviewTransport {
+    /// «التنبيهات»: one row of each new kind (2026-11-10), times relative to now.
+    static var notificationsJSON: String {
+        func at(_ minutes: Double) -> String {
+            ISO8601DateFormatter().string(from: Date().addingTimeInterval(-minutes * 60))
+        }
+        return """
+        {"items":[
+          {"id":"n1","kind":"news_bot_draft","category":"news","label":"مسودة خبر من بوت","actionLabel":"مراجعة المسودة",
+           "title":"أمانة الرياض تعلن اكتمال مشروع تطوير طريق الملك فهد","detail":"من: قروك بوت · بانتظار قرارك","actorName":"قروك بوت",
+           "targetId":"preview-news-1","linkUrl":null,"deeplink":"sabqdesk://news/preview-news-1","createdAt":"\(at(4))","isUnread":true},
+          {"id":"n2","kind":"tweet_published","category":"tweet","label":"نُشرت تغريدة","actionLabel":"فتح التغريدة",
+           "title":"عاجل | وزارة التعليم تعلن موعد بدء الفصل الدراسي الثاني","detail":"نُشرت تلقائيًا في موعدها",
+           "targetId":"preview-social-3","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-3","createdAt":"\(at(26))","isUnread":true},
+          {"id":"n3","kind":"news_draft","category":"news","label":"خبر من مراسل","actionLabel":"مراجعة الخبر",
+           "title":"افتتاح معرض الكتاب في جدة بمشاركة 400 دار نشر","detail":"من: سالم العتيبي","actorName":"سالم العتيبي",
+           "targetId":"preview-news-1","linkUrl":null,"deeplink":"sabqdesk://news/preview-news-1","createdAt":"\(at(58))","isUnread":true},
+          {"id":"n4","kind":"ticket_message","category":"message","label":"رسالة من كاتب","actionLabel":"فتح الرسالة",
+           "title":"استفسار عن موعد نشر مقال الأسبوع","detail":"من: نورة القحطاني","actorName":"نورة القحطاني",
+           "targetId":"preview-ticket-1","linkUrl":null,"deeplink":"sabqdesk://ticket/preview-ticket-1","createdAt":"\(at(95))","isUnread":false},
+          {"id":"n5","kind":"news_published","category":"news","label":"خبر جديد عبر بوت النشر","actionLabel":"فتح الخبر",
+           "title":"الأرصاد: أمطار رعدية على منطقة عسير حتى المساء","detail":"الناشر: قروك بوت","actorName":"قروك بوت",
+           "targetId":"preview-a5","linkUrl":"https://sabq.org/article/preview","deeplink":"sabqdesk://notifications","createdAt":"\(at(140))","isUnread":false},
+          {"id":"n6","kind":"opinion_scheduled","category":"opinion","label":"جُدول مقال رأي","actionLabel":"معاينة المقال",
+           "title":"المدن الذكية وأسئلة الخصوصية","detail":"خالد الحربي · يُنشر غدًا 9:00 ص","actorName":"خالد الحربي",
+           "targetId":"preview-op-4","linkUrl":null,"deeplink":"sabqdesk://opinion/preview-op-4","createdAt":"\(at(200))","isUnread":false}
+        ],"nextCursor":null,"categories":["tweet","opinion","news","message"],
+         "counts":{"all":6,"tweet":1,"opinion":1,"news":3,"message":1},"unreadCount":3,"seenAt":null}
+        """
+    }
+}
+
 /// Simulator screenshots with the preview fixtures: launch a Debug build with
 /// `SIMCTL_CHILD_DESK_SHOT=<scene>` and the app opens the tabs on canned data
 /// instead of the real session. Release builds never compile this.
@@ -461,6 +495,8 @@ enum DeskScreenshotScene: String {
     case opinionnoslot
     /// «الأخبار» list, the news preview and the edit-request review (2026-10-31).
     case news, newspreview, editrequest
+    /// «التنبيهات» with the clear buttons, and the alert switches (2026-11-10).
+    case notifications, notifprefs
 
     static let current = ProcessInfo.processInfo.environment["DESK_SHOT"].flatMap(Self.init(rawValue:))
 
@@ -473,7 +509,8 @@ enum DeskScreenshotScene: String {
         // Focusing the scheduled card scrolls past the first two slots.
         case .opinionmid: return .opinion(id: "preview-op-4")
         case .opinionnoslot: return .opinion(id: "preview-op-3")
-        case .news: return nil
+        case .news, .notifprefs: return nil
+        case .notifications: return .notifications
         case .newspreview: return .news(id: "preview-news-1")
         case .editrequest: return .editRequest(id: "preview-req-1")
         }
@@ -503,9 +540,13 @@ private struct DeskScreenshotRouter: View {
     let scene: DeskScreenshotScene
 
     var body: some View {
-        MainTabView(initialTab: scene.tab)
-            .background(DeskTheme.background)
-            .task { if let link = scene.link { model.pendingLink = link } }
+        if scene == .notifprefs {
+            NavigationStack { NotificationPrefsView() }
+        } else {
+            MainTabView(initialTab: scene.tab)
+                .background(DeskTheme.background)
+                .task { if let link = scene.link { model.pendingLink = link } }
+        }
     }
 }
 #endif

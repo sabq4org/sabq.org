@@ -9,16 +9,27 @@ export const STAFF_DESK_EVENT_KINDS = [
   "opinion_draft",
   "opinion_scheduled",
   "news_published",
+  // منذ 2026-11-10: مسودة خبر من بوت، خبر مراسل، طلب تعديل، ورسالة كاتب.
+  "news_bot_draft",
+  "news_draft",
+  "news_edit_request",
+  "ticket_message",
 ] as const;
 export type StaffDeskEventKind = (typeof STAFF_DESK_EVENT_KINDS)[number];
 
-/** تبويبات الشاشة: الكل، تغريدات، مقالات رأي، أخبار. */
-export const STAFF_DESK_EVENT_CATEGORIES = ["tweet", "opinion", "news"] as const;
+/**
+ * تبويبات الشاشة: الكل، تغريدات، مقالات رأي، أخبار، رسائل. «رسائل» تُعرض فقط
+ * لتطبيق يطلبها (`v=2`): النسخ الأقدم تتجاهل فئة لا تعرفها فيبقى رقم جرسها بلا صفوف.
+ */
+export const STAFF_DESK_EVENT_CATEGORIES = ["tweet", "opinion", "news", "message"] as const;
+/** نسخة عقد مركز التنبيهات التي تعرف فئة «رسائل». */
+export const STAFF_DESK_NOTIFICATIONS_V_MESSAGES = 2;
 export type StaffDeskEventCategory = (typeof STAFF_DESK_EVENT_CATEGORIES)[number];
 
 export function staffDeskEventCategory(kind: StaffDeskEventKind): StaffDeskEventCategory {
   if (kind.startsWith("tweet_")) return "tweet";
   if (kind.startsWith("opinion_")) return "opinion";
+  if (kind.startsWith("ticket_")) return "message";
   return "news";
 }
 
@@ -29,6 +40,10 @@ export const STAFF_DESK_EVENT_LABELS: Record<StaffDeskEventKind, { label: string
   opinion_draft: { label: "مسودة مقال رأي جديدة", action: "مراجعة المقال" },
   opinion_scheduled: { label: "جُدول مقال رأي", action: "معاينة المقال" },
   news_published: { label: "خبر جديد عبر بوت النشر", action: "فتح الخبر" },
+  news_bot_draft: { label: "مسودة خبر من بوت", action: "مراجعة المسودة" },
+  news_draft: { label: "خبر من مراسل", action: "مراجعة الخبر" },
+  news_edit_request: { label: "طلب تعديل على خبر", action: "فتح الطلب" },
+  ticket_message: { label: "رسالة من كاتب", action: "فتح الرسالة" },
 };
 
 /**
@@ -52,16 +67,24 @@ export function visibleStaffDeskCategories(caps: {
   canSocial: { view: boolean };
   canOpinion?: { view: boolean } | null;
   canPublisherNews?: boolean;
-}): StaffDeskEventCategory[] {
+  canTickets?: boolean;
+}, options: { includeMessages?: boolean } = {}): StaffDeskEventCategory[] {
   const out: StaffDeskEventCategory[] = [];
   if (caps.canSocial?.view) out.push("tweet");
   if (caps.canOpinion?.view) out.push("opinion");
   if (caps.canPublisherNews) out.push("news");
+  if (options.includeMessages && caps.canTickets) out.push("message");
   return out;
 }
 
-/** رابط التطبيق: التغريدة أو مقال الرأي أو مركز التنبيهات للخبر (يُفتح الخبر برابط linkUrl). */
+/**
+ * رابط التطبيق: التغريدة، مقال الرأي، الخبر أو طلب التعديل في تبويب «الأخبار»،
+ * تذكرة الكاتب، أو مركز التنبيهات للخبر المنشور (يُفتح برابط linkUrl).
+ */
 export function staffDeskEventDeeplink(kind: StaffDeskEventKind, targetId: string): string {
+  if (kind === "news_bot_draft" || kind === "news_draft") return `sabqdesk://news/${targetId}`;
+  if (kind === "news_edit_request") return `sabqdesk://news/edit-request/${targetId}`;
+  if (kind === "ticket_message") return `sabqdesk://ticket/${targetId}`;
   const category = staffDeskEventCategory(kind);
   if (category === "tweet") return `sabqdesk://social/${targetId}`;
   if (category === "opinion") return `sabqdesk://opinion/${targetId}`;
@@ -113,6 +136,17 @@ export function buildStaffDeskEventDetail(
       return [actor, when ? `يُنشر ${when}` : null].filter(Boolean).join(" · ");
     case "news_published":
       return actor ? `الناشر: ${actor}` : "نُشر عبر بوت";
+    case "news_bot_draft":
+      return actor ? `من: ${actor} · بانتظار قرارك` : "مسودة بانتظار قرارك";
+    case "news_draft":
+      return actor ? `من: ${actor}` : "بانتظار قرار المكتب";
+    case "news_edit_request":
+      return actor ? `طلبه: ${actor}` : "بانتظار قرار المكتب";
+    case "ticket_message":
+      return actor ? `من: ${actor}` : "رسالة بانتظار الرد";
+    default:
+      // نوع أحدث من هذا الكود (صف كتبه خادم أحدث): سطر محايد بدل undefined.
+      return actor ?? "";
   }
 }
 
@@ -140,7 +174,7 @@ export interface StaffDeskNotificationsResponse {
   /** الفئات المتاحة لهذا العضو بترتيب التبويبات. */
   categories: StaffDeskEventCategory[];
   /** عدد آخر 30 يوماً لكل تبويب. */
-  counts: { all: number; tweet: number; opinion: number; news: number };
+  counts: { all: number; tweet: number; opinion: number; news: number; message: number };
   unreadCount: number;
   seenAt: string | null;
 }
@@ -154,7 +188,23 @@ export const staffDeskNotificationsQuerySchema = z.object({
   category: z.enum(["all", ...STAFF_DESK_EVENT_CATEGORIES]).optional().default("all"),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional().default(30),
+  /** نسخة العقد التي يفهمها التطبيق؛ 2 فأعلى تعرف فئة «رسائل». */
+  v: z.coerce.number().int().min(1).max(99).optional().default(1),
 });
+
+/** POST /notifications/clear: «مسح الكل» في تبويب واحد أو في كل ما يراه العضو. */
+export const staffDeskClearSchema = z.object({
+  category: z.enum(["all", ...STAFF_DESK_EVENT_CATEGORIES]).optional().default("all"),
+  v: z.coerce.number().int().min(1).max(99).optional().default(1),
+});
+
+export const staffDeskUnreadQuerySchema = z.object({
+  v: z.coerce.number().int().min(1).max(99).optional().default(1),
+});
+
+export function staffDeskIncludesMessages(v: number | undefined): boolean {
+  return (v ?? 1) >= STAFF_DESK_NOTIFICATIONS_V_MESSAGES;
+}
 
 export interface StaffDeskEventCursor {
   createdAt: string;
@@ -195,8 +245,10 @@ export function staffDeskEventDedupeKey(input: {
     case "opinion_scheduled":
       // إعادة الجدولة لموعد مختلف حدث جديد.
       return `${input.kind}:${input.targetId}:${input.scheduledAt ? input.scheduledAt.toISOString() : "none"}`;
-    case "opinion_draft": {
-      // إعادة الإرسال بعد الإرجاع للكاتب حدث جديد؛ النداء المزدوج في الدقيقة نفسها لا.
+    case "opinion_draft":
+    case "news_draft":
+    case "ticket_message": {
+      // إعادة الإرسال بعد الإرجاع (أو رسالة ثانية على التذكرة) حدث جديد؛ النداء المزدوج في الدقيقة نفسها لا.
       const minute = Math.floor((input.at ?? new Date()).getTime() / 60_000);
       return `${input.kind}:${input.targetId}:${minute}`;
     }

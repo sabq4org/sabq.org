@@ -370,6 +370,13 @@ export interface StaffAlertPrefs {
   newsDrafts: boolean;
   /** ملخص الصباح: إشعار واحد 08:00 بتوقيت الرياض بما ينتظر قرار العضو (منذ 2026-11-09). */
   morningDigest: boolean;
+  /**
+   * نشاط البوتات (قروك، «نشر سبق» بتوكن البيئة): مسودة خبر، خبر منشور، أو تغريدة
+   * نشرها أو جدولها بوت (منذ 2026-11-10). كان الخبر المنشور ضمن publisherNews.
+   */
+  botNews: boolean;
+  /** متابعة النشر: تغريدة جُدولت أو نُشرت، ومقال رأي جُدول. للعلم لا للقرار، فالافتراضي مطفأ (منذ 2026-11-10). */
+  publishFollow: boolean;
   quietHours: StaffQuietHours;
 }
 
@@ -382,6 +389,8 @@ export const DEFAULT_STAFF_ALERT_PREFS: StaffAlertPrefs = {
   publisherNews: true,
   newsDrafts: true,
   morningDigest: true,
+  botNews: true,
+  publishFollow: false,
   quietHours: "off",
 };
 
@@ -394,7 +403,9 @@ export type StaffAlertKind =
   | "opinionDrafts"
   | "publisherNews"
   | "newsDrafts"
-  | "morningDigest";
+  | "morningDigest"
+  | "botNews"
+  | "publishFollow";
 
 export const staffAlertPrefsUpdateSchema = z
   .object({
@@ -406,6 +417,8 @@ export const staffAlertPrefsUpdateSchema = z
     publisherNews: z.boolean().optional(),
     newsDrafts: z.boolean().optional(),
     morningDigest: z.boolean().optional(),
+    botNews: z.boolean().optional(),
+    publishFollow: z.boolean().optional(),
     quietHours: z.enum(STAFF_QUIET_HOURS).optional(),
   })
   .strict();
