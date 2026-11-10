@@ -78,11 +78,13 @@ struct HomeSectionLinkLabel: View {
 }
 
 /// حاوية الأقسام المنتقاة (مُقترب، الأكثر تداولًا، الرأي، آخر الأخبار): الرأس
-/// الموحّد على خلفية الصفحة، ثم الصفوف على سطح تحريري مستقل بفواصل رفيعة.
+/// الموحّد على الورق التحريري، ثم الصفوف ممتدة مع هامش الصفحة بفواصل شعرية نظيفة
+/// بلا صندوق محاط بظل (أو بطاقة سماوية هادئة عند `skyTinted: true`).
 struct HomeSectionCard<Link: View, Content: View>: View {
     let title: String
     var context: String? = nil
     var lazy: Bool = false
+    var skyTinted: Bool = false
     @ViewBuilder var link: () -> Link
     @ViewBuilder var content: () -> Content
 
@@ -90,9 +92,16 @@ struct HomeSectionCard<Link: View, Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HomeSectionHeader(title: title, context: context, link: link)
                 .padding(.bottom, SabqLayout.space8)
-            rows
-                .padding(.horizontal, SabqLayout.space12)
-                .sabqNewsSurface()
+            if skyTinted {
+                rows
+                    .padding(.horizontal, SabqLayout.space12)
+                    .sabqSkyCardSurface()
+            } else {
+                Rectangle()
+                    .fill(SabqTheme.separator)
+                    .frame(height: 0.75)
+                rows
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)

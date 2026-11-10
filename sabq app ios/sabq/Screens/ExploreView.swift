@@ -98,12 +98,58 @@ struct ExploreView: View {
 
     // MARK: - Idle content
 
+    private var radarKeywords: [String] {
+        if !articlesStore.trendingKeywords.isEmpty {
+            return Array(articlesStore.trendingKeywords.prefix(10))
+        }
+        var seen = Set<String>()
+        var extracted: [String] = []
+        for article in articlesStore.trendingArticles + articlesStore.featuredArticles + articlesStore.allArticles.prefix(12) {
+            for tag in article.tags {
+                let clean = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                if clean.count >= 2, seen.insert(clean).inserted {
+                    extracted.append(clean)
+                    if extracted.count >= 8 { return extracted }
+                }
+            }
+        }
+        return extracted
+    }
+
     @ViewBuilder
     private var idleContent: some View {
+        if !radarKeywords.isEmpty {
+            radarTrendingSection
+        }
+
+        ExploreInteractiveHubsSection()
+
         sectionsGridSection
 
         if !recentSearches.isEmpty {
             recentSearchesSection
+        }
+    }
+
+    private var radarTrendingSection: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .center) {
+                DiscoverySectionHeading(title: "يتصاعد الآن في الرادار")
+                Spacer(minLength: SabqLayout.space8)
+                NavigationLink(value: TrendingRoute()) {
+                    HomeSectionLinkLabel(title: "الأكثر تداولًا")
+                }
+                .buttonStyle(.plain)
+            }
+
+            FlowLayout(spacing: SabqLayout.space8) {
+                ForEach(radarKeywords, id: \.self) { keyword in
+                    NavigationLink(value: KeywordRoute(keyword: keyword)) {
+                        DiscoveryChip(title: keyword, icon: "flame.fill")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
