@@ -2051,6 +2051,8 @@ export const roles = pgTable("roles", {
   nameAr: text("name_ar").notNull(),
   description: text("description"),
   isSystem: boolean("is_system").default(false).notNull(),
+  // active | closed | disabled | archived — shared/userAdmin.ts ROLE_STATUSES
+  status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

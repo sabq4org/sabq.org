@@ -6,6 +6,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, denyPermissionsForRoles, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
 import { mergeRoleSignals } from "@shared/effectiveRoles";
+import { getInactiveRoleNames, getInactiveRoles } from "./services/roleStatusCache";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
@@ -24,7 +25,10 @@ async function loadEffectivePermData(
       .where(eq(users.id, userId))
       .limit(1);
 
-    let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+    // الأدوار المعطّلة/المؤرشفة لا تُحتسب (shared/userAdmin.ts — resolveUserPermissions).
+    const inactive = await getInactiveRoleNames();
+    const legacyRole = user?.role && !inactive.has(user.role) ? user.role : null;
+    let isSuperuser = legacyRole ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(legacyRole) : false;
     let rbacRoleNames: string[] = [];
 
     if (!isSuperuser) {
@@ -33,21 +37,23 @@ async function loadEffectivePermData(
         .from(userRoles)
         .innerJoin(roles, eq(userRoles.roleId, roles.id))
         .where(eq(userRoles.userId, userId));
-      rbacRoleNames = rbacRoles.map(r => r.roleName);
-      isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
+      rbacRoleNames = rbacRoles.map(r => r.roleName).filter(name => !inactive.has(name));
+      isSuperuser = rbacRoleNames.some(name => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(name));
     }
 
     if (isSuperuser) {
       permData = { isSuperuser, permissions: [] };
     } else {
-      const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
+      const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [legacyRole || "reader"];
       const permissionData = await getUserPermissionData(userId);
       permData = {
         isSuperuser,
         permissions: resolveEffectivePermissions(allRoles, permissionData.permissions, permissionData.deniedPermissionCodes),
       };
     }
-    memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
+    // 30s: a role/permission change made on another replica (whose local cache
+    // the writer cannot clear) applies within half a minute, not five.
+    memoryCache.set(cacheKey, permData, 30 * 1000);
   }
 
   return permData;
@@ -109,9 +115,10 @@ export async function getUserRoleNames(userId: string): Promise<string[]> {
       .limit(1),
   ]);
 
+  const inactive = await getInactiveRoleNames();
   return mergeRoleSignals(
-    rbacRoles.map((r) => r.roleName),
-    user?.role,
+    rbacRoles.map((r) => r.roleName).filter((name) => !inactive.has(name)),
+    user?.role && !inactive.has(user.role) ? user.role : null,
   );
 }
 
@@ -189,7 +196,9 @@ export async function getUserPermissionData(userId: string): Promise<{
     .where(eq(users.id, userId))
     .limit(1);
 
-  let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+  const { names: inactive, ids: inactiveIds } = await getInactiveRoles();
+  const legacyRole = user?.role && !inactive.has(user.role) ? user.role : null;
+  let isSuperuser = legacyRole ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(legacyRole) : false;
   let rbacRoleNames: string[] = [];
 
   if (!isSuperuser) {
@@ -198,8 +207,8 @@ export async function getUserPermissionData(userId: string): Promise<{
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId));
-    rbacRoleNames = rbacRoles.map((r) => r.roleName);
-    isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
+    rbacRoleNames = rbacRoles.map((r) => r.roleName).filter((name) => !inactive.has(name));
+    isSuperuser = rbacRoleNames.some(name => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(name));
   }
 
   if (isSuperuser) {
@@ -208,18 +217,20 @@ export async function getUserPermissionData(userId: string): Promise<{
   }
 
   const roleNames = Array.from(
-    new Set([...(user?.role ? [user.role] : []), ...rbacRoleNames]),
+    new Set([...(legacyRole ? [legacyRole] : []), ...rbacRoleNames]),
   );
 
-  // Get role-based permissions
+  // Get role-based permissions (active roles only)
   const result = await db
-    .select({ permissionCode: permissions.code })
+    .select({ permissionCode: permissions.code, grantingRoleId: rolePermissions.roleId })
     .from(userRoles)
     .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
     .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
     .where(eq(userRoles.userId, userId));
 
-  const rolePermissionCodes = new Set(result.map(r => r.permissionCode));
+  const rolePermissionCodes = new Set(
+    result.filter(r => !inactiveIds.has(r.grantingRoleId)).map(r => r.permissionCode),
+  );
 
   // Get user-level overrides
   const overrides = await db
@@ -406,7 +417,8 @@ export function requireRole(...roleNames: string[]) {
         .innerJoin(roles, eq(userRoles.roleId, roles.id))
         .where(eq(userRoles.userId, userId));
 
-      userRoleNames = userRolesResult.map(r => r.roleName);
+      const inactive = await getInactiveRoleNames();
+      userRoleNames = userRolesResult.map(r => r.roleName).filter(name => !inactive.has(name));
 
       // Fallback: Check user.role from users table if no RBAC roles
       if (userRoleNames.length === 0) {
@@ -417,7 +429,7 @@ export function requireRole(...roleNames: string[]) {
           .where(eq(users.id, userId))
           .limit(1);
         
-        if (user?.role) {
+        if (user?.role && !inactive.has(user.role)) {
           userRoleNames.push(user.role);
         }
       }

@@ -6,6 +6,11 @@ const state = vi.hoisted(() => ({
   failOverrides: false,
   cache: new Map<string, unknown>(),
 }));
+// rbac.ts يستبعد الأدوار المعطّلة؛ هنا لا أدوار معطّلة.
+vi.mock("../../server/services/roleStatusCache", () => ({
+  getInactiveRoles: async () => ({ names: new Set<string>(), ids: new Set<string>() }),
+  getInactiveRoleNames: async () => new Set<string>(),
+}));
 vi.mock("../../server/db", () => ({ db: {
   select(fields: Record<string, unknown>) {
     const builder: any = {
