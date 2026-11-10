@@ -10,9 +10,11 @@
 // ----------------------------------------------------------------------------
 
 import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { validateXPostText } from "@shared/socialPostText";
+import { composeXPostText, validateXPostText } from "@shared/socialPostText";
 import { articles, socialPosts, type SocialPost } from "@shared/schema";
 import { db } from "../../db";
+import { BotSocialError } from "./botSocialLogic";
+import { resolveBotSocialArticleUrl } from "./botSocialService";
 import {
   SocialPublishValidationError,
   buildArticleUrl,
@@ -35,7 +37,9 @@ export function isEditorTweetChannelEnabled(
 export type EditorTweetMode = "published" | "processing" | "pending_approval" | "publish_failed";
 
 export interface EditorTweetInput {
-  articleId: string;
+  articleId?: string;
+  /** رابط الخبر العام بديلاً عن المعرّف. */
+  articleUrl?: string;
   text: string;
   includeLink: boolean;
   includeImage: boolean;
@@ -64,6 +68,8 @@ interface EditorTweetArticle {
 
 export interface EditorTweetDeps {
   loadArticle(articleId: string): Promise<EditorTweetArticle | null>;
+  /** يحوّل رابط الخبر العام إلى معرّفه. */
+  resolveArticleUrl(articleUrl: string): Promise<string>;
   findRecentSameTweet(input: {
     articleId: string;
     actorUserId: string;
@@ -116,6 +122,19 @@ const defaultDeps: EditorTweetDeps = {
       status: row.status,
       publishedAt: row.publishedAt ?? null,
     };
+  },
+  async resolveArticleUrl(articleUrl) {
+    try {
+      return (await resolveBotSocialArticleUrl(articleUrl)).articleId;
+    } catch (error) {
+      if (error instanceof BotSocialError) {
+        throw new SocialPublishValidationError(
+          error.message,
+          error.httpStatus === 404 ? 404 : 400,
+        );
+      }
+      throw error;
+    }
   },
   async findRecentSameTweet({ articleId, actorUserId, text, since }) {
     const [row] = await db
@@ -182,14 +201,17 @@ const defaultDeps: EditorTweetDeps = {
   now: () => new Date(),
 };
 
-export async function submitEditorTweet(
-  input: EditorTweetInput,
-  overrides: Partial<EditorTweetDeps> = {},
-): Promise<EditorTweetResult> {
-  const deps: EditorTweetDeps = { ...defaultDeps, ...overrides };
-  const text = input.text.trim();
-
-  const article = await deps.loadArticle(input.articleId);
+async function loadTweetableArticle(
+  target: { articleId?: string; articleUrl?: string },
+  deps: EditorTweetDeps,
+): Promise<EditorTweetArticle> {
+  const resolvedId = target.articleUrl ? await deps.resolveArticleUrl(target.articleUrl) : null;
+  if (resolvedId && target.articleId && resolvedId !== target.articleId) {
+    throw new SocialPublishValidationError("معرّف الخبر ورابطه لا يشيران إلى الخبر نفسه");
+  }
+  const articleId = resolvedId ?? target.articleId;
+  if (!articleId) throw new SocialPublishValidationError("معرّف الخبر أو رابطه مطلوب");
+  const article = await deps.loadArticle(articleId);
   if (!article) throw new SocialPublishValidationError("الخبر غير موجود", 404);
   // نفس شرط مسار البوت القائم (assertArticleTweetable): منشور ووقت نشره حلّ.
   if (
@@ -198,6 +220,61 @@ export async function submitEditorTweet(
   ) {
     throw new SocialPublishValidationError("التغريدة متاحة للخبر المنشور فقط", 409);
   }
+  return article;
+}
+
+export interface EditorTweetPreview {
+  /** direct = تُنشر مباشرة؛ approval = تذهب مقترحًا لمكتب سبق. */
+  mode: "direct" | "approval";
+  article: { id: string; title: string; url: string; imageUrl: string | null };
+  text: string;
+  linkUrl: string | null;
+  imageUrl: string | null;
+  composedText: string;
+  weightedLength: number;
+  valid: boolean;
+  /** يتجاوز 280: قد يُبتر عند النقل. */
+  overStandard: boolean;
+}
+
+/** معاينة بلا أي كتابة: تتحقق من الخبر وتحسب النص المركّب وطوله. */
+export async function previewEditorTweet(
+  input: {
+    articleId?: string;
+    articleUrl?: string;
+    text?: string;
+    includeLink: boolean;
+    includeImage: boolean;
+    canPublishNow: boolean;
+  },
+  overrides: Partial<EditorTweetDeps> = {},
+): Promise<EditorTweetPreview> {
+  const deps: EditorTweetDeps = { ...defaultDeps, ...overrides };
+  const article = await loadTweetableArticle(input, deps);
+  const text = input.text?.trim() || article.title;
+  const linkUrl = input.includeLink ? article.url : null;
+  const validation = validateXPostText(text, linkUrl);
+  return {
+    mode: input.canPublishNow ? "direct" : "approval",
+    article: { id: article.id, title: article.title, url: article.url, imageUrl: article.imageUrl },
+    text,
+    linkUrl,
+    imageUrl: input.includeImage ? article.imageUrl : null,
+    composedText: composeXPostText(text, linkUrl),
+    weightedLength: validation.weightedLength,
+    valid: validation.valid && !validation.empty,
+    overStandard: validation.overStandard,
+  };
+}
+
+export async function submitEditorTweet(
+  input: EditorTweetInput,
+  overrides: Partial<EditorTweetDeps> = {},
+): Promise<EditorTweetResult> {
+  const deps: EditorTweetDeps = { ...defaultDeps, ...overrides };
+  const text = input.text.trim();
+
+  const article = await loadTweetableArticle(input, deps);
   const lockKey = `editor-tweet:${input.actorUserId}:${article.id}`;
 
   const imageUrl = input.includeImage ? article.imageUrl : null;

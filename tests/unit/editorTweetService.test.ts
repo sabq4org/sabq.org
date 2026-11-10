@@ -10,6 +10,7 @@ vi.mock("../../server/services/staffDeskEventsService", () => ({
 import {
   EDITOR_TWEET_DUPLICATE_WINDOW_MS,
   isEditorTweetChannelEnabled,
+  previewEditorTweet,
   submitEditorTweet,
   toEditorTweetStatus,
   type EditorTweetDeps,
@@ -32,6 +33,7 @@ const post = (over: Record<string, unknown> = {}) =>
 function makeDeps(over: Partial<EditorTweetDeps> = {}): EditorTweetDeps {
   return {
     loadArticle: vi.fn(async () => article),
+    resolveArticleUrl: vi.fn(async () => "a1"),
     findRecentSameTweet: vi.fn(async () => null),
     findPendingProposal: vi.fn(async () => null),
     createDraftPost: vi.fn(async () => post()) as any,
@@ -215,6 +217,42 @@ describe("تغريدة المحرر من «نشر سبق» — حسب الصلا
     ]);
     expect(deps.createDraftPost).toHaveBeenCalledTimes(1);
     expect(results.map((r) => r.updated)).toEqual([false, true]);
+  });
+
+  it("المعاينة بلا كتابة: رابط الخبر يُحل، والنص الغائب = العنوان، والوضع حسب الصلاحية", async () => {
+    const deps = makeDeps();
+    const preview = await previewEditorTweet(
+      { articleUrl: article.url, includeLink: true, includeImage: true, canPublishNow: false },
+      deps,
+    );
+    expect(deps.resolveArticleUrl).toHaveBeenCalledWith(article.url);
+    expect(preview).toMatchObject({
+      mode: "approval",
+      text: article.title,
+      linkUrl: article.url,
+      imageUrl: article.imageUrl,
+      valid: true,
+    });
+    expect(preview.composedText).toContain(article.url);
+    expect(deps.createDraftPost).not.toHaveBeenCalled();
+    const direct = await previewEditorTweet(
+      { articleId: "a1", text: "نص", includeLink: false, includeImage: false, canPublishNow: true },
+      deps,
+    );
+    expect(direct).toMatchObject({ mode: "direct", linkUrl: null, imageUrl: null, text: "نص" });
+  });
+
+  it("يرفض معرّفًا ورابطًا لا يشيران إلى الخبر نفسه، وغياب الاثنين", async () => {
+    const deps = makeDeps({ resolveArticleUrl: vi.fn(async () => "other") });
+    await expect(
+      submitEditorTweet({ ...input(true), articleUrl: article.url }, deps),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      botDeskEditorTweetSchema.safeParse({ text: "نص" }).success,
+    ).toBe(false);
+    expect(
+      botDeskEditorTweetSchema.safeParse({ articleUrl: article.url, text: "نص" }).success,
+    ).toBe(true);
   });
 
   it("التنبيه بصياغة المحرر، وحالة التغريدة لصاحبها بلا حقول داخلية", async () => {
