@@ -33,6 +33,10 @@ function enqueue(urls: string[]): void {
   }
 }
 
+// بلا مهلة كان طلب واحد عالق عند Cloudflare ينتظر مهلة fetch الافتراضية
+// (دقائق)، وطوال ذلك isFlushing يجعل كل تطهير فوري (نشر، عاجل) بلا أثر.
+export const PURGE_REQUEST_TIMEOUT_MS = 8000;
+
 async function sendPurgeRequest(urls: string[]): Promise<PurgeResult> {
   try {
     const response = await fetch(
@@ -44,6 +48,7 @@ async function sendPurgeRequest(urls: string[]): Promise<PurgeResult> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ files: urls }),
+        signal: AbortSignal.timeout(PURGE_REQUEST_TIMEOUT_MS),
       }
     );
 
@@ -224,6 +229,7 @@ export async function purgeAll(): Promise<PurgeResult> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ purge_everything: true }),
+        signal: AbortSignal.timeout(PURGE_REQUEST_TIMEOUT_MS),
       }
     );
 
