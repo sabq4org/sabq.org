@@ -13,6 +13,7 @@ import {
 } from "@shared/userAdmin";
 import {
   UserAdminError,
+  VERIFY_FILTERS,
   changeRoleStatus,
   deleteUnusedRole,
   getUserProfile,
@@ -57,6 +58,7 @@ const listQuerySchema = z.object({
   roleId: z.string().trim().max(64).optional().transform((v) => v || undefined),
   status: z.enum(["active", "pending", "suspended", "banned", "locked", "restricted"]).optional(),
   publish: z.enum(PUBLISH_LEVELS).optional(),
+  verify: z.enum(VERIFY_FILTERS).optional(),
   sort: z.enum(["activity", "newest", "name"]).default("activity"),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(10).max(100).default(25),

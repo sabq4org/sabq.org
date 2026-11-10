@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { roles, staff, userPermissionOverrides, userRoles, users } from "@shared/schema";
+import { hasRealEmail } from "@shared/authEmail";
 import { READER_LIKE_ROLE_KEYS, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
 import { ROLE_NAMES, SUPERUSER_ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
 import {
@@ -199,12 +200,30 @@ function allRoleSignals(s: UserSignals): string[] {
 
 // ───────────────────────── القائمة ─────────────────────────
 
+export const VERIFY_FILTERS = ["email_verified", "email_unverified", "phone_verified", "phone_unverified", "two_factor", "no_email"] as const;
+export type VerifyFilter = (typeof VERIFY_FILTERS)[number];
+
+/** بريد حقيقي = غير فارغ وليس البريد الاصطناعي لحسابات الجوال (shared/authEmail.ts). */
+const REAL_EMAIL_SQL = sql`(u.email IS NOT NULL AND btrim(u.email) <> '' AND lower(u.email) NOT LIKE '%@phone.sabq.org')`;
+
+function verifySql(v: VerifyFilter): SQL {
+  switch (v) {
+    case "email_verified": return sql`(${REAL_EMAIL_SQL} AND u.email_verified)`;
+    case "email_unverified": return sql`(${REAL_EMAIL_SQL} AND NOT u.email_verified)`;
+    case "phone_verified": return sql`(u.phone_number IS NOT NULL AND u.phone_verified)`;
+    case "phone_unverified": return sql`(u.phone_number IS NOT NULL AND NOT u.phone_verified)`;
+    case "two_factor": return sql`u.two_factor_enabled`;
+    case "no_email": return sql`NOT ${REAL_EMAIL_SQL}`;
+  }
+}
+
 export interface ListParams {
   kind: "staff" | "readers" | "all";
   q?: string;
   roleId?: string;
   status?: "active" | "pending" | "suspended" | "banned" | "locked" | "restricted";
   publish?: PublishLevel;
+  verify?: VerifyFilter;
   sort: "activity" | "newest" | "name";
   page: number;
   pageSize: number;
@@ -224,6 +243,9 @@ interface ListRow {
   suspended_until: Date | null;
   banned_until: Date | null;
   is_staff: boolean;
+  email_verified: boolean;
+  phone_verified: boolean;
+  two_factor_enabled: boolean;
 }
 
 function orderSql(sort: ListParams["sort"]): SQL {
@@ -246,6 +268,7 @@ function filterSql(p: ListParams, roleName: string | null): SQL {
     parts.push(sql`(EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = ${p.roleId})
       ${roleName ? sql`OR u.role = ${roleName}` : sql``})`);
   }
+  if (p.verify) parts.push(verifySql(p.verify));
   if (p.status === "restricted") parts.push(sql`${EFF_STATUS_SQL} IN ('suspended', 'banned')`);
   else if (p.status) parts.push(sql`${EFF_STATUS_SQL} = ${p.status}`);
   return sql.join(parts, sql` AND `);
@@ -264,6 +287,11 @@ export interface ListedUser {
   suspendedUntil: string | null;
   bannedUntil: string | null;
   isStaff: boolean;
+  /** بريد حقيقي موثّق (البريد الاصطناعي لحسابات الجوال لا يُعدّ). */
+  emailVerified: boolean;
+  hasRealEmail: boolean;
+  phoneVerified: boolean;
+  twoFactorEnabled: boolean;
   roles: Array<{ id: string; name: string; nameAr: string; status: RoleStatus }>;
   publishLevel: PublishLevel;
   isSuperuser: boolean;
@@ -278,6 +306,7 @@ export async function listUsers(p: ListParams) {
   const where = filterSql(p, roleName);
   const select = sql`SELECT u.id, u.first_name, u.last_name, u.email, u.phone_number, u.profile_image_url,
     u.job_title, u.last_activity_at, u.created_at, u.suspended_until, u.banned_until,
+    u.email_verified, u.phone_verified, u.two_factor_enabled,
     ${EFF_STATUS_SQL} AS eff_status, ${IS_STAFF_SQL} AS is_staff
     FROM users u WHERE ${where}`;
 
@@ -337,6 +366,10 @@ export async function listUsers(p: ListParams) {
       suspendedUntil: r.suspended_until ? new Date(r.suspended_until).toISOString() : null,
       bannedUntil: r.banned_until ? new Date(r.banned_until).toISOString() : null,
       isStaff: !!r.is_staff,
+      hasRealEmail: hasRealEmail(r.email),
+      emailVerified: hasRealEmail(r.email) && !!r.email_verified,
+      phoneVerified: !!r.phone_number && !!r.phone_verified,
+      twoFactorEnabled: !!r.two_factor_enabled,
       roles: shown.map((x) => ({ id: x.id, name: x.name, nameAr: x.nameAr, status: x.status })),
       publishLevel: levels.get(r.id)?.level ?? "none",
       isSuperuser: levels.get(r.id)?.isSuperuser ?? false,

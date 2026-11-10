@@ -25,6 +25,10 @@ export interface ListedUser {
   suspendedUntil: string | null;
   bannedUntil: string | null;
   isStaff: boolean;
+  hasRealEmail: boolean;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  twoFactorEnabled: boolean;
   roles: RoleRef[];
   publishLevel: PublishLevel;
   isSuperuser: boolean;
