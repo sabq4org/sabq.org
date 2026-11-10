@@ -43,11 +43,11 @@ nonisolated enum SabqTheme {
     static let textSecondary = adaptive(0x55667A, 0xA6B5C4, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
     static let textTertiary = adaptive(0x617183, 0x8E9EAE, highContrastLight: 0x1B2B3A, highContrastDark: 0xF0F4F8)
 
-    // الهوية التحريرية الورقية المعتمدة:
-    // صفحة ورقية ناصعة في الوضع الفاتح (تزيل طابع لوحات الـ SaaS الرمادية)،
-    // وفواصل شعرية دقيقة بلا ظلال بطاقات عائمة، مع تباين مريح في الوضع الداكن.
+    // تجربة هوية «مكتب سبق» (طلب المالك 2026-10-31، فرع feat/ios-desk-palette-trial):
+    // صفحة رمادية مزرقّة ناعمة، بطاقات بيضاء بظل خفيف بلا حدّ، وتعبئات هادئة
+    // تميل للسماوي. القيم منسوخة من DeskTheme في «sabq desk ios».
 
-    static let background = adaptive(0xFFFFFF, 0x0B121A)
+    static let background = adaptive(0xF4F7FB, 0x0B121A)
     static let surface = adaptive(0xFFFFFF, 0x141D27)
     /// أشرطة الفصل بين الأقسام والبلوكات الهادئة (الموجز الذكي، الحقول).
     static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
@@ -251,11 +251,13 @@ extension SabqTextRole {
 }
 
 extension View {
-    /// One quiet surface per editorial group; rows share it without nested cards or heavy shadows.
+    /// One quiet surface per editorial group; rows share it without nested cards.
     func sabqNewsSurface() -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-        return background(shape.fill(SabqTheme.surface))
-            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+        return background(
+            shape.fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+        )
     }
 
     func sabqText(_ role: SabqTextRole) -> some View {
