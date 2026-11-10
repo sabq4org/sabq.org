@@ -52,7 +52,8 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
 
   const kind = asKind(params.get("kind"), defaultKind);
   const q = params.get("q") ?? "";
-  const roleId = params.get("roleId") ?? "";
+  // فلتر الدور مخفي في عرض القرّاء، فلا يُرسل فيه (كفلتر النشر) وإلا أفرغ القائمة بشرط لا يُرى.
+  const roleId = kind === "readers" ? "" : params.get("roleId") ?? "";
   const status = params.get("status") ?? "";
   const publish = kind === "staff" ? params.get("publish") ?? "" : "";
   const verify = params.get("verify") ?? "";
