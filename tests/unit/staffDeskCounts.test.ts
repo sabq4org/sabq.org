@@ -111,6 +111,14 @@ describe("staff desk counts (shared)", () => {
   it("opens the bell with any notifications tab and skips duplicate draft kinds", () => {
     expect(canSeeStaffDeskBell(NONE)).toBe(false);
     expect(canSeeStaffDeskBell({ ...NONE, canOpinion: { view: true } } as typeof NONE)).toBe(true);
-    expect(STAFF_BADGE_EXCLUDED_BELL_KINDS).toEqual(["tweet_draft", "opinion_draft"]);
+    expect(STAFF_BADGE_EXCLUDED_BELL_KINDS).toEqual([
+      "tweet_draft",
+      "opinion_draft",
+      "news_draft",
+      "news_edit_request",
+      "ticket_message",
+    ]);
+    // مسودة البوت لا يعدّها مصدر آخر، فتدخل رقم الأيقونة.
+    expect(STAFF_BADGE_EXCLUDED_BELL_KINDS).not.toContain("news_bot_draft");
   });
 });

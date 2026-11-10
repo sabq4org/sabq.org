@@ -75,6 +75,17 @@ export async function notifyDeskOfWriterInquiry(input: {
   occurredAt?: Date;
 }): Promise<void> {
   const notice = buildOpinionTicketStaffNotice(input);
+  // أثر في تبويب «رسائل» بمركز تنبيهات «مكتب سبق» (2026-11-10). لا يؤخّر ولا يُفشل التنبيه.
+  void import("./staffDeskEventsService")
+    .then(({ recordTicketMessageEvent }) =>
+      recordTicketMessageEvent({
+        ticketId: input.ticketId,
+        title: input.title?.trim() || input.message,
+        writerName: input.writerName?.trim() || null,
+        senderId: input.senderId,
+        at: input.occurredAt,
+      }))
+    .catch((err) => console.error("[opinion-tickets] desk timeline event failed", err));
   let recipients: Array<{ id: string; email: string | null }> = [];
   try {
     recipients = await listOpinionDeskRecipients(input.senderId);

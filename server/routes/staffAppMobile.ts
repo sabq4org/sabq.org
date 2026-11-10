@@ -74,12 +74,14 @@ import {
 import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
 import {
   StaffDeskEventsCursorError,
+  clearStaffDeskNotification,
+  clearStaffDeskNotifications,
   getStaffDeskUnread,
   listStaffDeskNotifications,
   markStaffDeskNotificationRead,
   markStaffDeskNotificationsSeen,
 } from "../services/staffDeskEventsService";
-import { staffDeskNotificationsQuerySchema } from "@shared/staffNotifications";
+import { staffDeskClearSchema, staffDeskNotificationsQuerySchema, staffDeskUnreadQuerySchema } from "@shared/staffNotifications";
 import { registerStaffNewsRoutes } from "./staffNewsDesk";
 import { registerStaffDeskCountsRoutes } from "./staffDeskCounts";
 import { registerStaffOpinionTitleRoutes } from "./staffOpinionTitle";
@@ -1366,7 +1368,8 @@ subRouter.get("/notifications", requireStaffAuth, async (req: StaffRequest, res:
 subRouter.get("/notifications/unread", requireStaffAuth, async (req: StaffRequest, res: Response) => {
   try {
     const ctx = req.staffAuth!;
-    res.json(await getStaffDeskUnread(ctx.capabilities, ctx.user.id));
+    const query = staffDeskUnreadQuerySchema.safeParse(req.query);
+    res.json(await getStaffDeskUnread(ctx.capabilities, ctx.user.id, new Date(), { v: query.success ? query.data.v : 1 }));
   } catch (error) {
     console.error("[StaffApp notifications/unread] error:", error);
     sendError(res, 500, { code: "server_error", message: "تعذر جلب عدد التنبيهات" });
@@ -1380,6 +1383,37 @@ subRouter.post("/notifications/seen", requireStaffAuth, async (req: StaffRequest
   } catch (error) {
     console.error("[StaffApp notifications/seen] error:", error);
     sendError(res, 500, { code: "server_error", message: "تعذر تعليم التنبيهات كمقروءة" });
+  }
+});
+
+// «مسح الإشعارات» (2026-11-10): لكل عضو على حدة؛ الأحداث نفسها تبقى لزملائه.
+subRouter.post("/notifications/clear", requireStaffAuth, async (req: StaffRequest, res: Response) => {
+  const parsed = staffDeskClearSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return sendError(res, 400, { code: "validation_error", message: "الفئة غير صالحة", details: parsed.error.flatten() });
+  }
+  try {
+    const ctx = req.staffAuth!;
+    const cleared = await clearStaffDeskNotifications(ctx.capabilities, ctx.user.id, parsed.data.category, { v: parsed.data.v });
+    const unread = await getStaffDeskUnread(ctx.capabilities, ctx.user.id, new Date(), { v: parsed.data.v });
+    res.json({ ok: true, cleared, unreadCount: unread.unreadCount });
+  } catch (error) {
+    console.error("[StaffApp notifications/clear] error:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر مسح التنبيهات" });
+  }
+});
+
+subRouter.delete("/notifications/:id", requireStaffAuth, async (req: StaffRequest, res: Response) => {
+  const id = String(req.params.id || "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    return sendError(res, 400, { code: "validation_error", message: "معرّف التنبيه غير صالح" });
+  }
+  try {
+    await clearStaffDeskNotification(req.staffAuth!.user.id, id);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[StaffApp notifications/delete] error:", error);
+    sendError(res, 500, { code: "server_error", message: "تعذر مسح التنبيه" });
   }
 });
 

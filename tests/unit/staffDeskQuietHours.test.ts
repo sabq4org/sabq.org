@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../../server/db", () => ({ db: {} }));
 
 import { DEFAULT_STAFF_ALERT_PREFS, isStaffQuietHour, staffAlertPrefsUpdateSchema } from "@shared/staffApp";
-import { applyStaffDeskPrefs, riyadhHour } from "../../server/services/staffAppPushService";
+import { applyStaffDeskPrefs, riyadhHour, staffDeskFollowTitle } from "../../server/services/staffAppPushService";
 import { normalizeStaffAlertPrefs } from "../../server/services/staffAlertPrefsService";
 
 const message = { title: "t", body: "b", type: "x", deeplink: "sabqdesk://inbox" };
@@ -44,5 +44,30 @@ describe("desk quiet hours and per-kind switches", () => {
     });
     expect(staffAlertPrefsUpdateSchema.safeParse({ quietHours: "night" }).success).toBe(true);
     expect(staffAlertPrefsUpdateSchema.safeParse({ quietHours: "always" }).success).toBe(false);
+  });
+});
+
+// 2026-11-10: «نشاط البوتات» مفعّل افتراضياً، و«متابعة النشر» مطفأة حتى يفعّلها العضو.
+describe("staff desk bot and follow prefs", () => {
+  const push = { title: "t", body: "b", type: "desk.x", deeplink: "sabqdesk://notifications" };
+  const noon = new Date("2026-11-10T09:00:00Z");
+
+  it("sends bot activity by default and holds follow-ups until opted in", () => {
+    expect(DEFAULT_STAFF_ALERT_PREFS.botNews).toBe(true);
+    expect(DEFAULT_STAFF_ALERT_PREFS.publishFollow).toBe(false);
+    expect(applyStaffDeskPrefs(undefined, "botNews", push, noon)).toEqual(push);
+    expect(applyStaffDeskPrefs(undefined, "publishFollow", push, noon)).toBeNull();
+    // صف قديم بلا المفتاحين: الافتراضي نفسه.
+    const old = normalizeStaffAlertPrefs({ publisherNews: false });
+    expect(old.botNews).toBe(true);
+    expect(old.publishFollow).toBe(false);
+    expect(applyStaffDeskPrefs(normalizeStaffAlertPrefs({ publishFollow: true }), "publishFollow", push, noon)).toEqual(push);
+    expect(applyStaffDeskPrefs(normalizeStaffAlertPrefs({ botNews: false }), "botNews", push, noon)).toBeNull();
+  });
+
+  it("names the bot in the follow-up title", () => {
+    expect(staffDeskFollowTitle("tweet_published", "قروك بوت")).toBe("نُشرت تغريدة من قروك بوت");
+    expect(staffDeskFollowTitle("tweet_scheduled", null)).toBe("جُدولت تغريدة");
+    expect(staffDeskFollowTitle("opinion_scheduled")).toBe("جُدول مقال رأي");
   });
 });

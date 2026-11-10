@@ -144,6 +144,10 @@ struct MainTabView: View {
             NotificationsView()
                 .onDisappear { Task { await model.refreshNotifications() } }
         }
+        .fullScreenCover(item: Binding(get: { model.pendingArticleURL.map(DeskWebPage.init(url:)) },
+                                       set: { model.pendingArticleURL = $0?.url })) { page in
+            SafariView(url: page.url).ignoresSafeArea()
+        }
         .sheet(isPresented: Binding(get: { model.showsAccount },
                                     set: { model.showsAccount = $0 })) {
             SettingsView()

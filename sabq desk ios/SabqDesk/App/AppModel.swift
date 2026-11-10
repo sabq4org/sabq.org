@@ -23,6 +23,8 @@ final class AppModel {
     private(set) var phase: Phase = .launching
     private(set) var unread = StaffUnreadCounts()
     var pendingLink: DeskDeepLink?
+    /// A published article a push asked to open (`desk.publisher_news`).
+    var pendingArticleURL: URL?
     /// Admins: the push switches for AI status and admin alerts.
     private(set) var alertPrefs: StaffAlertPrefs?
     /// Last failure saving `alertPrefs`, shown under the toggles.
@@ -101,6 +103,7 @@ final class AppModel {
         await client.logout()
         unread = StaffUnreadCounts()
         pendingLink = nil
+        pendingArticleURL = nil
         alertPrefs = nil
         alertPrefsError = nil
         urgentAlerts = 0
@@ -301,6 +304,11 @@ final class AppModel {
     }
 
     func open(pushPayload userInfo: [AnyHashable: Any]) {
+        // «نُشر خبر»: الصفحة الحية مباشرة بدل مركز التنبيهات (خادم 2026-11-10+).
+        if let url = DeskDeepLink.publishedArticleURL(pushPayload: userInfo) {
+            pendingArticleURL = url
+            return
+        }
         if let link = DeskDeepLink(pushPayload: userInfo) { pendingLink = link }
     }
 

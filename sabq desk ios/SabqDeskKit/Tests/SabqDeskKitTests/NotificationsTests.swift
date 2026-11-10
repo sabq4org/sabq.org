@@ -84,4 +84,66 @@ final class NotificationsTests: XCTestCase {
         let update = StaffAlertPrefsUpdate(publisherNews: false)
         XCTAssertFalse(update.applied(to: StaffAlertPrefs()).publisherNews)
     }
+
+    // MARK: - 2026-11-10: bot drafts, reporter news, writer messages, clear
+
+    private func row(kind: String, category: String, target: String, linkUrl: String? = nil) throws -> StaffNotification {
+        let link = linkUrl.map { "\"\($0)\"" } ?? "null"
+        let json = """
+        {"id":"x","kind":"\(kind)","category":"\(category)","label":"l","actionLabel":"a","title":"t","detail":"",
+         "targetId":"\(target)","linkUrl":\(link),"createdAt":"2026-11-10T09:00:00.000Z","isUnread":true}
+        """
+        return try decoder.decode(StaffNotification.self, from: json.data)
+    }
+
+    func testNewKindsOpenInsideTheApp() throws {
+        XCTAssertEqual(try row(kind: "news_bot_draft", category: "news", target: "a1").link, .news(id: "a1"))
+        XCTAssertEqual(try row(kind: "news_draft", category: "news", target: "a2").link, .news(id: "a2"))
+        XCTAssertEqual(try row(kind: "news_edit_request", category: "news", target: "r1").link, .editRequest(id: "r1"))
+        XCTAssertEqual(try row(kind: "ticket_message", category: "message", target: "t1").link, .ticket(id: "t1"))
+        // Published news still opens the live page, not a screen in the app.
+        let published = try row(kind: "news_published", category: "news", target: "a3", linkUrl: "https://sabq.org/article/x")
+        XCTAssertNil(published.link)
+        XCTAssertNotNil(published.articleURL)
+        // A crafted id never becomes a link.
+        XCTAssertNil(try row(kind: "news_bot_draft", category: "news", target: "a/../b").link)
+    }
+
+    func testMessagesTabAndCounts() throws {
+        let json = #"{"items":[],"categories":["tweet","news","message"],"counts":{"all":5,"tweet":1,"opinion":0,"news":2,"message":2},"unreadCount":0}"#
+        let decoded = try decoder.decode(StaffNotificationsPage.self, from: json.data)
+        XCTAssertEqual(decoded.categories, [.tweet, .news, .message])
+        XCTAssertEqual(decoded.counts.count(.message), 2)
+        XCTAssertEqual(StaffNotificationCategory.message.title, "رسائل")
+        // An older server sends no `message` count.
+        let older = try decoder.decode(StaffNotificationCounts.self, from: #"{"all":1,"tweet":1,"opinion":0,"news":0}"#.data)
+        XCTAssertEqual(older.message, 0)
+    }
+
+    func testBotDraftAndPublishedNewsPushes() {
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.bot_draft", "deeplink": "sabqdesk://news/a1", "articleId": "a1"]),
+                       .news(id: "a1"))
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.bot_draft", "articleId": "a1"]), .news(id: "a1"))
+        XCTAssertEqual(DeskDeepLink(pushPayload: ["type": "desk.tweet_published", "deeplink": "sabqdesk://social/p1", "postId": "p1"]),
+                       .social(id: "p1"))
+
+        let published: [AnyHashable: Any] = ["type": "desk.publisher_news", "deeplink": "sabqdesk://notifications",
+                                             "linkUrl": "https://sabq.org/article/abc"]
+        XCTAssertEqual(DeskDeepLink.publishedArticleURL(pushPayload: published)?.absoluteString, "https://sabq.org/article/abc")
+        // Older server (no linkUrl), a foreign host, or another push type: no article.
+        XCTAssertNil(DeskDeepLink.publishedArticleURL(pushPayload: ["type": "desk.publisher_news"]))
+        XCTAssertNil(DeskDeepLink.publishedArticleURL(pushPayload: ["type": "desk.publisher_news", "linkUrl": "https://evil.example/a"]))
+        XCTAssertNil(DeskDeepLink.publishedArticleURL(pushPayload: ["type": "desk.bot_draft", "linkUrl": "https://sabq.org/article/abc"]))
+    }
+
+    func testBotAndFollowPrefsDefaults() throws {
+        let prefs = try decoder.decode(StaffAlertPrefs.self, from: "{}".data)
+        XCTAssertTrue(prefs.botNews)
+        XCTAssertFalse(prefs.publishFollow)
+        XCTAssertFalse(StaffAlertPrefs().publishFollow)
+        XCTAssertTrue(StaffAlertPrefsUpdate(publishFollow: true).applied(to: prefs).publishFollow)
+        XCTAssertFalse(StaffAlertPrefsUpdate(botNews: false).applied(to: prefs).botNews)
+        let body = try JSONSerialization.jsonObject(with: StaffJSON.makeEncoder().encode(StaffAlertPrefsUpdate(publishFollow: true)))
+        XCTAssertEqual((body as? [String: Any])?["publishFollow"] as? Bool, true)
+    }
 }
