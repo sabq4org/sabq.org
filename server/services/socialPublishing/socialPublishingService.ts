@@ -1285,7 +1285,10 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
   authorUserId: string;
   authorName?: string | null;
   isUpdate?: boolean;
+  /** editor = مقترح محرر من «نشر سبق»: الصياغة «من محرر» بدل «من كاتب رأي». */
+  proposer?: "author" | "editor";
 }): Promise<void> {
+  const isEditor = input.proposer === "editor";
   let senderName = input.authorName?.trim() || "";
   let senderRole = "opinion_author";
   try {
@@ -1326,6 +1329,13 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
         articleTitle: input.articleTitle,
         articleUrl: input.articleUrl,
         isUpdate: input.isUpdate,
+        ...(isEditor
+          ? {
+              headline: input.isUpdate
+                ? `تحديث مقترح تغريدة من محرر: ${senderName}`
+                : `مقترح تغريدة جديد من محرر: ${senderName}`,
+            }
+          : {}),
       });
       await sendDeskAlertEmails(recipients, emailPayload, "[SocialPublish AuthorProposal]");
     }
@@ -1342,6 +1352,9 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
       text: input.post.text,
       isUpdate: input.isUpdate,
       excludeUserId: input.authorUserId,
+      ...(isEditor && !input.isUpdate
+        ? { titleOverride: `مقترح تغريدة من محرر: ${senderName || "محرر"}` }
+        : {}),
     });
   } catch (pushErr) {
     console.error(`${LOG_PREFIX} فشل دفع إشعار مقترح كاتب الرأي لتطبيق الديسك:`, pushErr);

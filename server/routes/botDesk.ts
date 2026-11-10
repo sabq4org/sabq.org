@@ -15,6 +15,7 @@
 //   POST  /api/internal/bot-desk/social/posts/:id/reject
 //   POST  /api/internal/bot-desk/social/posts/:id/publish
 //   POST  /api/internal/bot-desk/social/posts/:id/schedule
+//   GET   /api/internal/bot-desk/social/tweets/:id   (قرار المكتب في تغريدة المحرر، لصاحبها فقط)
 //   POST  /api/internal/bot-desk/social/tweets   (تغريدة المحرر: نشر مباشر أو مقترح للمكتب حسب الصلاحية)
 //   GET   /api/internal/bot-desk/opinion/drafts
 //   GET   /api/internal/bot-desk/opinion/drafts/:id
@@ -74,6 +75,7 @@ import {
 } from "../services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../services/socialPublishing/types";
 import {
+  getEditorTweetForOwner,
   isEditorTweetChannelEnabled,
   submitEditorTweet,
 } from "../services/socialPublishing/editorTweetService";
@@ -677,6 +679,23 @@ router.post(
         .json({ mode: result.mode, post: result.post, duplicate: result.duplicate, updated: result.updated });
     } catch (error) {
       handleSocialError(res, error, "تعذر إرسال التغريدة");
+    }
+  },
+);
+
+// قرار المكتب في تغريدة المحرر: لصاحبها فقط (404 لغيره)، بلا صلاحية view_log.
+router.get(
+  `${BOT_DESK_BASE_PATH}/social/tweets/:id`,
+  requireBotDeskAuth,
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const tweet = await getEditorTweetForOwner(req.params.id, req.botPrincipal!.userId);
+      if (!tweet) {
+        return sendError(res, 404, { code: "not_found", message: "التغريدة غير موجودة" });
+      }
+      res.json({ tweet });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر جلب حالة التغريدة");
     }
   },
 );

@@ -59,6 +59,7 @@ interface EditorTweetArticle {
   url: string;
   imageUrl: string | null;
   status: string;
+  publishedAt: Date | null;
 }
 
 export interface EditorTweetDeps {
@@ -101,6 +102,7 @@ const defaultDeps: EditorTweetDeps = {
         englishSlug: articles.englishSlug,
         imageUrl: articles.imageUrl,
         status: articles.status,
+        publishedAt: articles.publishedAt,
       })
       .from(articles)
       .where(eq(articles.id, articleId))
@@ -112,6 +114,7 @@ const defaultDeps: EditorTweetDeps = {
       url: buildArticleUrl(row),
       imageUrl: row.imageUrl || null,
       status: row.status,
+      publishedAt: row.publishedAt ?? null,
     };
   },
   async findRecentSameTweet({ articleId, actorUserId, text, since }) {
@@ -188,9 +191,14 @@ export async function submitEditorTweet(
 
   const article = await deps.loadArticle(input.articleId);
   if (!article) throw new SocialPublishValidationError("الخبر غير موجود", 404);
-  if (article.status !== "published") {
+  // نفس شرط مسار البوت القائم (assertArticleTweetable): منشور ووقت نشره حلّ.
+  if (
+    article.status !== "published" ||
+    (article.publishedAt && article.publishedAt.getTime() > deps.now().getTime())
+  ) {
     throw new SocialPublishValidationError("التغريدة متاحة للخبر المنشور فقط", 409);
   }
+  const lockKey = `editor-tweet:${input.actorUserId}:${article.id}`;
 
   const imageUrl = input.includeImage ? article.imageUrl : null;
   const image = imageUrl
@@ -200,9 +208,7 @@ export async function submitEditorTweet(
   if (input.canPublishNow) {
     // البحث عن مطابق + الإنشاء + الحجز تحت قفل واحد: طلبان متزامنان بالنص نفسه
     // لا ينشئان منشورين. النشر نفسه خارج القفل.
-    const locked = await deps.withSubmitLock(
-      `editor-tweet:${input.actorUserId}:${article.id}`,
-      async () => {
+    const locked = await deps.withSubmitLock(lockKey, async () => {
         const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
         const same = await deps.findRecentSameTweet({
           articleId: article.id,
@@ -220,8 +226,7 @@ export async function submitEditorTweet(
           createdByUserId: input.actorUserId,
         });
         return { same: null, claimed: await deps.claimPostForImmediatePublish(draft.id) };
-      },
-    );
+    });
     if (locked.same) {
       return {
         mode: locked.same.status === "published" ? "published" : "processing",
@@ -242,33 +247,33 @@ export async function submitEditorTweet(
     };
   }
 
-  const pending = await deps.findPendingProposal({
-    articleId: article.id,
-    actorUserId: input.actorUserId,
-  });
-  let updatedPost: SocialPost | null = null;
-  if (pending) {
-    const linkUrl = input.includeLink ? article.url : null;
-    const validation = validateXPostText(text, linkUrl);
-    if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
-    if (!validation.valid) {
-      throw new SocialPublishValidationError(
-        `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
-      );
-    }
+  const linkUrl = input.includeLink ? article.url : null;
+  const validation = validateXPostText(text, linkUrl);
+  if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
+  if (!validation.valid) {
+    throw new SocialPublishValidationError(
+      `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
+    );
+  }
+  // القفل نفسه: طلبان متزامنان من المحرر نفسه للخبر نفسه لا ينشئان مقترحين.
+  const { post, updated } = await deps.withSubmitLock(lockKey, async () => {
+    const pending = await deps.findPendingProposal({
+      articleId: article.id,
+      actorUserId: input.actorUserId,
+    });
     // null = المكتب قرّر في المقترح السابق للتو؛ الطلب الحالي يصبح مقترحًا جديدًا
     // ولا يمس ما اعتُمد أو جُدول.
-    updatedPost = await deps.updatePendingProposal({
-      postId: pending.id,
-      text,
-      linkUrl,
-      ...image,
-      now: deps.now(),
-    });
-  }
-  const post =
-    updatedPost ??
-    (await deps.createDraftPost({
+    const updatedPost = pending
+      ? await deps.updatePendingProposal({
+          postId: pending.id,
+          text,
+          linkUrl,
+          ...image,
+          now: deps.now(),
+        })
+      : null;
+    if (updatedPost) return { post: updatedPost, updated: true };
+    const created = await deps.createDraftPost({
       articleId: article.id,
       text,
       textSource: "custom",
@@ -276,8 +281,9 @@ export async function submitEditorTweet(
       ...image,
       createdByUserId: input.actorUserId,
       requestedAt: deps.now(),
-    }));
-  const updated = Boolean(updatedPost);
+    });
+    return { post: created, updated: false };
+  });
 
   // تنبيه «مكتب سبق» لا يؤخّر الرد ولا يُفشله.
   void deps
@@ -287,8 +293,66 @@ export async function submitEditorTweet(
       articleUrl: article.url,
       authorUserId: input.actorUserId,
       isUpdate: updated,
+      proposer: "editor",
     })
     .catch((err) => console.error("[EditorTweet] تعذر تنبيه المكتب:", err));
 
   return { mode: "pending_approval", post, duplicate: false, updated };
+}
+
+/** ما يراه صاحب التغريدة عن قرار المكتب — بلا حقول داخلية. */
+export interface EditorTweetStatus {
+  id: string;
+  articleId: string | null;
+  status: string;
+  /** pending_approval | scheduled | processing | published | rejected | failed */
+  state: "pending_approval" | "scheduled" | "processing" | "published" | "rejected" | "failed";
+  text: string;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  externalPostUrl: string | null;
+  /** سبب الرفض أو آخر خطأ نشر إن وُجد. */
+  reason: string | null;
+}
+
+export function toEditorTweetStatus(post: SocialPost): EditorTweetStatus {
+  const state: EditorTweetStatus["state"] =
+    post.status === "draft"
+      ? "pending_approval"
+      : post.status === "canceled"
+        ? "rejected"
+        : post.status === "scheduled" || post.status === "processing" || post.status === "published"
+          ? post.status
+          : "failed";
+  const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
+  return {
+    id: post.id,
+    articleId: post.articleId ?? null,
+    status: post.status,
+    state,
+    text: post.text,
+    scheduledAt: iso(post.scheduledAt),
+    publishedAt: iso(post.publishedAt),
+    externalPostUrl: post.externalPostUrl ?? null,
+    reason: state === "rejected" || state === "failed" ? post.lastError ?? null : null,
+  };
+}
+
+/** يقرأ تغريدة المحرر لصاحبها فقط؛ null إن لم توجد أو كانت لغيره. */
+export async function getEditorTweetForOwner(
+  postId: string,
+  ownerUserId: string,
+): Promise<EditorTweetStatus | null> {
+  const [row] = await db
+    .select()
+    .from(socialPosts)
+    .where(
+      and(
+        eq(socialPosts.id, postId),
+        eq(socialPosts.createdByUserId, ownerUserId),
+        isNull(socialPosts.publisherId),
+      ),
+    )
+    .limit(1);
+  return row ? toEditorTweetStatus(row) : null;
 }

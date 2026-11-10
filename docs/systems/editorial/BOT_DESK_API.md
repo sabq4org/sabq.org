@@ -111,6 +111,7 @@ curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/tickets/<ticketId>
 | `POST` | `/api/internal/bot-desk/social/posts/:id/schedule` | `social_publish.schedule` | جدولة المنشور `{ "scheduledAt": "2026-10-25T19:30:00+03:00" }` (ISO-8601 مع المنطقة الزمنية) عبر `schedulePost`. |
 
 | `POST` | `/api/internal/bot-desk/social/tweets` | توكن ناشر صالح | تغريدة المحرر من «نشر سبق» لخبر **منشور**: `{ "articleId", "text", "includeLink"?: true, "includeImage"?: true }`. صاحب `social_publish.publish_now` تُنشر تغريدته فورًا (`200`، `mode: "published"`). غيره تُحفظ مقترحًا يظهر في «مكتب سبق» (`202`، `mode: "pending_approval"`)، وإعادة الإرسال للخبر نفسه تحدّث المقترح المعلّق. مقفلة افتراضيًا: تعيد `403 social_disabled` حتى `BOT_DESK_EDITOR_TWEETS=on`. خبر غير منشور `409`. تكرار النص نفسه خلال 10 دقائق يعيد المنشور السابق (`duplicate: true`) بلا نشر ثانٍ؛ وإن كان ما زال قيد النشر يعود `202` بـ`mode: "processing"` (ليس تأكيد نشر). |
+| `GET` | `/api/internal/bot-desk/social/tweets/:id` | صاحب التغريدة فقط | حالة تغريدة المحرر وقرار المكتب: `{ tweet: { state, text, scheduledAt, publishedAt, externalPostUrl, reason } }`؛ `state` أحد `pending_approval`/`scheduled`/`processing`/`published`/`rejected`/`failed`، و`reason` سبب الرفض أو خطأ النشر. تغريدة غيره `404`. |
 
 #### أمثلة النشر الاجتماعي
 

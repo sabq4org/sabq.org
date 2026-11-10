@@ -11,6 +11,7 @@ import {
   EDITOR_TWEET_DUPLICATE_WINDOW_MS,
   isEditorTweetChannelEnabled,
   submitEditorTweet,
+  toEditorTweetStatus,
   type EditorTweetDeps,
 } from "../../server/services/socialPublishing/editorTweetService";
 import { SocialPublishValidationError } from "../../server/services/socialPublishing/socialPublishingService";
@@ -23,6 +24,7 @@ const article = {
   url: "https://sabq.org/article/riyadh-bus",
   imageUrl: "https://media.sabq.org/news/x.webp",
   status: "published",
+  publishedAt: new Date("2026-11-10T05:00:00.000Z"),
 };
 const post = (over: Record<string, unknown> = {}) =>
   ({ id: "p1", articleId: "a1", status: "draft", text: "نص", ...over }) as any;
@@ -185,5 +187,49 @@ describe("تغريدة المحرر من «نشر سبق» — حسب الصلا
     expect(err).toBeInstanceOf(SocialPublishValidationError);
     expect(err.status).toBe(409);
     expect(draft.createDraftPost).not.toHaveBeenCalled();
+    const future = makeDeps({
+      loadArticle: vi.fn(async () => ({
+        ...article,
+        publishedAt: new Date(NOW.getTime() + 60_000),
+      })),
+    });
+    await expect(submitEditorTweet(input(true), future)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("طلبا مقترح متزامنان من المحرر نفسه: مقترح واحد والثاني تحديث له", async () => {
+    let stored: any = null;
+    let chain: Promise<unknown> = Promise.resolve();
+    const deps = makeDeps({
+      withSubmitLock: ((_key: string, run: () => Promise<any>) => {
+        const next = chain.then(run);
+        chain = next.catch(() => undefined);
+        return next;
+      }) as any,
+      findPendingProposal: vi.fn(async () => stored),
+      createDraftPost: vi.fn(async () => (stored = post({ id: "one" }))) as any,
+      updatePendingProposal: vi.fn(async () => post({ id: "one", text: "محدّث" })),
+    });
+    const results = await Promise.all([
+      submitEditorTweet(input(false), deps),
+      submitEditorTweet(input(false), deps),
+    ]);
+    expect(deps.createDraftPost).toHaveBeenCalledTimes(1);
+    expect(results.map((r) => r.updated)).toEqual([false, true]);
+  });
+
+  it("التنبيه بصياغة المحرر، وحالة التغريدة لصاحبها بلا حقول داخلية", async () => {
+    const deps = makeDeps();
+    await submitEditorTweet(input(false), deps);
+    expect(deps.notifyDesk).toHaveBeenCalledWith(expect.objectContaining({ proposer: "editor" }));
+    expect(
+      toEditorTweetStatus(post({ status: "canceled", lastError: "العنوان مكرر" })),
+    ).toMatchObject({ state: "rejected", reason: "العنوان مكرر" });
+    expect(toEditorTweetStatus(post({ status: "draft", lastError: "x" }))).toMatchObject({
+      state: "pending_approval",
+      reason: null,
+    });
+    expect(
+      toEditorTweetStatus(post({ status: "published", externalPostUrl: "https://x.com/s/1" })),
+    ).toMatchObject({ state: "published", externalPostUrl: "https://x.com/s/1" });
   });
 });
