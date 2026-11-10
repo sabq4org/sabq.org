@@ -17,33 +17,44 @@ export const LIST_GRID =
 /** علامة توثيق صغيرة: نص + أيقونة، لا لون وحده (إمكانية الوصول). */
 function Verified({ ok, label }: { ok: boolean; label: string }) {
   return ok ? (
-    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-success">
+    <span className="inline-flex items-center gap-1 text-[12px] leading-4 font-medium text-success">
       <BadgeCheck className="h-3.5 w-3.5" aria-hidden />
       {label} موثّق
     </span>
   ) : (
-    <span className="text-[12px] text-warning">{label} غير موثّق</span>
+    <span className="text-[12px] leading-4 text-warning">{label} غير موثّق</span>
+  );
+}
+
+/**
+ * قيمة لاتينية (بريد أو رقم) فوق حالة توثيقها. القيمة تُكتب LTR لكنها تُحاذى
+ * لبداية العمود العربي (اليمين) مثل سطر التوثيق تحتها؛ `text-start` داخل عنصر LTR
+ * كان يدفعها إلى اليسار فينفصل السطران.
+ */
+function ContactValue({ value, ok, label, numeric }: { value: string; ok: boolean; label: string; numeric?: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-col items-start gap-0.5">
+      <span
+        dir="ltr"
+        title={value}
+        className={`max-w-full truncate text-right text-[13px] leading-5 ${numeric ? "tabular-nums" : ""}`}
+        style={{ unicodeBidi: "isolate" }}
+      >
+        {value}
+      </span>
+      <Verified ok={ok} label={label} />
+    </span>
   );
 }
 
 function EmailLine({ user }: { user: ListedUser }) {
-  if (!user.hasRealEmail || !user.email) return <span className="text-xs text-muted-foreground">بلا بريد</span>;
-  return (
-    <span className="flex min-w-0 flex-col">
-      <span dir="ltr" className="truncate text-start text-[13px]" style={{ unicodeBidi: "isolate" }}>{user.email}</span>
-      <Verified ok={user.emailVerified} label="البريد" />
-    </span>
-  );
+  if (!user.hasRealEmail || !user.email) return <span className="text-[12px] text-muted-foreground">بلا بريد</span>;
+  return <ContactValue value={user.email} ok={user.emailVerified} label="البريد" />;
 }
 
 function PhoneLine({ user }: { user: ListedUser }) {
-  if (!user.phoneNumber) return <span className="text-xs text-muted-foreground">بلا جوال</span>;
-  return (
-    <span className="flex min-w-0 flex-col">
-      <span dir="ltr" className="truncate text-start text-[13px] tabular-nums" style={{ unicodeBidi: "isolate" }}>{user.phoneNumber}</span>
-      <Verified ok={user.phoneVerified} label="الجوال" />
-    </span>
-  );
+  if (!user.phoneNumber) return <span className="text-[12px] text-muted-foreground">بلا جوال</span>;
+  return <ContactValue value={user.phoneNumber} ok={user.phoneVerified} label="الجوال" numeric />;
 }
 
 function CellLabel({ children }: { children: string }) {
