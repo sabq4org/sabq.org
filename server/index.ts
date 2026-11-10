@@ -1087,6 +1087,9 @@ if (!(globalThis as any).__sabqServer) {
     // «قفل المسودات»: يرفض الكتابة على مسودة مقفلة عند زميل قبل mobileApiRoutes.
     const mobileDraftLockGuard = (await import("./routes/mobileDraftLockGuard")).default;
     app.use("/api/v1", mobileDraftLockGuard);
+    // حدود مسارات AI المجهولة (POST /sports/intel/ask) قبل mobileApiRoutes.
+    const aiCostLimiters = (await import("./routes/v1/aiCostLimiters")).default;
+    app.use("/api/v1", aiCostLimiters);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 

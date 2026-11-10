@@ -17461,7 +17461,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
 
   // AI Content Tools - Text Summarizer
-  app.post("/api/ai-tools/summarize", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/summarize", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = summarizeSchema.parse(req.body);
       const result = await summarizeText(validatedData.text, validatedData.language);
@@ -17480,7 +17480,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Social Media Post Generator
-  app.post("/api/ai-tools/social-post", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/social-post", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = socialPostSchema.parse(req.body);
       const result = await generateSocialPost(
@@ -17503,7 +17503,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Smart Image Search
-  app.post("/api/ai-tools/image-search", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/image-search", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = imageSearchSchema.parse(req.body);
       const result = await suggestImageQuery(validatedData.contentText);
@@ -17522,7 +17522,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Instant Translator
-  app.post("/api/ai-tools/translate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/translate", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = translateSchema.parse(req.body);
       const result = await translateContent(
@@ -17545,7 +17545,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Fact Checker
-  app.post("/api/ai-tools/fact-check", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/fact-check", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = factCheckSchema.parse(req.body);
       const result = await checkFactAccuracy(
@@ -17567,7 +17567,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Trends Analysis
-  app.post("/api/ai-tools/analyze-trends", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/analyze-trends", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = analyzeTrendsSchema.parse(req.body);
       const result = await analyzeTrends(
@@ -26374,7 +26374,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/ai/generate-entity-description - توليد تعريف تلقائي للكيان
-  app.post("/api/ai/generate-entity-description", requireAuth, async (req: any, res) => {
+  app.post("/api/ai/generate-entity-description", requireAuth, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const { name, type, position, organization, location } = req.body;
       
@@ -30478,7 +30478,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
 
   // Generate Deep Analysis with SSE (requires authentication)
-  app.post("/api/deep-analysis/generate", requireAuth, async (req, res) => {
+  app.post("/api/deep-analysis/generate", requireAuth, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req, res) => {
     try {
       const { topic, keywords, category, saudiContext } = req.body;
       
