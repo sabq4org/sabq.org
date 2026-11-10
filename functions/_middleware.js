@@ -314,6 +314,10 @@ export function htmlSecurityHeadersForHost(hostname) {
   const headers = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
+    // منع التأطير من أصل آخر (clickjacking على اللوحة وتسجيل الدخول). helmet
+    // يضيف frame-ancestors على ردود Render فقط، وHTML هنا يخرج من Pages بلا أي
+    // ترويسة تأطير. X-Frame-Options لا CSP: لا نضيف سياسة محتوى من الحافة.
+    "X-Frame-Options": "SAMEORIGIN",
   };
   if (isHstsHost(hostname)) headers["Strict-Transport-Security"] = "max-age=86400";
   return headers;

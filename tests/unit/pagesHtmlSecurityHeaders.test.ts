@@ -18,6 +18,8 @@ describe("Pages HTML security headers", () => {
     expect(await response.text()).toBe(body);
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    // تدقيق 2026-11-10: HTML من Pages كان بلا أي ترويسة منع تأطير.
+    expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
     expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=86400");
     expect(response.headers.get("Content-Security-Policy")).toBeNull();
     expect(response.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
