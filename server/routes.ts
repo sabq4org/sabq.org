@@ -1577,7 +1577,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         const inferred = await inferStaffRolesFromWork(userId);
         if (inferred.length > 0) {
           allRoles = mergeRoleSignals(
-            [...activeRoleRows.map((r) => r.roleName), ...inferred],
+            [...activeRoleRows.map((r) => r.roleName), ...inferred.filter((r) => !inactiveRoleNames.has(r))],
             inactiveRoleNames.has(user.role) ? null : user.role,
           );
         }
@@ -6063,7 +6063,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ============================================================
 
   // Create new user with roles
-  app.post("/api/admin/users", requireAuth, requirePermission("users.create"), async (req: any, res) => {
+  app.post("/api/admin/users", requireAuth, requirePermission("users.create"), legacyUserActionGuard("admin_create"), async (req: any, res) => {
     try {
       const createdBy = req.user?.id;
       if (!createdBy) {

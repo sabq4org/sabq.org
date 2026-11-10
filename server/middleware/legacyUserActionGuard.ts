@@ -9,6 +9,7 @@ import type { NextFunction, Request, Response } from "express";
 import {
   UserAdminError,
   afterLegacyUserAction,
+  assertRolesAssignableToNewUser,
   checkLegacyUserAction,
   loadRoleCatalog,
   snapshotLegacyTargets,
@@ -17,7 +18,7 @@ import {
 export type LegacyUserAction =
   | "suspend" | "unsuspend" | "ban" | "unban" | "soft_delete" | "restore" | "role"
   | "bulk_suspend" | "bulk_ban" | "bulk_role"
-  | "admin_patch" | "admin_roles" | "admin_delete";
+  | "admin_patch" | "admin_roles" | "admin_delete" | "admin_create";
 
 const BLOCKING_STATUSES = new Set(["suspended", "banned", "locked", "deleted"]);
 
@@ -72,6 +73,9 @@ async function planFor(action: LegacyUserAction, req: Request): Promise<Plan> {
     }
     case "admin_delete":
       return { targets: one, blocksAccess: true, auditAction: "", log: false, revoke: false, details: {} };
+    case "admin_create":
+      // لا هدف بعد؛ يُفحص فقط أن الأدوار المطلوبة قابلة للإسناد (انظر legacyUserActionGuard).
+      return { targets: [], blocksAccess: false, auditAction: "", log: false, revoke: false, details: {} };
   }
 }
 
@@ -80,6 +84,12 @@ export function legacyUserActionGuard(action: LegacyUserAction) {
     const actorId = (req.user as { id?: string } | undefined)?.id;
     if (!actorId) return res.status(401).json({ message: "Unauthorized" });
     try {
+      if (action === "admin_create") {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const roleIds = Array.isArray(body.roleIds) ? body.roleIds.map(String) : [];
+        await assertRolesAssignableToNewUser(roleIds);
+        return next();
+      }
       const plan = await planFor(action, req);
       const targets = plan.targets.filter(Boolean);
       // بلا أهداف: يتولى المعالج رسالة «قائمة المستخدمين مطلوبة».

@@ -524,11 +524,14 @@ export async function previewUserChange(id: string, proposal: { roleIds: string[
 
   const overrides = sanitizeOverrides(proposal.overrides);
   const otherOverrides = s.overrides.filter((o) => !TRACK_PERMISSION_CODES.includes(o.code));
-  const nextNames = proposal.roleIds.map((rid) => byId.get(rid)!.name);
   const beforeInput = resolveInputFor(s, catalog, inactive);
+  // الأدوار لم تتغير (تعديل استثناءات فقط): saveUser لا يلمس users.role، فلا نلمسه هنا.
+  const sameRoles = new Set(proposal.roleIds).size === new Set(s.roleIds).size
+    && proposal.roleIds.every((rid) => s.roleIds.includes(rid));
+  const nextNames = sameRoles ? s.roleNames : proposal.roleIds.map((rid) => byId.get(rid)!.name);
   const afterInput: ResolveInput = {
     ...beforeInput,
-    legacyRole: primaryRoleKey(mergeRoleSignals(nextNames)),
+    legacyRole: sameRoles ? s.legacyRole : primaryRoleKey(mergeRoleSignals(nextNames)),
     assignedRoles: nextNames,
     overrides: [...otherOverrides, ...overrides],
   };
@@ -962,6 +965,18 @@ export async function checkLegacyUserAction(actorId: string, targetIds: string[]
   }
   if (losingSuper && (await countOtherActiveSuperusers(db, ids, inactive)) === 0) {
     throw new UserAdminError(409, "هذا آخر حساب إداري نشط. أسند دور «مسؤول» لحساب آخر أولًا.", "LAST_ADMIN");
+  }
+}
+
+/** إنشاء حساب جديد: كل دور مطلوب يُعدّ إسنادًا جديدًا، فيُمنع المغلق والمعطّل والمؤرشف. */
+export async function assertRolesAssignableToNewUser(roleIds: string[]): Promise<void> {
+  if (roleIds.length === 0) return;
+  const catalog = await loadRoleCatalog();
+  for (const id of roleIds) {
+    const role = catalog.find((r) => r.id === id);
+    if (role && UNASSIGNABLE_ROLE_STATUSES.includes(role.status)) {
+      throw new UserAdminError(403, `${role.nameAr}: الدور ${ROLE_STATUS_LABELS_AR[role.status]} ولا يُسند لمستخدمين جدد`, "ROLE_NOT_ASSIGNABLE");
+    }
   }
 }
 
