@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { db, getSessionFallbackPool } from "./db";
 import { users, appMemberSessions, canUserLogin, getUserStatusMessage } from "@shared/schema";
+import { unverifiedLinkUpdates } from "./utils/oauthLinkHardening";
 import { eq, or, sql, and, ne } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import appleSignin from "apple-signin-auth";
@@ -289,10 +290,13 @@ export async function setupAuth(app: Express) {
             if (existingUser) {
               // Update Google ID if not set
               if (!existingUser.googleId) {
+                // First link onto a never-verified row: see oauthLinkHardening.
+                const hardening = unverifiedLinkUpdates(existingUser);
                 await db
                   .update(users)
-                  .set({ googleId, authProvider: 'google' })
+                  .set({ googleId, authProvider: 'google', ...(hardening ?? {}) })
                   .where(eq(users.id, existingUser.id));
+                if (hardening) await invalidateAllUserSessions(existingUser.id);
               }
 
               // Check if user can login
@@ -438,10 +442,12 @@ export async function setupAuth(app: Express) {
             if (existingUser) {
               // Update Apple ID if not set
               if (!existingUser.appleId) {
+                const hardening = unverifiedLinkUpdates(existingUser);
                 await db
                   .update(users)
-                  .set({ appleId, authProvider: 'apple' })
+                  .set({ appleId, authProvider: 'apple', ...(hardening ?? {}) })
                   .where(eq(users.id, existingUser.id));
+                if (hardening) await invalidateAllUserSessions(existingUser.id);
               }
 
               // Update name if we got it and user doesn't have it

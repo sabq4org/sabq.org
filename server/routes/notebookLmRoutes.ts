@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from "express";
 import { isAuthenticated } from "../auth";
+import { requireAnyPermission } from "../rbac";
 import { notebookLmService } from "../services/notebookLmService";
 import { db } from "../db";
 import { eq, desc, and } from "drizzle-orm";
@@ -16,7 +17,7 @@ const router = Router();
  * POST /api/notebooklm/generate
  * Generate infographic using NotebookLM
  */
-router.post("/generate", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/generate", isAuthenticated, requireAnyPermission("articles.generate_images", "media.upload", "articles.create"), async (req: Request, res: Response) => {
   try {
     const { prompt, detail, orientation, language, colorStyle } = req.body;
     const userId = (req.user as any)?.id;

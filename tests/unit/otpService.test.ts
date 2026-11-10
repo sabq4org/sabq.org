@@ -106,4 +106,26 @@ describe("otpService", () => {
     expect(r.success).toBe(false);
     expect(r.configured).toBe(false);
   });
+
+  // تدقيق 2026-11-10: العدّاد كان «اقرأ ثم اكتب»، فالتخمينات المتوازية تتجاوز الحد.
+  it("caps parallel guesses at the attempt limit", async () => {
+    await sendOtp(PHONE, "login");
+    const real = codeFromBody(sent[sent.length - 1].body);
+    const wrong = Array.from({ length: 40 }, (_, i) => String(100000 + i)).filter((c) => c !== real);
+    const results = await Promise.all(wrong.map((c) => verifyOtp(PHONE, c, "login")));
+    expect(results.every((r) => !r.valid)).toBe(true);
+    // الرمز الصحيح لم يعد صالحًا: استُنفدت المحاولات وحُذف.
+    expect((await verifyOtp(PHONE, real, "login")).valid).toBe(false);
+  });
+
+  it("a fresh code gets a fresh attempt budget", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-10T10:00:00Z"));
+    await sendOtp(PHONE, "2fa");
+    for (let i = 0; i < OTP_MAX_ATTEMPTS; i++) await verifyOtp(PHONE, "000001", "2fa");
+    vi.setSystemTime(new Date(Date.now() + (OTP_RESEND_COOLDOWN_SECONDS + 1) * 1000));
+    expect((await sendOtp(PHONE, "2fa")).success).toBe(true);
+    const real = codeFromBody(sent[sent.length - 1].body);
+    expect((await verifyOtp(PHONE, real, "2fa")).valid).toBe(true);
+  });
 });

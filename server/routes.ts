@@ -161,7 +161,7 @@ import { classifyArticle } from './ai-classifier';
 import { generateSeoMetadata } from './seo-generator';
 import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } from "./cacheMiddleware";
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
-import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
+import { memoryCache, viewTrackingCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { getCachedNewsStatistics } from "./services/newsStatisticsService";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
@@ -1720,17 +1720,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Profile image upload endpoints (Reference: javascript_object_storage blueprint)
-  app.post("/api/profile/image/upload", isAuthenticated, async (req: any, res) => {
-    try {
-      const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
-    } catch (error) {
-      console.error("Error getting upload URL:", error);
-      res.status(500).json({ message: "فشل في الحصول على رابط الرفع" });
-    }
-  });
+  // POST /api/profile/image/upload و POST /api/objects/upload حُذفا (تدقيق
+  // 2026-11-10): رابط رفع موقَّع لأي مستخدم مسجَّل إلى مسار عام بلا نوع ولا
+  // حجم، وبلا مستدعٍ. الصورة الشخصية تُرفع عبر multer + Cloudflare Images.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -3913,203 +3905,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
 
   // Category Analytics Endpoint - Statistics for a specific category
-  app.get("/api/categories/:slug/analytics", async (req, res) => {
-    try {
-      const categories = await storage.getAllCategories();
-      const category = findCategoryBySlugOrEnglishSlug(categories, req.params.slug);
-      
-      if (!category) {
-        return res.status(404).json({ message: "Category not found" });
-      }
-
-      const now = new Date();
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-      // Determine which articles to analyze based on category type
-      let articleIds: string[] = [];
-      
-      if (category.type === "dynamic" || category.type === "smart") {
-        // For smart/dynamic categories, get articles from articleSmartCategories
-        const smartAssignments = await db
-          .select({ articleId: articleSmartCategories.articleId })
-          .from(articleSmartCategories)
-          .where(eq(articleSmartCategories.categoryId, category.id));
-        
-        articleIds = smartAssignments.map(item => item.articleId);
-      }
-
-      // Build WHERE conditions for category articles
-      const categoryConditions = category.type === "dynamic" || category.type === "smart"
-        ? and(
-            inArray(articles.id, articleIds.length > 0 ? articleIds : ['']), // Prevent empty array
-            eq(articles.status, "published")
-          )
-        : and(
-            eq(articles.categoryId, category.id),
-            eq(articles.status, "published")
-          );
-
-      // Get total article count in this category
-      const [totalCount] = await db.select({ count: sql<number>`count(*)::int` })
-        .from(articles)
-        .where(categoryConditions);
-
-      // Get articles published in last 30 days
-      const [recentCount] = await db.select({ count: sql<number>`count(*)::int` })
-        .from(articles)
-        .where(and(
-          categoryConditions,
-          gte(articles.publishedAt, monthAgo)
-        ));
-
-      // Get total views for all articles in this category
-      const [totalViewsResult] = await db.select({
-        total: sql<number>`COALESCE(SUM(${articles.views}), 0)::int`
-      })
-        .from(articles)
-        .where(categoryConditions);
-
-      // Calculate average views per article
-      const avgViews = totalCount.count > 0 
-        ? Math.round(totalViewsResult.total / totalCount.count)
-        : 0;
-
-      // Get most active reporter in this category
-      let topAuthor;
-      
-      if (category.type === "dynamic" || category.type === "smart") {
-        topAuthor = await db.select({
-          userId: articles.reporterId,
-          count: sql<number>`count(*)::int`,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          profileImageUrl: users.profileImageUrl,
-        })
-          .from(articles)
-          .innerJoin(users, eq(articles.reporterId, users.id))
-          .where(and(
-            inArray(articles.id, articleIds.length > 0 ? articleIds : ['']),
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            isNotNull(articles.reporterId)
-          ))
-          .groupBy(articles.reporterId, users.firstName, users.lastName, users.profileImageUrl)
-          .orderBy(sql`count(*) DESC`)
-          .limit(1);
-
-        // Fallback to authorId if no reporter
-        if (!topAuthor || topAuthor.length === 0) {
-          topAuthor = await db.select({
-            userId: articles.authorId,
-            count: sql<number>`count(*)::int`,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            profileImageUrl: users.profileImageUrl,
-          })
-            .from(articles)
-            .innerJoin(users, eq(articles.authorId, users.id))
-            .where(and(
-              inArray(articles.id, articleIds.length > 0 ? articleIds : ['']),
-              eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-              isNotNull(articles.authorId)
-            ))
-            .groupBy(articles.authorId, users.firstName, users.lastName, users.profileImageUrl)
-            .orderBy(sql`count(*) DESC`)
-            .limit(1);
-        }
-      } else {
-        topAuthor = await db.select({
-          userId: articles.reporterId,
-          count: sql<number>`count(*)::int`,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          profileImageUrl: users.profileImageUrl,
-        })
-          .from(articles)
-          .innerJoin(users, eq(articles.reporterId, users.id))
-          .where(and(
-            eq(articles.categoryId, category.id),
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            isNotNull(articles.reporterId)
-          ))
-          .groupBy(articles.reporterId, users.firstName, users.lastName, users.profileImageUrl)
-          .orderBy(sql`count(*) DESC`)
-          .limit(1);
-
-        // Fallback to authorId
-        if (!topAuthor || topAuthor.length === 0) {
-          topAuthor = await db.select({
-            userId: articles.authorId,
-            count: sql<number>`count(*)::int`,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            profileImageUrl: users.profileImageUrl,
-          })
-            .from(articles)
-            .innerJoin(users, eq(articles.authorId, users.id))
-            .where(and(
-              eq(articles.categoryId, category.id),
-              eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-              isNotNull(articles.authorId)
-            ))
-            .groupBy(articles.authorId, users.firstName, users.lastName, users.profileImageUrl)
-            .orderBy(sql`count(*) DESC`)
-            .limit(1);
-        }
-      }
-
-      // Get total interactions (reactions + comments) for category articles
-      let totalInteractions = 0;
-      
-      if (articleIds.length > 0 || !(category.type === "dynamic" || category.type === "smart")) {
-        const interactionCondition = category.type === "dynamic" || category.type === "smart"
-          ? inArray(reactions.articleId, articleIds.length > 0 ? articleIds : [''])
-          : eq(reactions.articleId, articles.id);
-
-        const [reactionsCount] = await db.select({
-          count: sql<number>`count(*)::int`
-        })
-          .from(reactions)
-          .leftJoin(articles, eq(reactions.articleId, articles.id))
-          .where(categoryConditions);
-
-        const commentsCondition = category.type === "dynamic" || category.type === "smart"
-          ? inArray(comments.articleId, articleIds.length > 0 ? articleIds : [''])
-          : eq(comments.articleId, articles.id);
-
-        const [commentsCount] = await db.select({
-          count: sql<number>`count(*)::int`
-        })
-          .from(comments)
-          .leftJoin(articles, eq(comments.articleId, articles.id))
-          .where(categoryConditions);
-
-        totalInteractions = (reactionsCount?.count || 0) + (commentsCount?.count || 0);
-      }
-
-      res.json({
-        categoryName: category.nameAr,
-        categoryIcon: category.icon,
-        categoryColor: category.color,
-        totalArticles: totalCount.count || 0,
-        recentArticles: recentCount.count || 0,
-        totalViews: totalViewsResult.total || 0,
-        avgViewsPerArticle: avgViews,
-        totalInteractions: totalInteractions,
-        topAuthor: topAuthor && topAuthor.length > 0 ? {
-          name: `${topAuthor[0].firstName} ${topAuthor[0].lastName}`.trim(),
-          profileImageUrl: topAuthor[0].profileImageUrl,
-          count: topAuthor[0].count
-        } : null
-      });
-    } catch (error) {
-      console.error("Error fetching category analytics:", error);
-      res.status(500).json({ message: "Failed to fetch category analytics" });
-    }
-  });
+  // GET /api/categories/:slug/analytics حُذف (تدقيق 2026-11-10): مجهول وبلا كاش
+  // ولا محدِّد، ونحو ثمانية استعلامات تجميع على جدول المقالات لكل طلب، وبلا مستدعٍ.
 
 
   // GET /api/categories/smart - Get categories with filtering support
@@ -5990,7 +5787,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
 
   // Reset user password (admin only)
-  app.post("/api/admin/users/:id/reset-password", requireAuth, requirePermission("users.update"), async (req: any, res) => {
+  app.post("/api/admin/users/:id/reset-password", requireAuth, requirePermission("users.update"), legacyUserActionGuard("admin_reset_password"), async (req: any, res) => {
     try {
       const adminUserId = req.user?.id;
       if (!adminUserId) {
@@ -8756,6 +8553,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
+      // النشر السريع ينقل مسودة أو مجدولًا إلى منشور فقط: إعادة نشر المنشور كانت
+      // تكتب publishedAt من جديد وتعيد التنبيهات، والمؤرشف كان يُنشر بضغطة.
+      if (article.status !== "draft" && article.status !== "scheduled") {
+        return res.status(409).json({ message: "المقال ليس مسودة ولا مجدولًا، فلا يُنشر من هنا", code: "ARTICLE_NOT_PUBLISHABLE" });
+      }
+      // الشرط نفسه داخل UPDATE يحسم السباق (ضغطتان معًا)، ومعه قفل التحرير.
+      const publishableNow = and(
+        eq(articles.id, articleId),
+        inArray(articles.status, ["draft", "scheduled"]),
+        articleLockAllowsWriter(userId),
+      );
+
       // Check ownership for users without broad permissions (e.g., publisher role)
       const userPermissions = await getUserPermissions(userId);
       const canPublishAny = userPermissions.includes('articles.manage') || 
@@ -8798,9 +8607,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 publisherId: agencyPublisher.id,
                 isPublisherNews: true,
               })
-              .where(eq(articles.id, articleId))
+              .where(publishableNow)
               .returning();
-            if (published && isBreakingNewsType(published.newsType)) {
+            if (!published) throw new Error("NOT_PUBLISHABLE");
+            if (isBreakingNewsType(published.newsType)) {
               clearedBreaking = await clearOtherBreakingArticles(published.id, tx);
             }
             const charge = await chargePublishInTx(tx, {
@@ -8820,6 +8630,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           }
           updatedArticle = result;
         } catch (txError: any) {
+          if (txError.message === "NOT_PUBLISHABLE") {
+            return res.status(409).json({ message: "تغيّرت حالة المقال أو يحرره زميل الآن. حدّث الصفحة.", code: "ARTICLE_NOT_PUBLISHABLE" });
+          }
           if (txError.message === "NO_CREDITS") {
             return res.status(403).json({ 
               message: "لا يوجد رصيد كافٍ لنشر المقالات. يرجى التواصل مع الإدارة لتجديد الباقة.",
@@ -8834,7 +8647,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             const [row] = await tx
               .update(articles)
               .set({ status: "published", publishedAt: new Date(), updatedAt: new Date() })
-              .where(eq(articles.id, articleId))
+              .where(publishableNow)
               .returning();
             return row;
           },
@@ -8844,8 +8657,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       if (!updatedArticle) {
-        console.error("❌ [PUBLISH] Article update failed unexpectedly");
-        return res.status(500).json({ message: "حدث خطأ أثناء نشر المقال" });
+        return res.status(409).json({ message: "تغيّرت حالة المقال أو يحرره زميل الآن. حدّث الصفحة.", code: "ARTICLE_NOT_PUBLISHABLE" });
       }
       invalidateArticleWrite(updatedArticle, { reason: "article-publish" });
       memoryCache.delete("lite-feed");
@@ -13975,7 +13787,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     try {
       const articleId = req.params.id;
       
-      if (!articleId) {
+      if (!articleId || articleId.length > 64) {
         return res.status(400).json({ message: "معرف المقال مطلوب" });
       }
 
@@ -13985,18 +13797,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // blocks). It counts RAW POST volume — including the de-duped repeats below
       // — so a refresh/scripted burst still surfaces in the logs even though it
       // no longer inflates the stored view count.
-      const articleHourlyCount = memoryCache.get<number>(articleHourlyKey) || 0;
+      const articleHourlyCount = viewTrackingCache.get<number>(articleHourlyKey) || 0;
       if (articleHourlyCount >= 500) {
         // Log suspicious activity but still allow view (soft limit). Throttle the
         // line to once per minute per article — otherwise every view above the
         // threshold prints, flooding the logs with thousands of identical alerts.
         const alertThrottleKey = `view:alertlog:${articleId}`;
-        if (!memoryCache.get(alertThrottleKey)) {
+        if (!viewTrackingCache.get(alertThrottleKey)) {
           console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
-          memoryCache.set(alertThrottleKey, true, 60 * 1000); // 1 minute
+          viewTrackingCache.set(alertThrottleKey, true, 60 * 1000); // 1 minute
         }
       }
-      memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
+      viewTrackingCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
 
       // "Real read" gate (server side). One genuine view per visitor (logged-in
       // user, else real client IP) per article within VIEW_DEDUP_WINDOW_MS. The
@@ -14011,10 +13823,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ? `u:${req.user.id}`
         : getTrustedRealIp(req);
       const viewDedupKey = `view:seen:${articleId}:${viewerKey}`;
-      if (memoryCache.get<boolean>(viewDedupKey)) {
+      if (viewTrackingCache.get<boolean>(viewDedupKey)) {
         return res.json({ success: true, counted: false });
       }
-      memoryCache.set(viewDedupKey, true, VIEW_DEDUP_WINDOW_MS);
+      viewTrackingCache.set(viewDedupKey, true, VIEW_DEDUP_WINDOW_MS);
 
       // Buffered batch write via articleViewCounterService (~10s flush window).
       const viewIncrement = Math.floor(Math.random() * 6) + 5;
@@ -16559,44 +16371,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  app.delete("/api/dashboard/articles/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const user = await storage.getUser(userId);
-
-      if (!user || (user.role !== "editor" && user.role !== "admin" && user.role !== "reporter")) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-      const article = await storage.getArticleById(req.params.id);
-
-      if (!article) {
-        return res.status(404).json({ message: "Article not found" });
-      }
-
-      if (article.authorId !== userId && user.role !== "admin") {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-      await storage.deleteArticle(req.params.id);
-      
-      // Invalidate caches when articles are deleted
-      memoryCache.invalidatePattern('^homepage');
-      memoryCache.invalidatePattern('^blocks:');
-      memoryCache.invalidatePattern('^insights:');
-      memoryCache.invalidatePattern('^opinion:');
-      memoryCache.invalidatePattern('^trending');
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      
-      res.json({ message: "Article deleted" });
-    } catch (error) {
-      console.error("Error deleting article:", error);
-      res.status(500).json({ message: "Failed to delete article" });
-    }
-  });
+  // DELETE /api/dashboard/articles/:id حُذف (تدقيق 2026-11-10): كان حذفًا نهائيًّا
+  // بلا articles.delete ولا سجل تدقيق ولا مستدعٍ. الحذف عبر /api/admin/articles/:id.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -17482,7 +17258,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
 
   // AI Content Tools - Text Summarizer
-  app.post("/api/ai-tools/summarize", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/summarize", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = summarizeSchema.parse(req.body);
       const result = await summarizeText(validatedData.text, validatedData.language);
@@ -17501,7 +17277,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Social Media Post Generator
-  app.post("/api/ai-tools/social-post", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/social-post", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = socialPostSchema.parse(req.body);
       const result = await generateSocialPost(
@@ -17524,7 +17300,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Smart Image Search
-  app.post("/api/ai-tools/image-search", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/image-search", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = imageSearchSchema.parse(req.body);
       const result = await suggestImageQuery(validatedData.contentText);
@@ -17543,7 +17319,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Instant Translator
-  app.post("/api/ai-tools/translate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/translate", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = translateSchema.parse(req.body);
       const result = await translateContent(
@@ -17566,7 +17342,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Fact Checker
-  app.post("/api/ai-tools/fact-check", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/fact-check", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = factCheckSchema.parse(req.body);
       const result = await checkFactAccuracy(
@@ -17588,7 +17364,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // AI Content Tools - Trends Analysis
-  app.post("/api/ai-tools/analyze-trends", isAuthenticated, async (req: any, res) => {
+  app.post("/api/ai-tools/analyze-trends", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const validatedData = analyzeTrendsSchema.parse(req.body);
       const result = await analyzeTrends(
@@ -18659,11 +18435,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
-    const objectStorageService = new ObjectStorageService();
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    res.json({ uploadURL });
-  });
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -26395,7 +26166,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/ai/generate-entity-description - توليد تعريف تلقائي للكيان
-  app.post("/api/ai/generate-entity-description", requireAuth, async (req: any, res) => {
+  app.post("/api/ai/generate-entity-description", requireAuth, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const { name, type, position, organization, location } = req.body;
       
@@ -27507,6 +27278,19 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET Single English Article by Slug - with full details
+  // en/ur article-by-slug are public: a draft, scheduled or archived row is
+  // visible only to its author/reporter or to staff who can see articles.
+  const canReadLocalizedArticle = async (
+    article: { status?: string | null; authorId?: string | null; reporterId?: string | null },
+    viewerId: string | undefined,
+  ): Promise<boolean> => {
+    if (article.status === "published") return true;
+    if (!viewerId) return false;
+    if (article.authorId === viewerId || article.reporterId === viewerId) return true;
+    const perms = await getUserPermissions(viewerId);
+    return ["articles.view", "articles.edit_any", "articles.publish"].some((code) => perms.includes(code));
+  };
+
   app.get("/api/en/articles/:slug", async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -27554,6 +27338,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
 
       if (!baseData) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+      if (!(await canReadLocalizedArticle(baseData.article, userId))) {
         return res.status(404).json({ message: "Article not found" });
       }
 
@@ -28639,6 +28426,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // Access joined tables by their actual table names
       const result: any = results[0];
       const article = result.ur_articles;
+      if (!(await canReadLocalizedArticle(article, userId))) {
+        return res.status(404).json({ message: "Article not found" });
+      }
       const category = result.ur_categories;
       // A column-object projection over a leftJoin yields {id:null,…} instead
       // of null when the join misses — collapse it so an empty reporter can't
@@ -30480,7 +30270,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
 
   // Generate Deep Analysis with SSE (requires authentication)
-  app.post("/api/deep-analysis/generate", requireAuth, async (req, res) => {
+  app.post("/api/deep-analysis/generate", requireAuth, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req, res) => {
     try {
       const { topic, keywords, category, saudiContext } = req.body;
       

@@ -27,7 +27,7 @@ import {
 } from "../services/socialMediaCardsService";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { isAuthenticated } from "../auth";
-import { requirePermission, requireAuth } from "../rbac";
+import { requirePermission, requireAnyPermission, requireAuth } from "../rbac";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { z } from "zod";
 
@@ -254,7 +254,7 @@ router.post("/generate-news-image", requireAuth, requirePermission(PERMISSION_CO
  * POST /api/visual-ai/generate-social-cards
  * Generate optimized social media cards for all platforms
  */
-router.post("/generate-social-cards", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/generate-social-cards", isAuthenticated, requireAnyPermission("articles.create", "articles.edit_any", "articles.edit_own"), async (req: Request, res: Response) => {
   try {
     const userId = (req.user as any)?.id;
     const {

@@ -65,6 +65,28 @@ async function kvDel(key: string): Promise<void> {
   memory.delete(key);
 }
 
+/**
+ * يحجز خانة المحاولة التالية (1..OTP_MAX_ATTEMPTS) لهذا الرمز بالذات، أو null
+ * إن استُنفدت. كل خانة مفتاح SET NX مستقل، فطلبان متوازيان لا يأخذان الخانة
+ * نفسها. الـsalt في المفتاح يجعل الرمز الجديد يبدأ بعدّاد جديد.
+ */
+async function claimAttemptSlot(key: string, salt: string, ttlSeconds: number): Promise<number | null> {
+  const redis = getRedisSessionAdapter();
+  for (let slot = 1; slot <= OTP_MAX_ATTEMPTS; slot++) {
+    const slotKey = `${key}:try:${salt}:${slot}`;
+    if (redis) {
+      if ((await redis.setLock(slotKey, "1", ttlSeconds * 1000)) === "OK") return slot;
+      continue;
+    }
+    sweep();
+    if (!memory.has(slotKey)) {
+      memory.set(slotKey, { value: "1", expiresAt: Date.now() + ttlSeconds * 1000 });
+      return slot;
+    }
+  }
+  return null;
+}
+
 const codeKey = (purpose: OtpPurpose, phone: string) => `otp:${purpose}:${phone}`;
 const sendKey = (purpose: OtpPurpose, phone: string) => `otpsend:${purpose}:${phone}`;
 
@@ -160,17 +182,23 @@ export async function verifyOtp(phoneE164: string, code: string, purpose: OtpPur
     await kvDel(key);
     return { valid: false, notFound: true, message: "انتهت صلاحية الرمز. اطلب رمزًا جديدًا." };
   }
+  // حجز خانة محاولة قبل المقارنة، ذرّيًّا (SET NX لكل خانة). النسخة السابقة
+  // كانت «اقرأ ← قارن ← اكتب attempts+1»، فالطلبات المتوازية تقرأ كلها
+  // attempts=0 وتتجاوز حد المحاولات.
+  const ttlLeft = Math.max(1, Math.ceil((record.expiresAt - Date.now()) / 1000));
+  const slot = await claimAttemptSlot(key, record.salt, ttlLeft);
+  if (slot === null) {
+    await kvDel(key);
+    return { valid: false, message: "تجاوزت عدد المحاولات. اطلب رمزًا جديدًا." };
+  }
   if (clean.length === 6 && safeEqual(hashCode(clean, record.salt), record.hash)) {
     await kvDel(key);
     return { valid: true, message: "تم التحقق بنجاح" };
   }
-  record.attempts += 1;
-  if (record.attempts >= OTP_MAX_ATTEMPTS) {
+  if (slot >= OTP_MAX_ATTEMPTS) {
     await kvDel(key);
     return { valid: false, message: "تجاوزت عدد المحاولات. اطلب رمزًا جديدًا." };
   }
-  const ttlLeft = Math.max(1, Math.ceil((record.expiresAt - Date.now()) / 1000));
-  await kvSet(key, JSON.stringify(record), ttlLeft);
   return { valid: false, message: "الرمز غير صحيح" };
 }
 

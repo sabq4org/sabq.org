@@ -11,6 +11,8 @@ import {
   getUserStatusMessage,
 } from "@shared/schema";
 import { db } from "../../db";
+import { invalidateAllUserSessions } from "../../auth";
+import { unverifiedLinkUpdates } from "../../utils/oauthLinkHardening";
 import { varaSendOtp, varaVerifyOtp } from "../../services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "../../services/phoneAuth";
 import { createTwoFactorChallenge } from "../../services/mobileTwoFactorChallenge";
@@ -221,13 +223,21 @@ router.post("/auth/google", async (req: Request, res: Response) => {
       }
 
       const updates: Partial<typeof users.$inferInsert> = {};
+      let revokeSessions = false;
       if (!existing.googleId) {
         updates.googleId = googleId;
         updates.authProvider = "google";
+        // First link onto a never-verified row: see oauthLinkHardening.
+        const hardening = unverifiedLinkUpdates(existing);
+        if (hardening) {
+          Object.assign(updates, hardening);
+          revokeSessions = true;
+        }
       }
       if (Object.keys(updates).length > 0) {
         await db.update(users).set(updates).where(eq(users.id, existing.id));
       }
+      if (revokeSessions) await invalidateAllUserSessions(existing.id);
       user = { ...existing, ...updates };
     } else {
       const { nanoid } = await import("nanoid");
@@ -384,9 +394,15 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       }
 
       const updates: Partial<typeof users.$inferInsert> = {};
+      let revokeSessions = false;
       if (!existing.appleId) {
         updates.appleId = appleId;
         updates.authProvider = "apple";
+        const hardening = unverifiedLinkUpdates(existing);
+        if (hardening) {
+          Object.assign(updates, hardening);
+          revokeSessions = true;
+        }
       }
       if (firstName && lastName && !existing.firstName) {
         updates.firstName = firstName;
@@ -395,6 +411,7 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       if (Object.keys(updates).length > 0) {
         await db.update(users).set(updates).where(eq(users.id, existing.id));
       }
+      if (revokeSessions) await invalidateAllUserSessions(existing.id);
       user = { ...existing, ...updates };
     } else {
       if (!rawEmail) {
