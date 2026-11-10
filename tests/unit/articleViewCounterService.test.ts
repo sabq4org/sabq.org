@@ -48,6 +48,22 @@ describe("articleViewCounterService", () => {
     ).toBe(false);
   });
 
+  // تدقيق 2026-11-10: معرّف غير موجود كان يُفشل القيد الأجنبي فتعلق الدفعة
+  // كلها في الذاكرة ويتوقف التفريغ حتى إعادة التشغيل. (الاستعلام جُرّب على
+  // Postgres حقيقي: الصف المجهول يُسقط والبقية تُكتب.)
+  it("drops unknown article ids in SQL instead of tripping the foreign key", async () => {
+    const { pool, query } = mockPoolWithClient(async () => okResult);
+    vi.doMock("../../server/db", () => ({ pool }));
+
+    const counter = await import("../../server/services/articleViewCounterService");
+    counter.bufferArticleViewIncrement("article-a", 5);
+    counter.bufferArticleViewIncrement("no-such-article", 9);
+    await counter.flushArticleViewCounters();
+
+    const insert = query.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO article_view_deltas"));
+    expect(String(insert?.[0])).toMatch(/JOIN articles a ON a\.id = v\.article_id/);
+  });
+
   it("re-buffers increments when a flush fails", async () => {
     let failNextInsert = true;
     const { pool, query } = mockPoolWithClient(async (sql) => {

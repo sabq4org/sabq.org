@@ -10759,7 +10759,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ACTIVITIES ROUTE (Moment by Moment)
   // ============================================================
 
-  app.get("/api/activities", async (req, res) => {
+  app.get("/api/activities", requireAuth, requirePermission("system.view_audit"), async (req, res) => {
     try {
       const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
       if (!pg) return;
@@ -10780,7 +10780,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'article_published' as type,
             a.published_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             a.id as target_id,
             'article' as target_kind,
@@ -10805,7 +10805,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'article_updated' as type,
             a.updated_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             a.id as target_id,
             'article' as target_kind,
@@ -10826,7 +10826,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'breaking_news' as type,
             a.published_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             a.id as target_id,
             'article' as target_kind,
@@ -10847,7 +10847,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'comment_added' as type,
             c.created_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             a.id as target_id,
             'article' as target_kind,
@@ -10855,7 +10855,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             a.slug as target_slug,
             a.image_url as target_image,
             'low' as importance,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) || ' علق على: ' || a.title as summary
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') || ' علق على: ' || a.title as summary
           FROM comments c
           LEFT JOIN users u ON c.user_id = u.id
           LEFT JOIN articles a ON c.article_id = a.id
@@ -10869,7 +10869,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'reaction_added' as type,
             r.created_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             a.id as target_id,
             'article' as target_kind,
@@ -10877,7 +10877,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             a.slug as target_slug,
             a.image_url as target_image,
             'low' as importance,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) || ' أعجب بـ: ' || a.title as summary
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') || ' أعجب بـ: ' || a.title as summary
           FROM reactions r
           LEFT JOIN users u ON r.user_id = u.id
           LEFT JOIN articles a ON r.article_id = a.id
@@ -10890,7 +10890,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'bookmark_added' as type,
             b.created_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             a.id as target_id,
             'article' as target_kind,
@@ -10898,7 +10898,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             a.slug as target_slug,
             a.image_url as target_image,
             'low' as importance,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) || ' حفظ: ' || a.title as summary
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') || ' حفظ: ' || a.title as summary
           FROM bookmarks b
           LEFT JOIN users u ON b.user_id = u.id
           LEFT JOIN articles a ON b.article_id = a.id
@@ -10951,15 +10951,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             'user_registered' as type,
             u.created_at as occurred_at,
             u.id as actor_id,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as actor_name,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as actor_name,
             u.profile_image_url as actor_avatar,
             u.id as target_id,
             'user' as target_kind,
-            COALESCE(u.first_name || ' ' || u.last_name, u.email) as target_title,
+            COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as target_title,
             NULL as target_slug,
             u.profile_image_url as target_image,
             'low' as importance,
-            'مستخدم جديد: ' || COALESCE(u.first_name || ' ' || u.last_name, u.email) as summary
+            'مستخدم جديد: ' || COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'مستخدم') as summary
           FROM users u
           WHERE u.status = 'active'
         )

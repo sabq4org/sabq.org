@@ -396,8 +396,9 @@ router.post("/articles/batch-view", async (req: Request, res: Response) => {
     let invalidCount = 0;
     
     for (const view of viewsToProcess) {
-      const articleId = view.articleId || view.article_id;
-      if (articleId) {
+      const articleId = view?.articleId || view?.article_id;
+      // مجهول الهوية: نص قصير فقط — غير ذلك يُعدّ غير صالح ولا يدخل الذاكرة.
+      if (typeof articleId === "string" && articleId.length > 0 && articleId.length <= 64) {
         const boost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
         aggregatedViews.set(articleId, (aggregatedViews.get(articleId) || 0) + boost);
       } else {
@@ -2876,104 +2877,6 @@ router.delete("/members/account", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] members/account delete error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
-  }
-});
-
-// ==========================================
-// اختبار APNs مباشر - Test APNs Direct
-// GET /api/v1/members/push-notifications/test-apns/:deviceToken
-// ==========================================
-router.get("/members/push-notifications/test-apns/:deviceToken?", async (req: Request, res: Response) => {
-  try {
-    const { deviceToken } = req.params;
-    
-    // Import APNs service
-    const { 
-      sendPushNotification, 
-      createCustomNotificationPayload,
-      isApnsConfigured 
-    } = await import("../services/apnsService");
-    
-    if (!isApnsConfigured()) {
-      return res.json({
-        success: false,
-        error: "APNs not configured",
-        config: {
-          keyId: process.env.APNS_KEY_ID || "not set",
-          teamId: process.env.APNS_TEAM_ID || "not set",
-          bundleId: process.env.APNS_BUNDLE_ID || "not set",
-          hasPrivateKey: !!process.env.APNS_KEY_P8,
-          environment: process.env.APNS_ENVIRONMENT || "production (default)"
-        }
-      });
-    }
-    
-    // Get device token from param or database
-    let targetToken = deviceToken;
-    
-    if (!targetToken) {
-      // Get most recent active iOS device
-      const [device] = await db
-        .select({ deviceToken: pushDevices.deviceToken })
-        .from(pushDevices)
-        .where(and(
-          eq(pushDevices.platform, 'ios'),
-          eq(pushDevices.isActive, true)
-        ))
-        .orderBy(desc(pushDevices.createdAt))
-        .limit(1);
-      
-      if (!device) {
-        return res.json({
-          success: false,
-          error: "No active iOS device found"
-        });
-      }
-      
-      targetToken = device.deviceToken;
-    }
-    
-    // Create test payload
-    const payload = createCustomNotificationPayload(
-      "اختبار APNs ✅",
-      `تم إرسال هذا الإشعار في ${new Date().toLocaleTimeString('ar-SA')}`,
-      {
-        sound: "default",
-        badge: 1,
-        type: "test"
-      }
-    );
-    
-    console.log(`[APNs Test] Sending test notification to ${targetToken.substring(0, 16)}...`);
-    console.log(`[APNs Test] Payload:`, JSON.stringify(payload, null, 2));
-    
-    const result = await sendPushNotification(targetToken, payload);
-    
-    console.log(`[APNs Test] Result:`, result);
-    
-    res.json({
-      success: result.success,
-      token: targetToken.substring(0, 20) + "...",
-      result: {
-        statusCode: result.statusCode,
-        apnsId: result.apnsId,
-        reason: result.reason
-      },
-      payload,
-      config: {
-        keyId: process.env.APNS_KEY_ID,
-        teamId: process.env.APNS_TEAM_ID,
-        bundleId: process.env.APNS_BUNDLE_ID,
-        environment: process.env.APNS_ENVIRONMENT || "production (default)"
-      },
-      timestamp: new Date().toISOString()
-    });
-  } catch (error: any) {
-    console.error("[APNs Test] Error:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
 });
 

@@ -3,6 +3,7 @@ import { memoryCache, sseConnectionManager } from "../memoryCache";
 import { purgeHomepage, purgeBreakingNews, purgeArticle } from "./cloudflarePurge";
 import { bumpSeoCacheGeneration } from "./seoCacheInvalidation";
 import { createRedisSubscription } from "../utils/redisSubscription";
+import { redisRetryDelay } from "../utils/redisRetry";
 
 /**
  * Feed-style keys affected by ANY article publish/unpublish/schedule/approve —
@@ -81,10 +82,7 @@ function initPubSub(): void {
   try {
     const opts = {
       maxRetriesPerRequest: 3,
-      retryStrategy(times: number) {
-        if (times > 5) return null;
-        return Math.min(times * 200, 2000);
-      },
+      retryStrategy: redisRetryDelay,
       enableReadyCheck: false,
       connectTimeout: 5000,
       lazyConnect: false,

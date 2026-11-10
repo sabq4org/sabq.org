@@ -1,6 +1,6 @@
 import { isShuttingDown, registerShutdownHook } from "./shutdown";
 import { pool } from "./db";
-import { getRedisClient } from "./redis";
+import { getRedisClient, isRedisConfigured } from "./redis";
 
 const LEADER_LOCK_ID = 12345;
 const LEASE_KEY = "sabq:leader:lease";
@@ -90,7 +90,16 @@ export async function tryBecomeLeader(): Promise<boolean> {
     }
   }
 
-  // احتياط التطوير (بلا Redis): قفل استشاري على جلسة محجوزة حصريًّا.
+  // REDIS_URL مضبوط لكن الاتصال منقطع الآن: لا قيادة. النزول إلى القفل
+  // الاستشاري هنا كان يصنع قائدين — هذه النسخة بالقفل والأخرى بالـlease —
+  // فتعمل المهام المجدولة مرتين. نعيد المحاولة في النبضة التالية بعد عودة Redis.
+  if (isRedisConfigured()) {
+    _mode = "lease";
+    _isLeader = false;
+    return false;
+  }
+
+  // احتياط التطوير (بلا REDIS_URL أصلًا): قفل استشاري على جلسة محجوزة حصريًّا.
   _mode = "advisory";
   try {
     const client = (await (pool as any).connect()) as LeaderClient;

@@ -5,6 +5,7 @@
 
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db";
+import { toPublicUser, type PublicUser } from "../utils/publicUser";
 import { shorts, categories, users, type Short, type Category, type User } from "@shared/schema";
 
 /** Decrement a short's like counter, floored at zero. Returns the updated row. */
@@ -28,7 +29,7 @@ export interface AdminShortsFilters {
 }
 
 export interface AdminShortsPage {
-  shorts: Array<Short & { category?: Category; reporter?: User }>;
+  shorts: Array<Short & { category?: Category; reporter?: PublicUser<User> }>;
   total: number;
 }
 
@@ -66,7 +67,7 @@ export async function listShortsForAdmin(filters: AdminShortsFilters): Promise<A
     shorts: results.map((r) => ({
       ...r.short,
       category: r.category || undefined,
-      reporter: r.reporter || undefined,
+      reporter: toPublicUser(r.reporter) || undefined,
     })),
     total: count,
   };

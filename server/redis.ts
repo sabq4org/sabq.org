@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import { redisRetryDelay } from "./utils/redisRetry";
 
 let redisClient: Redis | null = null;
 let _redisConnected = false;
@@ -67,10 +68,7 @@ function ensureRedisInit(): void {
       commandTimeout: 2500,
       connectTimeout: 3000,
       enableOfflineQueue: false,
-      retryStrategy(times) {
-        if (times > 5) return null;
-        return Math.min(times * 200, 2000);
-      },
+      retryStrategy: redisRetryDelay,
       lazyConnect: true,
       enableReadyCheck: false,
     });
@@ -126,6 +124,12 @@ export function getRedisSessionAdapter(): RedisSessionClient | null {
 export function getRedisClient(): RedisSessionClient | null {
   ensureRedisInit();
   return _redisConnected ? sessionAdapter : null;
+}
+
+/** REDIS_URL مضبوط (سواء كان الاتصال قائمًا الآن أم لا). */
+export function isRedisConfigured(): boolean {
+  ensureRedisInit();
+  return _redisConfigured;
 }
 
 export function isRedisAvailable(): boolean {

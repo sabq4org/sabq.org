@@ -22,6 +22,7 @@ import {
   updateCalendarAssignmentSchema,
 } from "@shared/schema";
 import { paginationOrReject } from "../utils/pagination";
+import { toPublicProfile } from "../utils/publicUser";
 
 export function registerCalendarRoutes(app: Express) {
   // ============================================================
@@ -98,7 +99,8 @@ export function registerCalendarRoutes(app: Express) {
         status: status || undefined,
       });
       
-      res.json(assignments);
+      // storage joins the whole `users` row for assignedByUser.
+      res.json(assignments.map((a) => ({ ...a, assignedByUser: toPublicProfile(a.assignedByUser) ?? undefined })));
     } catch (error) {
       console.error("خطأ في جلب المهام:", error);
       res.status(500).json({ message: "حدث خطأ في جلب المهام" });
@@ -337,7 +339,8 @@ export function registerCalendarRoutes(app: Express) {
     try {
       const { id } = req.params;
       const assignments = await storage.getCalendarAssignments({ eventId: id });
-      res.json(assignments);
+      // storage joins the whole `users` row for assignedByUser.
+      res.json(assignments.map((a) => ({ ...a, assignedByUser: toPublicProfile(a.assignedByUser) ?? undefined })));
     } catch (error) {
       console.error("خطأ في جلب المهام:", error);
       res.status(500).json({ message: "حدث خطأ في جلب المهام" });

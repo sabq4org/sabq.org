@@ -5,6 +5,7 @@ import { storage } from "../storage";
 import { requireAuth, logActivity } from "../rbac";
 import { insertSocialFollowSchema } from "@shared/schema";
 import { getRealIp as getTrustedRealIp } from "../utils/trustedProxyIp";
+import { toPublicProfile } from "../utils/publicUser";
 
 function getRealIp(req: any): string {
   return getTrustedRealIp(req);
@@ -117,7 +118,8 @@ router.get("/api/social/followers/:userId", async (req, res) => {
     const followers = await storage.getFollowers(userId, limit);
 
     console.log('[Social Follow] Fetched followers:', { userId, count: followers.length });
-    res.json(followers);
+    // storage joins the whole `users` row; this route is public.
+    res.json(followers.map((f) => ({ ...f, follower: toPublicProfile(f.follower) })));
   } catch (error) {
     console.error("Error fetching followers:", error);
     res.status(500).json({ message: "حدث خطأ أثناء جلب المتابعين" });
@@ -142,7 +144,7 @@ router.get("/api/social/following/:userId", async (req, res) => {
     const following = await storage.getFollowing(userId, limit);
 
     console.log('[Social Follow] Fetched following:', { userId, count: following.length });
-    res.json(following);
+    res.json(following.map((f) => ({ ...f, following: toPublicProfile(f.following) })));
   } catch (error) {
     console.error("Error fetching following:", error);
     res.status(500).json({ message: "حدث خطأ أثناء جلب قائمة المتابعة" });
