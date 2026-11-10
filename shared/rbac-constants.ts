@@ -745,5 +745,17 @@ export const ARTICLE_EDITOR_PERMISSIONS = [
     label: "إخفاء من الواجهة الرئيسية",
     labelEn: "Hide from Homepage",
     description: "إخفاء المقال من الصفحة الرئيسية مع إبقائه متاحاً عبر الرابط المباشر"
+  },
+  {
+    code: PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    label: "النشر الفوري على X",
+    labelEn: "Publish Now on X",
+    description: "تُنشر تغريداته مباشرة (من اللوحة ومن «نشر سبق»)، ومن دونها تذهب إلى «مكتب سبق» للموافقة"
+  },
+  {
+    code: PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    label: "جدولة منشورات X",
+    labelEn: "Schedule X Posts",
+    description: "جدولة التغريدات للنشر في وقت لاحق"
   }
 ];

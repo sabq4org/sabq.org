@@ -75,7 +75,10 @@
 - **الصلاحيات:** عائلة `social_publish.*` (8 أكواد) في
   `shared/rbac-constants.ts` + بذر `seedRBAC.ts`. المحرر ومدير المحتوى
   يملكون الكل عدا `manage_accounts` (ربط الحساب لمسؤول النظام). wildcard
-  `"*"` مدعوم كالعادة.
+  `"*"` مدعوم كالعادة. `publish_now` و`schedule` معروضتان في صفحة تعديل
+  المستخدم (`ARTICLE_EDITOR_PERMISSIONS` في `shared/rbac-constants.ts`) لتُمنحا
+  أو تُمنعا لشخص بعينه عبر `user_permission_overrides`؛ المنع لا يسري على
+  أصحاب `"*"` (المدير ومسؤول النظام).
 - **متطلبات X:** النشر البرمجي يتطلب خطة مدفوعة أو pay-per-use — راجع
   `docs/setup/X_PUBLISHING_SETUP_AR.md`. غياب `X_CLIENT_ID/SECRET` يعطّل
   الربط برسالة واضحة في الواجهة (`oauthConfigured`).
