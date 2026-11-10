@@ -504,6 +504,16 @@ export class MemoryCache {
 
 export const memoryCache = new MemoryCache();
 
+/**
+ * مفاتيح تتبّع المشاهدات (منع التكرار لكل زائر، العدّاد الساعي، كتم التنبيه).
+ *
+ * كانت في memoryCache المشترك (5000 مدخل): كل مشاهدة محسوبة تضيف مفتاحًا،
+ * فعند ذروة العاجل يمتلئ السقف ويطرد evictForSpace الأقدم — وهو كاش المحتوى
+ * الذي يعتمد عليه withCache — فتنزل القراءات إلى القاعدة في أسوأ وقت
+ * (تدقيق 2026-11-10). القيم هنا boolean/رقم، فسقف واسع رخيص.
+ */
+export const viewTrackingCache = new MemoryCache(100_000, 'viewTracking');
+
 export const CACHE_TTL = {
   SHORT: 2 * 60 * 1000,        // 2 minutes - for frequently changing data
   MEDIUM: 5 * 60 * 1000,       // 5 minutes - default for most endpoints
