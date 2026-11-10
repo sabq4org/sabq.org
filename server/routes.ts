@@ -95,6 +95,8 @@ import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
 import { createOAuthTokenErrorHandler, createOAuthWebCompletion } from "./oauthWebCompletion";
+import { legacyUserActionGuard } from "./middleware/legacyUserActionGuard";
+import { getInactiveRoleNames } from "./services/roleStatusCache";
 import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getUserRoleNames, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isOpinionOnlyContributor, isReaderLikeRole, mergeRoleSignals, pickPrimaryRoleRecord, primaryRoleKey } from "@shared/effectiveRoles";
@@ -1557,13 +1559,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      // A disabled/archived role (roles.status) grants nothing — same filter as rbac.ts.
+      const inactiveRoleNames = await getInactiveRoleNames();
+      const activeRoleRows = userRolesResult.filter((r) => !inactiveRoleNames.has(r.roleName));
 
       // Union RBAC + users.role and drop leftover "reader" when a staff
       // role exists — same helper as Mobile API / getUserRoleNames so a
       // correspondent never surfaces as «قارئ» from a stale layer.
       let allRoles = mergeRoleSignals(
-        userRolesResult.map((r) => r.roleName),
-        user.role,
+        activeRoleRows.map((r) => r.roleName),
+        inactiveRoleNames.has(user.role) ? null : user.role,
       );
       if (
         allRoles.every((name) => isReaderLikeRole(name)) &&
@@ -1572,13 +1577,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         const inferred = await inferStaffRolesFromWork(userId);
         if (inferred.length > 0) {
           allRoles = mergeRoleSignals(
-            [...userRolesResult.map((r) => r.roleName), ...inferred],
-            user.role,
+            [...activeRoleRows.map((r) => r.roleName), ...inferred.filter((r) => !inactiveRoleNames.has(r))],
+            inactiveRoleNames.has(user.role) ? null : user.role,
           );
         }
       }
       const role = primaryRoleKey(allRoles);
-      const primaryRbac = userRolesResult.find((r) => r.roleName === role);
+      const primaryRbac = activeRoleRows.find((r) => r.roleName === role);
       const roleLabel = primaryRbac?.roleNameAr
         || ROLE_LABELS_AR[role as keyof typeof ROLE_LABELS_AR]
         || user.jobTitle
@@ -5564,7 +5569,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
 
   // Update user (status, role assignment)
-  app.patch("/api/admin/users/:id", requireAuth, requirePermission("users.update"), async (req: any, res) => {
+  app.patch("/api/admin/users/:id", requireAuth, requirePermission("users.update"), legacyUserActionGuard("admin_patch"), async (req: any, res) => {
     try {
       const adminUserId = req.user?.id;
       if (!adminUserId) {
@@ -5757,12 +5762,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           .delete(userRoles)
           .where(eq(userRoles.userId, targetUserId));
 
-        // Assign new role
-        await db.insert(userRoles).values({
-          userId: targetUserId,
-          roleId: parsed.data.roleId,
-          assignedBy: adminUserId,
-        });
+        // Assign new role — and keep users.role in step, or a demoted admin stays superuser via rbac.ts.
+        await db.insert(userRoles).values({ userId: targetUserId, roleId: parsed.data.roleId, assignedBy: adminUserId });
+        await db.update(users).set({ role: role.name }).where(eq(users.id, targetUserId));
       }
 
       invalidateUserPermissionCache(targetUserId);
@@ -5818,7 +5820,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
 
   // Delete/Ban user
-  app.delete("/api/admin/users/:id", requireAuth, requirePermission("users.delete"), async (req: any, res) => {
+  app.delete("/api/admin/users/:id", requireAuth, requirePermission("users.delete"), legacyUserActionGuard("admin_delete"), async (req: any, res) => {
     try {
       const adminUserId = req.user?.id;
       if (!adminUserId) {
@@ -6061,7 +6063,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ============================================================
 
   // Create new user with roles
-  app.post("/api/admin/users", requireAuth, requirePermission("users.create"), async (req: any, res) => {
+  app.post("/api/admin/users", requireAuth, requirePermission("users.create"), legacyUserActionGuard("admin_create"), async (req: any, res) => {
     try {
       const createdBy = req.user?.id;
       if (!createdBy) {
@@ -6194,7 +6196,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
 
   // Update user roles
-  app.patch("/api/admin/users/:id/roles", requireAuth, requirePermission("users.change_role"), async (req: any, res) => {
+  app.patch("/api/admin/users/:id/roles", requireAuth, requirePermission("users.change_role"), legacyUserActionGuard("admin_roles"), async (req: any, res) => {
     try {
       const updatedBy = req.user?.id;
       if (!updatedBy) {
@@ -17809,7 +17811,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 3. POST /api/dashboard/users/:id/suspend - Suspend user
-  app.post("/api/dashboard/users/:id/suspend", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/:id/suspend", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("suspend"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       console.log("⏸️ [USER SUSPEND] Suspending user:", userId);
@@ -17833,7 +17835,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 4. POST /api/dashboard/users/:id/unsuspend - Unsuspend user
-  app.post("/api/dashboard/users/:id/unsuspend", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/:id/unsuspend", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("unsuspend"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       console.log("▶️ [USER UNSUSPEND] Unsuspending user:", userId);
@@ -17851,7 +17853,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 5. POST /api/dashboard/users/:id/ban - Ban user
-  app.post("/api/dashboard/users/:id/ban", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/:id/ban", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("ban"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       console.log("🚫 [USER BAN] Banning user:", userId);
@@ -17875,7 +17877,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 6. POST /api/dashboard/users/:id/unban - Unban user
-  app.post("/api/dashboard/users/:id/unban", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/:id/unban", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("unban"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       console.log("✅ [USER UNBAN] Unbanning user:", userId);
@@ -17893,7 +17895,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 7. PATCH /api/dashboard/users/:id/role - Update user role
-  app.patch("/api/dashboard/users/:id/role", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.patch("/api/dashboard/users/:id/role", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("role"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       const { role } = req.body;
@@ -17951,7 +17953,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 9. POST /api/dashboard/users/:id/soft-delete - Soft delete user
-  app.post("/api/dashboard/users/:id/soft-delete", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/:id/soft-delete", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("soft_delete"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       console.log("🗑️ [USER DELETE] Soft deleting user:", userId);
@@ -17970,7 +17972,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 10. POST /api/dashboard/users/:id/restore - Restore deleted user
-  app.post("/api/dashboard/users/:id/restore", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/:id/restore", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("restore"), async (req: any, res) => {
     try {
       const userId = req.params.id;
       console.log("♻️ [USER RESTORE] Restoring deleted user:", userId);
@@ -17988,7 +17990,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 11. POST /api/dashboard/users/bulk/suspend - Bulk suspend users
-  app.post("/api/dashboard/users/bulk/suspend", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/bulk/suspend", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("bulk_suspend"), async (req: any, res) => {
     try {
       const { userIds, reason, duration } = req.body;
       
@@ -18015,7 +18017,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 12. POST /api/dashboard/users/bulk/ban - Bulk ban users
-  app.post("/api/dashboard/users/bulk/ban", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/bulk/ban", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("bulk_ban"), async (req: any, res) => {
     try {
       const { userIds, reason, isPermanent, duration } = req.body;
       
@@ -18042,7 +18044,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // 13. POST /api/dashboard/users/bulk/update-role - Bulk update user roles
-  app.post("/api/dashboard/users/bulk/update-role", requireAuth, requirePermission('users.manage'), async (req: any, res) => {
+  app.post("/api/dashboard/users/bulk/update-role", requireAuth, requirePermission('users.manage'), legacyUserActionGuard("bulk_role"), async (req: any, res) => {
     try {
       const { userIds, role } = req.body;
       

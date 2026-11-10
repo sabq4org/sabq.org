@@ -209,6 +209,10 @@ const ArticlesManagementPreview = lazy(() => retryImport(() => import("@/pages/A
 const CategoriesManagement = lazy(() => retryImport(() => import("@/pages/CategoriesManagement")));
 const UsersManagement = lazy(() => retryImport(() => import("@/pages/UsersManagement")));
 const RolesManagement = lazy(() => retryImport(() => import("@/pages/RolesManagement")));
+const UsersAdminListPage = lazy(() => retryImport(() => import("@/pages/dashboard/usersAdmin/UsersAdminListPage")));
+const ReadersListPage = lazy(() => retryImport(() => import("@/pages/dashboard/usersAdmin/ReadersListPage")));
+const UserAdminProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/usersAdmin/UserAdminProfilePage")));
+const RolesAdminPage = lazy(() => retryImport(() => import("@/pages/dashboard/usersAdmin/RolesAdminPage")));
 const TagsManagement = lazy(() => retryImport(() => import("@/pages/TagsManagement")));
 
 // === LAZY IMPORTS (Profile & User) ===
@@ -1007,8 +1011,12 @@ function Router() {
             </ProtectedRoute>
           )}
         </Route>
-        <Route path="/dashboard/users">{() => <LazyRoute component={UsersManagement} />}</Route>
-        <Route path="/dashboard/staff">{() => <LazyRoute component={StaffMembers} />}</Route>
+        <Route path="/dashboard/users">{() => <LazyRoute component={UsersAdminListPage} />}</Route>
+        <Route path="/dashboard/users/:id">{() => <LazyRoute component={UserAdminProfilePage} />}</Route>
+        <Route path="/dashboard/staff">{() => <LazyRoute component={UsersAdminListPage} />}</Route>
+        <Route path="/dashboard/readers">{() => <LazyRoute component={ReadersListPage} />}</Route>
+        <Route path="/dashboard/users-legacy">{() => <LazyRoute component={UsersManagement} />}</Route>
+        <Route path="/dashboard/staff-legacy">{() => <LazyRoute component={StaffMembers} />}</Route>
         <Route path="/dashboard/staff-profiles">{() => <LazyRoute component={StaffProfilesDirectory} />}</Route>
         <Route path="/dashboard/official-letters">{() => <LazyRoute component={OfficialLetters} />}</Route>
         <Route path="/dashboard/my-services">{() => <LazyRoute component={MyServicesPage} />}</Route>
@@ -1017,7 +1025,8 @@ function Router() {
         <Route path="/dashboard/meetings">{() => <LazyRoute component={MeetingsHub} />}</Route>
         <Route path="/dashboard/meetings/room/:id">{() => <LazyRoute component={MeetingRoomPage} />}</Route>
         <Route path="/dashboard/meetings/:id">{() => <LazyRoute component={MeetingDetailPage} />}</Route>
-        <Route path="/dashboard/roles">{() => <LazyRoute component={RolesManagement} />}</Route>
+        <Route path="/dashboard/roles">{() => <LazyRoute component={RolesAdminPage} />}</Route>
+        <Route path="/dashboard/roles-legacy">{() => <LazyRoute component={RolesManagement} />}</Route>
         <Route path="/dashboard/publisher-tokens">
           {() => (
             <ProtectedRoute requireStaff={true} requireAnyPermission={["system.manage_settings"]}>

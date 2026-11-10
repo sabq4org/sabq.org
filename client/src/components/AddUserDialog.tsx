@@ -76,7 +76,10 @@ export function AddUserDialog({ open, onOpenChange }: AddUserDialogProps) {
       return Array.isArray(data) ? data : [];
     },
   });
-  const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
+  // الأدوار المغلقة أو المعطّلة أو المؤرشفة لا تُسند لحساب جديد (shared/userAdmin.ts).
+  const roles = (Array.isArray(rolesRaw) ? rolesRaw : []).filter(
+    (r) => !["closed", "disabled", "archived"].includes(String((r as { status?: string }).status ?? "active")),
+  );
 
   const form = useForm<FormData>({
     resolver: zodResolver(extendedCreateUserSchema) as Resolver<FormData>,
@@ -120,6 +123,8 @@ export function AddUserDialog({ open, onOpenChange }: AddUserDialogProps) {
     },
     onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      // شاشة المستخدمين الجديدة تستخدم مفاتيح /api/admin/user-admin/*.
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0] ?? "").startsWith("/api/admin/user-admin") });
       
       // Store the temporary password and show the dialog
       if (response.temporaryPassword) {

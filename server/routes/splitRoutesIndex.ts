@@ -96,6 +96,7 @@ import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import logoLibraryRouter from "./logoLibrary";
+import userAdminRouter from "./userAdmin";
 import socialPublishingRouter from "./socialPublishing";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
@@ -244,6 +245,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
   app.use(logoLibraryRouter);
+  app.use(userAdminRouter);
   app.use(socialPublishingRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);

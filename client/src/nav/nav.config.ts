@@ -801,7 +801,7 @@ export const navConfig: NavItem[] = [
         id: "staff",
         labelKey: "nav.staff",
         labelAr: "منسوبي سبق",
-        path: "/dashboard/staff",
+        path: "/dashboard/users",
         icon: Shield,
         roles: ["admin"],
         permissions: ["users.view", "users.manage"],
@@ -811,7 +811,8 @@ export const navConfig: NavItem[] = [
         id: "users_mgmt",
         labelKey: "nav.users",
         labelAr: "القرّاء",
-        path: "/dashboard/users",
+        // مسار مستقل بدل ?kind=readers: مطابقة العنصر النشط في useNav تقارن pathname فقط.
+        path: "/dashboard/readers",
         icon: UserCircle,
         roles: ["admin"],
         permissions: ["users.view", "users.manage"],
@@ -824,7 +825,7 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/roles",
         icon: ShieldCheck,
         roles: ["admin"],
-        permissions: ["roles.view", "roles.manage"],
+        permissions: ["system.manage_roles"],
       },
       {
         id: "permissions",
