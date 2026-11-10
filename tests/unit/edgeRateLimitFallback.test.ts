@@ -41,12 +41,16 @@ describe("Railway edge 429 detection (incident 2026-09-17)", () => {
 });
 
 describe("resolveFallbackOrigin", () => {
-  it("detours the direct Railway origin through api.sabq.org by default", () => {
-    expect(resolveFallbackOrigin(PRIMARY, {})).toBe(FALLBACK);
+  // Audit 2026-11-10: the default used to be the retired Railway hostname,
+  // which received visitors' cookies on any GET 429 once production left it.
+  it("has no built-in fallback: unset means none, for any primary", () => {
+    expect(resolveFallbackOrigin(PRIMARY, {})).toBeNull();
+    expect(resolveFallbackOrigin(FALLBACK, {})).toBeNull();
+    expect(resolveFallbackOrigin(FALLBACK, { API_FALLBACK_ORIGIN: "  " })).toBeNull();
   });
 
-  it("detours api.sabq.org through the direct Railway origin", () => {
-    expect(resolveFallbackOrigin(FALLBACK, {})).toBe(PRIMARY);
+  it("refuses a non-https fallback", () => {
+    expect(resolveFallbackOrigin(PRIMARY, { API_FALLBACK_ORIGIN: "http://alt.example" })).toBeNull();
   });
 
   it("honours API_FALLBACK_ORIGIN and strips trailing slashes", () => {

@@ -730,7 +730,6 @@ export function isEdgeRateLimited(res) {
   return res.status === 429 && !res.headers.has("x-railway-request-id");
 }
 
-const DIRECT_RAILWAY_ORIGIN = "https://sabqorg-production.up.railway.app";
 const EDGE_429_FALLBACK_TIMEOUT_MS = 10_000;
 
 function originOf(value) {
@@ -741,21 +740,18 @@ function originOf(value) {
   }
 }
 
-// A second route into the same backend that enters Railway's edge from a
-// DIFFERENT Cloudflare egress (api.sabq.org is fronted by the sabq-api-origin
-// Worker, observed at another placement/PoP than the Pages Function). It is a
-// best-effort detour around a per-source-IP block, not a second backend.
-// `API_FALLBACK_ORIGIN=off` disables it; anything equal to API_ORIGIN is
-// ignored so a misconfiguration can never double-hit the blocked path.
+// A second route into the same backend, used only for a GET that the hosting
+// edge refused with its own 429. It is OPT-IN: set API_FALLBACK_ORIGIN to an
+// origin we operate. The request is replayed there with the visitor's Cookie
+// and Authorization headers, so there is no built-in default — the old one
+// pointed at the Railway hostname, which stopped being ours when production
+// moved to Render (2026-10-21) and could be claimed by anyone.
+// Unset, "off", unparsable, or equal to API_ORIGIN all mean "no fallback".
 export function resolveFallbackOrigin(apiOrigin, env = {}) {
   const configured = String(env.API_FALLBACK_ORIGIN || "").trim().replace(/\/+$/, "");
-  if (configured.toLowerCase() === "off") return null;
-  const primary = originOf(apiOrigin);
-  const candidate =
-    configured ||
-    (primary === originOf(DEFAULT_API_ORIGIN) ? DIRECT_RAILWAY_ORIGIN : DEFAULT_API_ORIGIN);
-  const fallback = originOf(candidate);
-  if (!fallback || fallback === primary) return null;
+  if (!configured || configured.toLowerCase() === "off") return null;
+  const fallback = originOf(configured);
+  if (!fallback || !fallback.startsWith("https://") || fallback === originOf(apiOrigin)) return null;
   return fallback;
 }
 
