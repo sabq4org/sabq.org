@@ -11,8 +11,14 @@ import { z } from "zod";
 
 export const BOT_DRAFTS_BASE_PATH = "/api/internal/bot-drafts";
 
+/** مسار مسودات النسخة الإنجليزية (`en_articles`) بنفس توكنات وعقد Bot Drafts. */
+export const BOT_DRAFTS_EN_BASE_PATH = "/api/internal/bot-drafts/en";
+
 /** رفع صورة غلاف للمسودة — نفس توكنات Bot Drafts، بلا نشر. */
 export const BOT_DRAFTS_IMAGES_PATH = `${BOT_DRAFTS_BASE_PATH}/images`;
+
+/** مسار موازٍ لرفع صورة الغلاف في المسار الإنجليزي (نفس السلوك وR2). */
+export const BOT_DRAFTS_EN_IMAGES_PATH = `${BOT_DRAFTS_EN_BASE_PATH}/images`;
 
 /** اسم حقل multipart الذي يقبله مسار الرفع. */
 export const BOT_DRAFTS_IMAGE_FIELD = "file";
@@ -133,11 +139,22 @@ export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
   "infographicBannerUrl",
 ] as const;
 
+export const EN_BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
+  ...BOT_DRAFT_PUBLISHED_CONTENT_FIELDS,
+  "sourceArticleId",
+] as const;
+
 export type BotDraftPublishedContentField = (typeof BOT_DRAFT_PUBLISHED_CONTENT_FIELDS)[number];
+export type EnBotDraftPublishedContentField = (typeof EN_BOT_DRAFT_PUBLISHED_CONTENT_FIELDS)[number];
 
 /** حقول جسم التحديث التي لا تُقبل على الخبر المنشور. الترتيب ثابت للاختبارات. */
 export function findDisallowedPublishedContentFields(body: object): string[] {
   const allowed = new Set<string>(BOT_DRAFT_PUBLISHED_CONTENT_FIELDS);
+  return Object.keys(body).filter((key) => !allowed.has(key)).sort();
+}
+
+export function findDisallowedEnPublishedContentFields(body: object): string[] {
+  const allowed = new Set<string>(EN_BOT_DRAFT_PUBLISHED_CONTENT_FIELDS);
   return Object.keys(body).filter((key) => !allowed.has(key)).sort();
 }
 
@@ -183,6 +200,12 @@ const seoDescription = z.string().trim().max(160, "وصف SEO يتجاوز 160 �
  */
 const infographic = z.boolean();
 const infographicBannerUrl = httpsUrl.nullable();
+const sourceArticleId = z
+  .string()
+  .trim()
+  .min(1, "sourceArticleId يجب أن يكون معرّفاً صالحاً")
+  .max(64, "sourceArticleId طويل جداً")
+  .nullable();
 
 /** POST /api/internal/bot-drafts */
 export const botDraftCreateSchema = z
@@ -208,6 +231,31 @@ export const botDraftCreateSchema = z
   })
   .strict();
 
+/** POST /api/internal/bot-drafts/en — نفس الحقول مع sourceArticleId اختياري للربط بالخبر العربي الأصلي. */
+export const enBotDraftCreateSchema = z
+  .object({
+    title,
+    content,
+    contentFormat: contentFormat.optional(),
+    subtitle: subtitle.optional(),
+    excerpt: excerpt.optional(),
+    categoryId: categoryId.optional(),
+    categorySlug: categorySlug.optional(),
+    imageUrl: imageUrl.optional(),
+    imageUrls: imageUrls.optional(),
+    keywords: keywords.optional(),
+    seoTitle: seoTitle.optional(),
+    seoDescription: seoDescription.optional(),
+    sourceUrl: sourceUrl.optional(),
+    sourceArticleId: sourceArticleId.optional(),
+    clientReference: clientReference.optional(),
+    notes: notes.optional(),
+    riskLabel: riskLabel.optional(),
+    infographic: infographic.optional(),
+    infographicBannerUrl: infographicBannerUrl.optional(),
+  })
+  .strict();
+
 /** PATCH /api/internal/bot-drafts/:id — كل الحقول اختيارية، واحد على الأقل. */
 export const botDraftUpdateSchema = z
   .object({
@@ -224,6 +272,33 @@ export const botDraftUpdateSchema = z
     seoTitle: seoTitle.optional(),
     seoDescription: seoDescription.optional(),
     sourceUrl: sourceUrl.optional(),
+    clientReference: clientReference.optional(),
+    notes: notes.optional(),
+    riskLabel: riskLabel.optional(),
+    updateReason: updateReason.optional(),
+    infographic: infographic.optional(),
+    infographicBannerUrl: infographicBannerUrl.optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, { message: "لا توجد حقول للتحديث" });
+
+/** PATCH /api/internal/bot-drafts/en/:id — نفس الحقول مع sourceArticleId اختياري. */
+export const enBotDraftUpdateSchema = z
+  .object({
+    title: title.optional(),
+    content: content.optional(),
+    contentFormat: contentFormat.optional(),
+    subtitle: subtitle.optional(),
+    excerpt: excerpt.optional(),
+    categoryId: categoryId.optional(),
+    categorySlug: categorySlug.optional(),
+    imageUrl: imageUrl.optional(),
+    imageUrls: imageUrls.optional(),
+    keywords: keywords.optional(),
+    seoTitle: seoTitle.optional(),
+    seoDescription: seoDescription.optional(),
+    sourceUrl: sourceUrl.optional(),
+    sourceArticleId: sourceArticleId.optional(),
     clientReference: clientReference.optional(),
     notes: notes.optional(),
     riskLabel: riskLabel.optional(),
@@ -352,6 +427,8 @@ export const botDraftScheduleSchema = z
 
 export type BotDraftCreateInput = z.infer<typeof botDraftCreateSchema>;
 export type BotDraftUpdateInput = z.infer<typeof botDraftUpdateSchema>;
+export type EnBotDraftCreateInput = z.infer<typeof enBotDraftCreateSchema>;
+export type EnBotDraftUpdateInput = z.infer<typeof enBotDraftUpdateSchema>;
 export type BotDraftScheduleInput = z.infer<typeof botDraftScheduleSchema>;
 export type BotDraftArchiveInput = z.infer<typeof botDraftArchiveSchema>;
 export type BotDraftVisibilityInput = z.infer<typeof botDraftVisibilitySchema>;
@@ -467,6 +544,8 @@ export interface BotDraftResponse {
   draftCreatedAt: string | null;
   /** آخر تصحيح لمادة منشورة، أو null. */
   correctedAt: string | null;
+  /** معرّف الخبر العربي الأصلي المرتبط (فقط على مسارات النسخة الإنجليزية `/api/internal/bot-drafts/en`). */
+  sourceArticleId?: string | null;
 }
 
 /** رد `POST /api/internal/bot-drafts/images` — `deliveryUrl` يصلح غلافاً (`imageUrl`) أو صورة متن (`imageUrls`). */
@@ -524,6 +603,8 @@ export const BOT_DRAFT_ERROR_CODES = [
   "operation_not_found",
   "content_too_short",
   "generation_failed",
+  "source_article_not_found",
+  "source_article_already_linked",
 ] as const;
 
 export type BotDraftErrorCode = (typeof BOT_DRAFT_ERROR_CODES)[number];

@@ -531,6 +531,17 @@ async function publishScheduledArticles() {
     if (scheduledArticles.length > 0) {
       console.log(`[ScheduledPublisher] Successfully published ${scheduledArticles.length} scheduled articles`);
     }
+
+    // مواد الإنجليزية المجدولة عبر البوت فقط. استعلام articles أعلاه لا يتغير.
+    try {
+      const { publishDueScheduledEnBotArticles } = await import("./services/enBotDraftsService");
+      const publishedEn = await publishDueScheduledEnBotArticles(now);
+      if (publishedEn > 0) {
+        console.log(`[ScheduledPublisher] Published ${publishedEn} scheduled English bot articles`);
+      }
+    } catch (error) {
+      console.error("[ScheduledPublisher] English bot schedule failed:", error);
+    }
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     alertCriticalFailure("publishScheduledArticles", err);

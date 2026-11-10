@@ -57,12 +57,19 @@ async function loadCandidates(now: Date): Promise<EnAutoCandidate[]> {
         eq(articles.articleType, "news"),
         gte(articles.publishedAt, new Date(now.getTime() - EN_AUTO_LOOKBACK_MS)),
         lte(articles.publishedAt, new Date(now.getTime() - EN_AUTO_SETTLE_MS)),
+        // أي صف إنجليزي مربوط بالمعرّف — ترجمة يدوية أو آلية أو مسودة أنشأها البوت —
+        // يستبعد الخبر. المهمة تُدرج فقط ولا تُحدّث صفاً قائماً.
         sql`NOT EXISTS (SELECT 1 FROM ${enArticles} WHERE ${enArticles.seoMetadata}->>'sourceArticleId' = ${articles.id})`,
       ),
     )
     .orderBy(desc(articles.publishedAt))
     .limit(EN_AUTO_MAX_CANDIDATES);
   return rows.map((r) => ({ ...r, newsType: r.newsType || "regular" }));
+}
+
+/** نفس مرشحي المهمة، للاختبار على Postgres: صف بوت مربوط بـ sourceArticleId لا يظهر. */
+export async function loadEnAutoTranslateCandidates(now: Date): Promise<EnAutoCandidate[]> {
+  return loadCandidates(now);
 }
 
 async function loadRecentEnTitles(now: Date): Promise<string[]> {

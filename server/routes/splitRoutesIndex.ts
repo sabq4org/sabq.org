@@ -43,6 +43,7 @@ import staffProfilesRouter from "./staffProfiles";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
 import botDraftsRouter from "./botDrafts";
+import enBotDraftsRouter from "./enBotDrafts";
 import botDeskRouter from "./botDesk";
 import staffAppMobileRouter from "./staffAppMobile";
 import mobileEditorialRouter from "./mobileEditorial";
@@ -182,6 +183,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(staffProfilesRouter);
   app.use(meetingsRouter);
   app.use(meetingMinutesRouter);
+  // النسخة الإنجليزية أولاً حتى لا يلتقط راوتر العربية المسار /en كمعرّف مادة.
+  app.use(enBotDraftsRouter);
   // مسودات البوتات (نشر سبق / Grok) — /api/internal/bot-drafts، Bearer لكل بوت، draft فقط
   app.use(botDraftsRouter);
   // بوت الديسك (استفسارات المساهمين + مقترحات النشر الاجتماعي) — /api/internal/bot-desk، Bearer botpub_*

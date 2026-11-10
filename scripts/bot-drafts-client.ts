@@ -23,6 +23,8 @@
  *   tsx scripts/bot-drafts-client.ts restore <id>
  *   tsx scripts/bot-drafts-client.ts visibility <id> [--featured=true|false] [--breaking=true|false] [--hide-from-homepage=true|false]
  *   tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg
+ *   أضف --lang=en لأي أمر ليضرب /api/internal/bot-drafts/en (الافتراضي عربي).
+ *   الإنشاء الإنجليزي يقبل --category-slug=saudi و--source-article-id=<id العربي>.
  */
 
 import { readFileSync } from "node:fs";
@@ -34,6 +36,8 @@ export interface BotDraftClientOptions {
   baseUrl: string;
   /** توكن البوت — من متغير بيئة أو مدير أسرار، لا يُطبع أبداً */
   token: string;
+  /** `en` يضرب `/api/internal/bot-drafts/en`. الغياب يبقى المسار العربي. */
+  lang?: "ar" | "en";
   fetchImpl?: typeof fetch;
 }
 
@@ -50,6 +54,8 @@ export interface BotDraftPayload {
   imageUrls?: string[];
   keywords?: string[];
   sourceUrl?: string | null;
+  /** النسخة الإنجليزية فقط: معرّف الخبر العربي الأصلي. */
+  sourceArticleId?: string | null;
   clientReference?: string;
   notes?: string | null;
 }
@@ -109,6 +115,7 @@ export class BotDraftsClient {
   private readonly token: string;
   private readonly fetchImpl: typeof fetch;
   private readonly userAgent: string;
+  private readonly draftsPath: string;
 
   constructor(options: BotDraftClientOptions) {
     if (!options.token) throw new Error("SABQ_BOT_DRAFTS_TOKEN is required");
@@ -116,11 +123,18 @@ export class BotDraftsClient {
     this.token = options.token;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.userAgent = BOT_DRAFTS_USER_AGENT;
+    this.draftsPath = options.lang === "en" ? "/api/internal/bot-drafts/en" : "/api/internal/bot-drafts";
   }
 
-  /** إنشاء مسودة عربية — تظهر فوراً في /dashboard/articles (المسودات). الحالة draft دائماً. */
+  private articlePath(id?: string, action?: string): string {
+    if (!id) return this.draftsPath;
+    const encoded = encodeURIComponent(id);
+    return action ? `${this.draftsPath}/${encoded}/${action}` : `${this.draftsPath}/${encoded}`;
+  }
+
+  /** إنشاء مسودة. العربية على /dashboard/articles، والإنجليزية على /en/dashboard/articles. الحالة draft دائماً. */
   create(payload: BotDraftPayload & { title: string; content: string }): Promise<BotDraft> {
-    return this.request("POST", "/api/internal/bot-drafts", payload);
+    return this.request("POST", this.articlePath(), payload);
   }
 
   /**
@@ -129,7 +143,7 @@ export class BotDraftsClient {
    * `categorySlug` على المنشور → 422. مؤرشف/مجدول/جاهز أو خبر ليس للبوت → 409. قفل المحرر → 409.
    */
   update(id: string, payload: BotDraftPayload): Promise<BotDraft> {
-    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}`, payload);
+    return this.request("PATCH", this.articlePath(id), payload);
   }
 
   /**
@@ -137,7 +151,7 @@ export class BotDraftsClient {
    * بعد النجاح `updatable` تصبح false ولا يُقبل تحديث المحتوى حتى يُرجعها محرر إلى draft.
    */
   markReady(id: string): Promise<BotDraft> {
-    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/ready`, {});
+    return this.request("PATCH", this.articlePath(id, "ready"), {});
   }
 
   /**
@@ -145,7 +159,7 @@ export class BotDraftsClient {
    * الرد: `status=published` و`updatable=true` (المحتوى قابل للتعديل بعدها) و`publicUrl`.
    */
   publish(id: string): Promise<BotDraft> {
-    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/publish`, {});
+    return this.request("POST", this.articlePath(id, "publish"), {});
   }
 
   /**
@@ -153,17 +167,17 @@ export class BotDraftsClient {
    * وقت الرياض: `2026-09-24T18:30:00+03:00` أو ما يعادله UTC.
    */
   schedule(id: string, publishAt: string): Promise<BotDraft> {
-    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, { publishAt });
+    return this.request("POST", this.articlePath(id, "schedule"), { publishAt });
   }
 
   /** تغيير موعد مادة حالتها `scheduled`. نفس صيغة `publishAt`. لا يحذف المادة. */
   reschedule(id: string, publishAt: string): Promise<BotDraft> {
-    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, { publishAt });
+    return this.request("PATCH", this.articlePath(id, "schedule"), { publishAt });
   }
 
   /** إلغاء الجدولة وإعادة المادة `draft`. لا حذف. */
   unschedule(id: string): Promise<BotDraft> {
-    return this.request("DELETE", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, {});
+    return this.request("DELETE", this.articlePath(id, "schedule"), {});
   }
 
   /**
@@ -171,12 +185,12 @@ export class BotDraftsClient {
    * DELETE على المعرّف نفسه يبقى 405 ولا يحذف الصف.
    */
   archive(id: string, reason?: string): Promise<BotDraft> {
-    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/archive`, reason ? { reason } : {});
+    return this.request("POST", this.articlePath(id, "archive"), reason ? { reason } : {});
   }
 
   /** استعادة مادة `archived` إلى `draft`. لا تنشر ولا تعيد موعداً قديماً. */
   restore(id: string): Promise<BotDraft> {
-    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/restore`, {});
+    return this.request("POST", this.articlePath(id, "restore"), {});
   }
 
   /**
@@ -187,12 +201,12 @@ export class BotDraftsClient {
     id: string,
     patch: { isFeatured?: boolean; newsType?: "breaking" | "regular"; hideFromHomepage?: boolean },
   ): Promise<BotDraft> {
-    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/visibility`, patch);
+    return this.request("PATCH", this.articlePath(id, "visibility"), patch);
   }
 
   /** حالة المسودة ومعرفها ورابط التحرير الداخلي. */
   get(id: string): Promise<BotDraft> {
-    return this.request("GET", `/api/internal/bot-drafts/${encodeURIComponent(id)}`);
+    return this.request("GET", this.articlePath(id));
   }
 
   /** رفع صورة إلى R2 (multipart field = file). مرّر `deliveryUrl` كـ `imageUrl` (غلاف) أو ضمن `imageUrls` (متن). */
@@ -203,7 +217,7 @@ export class BotDraftsClient {
         : new Blob([input.data], { type: input.contentType || "application/octet-stream" });
     const form = new FormData();
     form.append("file", blob, input.filename);
-    return this.request("POST", "/api/internal/bot-drafts/images", form);
+    return this.request("POST", `${this.draftsPath}/images`, form);
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -271,6 +285,7 @@ function payloadFromFlags(flags: Record<string, string>): BotDraftPayload {
   }
   if (flags.keywords) payload.keywords = flags.keywords.split(",").map((k) => k.trim()).filter(Boolean);
   if (flags["source-url"]) payload.sourceUrl = flags["source-url"];
+  if (flags["source-article-id"]) payload.sourceArticleId = flags["source-article-id"];
   if (flags.ref) payload.clientReference = flags.ref;
   if (flags.notes) payload.notes = flags.notes;
   return payload;
@@ -282,6 +297,7 @@ async function main() {
   const client = new BotDraftsClient({
     baseUrl: process.env.SABQ_API_BASE || "https://api.sabq.org",
     token: process.env.SABQ_BOT_DRAFTS_TOKEN || "",
+    lang: flags.lang === "en" ? "en" : "ar",
   });
 
   let result: BotDraft | BotDraftImageUpload;
