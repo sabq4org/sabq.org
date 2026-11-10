@@ -3,6 +3,7 @@ import { z } from "zod";
 import Redis from "ioredis";
 import { requireAuth, requireAnyPermission } from "../rbac";
 import { isLeader } from "../leaderElection";
+import { redisRetryDelay } from "../utils/redisRetry";
 
 const router: Router = Router();
 
@@ -68,10 +69,7 @@ function initPubSub() {
   try {
     const opts = {
       maxRetriesPerRequest: 3,
-      retryStrategy(times: number) {
-        if (times > 5) return null;
-        return Math.min(times * 200, 2000);
-      },
+      retryStrategy: redisRetryDelay,
       enableReadyCheck: false,
       connectTimeout: 5000,
       lazyConnect: false,

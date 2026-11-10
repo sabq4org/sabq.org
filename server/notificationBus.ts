@@ -3,6 +3,7 @@
 // regardless of which pod they're connected to in a multi-pod deployment.
 
 import Redis from 'ioredis';
+import { redisRetryDelay } from "./utils/redisRetry";
 
 const NOTIFICATION_BUS_CHANNEL = 'notification-bus:emit';
 const NOTIFICATION_BUS_POD_ID = `${process.pid}-${Date.now()}-${Math.random()
@@ -132,10 +133,7 @@ export const notificationBus = new NotificationBus();
   try {
     const opts = {
       maxRetriesPerRequest: 3,
-      retryStrategy(times: number) {
-        if (times > 5) return null;
-        return Math.min(times * 200, 2000);
-      },
+      retryStrategy: redisRetryDelay,
       enableReadyCheck: false,
       connectTimeout: 5000,
       lazyConnect: false,

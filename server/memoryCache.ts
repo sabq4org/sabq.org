@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import Redis from 'ioredis';
 import { isEnglishSports } from './services/sportsLang';
 import { createRedisSubscription } from './utils/redisSubscription';
+import { redisRetryDelay } from "./utils/redisRetry";
 
 interface CacheEntry<T> {
   data: T;
@@ -213,10 +214,7 @@ export const sseConnectionManager = new SSEConnectionManager();
   try {
     const opts = {
       maxRetriesPerRequest: 3,
-      retryStrategy(times: number) {
-        if (times > 5) return null;
-        return Math.min(times * 200, 2000);
-      },
+      retryStrategy: redisRetryDelay,
       enableReadyCheck: false,
       connectTimeout: 5000,
       lazyConnect: false,
