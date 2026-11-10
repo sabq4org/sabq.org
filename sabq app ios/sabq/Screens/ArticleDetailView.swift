@@ -122,6 +122,8 @@ struct ArticleDetailView: View {
     @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
     /// الخبر ظاهر فعلًا (ليس مغطًّى بصفحة مدفوعة فوقه) — وحده ينشر سياقه.
     @State private var isOnScreen = false
+    /// ورقة «خلفية القصة وسياق الخبر» على الآيفون العادي (للوصول إلى التسلسل الزمني والسياق).
+    @State private var isContextSheetPresented = false
 
     private var articleContext: ArticleContext {
         ArticleContext.news(article: displayArticle, related: relatedArticles, keywords: displayTags)
@@ -258,6 +260,16 @@ struct ArticleDetailView: View {
                         // already tired. Add explicit top-padding so each
                         // section settles into its own breathing room
                         // (effective gap = 18 base + N below).
+                        if !isFocusMode, !summaryMovedToContextColumn,
+                           (!articleContext.storySoFar.isEmpty || !articleContext.related.isEmpty) {
+                            StoryContextPromptCard(
+                                timelineCount: articleContext.storySoFar.count,
+                                relatedCount: articleContext.related.count,
+                                action: { isContextSheetPresented = true }
+                            )
+                            .padding(.top, SabqLayout.space8)
+                        }
+
                         actionBar
                             .padding(.top, SabqLayout.space16)
 
@@ -413,6 +425,32 @@ struct ArticleDetailView: View {
             if publishesReaderContext { navigation?.withdrawReaderContext(id: articleContext.id) }
         }
         .onChange(of: articleContext) { _, context in publishContext(context) }
+        .sheet(isPresented: $isContextSheetPresented) {
+            ArticleContextSheet(
+                context: articleContext,
+                onOpenArticle: { target in
+                    isContextSheetPresented = false
+                    let tab = navigation?.selectedTab ?? .home
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        navigation?.openFromReaderContext(target, in: tab)
+                    }
+                },
+                onOpenOpinion: { opinion in
+                    isContextSheetPresented = false
+                    let tab = navigation?.selectedTab ?? .home
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        navigation?.openFromReaderContext(opinion, in: tab)
+                    }
+                },
+                onOpenKeyword: { keyword in
+                    isContextSheetPresented = false
+                    let tab = navigation?.selectedTab ?? .home
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        navigation?.openFromReaderContext(KeywordRoute(keyword: keyword), in: tab)
+                    }
+                }
+            )
+        }
     }
 
     private var bookmarkToolbarButton: some View {
@@ -744,6 +782,12 @@ struct ArticleDetailView: View {
             // Passport "موثوق" pill — opens the same sheet as the action bar.
             if let slug = article.slug {
                 PassportInlineBadge(slug: slug)
+            }
+
+            if !summaryMovedToContextColumn, !articleContext.isEmpty {
+                StoryContextInlinePill {
+                    isContextSheetPresented = true
+                }
             }
         }
     }

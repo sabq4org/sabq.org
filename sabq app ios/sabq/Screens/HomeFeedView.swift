@@ -90,6 +90,12 @@ struct HomeFeedView: View {
     /// new tier (one-shot) or when the periodic nudge is due. Cleared
     /// on dismiss.
     @State private var loyaltyBanner: LoyaltyBannerState?
+    /// الخبر المفتوح في ورقة «✨ الزبدة» السفلية لمعاينة النقاط الثلاث دون مغادرة الرئيسية.
+    @State private var zubdaArticle: Article?
+    /// أخبار الأقسام المجلوبة عند نقر عدسة قسم في `EditorialLensesBar`.
+    @State private var categoryLensArticles: [String: [Article]] = [:]
+    @State private var isLoadingCategoryLens = false
+    @Environment(SabqNavigationState.self) private var navigation
 
     private static let loyaltyLastSeenLevelKey = "sabq_loyalty_last_seen_level"
     private static let loyaltyLastNudgeDateKey = "sabq_loyalty_last_nudge_at"
@@ -135,9 +141,8 @@ struct HomeFeedView: View {
                 if isContentReady, homeSpreadLayout {
                     spreadContent(containerWidth: container.size.width)
                 } else if isContentReady {
-                    // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
-                    // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
-                    // a collapsed «المزيد اليوم» disclosure.
+                    // الهوية التحريرية المجدّدة: ترويسة الصحيفة ← عدسات الأقسام ← عاجل ←
+                    // الهيرو غير المبتور ← شريط النبض الحي الموحّد ← «آخر الأخبار» فوق خط الطي مباشرة.
                     CollapsingVStack(spacing: SabqLayout.space16) {
                         Color.clear
                             .frame(height: 0)
@@ -179,6 +184,8 @@ struct HomeFeedView: View {
                     if let replacement = homeFeedReplacement {
                         replacement
                     } else {
+                    EditorialLensesBar(selectedCategory: Bindable(articlesStore).selectedCategory)
+
                     // عاجل — يظهر في الأعلى وفوق الخبر الرئيسي مباشرة.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
@@ -188,57 +195,38 @@ struct HomeFeedView: View {
 
                     }
 
-                    featuredSection
+                    if articlesStore.selectedCategory == nil {
+                        featuredSection
 
-                    // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
-                    // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
-                    // فاصل الأقسام مسافة 24 لا خط: 16 من العمود + 8 هنا.
-                    SportsPortalStrip()
-                        .padding(.bottom, SabqLayout.space8)
-
-                    // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
-                    // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
-                    // الشرط هنا لا داخل البلوك: Group بمحتوى EmptyView لا يشغّل .task
-                    // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
-                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
-                        EconomyHomeBlock()
-                    }
-
-                    // بطاقات البطولات تأتي بعد بطاقة الاقتصاد، وتختفي ذاتيًا بلا بيانات.
-                    WorldCupHomeStrip()
-
-                    AsianCupHomeStrip()
-
-                    KingsCupHomeStrip()
-
-                    RoshnHomeStrip()
-
-                    // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
-                    if authStore.isLoggedIn {
-                        personalJourneyBlock
+                        // شريط النبض الحي الموحّد: يختزل الاقتصاد ومواعيدك والرياضة والبطولات
+                        // في شريط أفقي رشيق حتى تصعد «آخر الأخبار» مباشرة فوق خط الطي.
+                        LivePulseStripView()
                     }
 
                     latestArticlesSection
-                        .padding(.top, SabqLayout.space8)
                         .id(Self.latestSectionID)
 
-                    opinionsPreviewSection
+                    if articlesStore.selectedCategory == nil {
+                        opinionsPreviewSection
 
-                    MuqtarabHomeStrip()
+                        MuqtarabHomeStrip()
 
-                    // «الأكثر تداولًا» ظاهر مباشرة بدل طيّه خلف «المزيد اليوم»،
-                    // وبعده البلوكات الاختيارية حين تتوفر لها بيانات فقط.
-                    trendingPreviewSection()
+                        trendingPreviewSection()
 
+                        // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
+                        if authStore.isLoggedIn {
+                            personalJourneyBlock
+                        }
 
-                    if !articlesStore.stories.isEmpty {
-                        storiesSection
-                    }
+                        if !articlesStore.stories.isEmpty {
+                            storiesSection
+                        }
 
-                    HajjBlockView()
+                        HajjBlockView()
 
-                    if !calendarToday.isEmpty {
-                        calendarTodayCard
+                        if !calendarToday.isEmpty {
+                            calendarTodayCard
+                        }
                     }
                     } // homeFeedReplacement
                 }
@@ -247,7 +235,7 @@ struct HomeFeedView: View {
                 // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
                 // الصفرية؛ CollapsingVStack لا يحجزها فنعوّضها هنا لبقاء الرأس مكانه.
                 .padding(.top, SabqLayout.space16)
-                .padding(.bottom, SabqLayout.space40)
+                .padding(.bottom, SabqLayout.tabBarClearance)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     VStack(spacing: 0) {
@@ -384,6 +372,26 @@ struct HomeFeedView: View {
                             Button("إغلاق") { showLoyaltyAccount = false }
                         }
                     }
+            }
+        }
+        .sheet(item: $zubdaArticle) { selected in
+            ZubdaSummarySheet(article: selected) { fullTarget in
+                if opensArticlesInReader {
+                    navigation.openInReader(fullTarget)
+                } else {
+                    navigation.openFromReaderContext(fullTarget, in: navigation.selectedTab)
+                }
+            }
+        }
+        .onChange(of: articlesStore.selectedCategory) { _, newCategory in
+            guard let newCategory, categoryLensArticles[newCategory.slug] == nil else { return }
+            Task { @MainActor in
+                isLoadingCategoryLens = true
+                let fetched = await articlesStore.loadCategoryArticles(slug: newCategory.slug, page: 1)
+                if !fetched.articles.isEmpty {
+                    categoryLensArticles[newCategory.slug] = fetched.articles
+                }
+                isLoadingCategoryLens = false
             }
         }
         }
@@ -552,88 +560,11 @@ struct HomeFeedView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        HStack(alignment: .center, spacing: SabqLayout.space12) {
-            SabqBrandLogo(height: 40)
-
-            Spacer(minLength: 0)
-
-            HStack(spacing: SabqLayout.space4) {
-                // Appearance cycle — taps walk system → light → dark →
-                // system. The full 3-state picker lives in Settings; this
-                // button is the quick-access affordance and shows the
-                // current mode's icon.
-                Button {
-                    SabqHaptics.light()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                        let current = AppAppearance(rawValue: appearanceRaw) ?? .system
-                        appearanceRaw = current.next.rawValue
-                    }
-                } label: {
-                    let mode = AppAppearance(rawValue: appearanceRaw) ?? .system
-                    headerIcon(mode.iconName)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("تبديل المظهر — الحالي: \((AppAppearance(rawValue: appearanceRaw) ?? .system).arabicLabel)")
-
-                // «مواعيدك» — رابط رئيسي في رأس الويب: الرواتب والدعم والإجازات.
-                ReaderLink(value: MawaeedRoute()) {
-                    headerIcon("calendar")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("مواعيدك — الرواتب والدعم والإجازات")
-
-                // "لحظة بلحظة" entry point. The red pulsing dot was removed
-                // to avoid confusing it with the editorial-notifications
-                // unread indicator on the bell next to it — same colour
-                // would have meant two different things side by side.
-                ReaderLink(value: MomentByMomentRoute()) {
-                    headerIcon("dot.radiowaves.left.and.right")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("لحظة بلحظة — التغطية المباشرة")
-
-                // جرس الإشعارات — صندوق القارئ (/v1/inbox)، وفي أعلاه للكتّاب
-                // صفّ «إشعاراتي التحريرية». النقطة الحمراء = غير المقروء في الاثنين.
-                if authStore.isLoggedIn {
-                    ReaderLink(value: ReaderInboxRoute()) {
-                        headerIcon("bell")
-                            .overlay(alignment: .topTrailing) {
-                                // Red unread dot — driven by NotificationsStore's
-                                // `unreadCount` which the EditorialNotificationsView
-                                // updates on every fetch.
-                                if notificationsStore.totalUnread > 0 {
-                                    Circle()
-                                        .fill(SabqTheme.breaking)
-                                        .frame(width: 10, height: 10)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(SabqTheme.background, lineWidth: 2)
-                                        )
-                                        .padding(10)
-                                }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(notificationsStore.totalUnread > 0
-                        ? "الإشعارات — لديك إشعارات غير مقروءة"
-                        : "الإشعارات")
-                }
-
-                ReaderLink(value: SearchRoute()) {
-                    headerIcon("magnifyingglass")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("البحث")
-            }
-        }
-    }
-
-    private func headerIcon(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(SabqType.sectionHeading.font.weight(.regular))
-            .foregroundStyle(SabqTheme.textPrimary)
-            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
-            .contentShape(Rectangle())
+        EditorialMastheadView(
+            isCompact: isHeaderCompact,
+            isLoggedIn: authStore.isLoggedIn,
+            unreadNotifications: notificationsStore.totalUnread
+        )
     }
 
     // MARK: - Breaking News
@@ -712,10 +643,11 @@ struct HomeFeedView: View {
         if dynamicTypeSize.isAccessibilitySize {
             featuredRowsSection
         } else {
-            FeaturedCarousel(
+            EditorialHeroSection(
                 articles: heroArticles,
                 isBookmarked: { bookmarksStore.isBookmarked($0.id) },
-                onBookmark: { bookmarksStore.toggle($0.id, article: $0) }
+                onBookmark: { bookmarksStore.toggle($0.id, article: $0) },
+                onZubda: { zubdaArticle = $0 }
             )
         }
     }
@@ -954,7 +886,7 @@ struct HomeFeedView: View {
     private var opinionsPreviewSection: some View {
         let opinions = Array(articlesStore.opinions.prefix(5))
         if !opinions.isEmpty {
-            HomeSectionCard(title: "آراء تستحق القراءة") {
+            HomeSectionCard(title: "آراء تستحق القراءة", skyTinted: true) {
                 ReaderLink(value: OpinionsRoute()) {
                     HomeSectionLinkLabel()
                 }
@@ -984,8 +916,15 @@ struct HomeFeedView: View {
     private var latestTimelineArticles: [Article] {
         let skip = displayedBreakingArticle?.id
         let opinionIDs = Set(articlesStore.opinions.map(\.id))
-        let heroIDs = articlesStore.selectedCategory == nil ? Set(heroArticles.map(\.id)) : []
-        return articlesStore.filteredArticles.filter {
+        if let selected = articlesStore.selectedCategory {
+            let remote = categoryLensArticles[selected.slug] ?? []
+            let local = articlesStore.articles(for: selected)
+            var seen = Set<String>()
+            let merged = (remote + local).filter { seen.insert($0.id).inserted }
+            return merged.filter { $0.id != skip && !opinionIDs.contains($0.id) }
+        }
+        let heroIDs = Set(heroArticles.map(\.id))
+        return articlesStore.allArticles.filter {
             $0.id != skip && !opinionIDs.contains($0.id) && !heroIDs.contains($0.id)
         }
     }
@@ -994,42 +933,63 @@ struct HomeFeedView: View {
         let articles = latestTimelineArticles
         return VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HomeSectionCard(
-                title: articlesStore.selectedCategory?.title ?? "آخر الأخبار",
+                title: articlesStore.selectedCategory.map { $0 == .business ? "اقتصاد وأعمال" : $0.title } ?? "آخر الأخبار",
+                context: articlesStore.selectedCategory == nil ? "تحديث مستمر" : nil,
                 lazy: true
             ) {
-                EmptyView()
-            } content: {
-                ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
-                    if index > 0 {
-                        SidebarRowDivider()
-                    }
-
-                    ArticleLink(article: article) {
-                        CompactArticleRow(
-                            article: article,
-                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                            isBookmarked: bookmarksStore.isBookmarked(article.id),
-                            isNew: articlesStore.isRecentlyAdded(article.id),
-                            showsCategory: articlesStore.selectedCategory == nil
-                        )
+                if articlesStore.selectedCategory != nil {
+                    Button {
+                        SabqHaptics.light()
+                        withAnimation(.snappy(duration: 0.22)) {
+                            articlesStore.selectedCategory = nil
+                        }
+                    } label: {
+                        Text("عودة للكل")
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(minHeight: SabqLayout.touchTarget)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityIdentifier("home.article.\(article.id)")
-                    .contextMenu {
-                        Button {
-                            bookmarksStore.toggle(article.id, article: article)
-                        } label: {
-                            Label(
-                                bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ المقال",
-                                systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark"
-                            )
+                }
+            } content: {
+                if articles.isEmpty && isLoadingCategoryLens {
+                    DiscoveryListSkeleton(count: 4)
+                } else {
+                    ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
+                        if index > 0 {
+                            SidebarRowDivider()
                         }
-                    }
-                    .onAppear {
-                        // Prefetch images for the next 5 articles
-                        let upcoming = articles.dropFirst(index + 1).prefix(5)
-                        let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-                        if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
+
+                        EditorialArticleFeedRow(
+                            article: article,
+                            isBookmarked: bookmarksStore.isBookmarked(article.id),
+                            isNew: articlesStore.isRecentlyAdded(article.id),
+                            showsCategory: articlesStore.selectedCategory == nil,
+                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                            onZubda: { zubdaArticle = article }
+                        )
+                        .accessibilityIdentifier("home.article.\(article.id)")
+                        .contextMenu {
+                            Button {
+                                zubdaArticle = article
+                            } label: {
+                                Label("الزبدة (خلاصة الخبر)", systemImage: "sparkles")
+                            }
+                            Button {
+                                bookmarksStore.toggle(article.id, article: article)
+                            } label: {
+                                Label(
+                                    bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ المقال",
+                                    systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark"
+                                )
+                            }
+                        }
+                        .onAppear {
+                            // Prefetch images for the next 5 articles
+                            let upcoming = articles.dropFirst(index + 1).prefix(5)
+                            let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
+                            if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
+                        }
                     }
                 }
             }

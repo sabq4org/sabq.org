@@ -1143,11 +1143,14 @@ struct SurfaceCard<Content: View>: View {
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
-        // بطاقة المكتب: بيضاء بظل خفيف بلا حدّ — نفس لغة بقية البطاقات.
+        // سطح تحريري هادئ بحدّ شعري نظيف بلا ظلال عائمة.
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
         )
         .sabqRTL()
     }
@@ -1866,17 +1869,11 @@ struct CompactArticleRow: View {
 
     // MARK: - Shared sub-views
 
-    private var categoryPill: some View {
+    private var categoryLabel: some View {
         Text(article.categoryTitle)
             .font(SabqType.tag.font)
-            .foregroundStyle(SabqTheme.primary)
+            .foregroundStyle(article.isBreaking ? SabqTheme.breaking : SabqTheme.primary)
             .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2.5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(SabqTheme.primary.opacity(0.07))
-            )
             .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -1884,8 +1881,8 @@ struct CompactArticleRow: View {
         Text("جديد")
             .font(SabqType.tag.font)
             .foregroundStyle(SabqTheme.success)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2.5)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
             .background(
                 Capsule(style: .continuous)
                     .fill(SabqTheme.success.opacity(0.08))
@@ -1898,7 +1895,11 @@ struct CompactArticleRow: View {
             let showNew = isNew || article.isFreshlyPublished(relativeTo: context.date)
             HStack(alignment: .center, spacing: 6) {
                 if showsCategory {
-                    categoryPill
+                    categoryLabel
+                    Text("·")
+                        .font(SabqType.timestamp.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .accessibilityHidden(true)
                 }
                 if article.isInfographic {
                     InfographicPill()
@@ -1908,6 +1909,7 @@ struct CompactArticleRow: View {
                 } else {
                     Text(SabqFormatters.arabicRelative(article.publishDate, now: context.date))
                         .font(SabqType.timestamp.font)
+                        .monospacedDigit()
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
@@ -2332,14 +2334,9 @@ extension View {
     /// `SabqTheme.surfaceMuted` كي يتمايز البلوك عن الصفحة.
     func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-        // هوية المكتب: الأبيض بظل خفيف بلا حدّ؛ التعبئة الهادئة داخل صفحة بيضاء بلا ظل.
-        let raised = fill == SabqTheme.surface
-        return clipShape(shape)
-            .background(
-                shape.fill(fill)
-                    .shadow(color: raised ? SabqTheme.shadow : .clear,
-                            radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
-            )
+        return background(shape.fill(fill))
+            .overlay(shape.strokeBorder(SabqTheme.separator, lineWidth: 0.75))
+            .clipShape(shape)
     }
 
     /// بطاقة تحريرية مميزة بخلفية سماوية سبق هادئة وإطار سماوي ناعم.
