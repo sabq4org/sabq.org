@@ -1001,8 +1001,8 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
 
                 {/* Article Editor Permissions Section */}
                 <FormSection
-                  title="صلاحيات محرر المقالات"
-                  description="تخصيص صلاحيات المحرر لهذا المستخدم"
+                  title="صلاحيات التحرير والنشر"
+                  description="تخصيص صلاحيات المقالات والنشر على X لهذا المستخدم"
                   icon={Shield}
                 >
                   <div className="space-y-3" data-testid="article-editor-permissions">
