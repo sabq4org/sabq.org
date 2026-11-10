@@ -8756,6 +8756,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
+      // النشر السريع ينقل مسودة أو مجدولًا إلى منشور فقط: إعادة نشر المنشور كانت
+      // تكتب publishedAt من جديد وتعيد التنبيهات، والمؤرشف كان يُنشر بضغطة.
+      if (article.status !== "draft" && article.status !== "scheduled") {
+        return res.status(409).json({ message: "المقال ليس مسودة ولا مجدولًا، فلا يُنشر من هنا", code: "ARTICLE_NOT_PUBLISHABLE" });
+      }
+      // الشرط نفسه داخل UPDATE يحسم السباق (ضغطتان معًا)، ومعه قفل التحرير.
+      const publishableNow = and(
+        eq(articles.id, articleId),
+        inArray(articles.status, ["draft", "scheduled"]),
+        articleLockAllowsWriter(userId),
+      );
+
       // Check ownership for users without broad permissions (e.g., publisher role)
       const userPermissions = await getUserPermissions(userId);
       const canPublishAny = userPermissions.includes('articles.manage') || 
@@ -8798,9 +8810,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 publisherId: agencyPublisher.id,
                 isPublisherNews: true,
               })
-              .where(eq(articles.id, articleId))
+              .where(publishableNow)
               .returning();
-            if (published && isBreakingNewsType(published.newsType)) {
+            if (!published) throw new Error("NOT_PUBLISHABLE");
+            if (isBreakingNewsType(published.newsType)) {
               clearedBreaking = await clearOtherBreakingArticles(published.id, tx);
             }
             const charge = await chargePublishInTx(tx, {
@@ -8820,6 +8833,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           }
           updatedArticle = result;
         } catch (txError: any) {
+          if (txError.message === "NOT_PUBLISHABLE") {
+            return res.status(409).json({ message: "تغيّرت حالة المقال أو يحرره زميل الآن. حدّث الصفحة.", code: "ARTICLE_NOT_PUBLISHABLE" });
+          }
           if (txError.message === "NO_CREDITS") {
             return res.status(403).json({ 
               message: "لا يوجد رصيد كافٍ لنشر المقالات. يرجى التواصل مع الإدارة لتجديد الباقة.",
@@ -8834,7 +8850,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             const [row] = await tx
               .update(articles)
               .set({ status: "published", publishedAt: new Date(), updatedAt: new Date() })
-              .where(eq(articles.id, articleId))
+              .where(publishableNow)
               .returning();
             return row;
           },
@@ -8844,8 +8860,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       if (!updatedArticle) {
-        console.error("❌ [PUBLISH] Article update failed unexpectedly");
-        return res.status(500).json({ message: "حدث خطأ أثناء نشر المقال" });
+        return res.status(409).json({ message: "تغيّرت حالة المقال أو يحرره زميل الآن. حدّث الصفحة.", code: "ARTICLE_NOT_PUBLISHABLE" });
       }
       invalidateArticleWrite(updatedArticle, { reason: "article-publish" });
       memoryCache.delete("lite-feed");
@@ -16559,44 +16574,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  app.delete("/api/dashboard/articles/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const user = await storage.getUser(userId);
-
-      if (!user || (user.role !== "editor" && user.role !== "admin" && user.role !== "reporter")) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-      const article = await storage.getArticleById(req.params.id);
-
-      if (!article) {
-        return res.status(404).json({ message: "Article not found" });
-      }
-
-      if (article.authorId !== userId && user.role !== "admin") {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-      await storage.deleteArticle(req.params.id);
-      
-      // Invalidate caches when articles are deleted
-      memoryCache.invalidatePattern('^homepage');
-      memoryCache.invalidatePattern('^blocks:');
-      memoryCache.invalidatePattern('^insights:');
-      memoryCache.invalidatePattern('^opinion:');
-      memoryCache.invalidatePattern('^trending');
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      
-      res.json({ message: "Article deleted" });
-    } catch (error) {
-      console.error("Error deleting article:", error);
-      res.status(500).json({ message: "Failed to delete article" });
-    }
-  });
+  // DELETE /api/dashboard/articles/:id حُذف (تدقيق 2026-11-10): كان حذفًا نهائيًّا
+  // بلا articles.delete ولا سجل تدقيق ولا مستدعٍ. الحذف عبر /api/admin/articles/:id.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -27507,6 +27486,19 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET Single English Article by Slug - with full details
+  // en/ur article-by-slug are public: a draft, scheduled or archived row is
+  // visible only to its author/reporter or to staff who can see articles.
+  const canReadLocalizedArticle = async (
+    article: { status?: string | null; authorId?: string | null; reporterId?: string | null },
+    viewerId: string | undefined,
+  ): Promise<boolean> => {
+    if (article.status === "published") return true;
+    if (!viewerId) return false;
+    if (article.authorId === viewerId || article.reporterId === viewerId) return true;
+    const perms = await getUserPermissions(viewerId);
+    return ["articles.view", "articles.edit_any", "articles.publish"].some((code) => perms.includes(code));
+  };
+
   app.get("/api/en/articles/:slug", async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -27554,6 +27546,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
 
       if (!baseData) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+      if (!(await canReadLocalizedArticle(baseData.article, userId))) {
         return res.status(404).json({ message: "Article not found" });
       }
 
@@ -28639,6 +28634,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // Access joined tables by their actual table names
       const result: any = results[0];
       const article = result.ur_articles;
+      if (!(await canReadLocalizedArticle(article, userId))) {
+        return res.status(404).json({ message: "Article not found" });
+      }
       const category = result.ur_categories;
       // A column-object projection over a leftJoin yields {id:null,…} instead
       // of null when the join misses — collapse it so an empty reporter can't
