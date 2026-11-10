@@ -745,5 +745,19 @@ export const ARTICLE_EDITOR_PERMISSIONS = [
     label: "إخفاء من الواجهة الرئيسية",
     labelEn: "Hide from Homepage",
     description: "إخفاء المقال من الصفحة الرئيسية مع إبقائه متاحاً عبر الرابط المباشر"
+  },
+  // النشر على X: يحددان هل تُنشر تغريدة المستخدم مباشرة (من اللوحة أو «نشر سبق»)
+  // أم تمر على «مكتب سبق» للموافقة. يظهران هنا ليُمنحا أو يُمنعا لمستخدم بعينه.
+  {
+    code: PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    label: "النشر الفوري على X",
+    labelEn: "Publish Now on X",
+    description: "بدونها تمر تغريداته على مكتب سبق للموافقة"
+  },
+  {
+    code: PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    label: "جدولة منشورات X",
+    labelEn: "Schedule X Posts",
+    description: "جدولة منشور على X لوقت لاحق"
   }
 ];

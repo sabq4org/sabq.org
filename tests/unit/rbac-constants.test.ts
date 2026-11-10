@@ -8,6 +8,7 @@ import {
   resolveEffectivePermissions,
   denyPermissionsForRoles,
   canAssignRole,
+  ARTICLE_EDITOR_PERMISSIONS,
 } from "@shared/rbac-constants";
 
 // The wildcard contract is load-bearing: /api/auth/user returns the array
@@ -150,5 +151,19 @@ describe("canAssignRole", () => {
   it("non-admin roles can assign nothing", () => {
     expect(canAssignRole(ROLE_NAMES.EDITOR, ROLE_NAMES.REPORTER)).toBe(false);
     expect(canAssignRole(ROLE_NAMES.READER, ROLE_NAMES.READER)).toBe(false);
+  });
+});
+
+// صفحة تعديل المستخدم تعرض هذه القائمة فقط؛ ما ليس فيها لا يمكن منحه أو منعه لشخص بعينه من اللوحة.
+describe("per-user permission list shown in the edit-user dialog", () => {
+  it("offers the two X publishing permissions with real, distinct codes", () => {
+    const codes = ARTICLE_EDITOR_PERMISSIONS.map((permission) => permission.code);
+    expect(codes).toContain(PERMISSION_CODES.SOCIAL_PUBLISH_NOW);
+    expect(codes).toContain(PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE);
+    expect(new Set(codes).size).toBe(codes.length);
+    for (const permission of ARTICLE_EDITOR_PERMISSIONS) {
+      expect(Object.values(PERMISSION_CODES)).toContain(permission.code);
+      expect(permission.label.trim()).not.toBe("");
+    }
   });
 });

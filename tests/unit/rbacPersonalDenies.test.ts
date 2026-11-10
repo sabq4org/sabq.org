@@ -71,6 +71,25 @@ describe("personal permission deny boundary", () => {
     expect(state.cache.has("auth-user:editor")).toBe(false);
     expect(await userHasPermission("editor", "articles.publish")).toBe(false);
   });
+  // «النشر الفوري على X» يُمنح أو يُمنع لمستخدم بعينه من صفحة تعديل المستخدم؛ وهي ما يقرر
+  // هل تُنشر تغريدته من «نشر سبق» مباشرة أم تنتظر موافقة مكتب سبق.
+  it("lets one content manager be sent through the desk, and one reporter publish on X directly", async () => {
+    state.role = "content_manager";
+    state.overrides = [];
+    expect(await userHasPermission("manager", "social_publish.publish_now")).toBe(true);
+    state.overrides = [{ permissionCode: "social_publish.publish_now", effect: "deny" }];
+    invalidateUserPermissionCache("manager");
+    expect(await userHasPermission("manager", "social_publish.publish_now")).toBe(false);
+    expect(await userHasPermission("manager", "social_publish.schedule")).toBe(true);
+
+    state.role = "reporter";
+    state.overrides = [];
+    expect(await userHasPermission("reporter", "social_publish.publish_now")).toBe(false);
+    state.overrides = [{ permissionCode: "social_publish.publish_now", effect: "allow" }];
+    invalidateUserPermissionCache("reporter");
+    expect(await userHasPermission("reporter", "social_publish.publish_now")).toBe(true);
+    expect(await userHasPermission("reporter", "social_publish.schedule")).toBe(false);
+  });
   it("retains superuser wildcard and legacy expanded-code contracts", async () => {
     state.role = "admin";
     expect(await getEffectiveUserPermissions("admin")).toEqual(["*"]);
