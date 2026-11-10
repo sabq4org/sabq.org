@@ -1,11 +1,24 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { articlePolls, pollOptions, pollVotes, articles } from "@shared/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../rbac";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import OpenAI from "openai";
 import { withCache, CACHE_TTL, memoryCache } from "../memoryCache";
+import rateLimit from "express-rate-limit";
+import { cfKeyGenerator, cfValidate, getRealIp } from "../utils/rateLimiting";
+import { anonVoteCapReached, resolveVoterSessionId } from "../services/pollVoteGuard";
+
+const voteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { message: "محاولات تصويت كثيرة. حاول بعد قليل." },
+});
 
 const router = Router();
 const openai = new OpenAI();
@@ -76,15 +89,20 @@ router.get("/article/:articleId", async (req: Request, res: Response) => {
 });
 
 // Vote on a poll (public)
-router.post("/:pollId/vote", async (req: Request, res: Response) => {
+router.post("/:pollId/vote", voteLimiter, async (req: Request, res: Response) => {
   try {
     const { pollId } = req.params;
     const { optionId } = req.body;
     const userId = (req as any).user?.id;
-    const sessionId = req.cookies?.sessionId || req.headers['x-session-id'] as string || `anon-${Date.now()}`;
-    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+    const ipAddress = getRealIp(req);
+    const sessionId = resolveVoterSessionId({
+      cookieSessionId: req.cookies?.sessionId,
+      headerSessionId: req.headers['x-session-id'],
+      ip: ipAddress,
+      pollId,
+    });
 
-    if (!optionId) {
+    if (!optionId || typeof optionId !== "string") {
       return res.status(400).json({ message: "يرجى اختيار إجابة" });
     }
 
@@ -98,6 +116,30 @@ router.post("/:pollId/vote", async (req: Request, res: Response) => {
 
     if (!poll) {
       return res.status(404).json({ message: "الاستطلاع غير موجود أو منتهي" });
+    }
+
+    if (poll.expiresAt && new Date(poll.expiresAt).getTime() <= Date.now()) {
+      return res.status(404).json({ message: "الاستطلاع غير موجود أو منتهي" });
+    }
+
+    // الخيار يجب أن يتبع هذا الاستطلاع، وإلا رفع صوتٌ هنا عدّاد استطلاع آخر.
+    const [option] = await db
+      .select({ id: pollOptions.id })
+      .from(pollOptions)
+      .where(and(eq(pollOptions.id, optionId), eq(pollOptions.pollId, pollId)))
+      .limit(1);
+    if (!option) {
+      return res.status(400).json({ message: "الخيار لا يتبع هذا الاستطلاع" });
+    }
+
+    if (!userId) {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(pollVotes)
+        .where(and(eq(pollVotes.pollId, pollId), eq(pollVotes.ipAddress, ipAddress), isNull(pollVotes.userId)));
+      if (anonVoteCapReached(Number(count))) {
+        return res.status(429).json({ message: "تم بلوغ حد التصويت من هذا الاتصال" });
+      }
     }
 
     // Check if already voted
@@ -116,26 +158,22 @@ router.post("/:pollId/vote", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "لقد قمت بالتصويت مسبقاً" });
     }
 
-    // Record the vote
-    await db.insert(pollVotes).values({
-      pollId,
-      optionId,
-      userId: userId || null,
-      sessionId,
-      ipAddress,
+    // الصوت وعدّاداه في معاملة واحدة: فشل أحدها لا يترك عدّادًا بلا صوت.
+    await db.transaction(async (tx) => {
+      await tx.insert(pollVotes).values({
+        pollId,
+        optionId,
+        userId: userId || null,
+        sessionId,
+        ipAddress,
+      });
+      await tx.update(pollOptions)
+        .set({ votesCount: sql`${pollOptions.votesCount} + 1` })
+        .where(and(eq(pollOptions.id, optionId), eq(pollOptions.pollId, pollId)));
+      await tx.update(articlePolls)
+        .set({ totalVotes: sql`${articlePolls.totalVotes} + 1`, updatedAt: new Date() })
+        .where(eq(articlePolls.id, pollId));
     });
-
-    // Update vote counts
-    await db.update(pollOptions)
-      .set({ votesCount: sql`${pollOptions.votesCount} + 1` })
-      .where(eq(pollOptions.id, optionId));
-
-    await db.update(articlePolls)
-      .set({ 
-        totalVotes: sql`${articlePolls.totalVotes} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(articlePolls.id, pollId));
 
     // Invalidate poll cache for this article so vote counts refresh
     if (poll.articleId) {
