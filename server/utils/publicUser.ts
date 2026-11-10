@@ -46,3 +46,53 @@ export function toPublicUser<T extends Record<string, any>>(user: T | null | und
   for (const field of SENSITIVE_USER_FIELDS) delete out[field];
   return out as PublicUser<T>;
 }
+
+/** The only columns an anonymous visitor may see about another user. */
+export const PUBLIC_PROFILE_FIELDS = [
+  "id",
+  "firstName",
+  "lastName",
+  "firstNameEn",
+  "lastNameEn",
+  "profileImageUrl",
+  "bio",
+] as const;
+
+export type PublicProfile = Partial<Record<(typeof PUBLIC_PROFILE_FIELDS)[number], unknown>>;
+
+/**
+ * Allowlist projection for surfaces that anyone can read (follower lists,
+ * assignment bylines). Unlike `toPublicUser` it also drops email, phone, role
+ * and every other column: a public reader has no business seeing them.
+ */
+export function toPublicProfile(user: Record<string, any> | null | undefined): PublicProfile | null {
+  if (!user) return null;
+  const out: PublicProfile = {};
+  for (const field of PUBLIC_PROFILE_FIELDS) {
+    if (user[field] !== undefined) out[field] = user[field];
+  }
+  return out;
+}
+
+/**
+ * Removes the sensitive columns from every object nested in `value`.
+ *
+ * For legacy `storage.ts` queries that join the whole `users` row under an
+ * arbitrary key (`createdBy`, `assignedTo`, `reporter`…) and cannot be changed
+ * at the source while that file is frozen. Returns a copy; Dates and other
+ * non-plain objects pass through untouched.
+ */
+export function stripSensitiveUserFields<T>(value: T, depth = 0): T {
+  if (depth > 6 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSensitiveUserFields(item, depth + 1)) as unknown as T;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+    if ((SENSITIVE_USER_FIELDS as readonly string[]).includes(key)) continue;
+    out[key] = stripSensitiveUserFields(inner, depth + 1);
+  }
+  return out as T;
+}

@@ -25,6 +25,7 @@ import {
 } from "@shared/schema";
 import { pickTableColumns } from "../utils/sanitizeBody";
 import { parsePage, parseLimit } from "../utils/pagination";
+import { stripSensitiveUserFields } from "../utils/publicUser";
 import { partialWithoutDefaults } from "@shared/zodPartial";
 
 const taskLimiter = rateLimit({
@@ -103,7 +104,7 @@ export function registerTaskRoutes(app: Express) {
       
       const hasMore = result.total > offset + limitNum;
       res.json({
-        tasks: result.tasks,
+        tasks: stripSensitiveUserFields(result.tasks),
         total: result.total,
         page: pageNum,
         limit: limitNum,
@@ -408,7 +409,8 @@ export function registerTaskRoutes(app: Express) {
         }
       }
       
-      res.json(task);
+      // getTaskWithDetails joins the whole `users` row for creator/assignee.
+      res.json(stripSensitiveUserFields(task));
     } catch (error: any) {
       console.error('Error fetching task:', error);
       res.status(500).json({ error: 'فشل في جلب المهمة' });
