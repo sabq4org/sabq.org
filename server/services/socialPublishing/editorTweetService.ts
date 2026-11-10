@@ -9,7 +9,8 @@
 // النطاق: خبر منشور فقط. القناة مقفلة افتراضيًا حتى BOT_DESK_EDITOR_TWEETS=on.
 // ----------------------------------------------------------------------------
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { validateXPostText } from "@shared/socialPostText";
 import { articles, socialPosts, type SocialPost } from "@shared/schema";
 import { db } from "../../db";
 import {
@@ -19,7 +20,6 @@ import {
   createDraftPost,
   notifyDeskOfAuthorSocialProposal,
   publishClaimedPost,
-  updateEditablePost,
 } from "./socialPublishingService";
 
 /** مهلة الحماية من الإرسال المكرر (إعادة المحاولة بعد انقطاع الشبكة). */
@@ -31,7 +31,8 @@ export function isEditorTweetChannelEnabled(
   return (env.BOT_DESK_EDITOR_TWEETS ?? "").trim().toLowerCase() === "on";
 }
 
-export type EditorTweetMode = "published" | "pending_approval" | "publish_failed";
+/** processing = طلب مطابق سابق ما زال قيد النشر؛ ليس تأكيد نشر. */
+export type EditorTweetMode = "published" | "processing" | "pending_approval" | "publish_failed";
 
 export interface EditorTweetInput {
   articleId: string;
@@ -69,8 +70,21 @@ export interface EditorTweetDeps {
     since: Date;
   }): Promise<SocialPost | null>;
   findPendingProposal(input: { articleId: string; actorUserId: string }): Promise<SocialPost | null>;
+  /**
+   * يحدّث المقترح فقط إن بقي مسودة تنتظر القرار (شرط ذري داخل WHERE). يعيد null
+   * إن جدوله المكتب أو نشره أو رفضه بين القراءة والتحديث.
+   */
+  updatePendingProposal(input: {
+    postId: string;
+    text: string;
+    linkUrl: string | null;
+    imageSource: "article" | "none";
+    imageUrl: string | null;
+    now: Date;
+  }): Promise<SocialPost | null>;
+  /** قفل مشترك بين النسخ يجعل «ابحث عن مطابق ثم أنشئ واحجز» خطوة واحدة. */
+  withSubmitLock<T>(lockKey: string, run: () => Promise<T>): Promise<T>;
   createDraftPost: typeof createDraftPost;
-  updateEditablePost: typeof updateEditablePost;
   claimPostForImmediatePublish: typeof claimPostForImmediatePublish;
   publishClaimedPost: typeof publishClaimedPost;
   notifyDesk: typeof notifyDeskOfAuthorSocialProposal;
@@ -135,8 +149,30 @@ const defaultDeps: EditorTweetDeps = {
       .limit(1);
     return row ?? null;
   },
+  async updatePendingProposal({ postId, text, linkUrl, imageSource, imageUrl, now }) {
+    const [row] = await db
+      .update(socialPosts)
+      .set({ text, linkUrl, imageSource, imageUrl, requestedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(socialPosts.id, postId),
+          eq(socialPosts.status, "draft"),
+          isNull(socialPosts.publisherId),
+          isNotNull(socialPosts.requestedAt),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  },
+  async withSubmitLock(lockKey, run) {
+    // القفل يُحرَّر بنهاية المعاملة. الاستعلامات داخل run تجري على اتصالات أخرى
+    // من المجمع، والمطلوب هنا التسلسل بين الطلبات لا العزل.
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      return run();
+    });
+  },
   createDraftPost,
-  updateEditablePost,
   claimPostForImmediatePublish,
   publishClaimedPost,
   notifyDesk: notifyDeskOfAuthorSocialProposal,
@@ -162,28 +198,42 @@ export async function submitEditorTweet(
     : { imageSource: "none" as const, imageUrl: null };
 
   if (input.canPublishNow) {
-    const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
-    const same = await deps.findRecentSameTweet({
-      articleId: article.id,
-      actorUserId: input.actorUserId,
-      text,
-      since,
-    });
-    if (same) return { mode: "published", post: same, duplicate: true, updated: false };
-
-    const draft = await deps.createDraftPost({
-      articleId: article.id,
-      text,
-      textSource: "custom",
-      includeLink: input.includeLink,
-      ...image,
-      createdByUserId: input.actorUserId,
-    });
-    const claimed = await deps.claimPostForImmediatePublish(draft.id);
-    if (!claimed) {
+    // البحث عن مطابق + الإنشاء + الحجز تحت قفل واحد: طلبان متزامنان بالنص نفسه
+    // لا ينشئان منشورين. النشر نفسه خارج القفل.
+    const locked = await deps.withSubmitLock(
+      `editor-tweet:${input.actorUserId}:${article.id}`,
+      async () => {
+        const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
+        const same = await deps.findRecentSameTweet({
+          articleId: article.id,
+          actorUserId: input.actorUserId,
+          text,
+          since,
+        });
+        if (same) return { same, claimed: null };
+        const draft = await deps.createDraftPost({
+          articleId: article.id,
+          text,
+          textSource: "custom",
+          includeLink: input.includeLink,
+          ...image,
+          createdByUserId: input.actorUserId,
+        });
+        return { same: null, claimed: await deps.claimPostForImmediatePublish(draft.id) };
+      },
+    );
+    if (locked.same) {
+      return {
+        mode: locked.same.status === "published" ? "published" : "processing",
+        post: locked.same,
+        duplicate: true,
+        updated: false,
+      };
+    }
+    if (!locked.claimed) {
       throw new SocialPublishValidationError("المنشور قيد النشر بالفعل أو حالته لا تسمح", 409);
     }
-    const result = await deps.publishClaimedPost(claimed, input.actorUserId);
+    const result = await deps.publishClaimedPost(locked.claimed, input.actorUserId);
     return {
       mode: result.status === "published" ? "published" : "publish_failed",
       post: result,
@@ -196,21 +246,38 @@ export async function submitEditorTweet(
     articleId: article.id,
     actorUserId: input.actorUserId,
   });
-  const post = pending
-    ? await deps.updateEditablePost(pending.id, {
-        text,
-        includeLink: input.includeLink,
-        ...image,
-      })
-    : await deps.createDraftPost({
-        articleId: article.id,
-        text,
-        textSource: "custom",
-        includeLink: input.includeLink,
-        ...image,
-        createdByUserId: input.actorUserId,
-        requestedAt: deps.now(),
-      });
+  let updatedPost: SocialPost | null = null;
+  if (pending) {
+    const linkUrl = input.includeLink ? article.url : null;
+    const validation = validateXPostText(text, linkUrl);
+    if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
+    if (!validation.valid) {
+      throw new SocialPublishValidationError(
+        `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
+      );
+    }
+    // null = المكتب قرّر في المقترح السابق للتو؛ الطلب الحالي يصبح مقترحًا جديدًا
+    // ولا يمس ما اعتُمد أو جُدول.
+    updatedPost = await deps.updatePendingProposal({
+      postId: pending.id,
+      text,
+      linkUrl,
+      ...image,
+      now: deps.now(),
+    });
+  }
+  const post =
+    updatedPost ??
+    (await deps.createDraftPost({
+      articleId: article.id,
+      text,
+      textSource: "custom",
+      includeLink: input.includeLink,
+      ...image,
+      createdByUserId: input.actorUserId,
+      requestedAt: deps.now(),
+    }));
+  const updated = Boolean(updatedPost);
 
   // تنبيه «مكتب سبق» لا يؤخّر الرد ولا يُفشله.
   void deps
@@ -219,9 +286,9 @@ export async function submitEditorTweet(
       articleTitle: article.title,
       articleUrl: article.url,
       authorUserId: input.actorUserId,
-      isUpdate: Boolean(pending),
+      isUpdate: updated,
     })
     .catch((err) => console.error("[EditorTweet] تعذر تنبيه المكتب:", err));
 
-  return { mode: "pending_approval", post, duplicate: false, updated: Boolean(pending) };
+  return { mode: "pending_approval", post, duplicate: false, updated };
 }

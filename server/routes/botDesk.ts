@@ -673,7 +673,7 @@ router.post(
         });
       }
       return res
-        .status(result.mode === "pending_approval" ? 202 : 200)
+        .status(result.mode === "published" ? 200 : 202)
         .json({ mode: result.mode, post: result.post, duplicate: result.duplicate, updated: result.updated });
     } catch (error) {
       handleSocialError(res, error, "تعذر إرسال التغريدة");

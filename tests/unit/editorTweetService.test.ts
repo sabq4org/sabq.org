@@ -33,7 +33,8 @@ function makeDeps(over: Partial<EditorTweetDeps> = {}): EditorTweetDeps {
     findRecentSameTweet: vi.fn(async () => null),
     findPendingProposal: vi.fn(async () => null),
     createDraftPost: vi.fn(async () => post()) as any,
-    updateEditablePost: vi.fn(async () => post({ text: "محدّث" })) as any,
+    updatePendingProposal: vi.fn(async () => post({ id: "p9", text: "محدّث" })),
+    withSubmitLock: vi.fn(async (_key: string, run: () => Promise<any>) => run()) as any,
     claimPostForImmediatePublish: vi.fn(async () => post({ status: "processing" })) as any,
     publishClaimedPost: vi.fn(async () => post({ status: "published" })) as any,
     notifyDesk: vi.fn(async () => undefined) as any,
@@ -104,10 +105,46 @@ describe("تغريدة المحرر من «نشر سبق» — حسب الصلا
     const result = await submitEditorTweet(input(false), deps);
     expect(result).toMatchObject({ mode: "pending_approval", updated: true });
     expect(deps.createDraftPost).not.toHaveBeenCalled();
-    expect(deps.updateEditablePost).toHaveBeenCalledWith(
-      "p9",
-      expect.objectContaining({ text: "نص التغريدة", includeLink: true }),
+    expect(deps.updatePendingProposal).toHaveBeenCalledWith(
+      expect.objectContaining({ postId: "p9", text: "نص التغريدة", linkUrl: article.url }),
     );
+  });
+
+  it("إن قرّر المكتب في المقترح السابق للتو: مقترح جديد ولا يُمس المعتمد", async () => {
+    const deps = makeDeps({
+      findPendingProposal: vi.fn(async () => post({ id: "p9" })),
+      updatePendingProposal: vi.fn(async () => null),
+    });
+    const result = await submitEditorTweet(input(false), deps);
+    expect(result).toMatchObject({ mode: "pending_approval", updated: false });
+    expect((deps.createDraftPost as any).mock.calls[0][0].requestedAt).toEqual(NOW);
+  });
+
+  it("طلبان متزامنان بالنص نفسه: منشور واحد فقط يُنشأ ويُنشر", async () => {
+    const store: any[] = [];
+    let chain: Promise<unknown> = Promise.resolve();
+    const deps = makeDeps({
+      withSubmitLock: ((_key: string, run: () => Promise<any>) => {
+        const next = chain.then(run);
+        chain = next.catch(() => undefined);
+        return next;
+      }) as any,
+      findRecentSameTweet: vi.fn(async () => store[0] ?? null),
+      createDraftPost: vi.fn(async () => post({ id: "only" })) as any,
+      claimPostForImmediatePublish: vi.fn(async () => {
+        const claimed = post({ id: "only", status: "processing" });
+        store.push(claimed);
+        return claimed;
+      }) as any,
+    });
+    const [first, second] = await Promise.all([
+      submitEditorTweet(input(true), deps),
+      submitEditorTweet(input(true), deps),
+    ]);
+    expect(deps.createDraftPost).toHaveBeenCalledTimes(1);
+    expect(deps.publishClaimedPost).toHaveBeenCalledTimes(1);
+    expect(first.mode).toBe("published");
+    expect(second).toMatchObject({ mode: "processing", duplicate: true });
   });
 
   it("تكرار النص نفسه خلال المهلة لا ينشر مرة ثانية", async () => {
