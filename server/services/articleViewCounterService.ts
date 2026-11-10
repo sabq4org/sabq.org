@@ -98,8 +98,13 @@ async function flushChunk(chunk: [string, number][]): Promise<void> {
 
   await withLocalTimeouts(FLUSH_LOCK_TIMEOUT_MS, FLUSH_STATEMENT_TIMEOUT_MS, async (client) => {
     await client.query(
+      // JOIN على articles: معرّف غير موجود (يصل من مسارات مجهولة مثل
+      // /api/v1/articles/batch-view) يُسقَط هنا بدل أن يفشل القيد الأجنبي
+      // فتُعاد الدفعة كلها للانتظار إلى الأبد وتتوقف العدّادات.
       `INSERT INTO article_view_deltas (article_id, pending, updated_at)
-       VALUES ${values}
+       SELECT v.article_id, v.pending, v.updated_at
+       FROM (VALUES ${values}) AS v(article_id, pending, updated_at)
+       JOIN articles a ON a.id = v.article_id
        ON CONFLICT (article_id) DO UPDATE SET
          pending = article_view_deltas.pending + EXCLUDED.pending,
          updated_at = now()`,

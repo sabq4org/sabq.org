@@ -192,7 +192,7 @@ export default tseslint.config(
     // RATCHETED DOWN 2026-11-07 (writer+reporter accounts): submit kind logic
     // moved to shared/effectiveRoles.ts. File is now 9659 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 9659 }] },
+    rules: { "max-lines": ["error", { max: 9563 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through
