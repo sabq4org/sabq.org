@@ -1720,17 +1720,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Profile image upload endpoints (Reference: javascript_object_storage blueprint)
-  app.post("/api/profile/image/upload", isAuthenticated, async (req: any, res) => {
-    try {
-      const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
-    } catch (error) {
-      console.error("Error getting upload URL:", error);
-      res.status(500).json({ message: "فشل في الحصول على رابط الرفع" });
-    }
-  });
+  // POST /api/profile/image/upload و POST /api/objects/upload حُذفا (تدقيق
+  // 2026-11-10): رابط رفع موقَّع لأي مستخدم مسجَّل إلى مسار عام بلا نوع ولا
+  // حجم، وبلا مستدعٍ. الصورة الشخصية تُرفع عبر multer + Cloudflare Images.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -18638,11 +18630,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
-    const objectStorageService = new ObjectStorageService();
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    res.json({ uploadURL });
-  });
 
   // News Analytics Endpoint - Smart statistics and insights
 
