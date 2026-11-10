@@ -6991,6 +6991,25 @@ export const enArticles = pgTable("en_articles", {
     overrideBy?: string;
     overrideReason?: string;
     rawResponse?: any;
+    sourceArticleId?: string;
+    trigger?: "manual" | "auto" | "bot";
+    editorialModifiedAt?: string;
+    // English Bot Drafts API (/api/internal/bot-drafts/en/*) — type-only JSONB additions, no DDL.
+    source?: "bot";
+    bot?: string;
+    clientReference?: string;
+    notes?: string;
+    sourceUrl?: string;
+    riskLabel?: "safe" | "needs_look" | "sensitive" | null;
+    infographicBannerUrl?: string | null;
+    draftCreatedAt?: string;
+    correctedAt?: string;
+    updateReason?: string | null;
+    publisherUserId?: string;
+    publisherTokenId?: string;
+    publisherOwnerUserId?: string;
+    publisherId?: string | null;
+    scheduleFailure?: { at: string; reason: string };
   }>(),
   publishedAt: timestamp("published_at"),
   resurfacedAt: timestamp("resurfaced_at"), // مواءمة مع جدول articles العربي (خاصية الإنعاش)
@@ -7003,6 +7022,28 @@ export const enArticles = pgTable("en_articles", {
   index("idx_en_articles_type").on(table.articleType),
   index("idx_en_articles_published_at").on(table.publishedAt.desc()),
   index("idx_en_articles_english_slug").on(table.englishSlug),
+]);
+
+// إيصال نشر بوت النسخة الإنجليزية. جدول المقالات العربي
+// article_publish_operations.article_id يشير إلى articles ولا يقبل معرّف en_articles.
+export const enArticlePublishOperations = pgTable("en_article_publish_operations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  operationId: varchar("operation_id").notNull(),
+  actorKey: varchar("actor_key").notNull(),
+  articleId: varchar("article_id").references(() => enArticles.id, { onDelete: "cascade" }).notNull(),
+  bodyFingerprint: varchar("body_fingerprint").notNull(),
+  status: text("status").notNull(), // processing | succeeded | failed
+  response: jsonb("response").$type<Record<string, unknown> | null>(),
+  error: jsonb("error").$type<Record<string, unknown> | null>(),
+  claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("uq_en_article_publish_operations_actor_article_operation").on(
+    table.actorKey,
+    table.articleId,
+    table.operationId,
+  ),
+  index("idx_en_article_publish_operations_article").on(table.articleId, table.claimedAt.desc()),
 ]);
 
 // English Comments

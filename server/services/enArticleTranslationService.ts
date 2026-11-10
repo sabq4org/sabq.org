@@ -175,6 +175,8 @@ function parseTranslation(raw: string): TranslatedFields {
  * `status: "published"` matches the dashboard button; "draft" leaves it for an editor.
  * The duplicate check runs again under an advisory lock right before insert, so the
  * button and the job can never create two translations of the same story.
+ * A bot English row that stores seoMetadata.sourceArticleId is the same exclusion:
+ * this function throws ALREADY_TRANSLATED and never updates an existing row.
  */
 export async function translateArticleToEnglish(opts: {
   articleId: string;

@@ -1,9 +1,10 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.5.0
+  version: 1.6.0
   description: |
     مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
+    النسخة الإنجليزية تحت /api/internal/bot-drafts/en بنفس التوكن. جسم المسار العربي لا يقبل sourceArticleId.
     POST /{id}/publish ينشر فوراً. POST /{id}/schedule يجدول بـ publishAt.
     PATCH /{id}/schedule يغيّر موعد مادة مجدولة. DELETE /{id}/schedule يلغي الجدولة ويعيدها draft.
     POST /{id}/archive أرشفة ناعمة لمادة منشورة. POST /{id}/restore يعيد المؤرشفة draft دون نشر. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
@@ -585,12 +586,261 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/en:
+    post:
+      operationId: createEnglishSabqDraft
+      summary: إنشاء مسودة إنجليزية في en_articles (status=draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnBotDraftCreate"
+      responses:
+        "201":
+          description: المسودة الإنجليزية أُنشئت. publicUrl يبقى null حتى النشر.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: source_article_already_linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/en/images:
+    post:
+      operationId: uploadEnglishBotDraftImage
+      summary: رفع صورة غلاف إنجليزية إلى R2 (نفس عقد /images)
+      responses:
+        "201":
+          description: deliveryUrl على media.sabq.org
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraftImageUpload"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/Error" }
+  /api/internal/bot-drafts/en/by-public-id/{publicId}:
+    get:
+      operationId: getEnglishArticleByPublicId
+      summary: خبر إنجليزي منشور من /en/article/{publicId}
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      responses:
+        "200":
+          description: المطابقة تفضّل english_slug
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotPublicArticleLookup"
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/internal/bot-drafts/en/{id}:
+    get:
+      operationId: getEnglishSabqDraft
+      summary: قراءة مسودة إنجليزية أو خبر إنجليزي منشور
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateEnglishSabqDraft
+      summary: تعديل مسودة إنجليزية أو خبر إنجليزي منشور
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnBotDraftUpdate"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /api/internal/bot-drafts/en/{id}/regenerate-extras:
+    post:
+      operationId: regenerateEnglishDraftExtras
+      summary: موجز إنجليزي وSEO إنجليزي
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerateExtras"
+      responses:
+        "200":
+          description: الملخص بالإنجليزية وSEO باللغة en
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegenerateExtrasResult"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "502": { $ref: "#/components/responses/Error" }
+  /api/internal/bot-drafts/en/{id}/ready:
+    patch:
+      operationId: markEnglishDraftReady
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+  /api/internal/bot-drafts/en/{id}/publish:
+    post:
+      operationId: publishEnglishSabqDraft
+      summary: نشر فوري. operationId يكتب en_article_publish_operations
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishBody"
+      responses:
+        "200":
+          description: BotDraft عند غياب operationId، أو إيصال succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+  /api/internal/bot-drafts/en/{id}/operations/{operationId}:
+    get:
+      operationId: getEnglishPublishOperation
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+        - name: operationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishOperation"
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/internal/bot-drafts/en/{id}/schedule:
+    post:
+      operationId: scheduleEnglishSabqDraft
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleBody"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+    patch:
+      operationId: rescheduleEnglishSabqDraft
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleBody"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+    delete:
+      operationId: unscheduleEnglishSabqDraft
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+  /api/internal/bot-drafts/en/{id}/archive:
+    post:
+      operationId: archiveEnglishSabqDraft
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveBody"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+  /api/internal/bot-drafts/en/{id}/restore:
+    post:
+      operationId: restoreEnglishSabqDraft
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
+  /api/internal/bot-drafts/en/{id}/visibility:
+    patch:
+      operationId: setEnglishDraftVisibility
+      parameters:
+        - $ref: "#/components/parameters/ArticleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VisibilityBody"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnBotDraft"
 components:
   securitySchemes:
     botToken:
       type: http
       scheme: bearer
       description: توكن البوت من BOT_DRAFTS_API_TOKENS (Railway). يُخزَّن في مدير أسرار البوت باسم SABQ_BOT_DRAFTS_TOKEN.
+  parameters:
+    ArticleId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    PublicId:
+      name: publicId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 300 }
   schemas:
     DraftFields:
       type: object
@@ -645,6 +895,69 @@ components:
       allOf:
         - $ref: "#/components/schemas/DraftFields"
         - minProperties: 1
+    EnBotDraftCreate:
+      description: جسم المسار الإنجليزي. sourceArticleId اختياري ويرفضه المسار العربي.
+      allOf:
+        - $ref: "#/components/schemas/DraftFields"
+        - type: object
+          required: [title, content]
+          properties:
+            sourceArticleId:
+              type: string
+              nullable: true
+              maxLength: 64
+              description: معرّف الخبر العربي الأصلي في articles
+    EnBotDraftUpdate:
+      allOf:
+        - $ref: "#/components/schemas/EnBotDraftCreate"
+        - minProperties: 1
+    EnBotDraft:
+      description: نفس BotDraft مع sourceArticleId وpublicUrl على /en/article/{englishSlug}
+      allOf:
+        - $ref: "#/components/schemas/BotDraft"
+        - type: object
+          properties:
+            sourceArticleId: { type: string, nullable: true }
+    RegenerateExtras:
+      type: object
+      additionalProperties: false
+      properties:
+        fields:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [summary, keywords, seo] }
+    RegenerateExtrasResult:
+      type: object
+      properties:
+        draft: { $ref: "#/components/schemas/EnBotDraft" }
+        regenerated: { type: object }
+    PublishBody:
+      type: object
+      additionalProperties: false
+      properties:
+        operationId: { type: string, format: uuid }
+        sensitiveOverride: { type: boolean, description: مقبول ويُتجاهل }
+        overrideReason: { type: string, maxLength: 500 }
+    ScheduleBody:
+      type: object
+      additionalProperties: false
+      required: [publishAt]
+      properties:
+        publishAt: { type: string, description: ISO-8601 مع إزاحة، مثال 2026-12-01T18:30:00+03:00 }
+    ArchiveBody:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 1000 }
+    VisibilityBody:
+      type: object
+      additionalProperties: false
+      properties:
+        isFeatured: { type: boolean }
+        newsType: { type: string, enum: [breaking, regular] }
+        hideFromHomepage: { type: boolean }
+    PublishOperation:
+      $ref: "#/components/schemas/BotDraftPublishOperation"
     BotPublicArticleLookup:
       type: object
       required: [id, status, title, slug, englishSlug, source, categorySlug, publishedAt, updatedAt, publicUrl, updatable]
@@ -736,7 +1049,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, not_archived, locked_by_editor, draft_changed, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error, content_too_short, generation_failed]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, not_archived, locked_by_editor, draft_changed, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error, content_too_short, generation_failed, source_article_not_found, source_article_already_linked]
         message: { type: string }
         details: {}
   responses:
@@ -757,4 +1070,10 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     NotConfigured:
       description: not_configured — BOT_DRAFTS_API_TOKENS غير مضبوط
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: تعارض حالة
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Error:
+      description: خطأ تشغيلي
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

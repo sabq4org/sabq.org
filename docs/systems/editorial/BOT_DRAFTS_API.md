@@ -823,7 +823,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 
 - **صورة الغلاف:** ارفع ملفاً عبر `POST /api/internal/bot-drafts/images` (10MB، JPEG/PNG/WEBP/GIF) إلى R2 (`sabq-news-images`) ثم مرّر `deliveryUrl` (`https://media.sabq.org/news/…`) كـ `imageUrl`. لا نشر ولا جدول من مسار الرفع، ولا تخزين أساسي على Cloudflare Images. GIF مقبول هنا فقط لأن المسار مصادق للبوت ومحدود الحجم؛ مسار `/api/media/upload` العام ما زال يرفض GIF (تدقيق M8).
 - **صور المتن:** نفس الرفع، والروابط في `imageUrls` (حتى 20) أو `<img src="https://…">` مغلق داخل HTML. تُخزَّن كعقدة صورة المحرر أسفل المتن أو في موضع الوسم. `GET` يعيد `bodyImageUrls` لا المتن. لا ألبوم منفصل ولا نسخ تلقائي للغلاف إلى الجسم.
-- **أخبار عربية `news` فقط**. لا رأي/تحليل/EN/UR من هذا العقد.
+- **العقد العربي: أخبار عربية `news` (وإنفوجرافيك) فقط**. لا رأي ولا تحليل ولا أردية. النسخة الإنجليزية مسار موازٍ `/api/internal/bot-drafts/en/*` موثّق في القسم التالي، ولا يُمرَّر `lang` في جسم المسار العربي.
 - **لا idempotency على الإنشاء**: تكرار `POST` ينتج مسودتين؛ استخدم `clientReference` للمطابقة، ولا تعد المحاولة بعد `201`.
 - **لا حذف نهائي من البوت**: `POST /archive` أرشفة ناعمة لمادة منشورة (`source=bot` فقط). الاستعادة من لوحة المحرر. `DELETE /:id` يبقى 405.
 - المحدد `express-rate-limit` في الذاكرة لكل نسخة خادم؛ مع عدة نسخ Railway السقف الفعلي ≈ السقف × عدد النسخ.
@@ -834,7 +834,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 2. **الإسناد الافتراضي** لحساب «صحيفة سبق». البديل: حساب خدمة مخصص عبر `BOT_DRAFTS_AUTHOR_USER_ID`.
 3. **ضبط الأسرار على Railway** (`BOT_DRAFTS_API_TOKENS`) وإعادة النشر — بدونها المسار يرد `503` ولا أثر له على التحرير الحالي.
 
-لا تغييرات schema ولا `db:push`: النشر والجدولة يستخدمان `published` و`scheduled` و`scheduledAt` و`publishedAt` و`publishType` القائمة. `sourceMetadata` يبقى jsonb بلا DDL.
+لا تغييرات schema على جدول `articles` ولا `db:push`. النشر والجدولة العربيان يستخدمان الأعمدة القائمة. مسار الإنجليزية يكتب `en_articles` القائم، ومصدر البوت و`sourceArticleId` داخل `seo_metadata` jsonb بلا DDL لصف المادة. إيصال `operationId` الإنجليزي جدول جديد: `migrations/20261110_en_bot_publish_operations.sql`، يشغّله علي قبل دمج طلبات النشر التي ترسل `operationId`.
 
 
 ## Personal publisher credentials (phase 1)
@@ -853,3 +853,52 @@ Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal 
 يقبل المسار توكن الناشر الشخصي فقط، ومعلمة `ids` تحتوي حتى 100 معرّف فريد (أحرف ASCII والأرقام و`_` و`-`، بحد 128 حرفاً لكل معرّف). تُطبّق ملكية التوكن في استعلام SQL ولا يعيد المسار مواد بوت يملكها مستخدم آخر أو مواداً غير `source=bot`. يعيد لكل مادة `id` و`status` و`publishedAt` فقط عندما تكون الحالة `published`؛ الحالات الأخرى تعيد `publishedAt: null`. لا يستخدم `updatedAt` أو `createdAt` بديلاً عن وقت النشر.
 
 يرد الحقل `canViewPublisherNames` دائماً. لا يظهر `publisherName` إلا للتوكن الشخصي لحساب ضمن أدوار مسؤول النظام المعتمدة، ويُستخرج من أحدث حدث `published` في `article_events` مع اسم منفذ الحدث. لا يُستنتج الاسم من مالك المادة أو حساب الإسناد أو اسم البوت، وإذا غاب الحدث/اسم المستخدم تكون القيمة `null`. التوكن القديم المشترك مرفوض بـ`403`.
+
+## النسخة الإنجليزية — `/api/internal/bot-drafts/en`
+
+نفس توكن `BOT_DRAFTS_API_TOKENS` و`botpub_*`، ونفس شكل الرد والأخطاء. المسار موازٍ حتى لا يتغير جسم المسار العربي (`.strict()` يرفض `sourceArticleId` و`lang`). الراوتر يُركَّب قبل راوتر العربية لأن `POST /en` كان سيُلتقط كفعل أو معرّف.
+
+| المسار | الوظيفة |
+|--------|---------|
+| `POST /api/internal/bot-drafts/en/images` | رفع الغلاف إلى R2، `metadata.source=bot-drafts-en` |
+| `POST /api/internal/bot-drafts/en` | مسودة في `en_articles` |
+| `GET /api/internal/bot-drafts/en/:id` | القراءة، و`includeContent=1` للمتن |
+| `GET /api/internal/bot-drafts/en/by-public-id/:publicId` | خبر منشور عبر `english_slug` ثم `slug` |
+| `PATCH /api/internal/bot-drafts/en/:id` | تعديل المسودة أو الخبر المنشور |
+| `POST /api/internal/bot-drafts/en/:id/regenerate-extras` | موجز إنجليزي عبر `editor-summarize` وSEO عبر `generateSeoMetadata(..., "en")` |
+| `PATCH .../ready` | `draft` → `ready_to_publish` |
+| `POST .../publish` | نشر فوري. `operationId` يكتب `en_article_publish_operations` |
+| `GET .../operations/:operationId` | قراءة الإيصال |
+| `POST` / `PATCH` / `DELETE .../schedule` | جدولة وتعديل موعد وإلغاء |
+| `POST .../archive` و`POST .../restore` | أرشفة ناعمة ثم العودة مسودة |
+| `PATCH .../visibility` | مميز / عاجل / إخفاء الرئيسية |
+
+مثال إنشاء:
+
+```json
+{
+  "title": "Saudi cabinet approves a national decision",
+  "content": "<p>The cabinet approved a decision the English edition reports for readers.</p>",
+  "categorySlug": "saudi",
+  "sourceArticleId": "arabic-article-id",
+  "imageUrl": "https://media.sabq.org/news/2026/11/cover.webp"
+}
+```
+
+الرد `201` يحمل `status: "draft"` و`sourceArticleId` و`publicUrl: null` حتى النشر. بعد `POST /publish`:
+
+```json
+{ "status": "published", "publicUrl": "https://sabq.org/en/article/srcslug", "sourceArticleId": "arabic-article-id" }
+```
+
+مع `operationId` يصبح الرد `{ "status": "succeeded", "response": { ... } }` كما في المسار العربي.
+
+- **التصنيفات:** `en_categories` بحالة `active` ونوع `core` (أو نوع فارغ). إنتاج 2026-11-10: `saudi`، `sports`، `tourism`، `business`، `world`. التصنيف الذكي/الموسمي/غير النشط `422 category_not_found` مع `validSlugs` من الجدول الإنجليزي، لا من تصنيفات العربية.
+- **الإسناد:** `authorId` و`reporterId` = `resolveBotAuthorId()` (حساب «صحيفة سبق» أو `BOT_DRAFTS_AUTHOR_USER_ID`). `aiGenerated=false` و`seo_metadata.trigger="bot"` و`seo_metadata.source="bot"`.
+- **الرابط العام:** `https://sabq.org/en/article/{englishSlug || slug}` كما في `EnglishArticleDetail` و`edgeMeta`. لوحة التحرير `/en/dashboard/articles/:id/edit`، وهي أيضاً `previewUrl` لأن لوحة الإنجليزية بلا صفحة معاينة منفصلة.
+- **الربط:** `sourceArticleId` اختياري. الخبر العربي يجب أن يوجد (`422 source_article_not_found`). ربط ثانٍ لنفس المعرّف `409 source_article_already_linked` تحت `pg_advisory_xact_lock`. إن كان `englishSlug` العربي حراً يُستخدم للرابط حتى يتطابق hreflang.
+- **الترجمة الآلية:** `loadCandidates` يستبعد أي صف `en_articles` يحمل `seoMetadata.sourceArticleId`. `translateArticleToEnglish` يرمي `ALREADY_TRANSLATED` ولا يحدّث صفاً قائماً، بما فيه صف البوت.
+- **الجدولة:** `publishScheduledArticles` ما زال يقرأ `articles` فقط. بعده `publishDueScheduledEnBotArticles` ينشر صفوف `en_articles` ذات `seo_metadata.source=bot` و`status=scheduled`. مواد لوحة الإنجليزية المجدولة يدوياً تبقى على سلوكها السابق.
+- **العاجل:** حصرية داخل `en_articles`. إن وُجد `sourceArticleId` تُزامَن حالة الخبر العربي الأصلي كما يفعل زر العاجل في لوحة الإنجليزية.
+- **ما لا يُنسخ من العربي:** لا `article_events` ولا `article_versions` ولا `article_revisions` (مفاتيحها على `articles`). السجل `activity_logs` بنوع `en_article`. لا حكم مراجع. لا تاريخ شخصي. بانر الإنفوجرافيك يُحفظ في `seo_metadata.infographicBannerUrl` لأن `en_articles` بلا عمود بانر؛ صفحة القارئ الإنجليزية تعرض `imageUrl`. لا قفل مسودات على `en_articles`.
+- **العميل:** `tsx scripts/bot-drafts-client.ts --lang=en create ...` والافتراضي يبقى عربياً.

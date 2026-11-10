@@ -399,8 +399,14 @@
         "server/services/articleReadOverlay.ts",
         "tests/unit/articleReadOverlay.test.ts",
         "server/routes/botDrafts.ts",
+        "server/routes/enBotDrafts.ts",
         "server/services/botDraftsService.ts",
+        "server/services/enBotDraftsService.ts",
         "server/services/botDraftPublishEffects.ts",
+        "server/services/enBotDraftPublishEffects.ts",
+        "tests/unit/enBotDrafts.test.ts",
+        "tests/unit/enBotDrafts.integration.test.ts",
+        "migrations/20261110_en_bot_publish_operations.sql",
         "shared/botDrafts.ts",
         "shared/publishFirst.ts",
         "server/services/publishFirstService.ts",
@@ -535,7 +541,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-11-09"
+      "lastReviewed": "2026-11-10"
     },
     {
       "id": "ifox",
