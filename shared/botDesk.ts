@@ -53,6 +53,38 @@ export const botDeskSocialRejectSchema = z
 
 export const botDeskSocialPublishSchema = z.object({}).strict();
 
+/** تغريدة يطلبها المحرر من «نشر سبق» لخبر منشور (تُنشر أو تُحال للمكتب حسب صلاحيته). */
+const editorTweetTarget = {
+  articleId: z.string().trim().min(1).max(128).optional(),
+  /** رابط الخبر العام على sabq.org بديلاً عن المعرّف. */
+  articleUrl: z.string().trim().min(1).max(2048).optional(),
+  includeLink: z.boolean().default(true),
+  includeImage: z.boolean().default(true),
+  /** صور يرفعها المحرر بدل صورة الخبر (حتى 4). وجودها يتجاوز includeImage. */
+  imageUrls: z.array(z.string().trim().url().max(2048)).max(4, "الصور 4 كحد أقصى").optional(),
+  /** مصدر النص كما في نموذج الويب: عنوان الخبر، نص المحرر، أو نص مولَّد. */
+  textSource: z.enum(["title", "custom", "ai"]).optional(),
+};
+const hasEditorTweetTarget = (v: { articleId?: string; articleUrl?: string }) =>
+  Boolean(v.articleId || v.articleUrl);
+
+export const botDeskEditorTweetSchema = z
+  .object({
+    ...editorTweetTarget,
+    text: z.string().trim().min(1, "نص التغريدة مطلوب").max(25_000, "النص طويل جداً"),
+  })
+  .strict()
+  .refine(hasEditorTweetTarget, { message: "معرّف الخبر أو رابطه مطلوب" });
+
+/** معاينة بلا كتابة: النص اختياري (غيابه = عنوان الخبر). */
+export const botDeskEditorTweetPreviewSchema = z
+  .object({
+    ...editorTweetTarget,
+    text: z.string().trim().max(25_000, "النص طويل جداً").optional(),
+  })
+  .strict()
+  .refine(hasEditorTweetTarget, { message: "معرّف الخبر أو رابطه مطلوب" });
+
 export const botDeskSocialScheduleSchema = z
   .object({
     scheduledAt: z
@@ -77,6 +109,7 @@ export type BotDeskErrorCode =
   | "conflict"
   | "rate_limited"
   | "publish_failed"
+  | "social_disabled"
   | "server_error";
 
 export interface BotDeskErrorBody {

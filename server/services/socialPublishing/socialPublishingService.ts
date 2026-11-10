@@ -1285,7 +1285,10 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
   authorUserId: string;
   authorName?: string | null;
   isUpdate?: boolean;
+  /** editor = مقترح محرر من «نشر سبق»: الصياغة «من محرر» بدل «من كاتب رأي». */
+  proposer?: "author" | "editor";
 }): Promise<void> {
+  const isEditor = input.proposer === "editor";
   let senderName = input.authorName?.trim() || "";
   let senderRole = "opinion_author";
   try {
@@ -1326,6 +1329,13 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
         articleTitle: input.articleTitle,
         articleUrl: input.articleUrl,
         isUpdate: input.isUpdate,
+        ...(isEditor
+          ? {
+              headline: input.isUpdate
+                ? `تحديث مقترح تغريدة من محرر: ${senderName}`
+                : `مقترح تغريدة جديد من محرر: ${senderName}`,
+            }
+          : {}),
       });
       await sendDeskAlertEmails(recipients, emailPayload, "[SocialPublish AuthorProposal]");
     }
@@ -1342,6 +1352,9 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
       text: input.post.text,
       isUpdate: input.isUpdate,
       excludeUserId: input.authorUserId,
+      ...(isEditor && !input.isUpdate
+        ? { titleOverride: `مقترح تغريدة من محرر: ${senderName || "محرر"}` }
+        : {}),
     });
   } catch (pushErr) {
     console.error(`${LOG_PREFIX} فشل دفع إشعار مقترح كاتب الرأي لتطبيق الديسك:`, pushErr);
@@ -1379,6 +1392,8 @@ export interface PendingSocialProposalItem {
   publisherId: string | null;
   isAuthorProposal: boolean;
   isAgencyProposal: boolean;
+  /** مقترح محرر من «نشر سبق» (يُعرض ضمن kind=author). */
+  isEditorProposal: boolean;
   articleId: string | null;
   articleTitle: string | null;
   articleUrl: string | null;
@@ -1464,8 +1479,13 @@ export async function listPendingSocialProposalsForDesk(
         ((r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId) ||
           (r.articleSubmitterId && r.post.createdByUserId === r.articleSubmitterId)),
     );
-    if (!isAgency && !isAuthor) continue;
-    if (kind === "author" && !isAuthor) continue;
+    // مقترح محرر من «نشر سبق» بلا صلاحية نشر فوري: منشور لخبر عليه requestedAt
+    // بلا وكالة (editorTweetService). يُعرض ضمن نوع author حتى لا يتغير عقد التطبيق.
+    const isEditor = Boolean(
+      !isAgency && !isAuthor && r.post.articleId && r.post.requestedAt,
+    );
+    if (!isAgency && !isAuthor && !isEditor) continue;
+    if (kind === "author" && !isAuthor && !isEditor) continue;
     if (kind === "agency" && !isAgency) continue;
 
     const createdByName = fullName(r.creatorFirst, r.creatorLast);
@@ -1492,7 +1512,7 @@ export async function listPendingSocialProposalsForDesk(
       scheduledAt: r.post.scheduledAt ? new Date(r.post.scheduledAt).toISOString() : null,
       publishedAt: r.post.publishedAt ? new Date(r.post.publishedAt).toISOString() : null,
       lastError: r.post.lastError ?? null,
-      authorName: isAuthor ? createdByName : null,
+      authorName: isAuthor || isEditor ? createdByName : null,
       agencyName,
       proposerName: isAgency ? agencyName ?? createdByName : createdByName,
       createdByUserId: r.post.createdByUserId,
@@ -1507,6 +1527,7 @@ export async function listPendingSocialProposalsForDesk(
       publisherId: r.post.publisherId ?? null,
       isAuthorProposal: isAuthor,
       isAgencyProposal: isAgency,
+      isEditorProposal: isEditor,
       articleId: r.post.articleId ?? null,
       articleTitle: r.articleTitle ?? null,
       articleUrl,

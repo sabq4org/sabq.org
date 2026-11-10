@@ -64,6 +64,8 @@ async function countPendingSocialProposals(): Promise<number> {
               eq(socialPosts.createdByUserId, articles.submitterId),
             ),
           ),
+          // مقترح محرر من «نشر سبق» (editorTweetService): خبر + requestedAt بلا وكالة.
+          and(isNotNull(socialPosts.articleId), isNotNull(socialPosts.requestedAt)),
         ),
       ),
     );

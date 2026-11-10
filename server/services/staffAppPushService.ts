@@ -263,13 +263,16 @@ export async function notifyStaffDeskOfSocialProposal(input: {
   text: string;
   isUpdate?: boolean;
   excludeUserId?: string | null;
+  /** عنوان بديل للإشعار (مثل مقترح محرر من «نشر سبق»). */
+  titleOverride?: string;
 }): Promise<void> {
   try {
     const recipientIds = await listSocialDeskRecipientUserIds(input.excludeUserId);
     if (recipientIds.length === 0) return;
 
-    const title =
-      input.proposalKind === "agency"
+    const title = input.titleOverride?.trim()
+      ? input.titleOverride.trim()
+      : input.proposalKind === "agency"
         ? `مقترح تغريدة من وكالة: ${input.senderName}`
         : input.isUpdate
           ? `تحديث مقترح تغريدة: ${input.senderName}`

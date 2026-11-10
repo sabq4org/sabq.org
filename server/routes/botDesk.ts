@@ -15,6 +15,10 @@
 //   POST  /api/internal/bot-desk/social/posts/:id/reject
 //   POST  /api/internal/bot-desk/social/posts/:id/publish
 //   POST  /api/internal/bot-desk/social/posts/:id/schedule
+//   GET   /api/internal/bot-desk/social/tweets/capability   (هل القناة مفعّلة وهل ينشر مباشرة)
+//   POST  /api/internal/bot-desk/social/tweets/preview   (معاينة بلا كتابة)
+//   GET   /api/internal/bot-desk/social/tweets/:id   (قرار المكتب في تغريدة المحرر، لصاحبها فقط)
+//   POST  /api/internal/bot-desk/social/tweets   (تغريدة المحرر: نشر مباشر أو مقترح للمكتب حسب الصلاحية)
 //   GET   /api/internal/bot-desk/opinion/drafts
 //   GET   /api/internal/bot-desk/opinion/drafts/:id
 //   GET   /api/internal/bot-desk/opinion/drafts/:id/slot-check
@@ -38,6 +42,8 @@ import {
   BOT_DESK_AUDIT_CHANNEL,
   BOT_DESK_BASE_PATH,
   botDeskSocialPendingQuerySchema,
+  botDeskEditorTweetPreviewSchema,
+  botDeskEditorTweetSchema,
   botDeskSocialPublishSchema,
   botDeskSocialRejectSchema,
   botDeskSocialScheduleSchema,
@@ -71,6 +77,12 @@ import {
   schedulePost,
 } from "../services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../services/socialPublishing/types";
+import {
+  getEditorTweetForOwner,
+  isEditorTweetChannelEnabled,
+  previewEditorTweet,
+  submitEditorTweet,
+} from "../services/socialPublishing/editorTweetService";
 import {
   StaffOpinionDeskError,
   checkOpinionSlotClashes,
@@ -611,6 +623,131 @@ router.post(
       res.json({ post });
     } catch (error) {
       handleSocialError(res, error, "تعذرت الجدولة");
+    }
+  },
+);
+
+// تغريدة المحرر من «نشر سبق» لخبر منشور. أي صاحب توكن ناشر صالح يرسل؛ صلاحية
+// social_publish.publish_now تحدد النتيجة: نشر مباشر، أو مقترح ينتظر «مكتب سبق».
+router.post(
+  `${BOT_DESK_BASE_PATH}/social/tweets`,
+  requireBotDeskAuth,
+  botDeskWriteLimiter,
+  botDeskPublishLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    if (!isEditorTweetChannelEnabled()) {
+      return sendError(res, 403, {
+        code: "social_disabled",
+        message: "قناة تغريدات «نشر سبق» غير مفعّلة",
+      });
+    }
+    const parsed = botDeskEditorTweetSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "بيانات التغريدة غير صالحة",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const actorUserId = req.botPrincipal!.userId;
+      const canPublishNow = await userHasPermission(
+        actorUserId,
+        PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+      );
+      const result = await submitEditorTweet({ ...parsed.data, actorUserId, canPublishNow });
+      if (!result.duplicate) {
+        await auditBotDeskWrite(req, {
+          action:
+            result.mode === "pending_approval" ? "social_tweet_propose" : "social_tweet_publish",
+          entityType: "social_post",
+          entityId: result.post.id,
+          newValue: {
+            mode: result.mode,
+            status: result.post.status,
+            articleId: result.post.articleId,
+            updated: result.updated,
+            externalPostUrl: result.post.externalPostUrl ?? null,
+          },
+        });
+      }
+      if (result.mode === "publish_failed") {
+        return sendError(res, 502, {
+          code: "publish_failed",
+          message: result.post.lastError || "فشل النشر",
+          post: result.post,
+        });
+      }
+      return res
+        .status(result.mode === "published" ? 200 : 202)
+        .json({ mode: result.mode, post: result.post, duplicate: result.duplicate, updated: result.updated });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر إرسال التغريدة");
+    }
+  },
+);
+
+// هل القناة مفعّلة، وهل ينشر صاحب التوكن مباشرة؟ يقرؤها «نشر سبق» ليعرض القناة والزر المناسب.
+router.get(
+  `${BOT_DESK_BASE_PATH}/social/tweets/capability`,
+  requireBotDeskAuth,
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const enabled = isEditorTweetChannelEnabled();
+      const canPublishNow = enabled
+        ? await userHasPermission(req.botPrincipal!.userId, PERMISSION_CODES.SOCIAL_PUBLISH_NOW)
+        : false;
+      res.json({ enabled, canPublishNow, mode: canPublishNow ? "direct" : "approval" });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر قراءة صلاحية التغريد");
+    }
+  },
+);
+
+// معاينة بلا كتابة: تقبل معرّف الخبر أو رابطه العام، وتعيد النص المركّب وطوله.
+router.post(
+  `${BOT_DESK_BASE_PATH}/social/tweets/preview`,
+  requireBotDeskAuth,
+  async (req: BotDeskRequest, res: Response) => {
+    if (!isEditorTweetChannelEnabled()) {
+      return sendError(res, 403, {
+        code: "social_disabled",
+        message: "قناة تغريدات «نشر سبق» غير مفعّلة",
+      });
+    }
+    const parsed = botDeskEditorTweetPreviewSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "بيانات المعاينة غير صالحة",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const canPublishNow = await userHasPermission(
+        req.botPrincipal!.userId,
+        PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+      );
+      res.json({ preview: await previewEditorTweet({ ...parsed.data, canPublishNow }) });
+    } catch (error) {
+      handleSocialError(res, error, "تعذرت معاينة التغريدة");
+    }
+  },
+);
+
+// قرار المكتب في تغريدة المحرر: لصاحبها فقط (404 لغيره)، بلا صلاحية view_log.
+router.get(
+  `${BOT_DESK_BASE_PATH}/social/tweets/:id`,
+  requireBotDeskAuth,
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const tweet = await getEditorTweetForOwner(req.params.id, req.botPrincipal!.userId);
+      if (!tweet) {
+        return sendError(res, 404, { code: "not_found", message: "التغريدة غير موجودة" });
+      }
+      res.json({ tweet });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر جلب حالة التغريدة");
     }
   },
 );
