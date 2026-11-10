@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { MoreHorizontal } from "lucide-react";
+import { BadgeCheck, MoreHorizontal, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,8 +8,43 @@ import { initialOf, relativeTimeAr, statusText, statusTone } from "./format";
 import { PublishMeter, RoleChip, StatusTag } from "./ui";
 import type { StatusActionKind } from "./UserActionDialogs";
 
+/** عرض القرّاء: البريد والجوال وتوثيقهما بدل الأدوار ومسار الخبر (لا معنى لهما للقارئ). */
+export type ListVariant = "staff" | "contact";
+
 export const LIST_GRID =
   "grid grid-cols-2 gap-x-3.5 gap-y-2.5 md:grid-cols-[minmax(0,2.3fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,.9fr)_170px] md:gap-3.5";
+
+/** علامة توثيق صغيرة: نص + أيقونة، لا لون وحده (إمكانية الوصول). */
+function Verified({ ok, label }: { ok: boolean; label: string }) {
+  return ok ? (
+    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-success">
+      <BadgeCheck className="h-3.5 w-3.5" aria-hidden />
+      {label} موثّق
+    </span>
+  ) : (
+    <span className="text-[12px] text-warning">{label} غير موثّق</span>
+  );
+}
+
+function EmailLine({ user }: { user: ListedUser }) {
+  if (!user.hasRealEmail || !user.email) return <span className="text-xs text-muted-foreground">بلا بريد</span>;
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span dir="ltr" className="truncate text-start text-[13px]" style={{ unicodeBidi: "isolate" }}>{user.email}</span>
+      <Verified ok={user.emailVerified} label="البريد" />
+    </span>
+  );
+}
+
+function PhoneLine({ user }: { user: ListedUser }) {
+  if (!user.phoneNumber) return <span className="text-xs text-muted-foreground">بلا جوال</span>;
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span dir="ltr" className="truncate text-start text-[13px] tabular-nums" style={{ unicodeBidi: "isolate" }}>{user.phoneNumber}</span>
+      <Verified ok={user.phoneVerified} label="الجوال" />
+    </span>
+  );
+}
 
 function CellLabel({ children }: { children: string }) {
   return <span className="mb-0.5 block text-xs text-muted-foreground md:hidden">{children}</span>;
@@ -24,7 +59,7 @@ export interface RowActions {
   canResetPassword: boolean;
 }
 
-export function UserListRow({ user, actions }: { user: ListedUser; actions: RowActions }) {
+export function UserListRow({ user, actions, variant = "staff" }: { user: ListedUser; actions: RowActions; variant?: ListVariant }) {
   const banned = user.status === "banned";
   const suspended = user.status === "suspended";
   const sensitive: Array<{ label: string; run: () => void }> = [];
@@ -52,12 +87,41 @@ export function UserListRow({ user, actions }: { user: ListedUser; actions: RowA
           <Link href={`/dashboard/users/${user.id}`} className="block truncate font-semibold hover:underline">
             {user.name}
           </Link>
-          <span dir="ltr" className="block truncate text-start text-[12.5px] text-muted-foreground" style={{ unicodeBidi: "isolate" }}>
-            {user.email || user.phoneNumber || ""}
-          </span>
+          {variant === "staff" ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-[12.5px] text-muted-foreground">
+              <span dir="ltr" className="truncate" style={{ unicodeBidi: "isolate" }}>
+                {(user.hasRealEmail && user.email) || user.phoneNumber || ""}
+              </span>
+              {user.emailVerified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-label="بريد موثّق" />}
+              {user.phoneNumber && user.hasRealEmail && (
+                <span dir="ltr" className="tabular-nums" style={{ unicodeBidi: "isolate" }}>{user.phoneNumber}</span>
+              )}
+              {user.phoneVerified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-label="جوال موثّق" />}
+            </span>
+          ) : (
+            user.twoFactorEnabled && (
+              <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground">
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                تحقق ثنائي مفعّل
+              </span>
+            )
+          )}
         </div>
       </div>
 
+      {variant === "contact" ? (
+        <>
+          <div role="cell" className="min-w-0">
+            <CellLabel>البريد</CellLabel>
+            <EmailLine user={user} />
+          </div>
+          <div role="cell" className="min-w-0">
+            <CellLabel>الجوال</CellLabel>
+            <PhoneLine user={user} />
+          </div>
+        </>
+      ) : (
+      <>
       <div role="cell" className="min-w-0">
         <CellLabel>الأدوار</CellLabel>
         <div className="flex flex-wrap gap-1">
@@ -73,6 +137,8 @@ export function UserListRow({ user, actions }: { user: ListedUser; actions: RowA
         <CellLabel>في مسار الخبر</CellLabel>
         <PublishMeter level={user.publishLevel} dimmed={banned || suspended} />
       </div>
+      </>
+      )}
 
       <div role="cell">
         <CellLabel>الحالة</CellLabel>

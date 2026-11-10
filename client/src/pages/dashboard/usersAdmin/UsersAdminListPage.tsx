@@ -30,6 +30,14 @@ const SORTS = [
   { value: "newest", label: "الأحدث تسجيلًا" },
   { value: "name", label: "الاسم" },
 ];
+const VERIFY_OPTIONS = [
+  { value: "email_verified", label: "بريد موثّق" },
+  { value: "email_unverified", label: "بريد غير موثّق" },
+  { value: "phone_verified", label: "جوال موثّق" },
+  { value: "phone_unverified", label: "جوال غير موثّق" },
+  { value: "two_factor", label: "تحقق ثنائي مفعّل" },
+  { value: "no_email", label: "بلا بريد" },
+];
 const STATUSES = ["active", "pending", "restricted", "suspended", "banned", "locked"] as const;
 
 function asKind(v: string | null, fallback: UserKind): UserKind {
@@ -44,9 +52,12 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
 
   const kind = asKind(params.get("kind"), defaultKind);
   const q = params.get("q") ?? "";
-  const roleId = params.get("roleId") ?? "";
+  // فلتر الدور مخفي في عرض القرّاء، فلا يُرسل فيه (كفلتر النشر) وإلا أفرغ القائمة بشرط لا يُرى.
+  const roleId = kind === "readers" ? "" : params.get("roleId") ?? "";
   const status = params.get("status") ?? "";
   const publish = kind === "staff" ? params.get("publish") ?? "" : "";
+  const verify = params.get("verify") ?? "";
+  const variant = kind === "readers" ? "contact" : "staff";
   const sort = params.get("sort") ?? "activity";
   const page = Math.max(1, Number(params.get("page")) || 1);
 
@@ -77,7 +88,7 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
   const canRoles = hasPermission(user, "system.manage_roles");
 
   const listQuery = useQuery<ListResponse>({
-    queryKey: [`${API}/users`, { kind, q, roleId, status, publish, sort, page, pageSize: PAGE_SIZE }],
+    queryKey: [`${API}/users`, { kind, q, roleId, status, publish, verify, sort, page, pageSize: PAGE_SIZE }],
     enabled: canView,
     staleTime: 15_000,
   });
@@ -104,10 +115,10 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
     canResetPassword: hasPermission(user, "users.update"),
   };
 
-  const hasFilters = !!(q || roleId || status || publish);
+  const hasFilters = !!(q || roleId || status || publish || verify);
   const clearFilters = () => {
     setQInput("");
-    update({ q: null, roleId: null, status: null, publish: null });
+    update({ q: null, roleId: null, status: null, publish: null, verify: null });
   };
 
   const kpis: Array<{ key: string; label: string; value: number | undefined; pressed: boolean; onClick: () => void }> = [
@@ -207,7 +218,7 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
           ))}
         </div>
 
-        <div className="grid grid-cols-2 items-end gap-2.5 md:grid-cols-[minmax(0,2.2fr)_repeat(4,minmax(0,1fr))]">
+        <div className="grid grid-cols-2 items-end gap-2.5 md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))]">
           <Field label="بحث" htmlFor="ua-q" className="col-span-2 md:col-span-1">
             <div className="relative">
               <Search className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -237,7 +248,7 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
               </Select>
             </Field>
           )}
-          {canRoles && roles.length > 0 && (
+          {canRoles && roles.length > 0 && kind !== "readers" && (
             <Field label="الدور" htmlFor="ua-role">
               <Select value={roleId || ALL} onValueChange={(v) => update({ roleId: v === ALL ? null : v })} dir="rtl">
                 <SelectTrigger id="ua-role" className="min-h-[44px] sm:min-h-9">
@@ -254,6 +265,21 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
               </Select>
             </Field>
           )}
+          <Field label="التوثيق" htmlFor="ua-verify">
+            <Select value={verify || ALL} onValueChange={(v) => update({ verify: v === ALL ? null : v })} dir="rtl">
+              <SelectTrigger id="ua-verify" className="min-h-[44px] sm:min-h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>الكل</SelectItem>
+                {VERIFY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           <Field label="حالة الحساب" htmlFor="ua-status">
             <Select value={status || ALL} onValueChange={(v) => update({ status: v === ALL ? null : v })} dir="rtl">
               <SelectTrigger id="ua-status" className="min-h-[44px] sm:min-h-9">
@@ -288,8 +314,8 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
         <div role="table" aria-label="المستخدمون" className="overflow-hidden rounded-lg border bg-card">
           <div role="row" className={`${LIST_GRID} hidden border-b bg-muted/50 px-4 py-2 text-[12.5px] font-semibold text-muted-foreground md:grid`}>
             <span>المستخدم</span>
-            <span>الأدوار</span>
-            <span>في مسار الخبر</span>
+            <span>{variant === "contact" ? "البريد" : "الأدوار"}</span>
+            <span>{variant === "contact" ? "الجوال" : "في مسار الخبر"}</span>
             <span>الحالة</span>
             <span>آخر نشاط</span>
             <span />
@@ -334,7 +360,7 @@ export default function UsersAdminListPage({ defaultKind = "staff" }: { defaultK
             </div>
           )}
 
-          {!listQuery.isError && items.map((u) => <UserListRow key={u.id} user={u} actions={actions} />)}
+          {!listQuery.isError && items.map((u) => <UserListRow key={u.id} user={u} actions={actions} variant={variant} />)}
 
           {!listQuery.isError && total > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2.5 border-t bg-muted/50 px-4 py-2.5">
