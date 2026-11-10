@@ -15,6 +15,7 @@
 //   POST  /api/internal/bot-desk/social/posts/:id/reject
 //   POST  /api/internal/bot-desk/social/posts/:id/publish
 //   POST  /api/internal/bot-desk/social/posts/:id/schedule
+//   POST  /api/internal/bot-desk/social/tweets   (تغريدة المحرر: نشر مباشر أو مقترح للمكتب حسب الصلاحية)
 //   GET   /api/internal/bot-desk/opinion/drafts
 //   GET   /api/internal/bot-desk/opinion/drafts/:id
 //   GET   /api/internal/bot-desk/opinion/drafts/:id/slot-check
@@ -38,6 +39,7 @@ import {
   BOT_DESK_AUDIT_CHANNEL,
   BOT_DESK_BASE_PATH,
   botDeskSocialPendingQuerySchema,
+  botDeskEditorTweetSchema,
   botDeskSocialPublishSchema,
   botDeskSocialRejectSchema,
   botDeskSocialScheduleSchema,
@@ -71,6 +73,10 @@ import {
   schedulePost,
 } from "../services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../services/socialPublishing/types";
+import {
+  isEditorTweetChannelEnabled,
+  submitEditorTweet,
+} from "../services/socialPublishing/editorTweetService";
 import {
   StaffOpinionDeskError,
   checkOpinionSlotClashes,
@@ -611,6 +617,66 @@ router.post(
       res.json({ post });
     } catch (error) {
       handleSocialError(res, error, "تعذرت الجدولة");
+    }
+  },
+);
+
+// تغريدة المحرر من «نشر سبق» لخبر منشور. أي صاحب توكن ناشر صالح يرسل؛ صلاحية
+// social_publish.publish_now تحدد النتيجة: نشر مباشر، أو مقترح ينتظر «مكتب سبق».
+router.post(
+  `${BOT_DESK_BASE_PATH}/social/tweets`,
+  requireBotDeskAuth,
+  botDeskWriteLimiter,
+  botDeskPublishLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    if (!isEditorTweetChannelEnabled()) {
+      return sendError(res, 403, {
+        code: "social_disabled",
+        message: "قناة تغريدات «نشر سبق» غير مفعّلة",
+      });
+    }
+    const parsed = botDeskEditorTweetSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "بيانات التغريدة غير صالحة",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const actorUserId = req.botPrincipal!.userId;
+      const canPublishNow = await userHasPermission(
+        actorUserId,
+        PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+      );
+      const result = await submitEditorTweet({ ...parsed.data, actorUserId, canPublishNow });
+      if (!result.duplicate) {
+        await auditBotDeskWrite(req, {
+          action:
+            result.mode === "pending_approval" ? "social_tweet_propose" : "social_tweet_publish",
+          entityType: "social_post",
+          entityId: result.post.id,
+          newValue: {
+            mode: result.mode,
+            status: result.post.status,
+            articleId: result.post.articleId,
+            updated: result.updated,
+            externalPostUrl: result.post.externalPostUrl ?? null,
+          },
+        });
+      }
+      if (result.mode === "publish_failed") {
+        return sendError(res, 502, {
+          code: "publish_failed",
+          message: result.post.lastError || "فشل النشر",
+          post: result.post,
+        });
+      }
+      return res
+        .status(result.mode === "pending_approval" ? 202 : 200)
+        .json({ mode: result.mode, post: result.post, duplicate: result.duplicate, updated: result.updated });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر إرسال التغريدة");
     }
   },
 );

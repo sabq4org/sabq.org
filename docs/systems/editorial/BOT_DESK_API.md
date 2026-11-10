@@ -33,6 +33,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)
     - `POST /social/posts/:id/publish`: `social_publish.publish_now`
     - `POST /social/posts/:id/schedule`: `social_publish.schedule`
     - `POST /social/posts/:id/reject`: `social_publish.manage_scheduled` **أو** `social_publish.create`
+    - `POST /social/tweets`: أي توكن ناشر صالح؛ `social_publish.publish_now` تحدد النتيجة (نشر مباشر أو مقترح للمكتب)
 - **الإعفاء من CSRF:** جميع المسارات تقع تحت `/api/internal/*` المعفاة من فحص CSRF المتصفحي، وترسل دائماً `Cache-Control: private, no-store`.
 - **سجل التدقيق (`activity_logs`):** كل عملية كتابة تُسجَّل في `activity_logs` تحت القناة `channel: "bot-desk-api"` مع `tokenId` و`tokenPrefix` و`tokenLabel`؛ **لا يُحفظ التوكن الخام في السجلات أبداً**.
 
@@ -108,6 +109,8 @@ curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/tickets/<ticketId>
 | `POST` | `/api/internal/bot-desk/social/posts/:id/reject` | `social_publish.manage_scheduled` أو `social_publish.create` | رفض المقترح `{ "reason"?: "..." }` عبر `cancelPost` (`status = "canceled"`) مع إشعار الكاتب أو الوكالة. |
 | `POST` | `/api/internal/bot-desk/social/posts/:id/publish` | `social_publish.publish_now` | مطالبة ذرية ونشر فوري لجسم فارغ `{}` (`claimPostForImmediatePublish` + `publishClaimedPost`). محدد بـ 20 عملية / 5 دقائق؛ ويعيد `409 conflict` إذا كان المنشور قيد النشر أو منشوراً مسبقاً. |
 | `POST` | `/api/internal/bot-desk/social/posts/:id/schedule` | `social_publish.schedule` | جدولة المنشور `{ "scheduledAt": "2026-10-25T19:30:00+03:00" }` (ISO-8601 مع المنطقة الزمنية) عبر `schedulePost`. |
+
+| `POST` | `/api/internal/bot-desk/social/tweets` | توكن ناشر صالح | تغريدة المحرر من «نشر سبق» لخبر **منشور**: `{ "articleId", "text", "includeLink"?: true, "includeImage"?: true }`. صاحب `social_publish.publish_now` تُنشر تغريدته فورًا (`200`، `mode: "published"`). غيره تُحفظ مقترحًا يظهر في «مكتب سبق» (`202`، `mode: "pending_approval"`)، وإعادة الإرسال للخبر نفسه تحدّث المقترح المعلّق. مقفلة افتراضيًا: تعيد `403 social_disabled` حتى `BOT_DESK_EDITOR_TWEETS=on`. خبر غير منشور `409`. تكرار النص نفسه خلال 10 دقائق يعيد المنشور السابق (`duplicate: true`) بلا نشر ثانٍ. |
 
 #### أمثلة النشر الاجتماعي
 

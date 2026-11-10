@@ -53,6 +53,16 @@ export const botDeskSocialRejectSchema = z
 
 export const botDeskSocialPublishSchema = z.object({}).strict();
 
+/** تغريدة يطلبها المحرر من «نشر سبق» لخبر منشور (تُنشر أو تُحال للمكتب حسب صلاحيته). */
+export const botDeskEditorTweetSchema = z
+  .object({
+    articleId: z.string().trim().min(1, "معرّف الخبر مطلوب").max(128),
+    text: z.string().trim().min(1, "نص التغريدة مطلوب").max(25_000, "النص طويل جداً"),
+    includeLink: z.boolean().default(true),
+    includeImage: z.boolean().default(true),
+  })
+  .strict();
+
 export const botDeskSocialScheduleSchema = z
   .object({
     scheduledAt: z
@@ -77,6 +87,7 @@ export type BotDeskErrorCode =
   | "conflict"
   | "rate_limited"
   | "publish_failed"
+  | "social_disabled"
   | "server_error";
 
 export interface BotDeskErrorBody {
