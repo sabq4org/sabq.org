@@ -18,7 +18,7 @@ import {
 export type LegacyUserAction =
   | "suspend" | "unsuspend" | "ban" | "unban" | "soft_delete" | "restore" | "role"
   | "bulk_suspend" | "bulk_ban" | "bulk_role"
-  | "admin_patch" | "admin_roles" | "admin_delete" | "admin_create";
+  | "admin_patch" | "admin_roles" | "admin_delete" | "admin_create" | "admin_reset_password";
 
 const BLOCKING_STATUSES = new Set(["suspended", "banned", "locked", "deleted"]);
 
@@ -73,6 +73,10 @@ async function planFor(action: LegacyUserAction, req: Request): Promise<Plan> {
     }
     case "admin_delete":
       return { targets: one, blocksAccess: true, auditAction: "", log: false, revoke: false, details: {} };
+    case "admin_reset_password":
+      // تعيين كلمة مرور لحساب = دخول به: يخضع لرتبة الهدف مثل بقية الإجراءات.
+      // المعالج يسجّل ويبطل الجلسات بنفسه.
+      return { targets: one, blocksAccess: false, auditAction: "", log: false, revoke: false, details: {} };
     case "admin_create":
       // لا هدف بعد؛ يُفحص فقط أن الأدوار المطلوبة قابلة للإسناد (انظر legacyUserActionGuard).
       return { targets: [], blocksAccess: false, auditAction: "", log: false, revoke: false, details: {} };

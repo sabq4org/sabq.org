@@ -5990,7 +5990,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
 
   // Reset user password (admin only)
-  app.post("/api/admin/users/:id/reset-password", requireAuth, requirePermission("users.update"), async (req: any, res) => {
+  app.post("/api/admin/users/:id/reset-password", requireAuth, requirePermission("users.update"), legacyUserActionGuard("admin_reset_password"), async (req: any, res) => {
     try {
       const adminUserId = req.user?.id;
       if (!adminUserId) {
