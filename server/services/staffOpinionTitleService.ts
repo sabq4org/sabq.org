@@ -87,8 +87,25 @@ export async function editOpinionTitleFromDesk(input: {
     metadata: { channel: "staff-app", flow: "opinion-title" },
   }).catch((err) => console.error("[staff-opinion] title history record failed:", err));
 
-  // العلامة تحفظ عنوان الكاتب الأصلي: تعديل ثانٍ لا يستبدله.
-  const key = opinionTitleEditKey(before.id);
+  await recordOpinionTitleEditFlag(before.id, input.actorId, before.title);
+
+  return {
+    article: { id: row.id, title: row.title, titleEdited: true },
+    previous: { title: before.title },
+    changed: true,
+  };
+}
+
+/**
+ * علامة «عُدّل العنوان». تحفظ عنوان الكاتب الأصلي: تعديل ثانٍ لا يستبدله.
+ * فشل الكتابة لا يُسقط التعديل (يُسجَّل فقط).
+ */
+export async function recordOpinionTitleEditFlag(
+  articleId: string,
+  actorId: string,
+  titleBeforeEdit: string,
+): Promise<void> {
+  const key = opinionTitleEditKey(articleId);
   try {
     const [existing] = await db
       .select({ value: systemSettings.value })
@@ -97,10 +114,10 @@ export async function editOpinionTitleFromDesk(input: {
       .limit(1);
     const previousFlag = (existing?.value ?? null) as Partial<OpinionTitleEditFlag> | null;
     const flag: OpinionTitleEditFlag = {
-      by: input.actorId,
+      by: actorId,
       at: new Date().toISOString(),
       originalTitle:
-        typeof previousFlag?.originalTitle === "string" ? previousFlag.originalTitle : before.title,
+        typeof previousFlag?.originalTitle === "string" ? previousFlag.originalTitle : titleBeforeEdit,
     };
     await db
       .insert(systemSettings)
@@ -112,10 +129,4 @@ export async function editOpinionTitleFromDesk(input: {
   } catch (err) {
     console.error("[staff-opinion] title flag write failed:", err instanceof Error ? err.message : err);
   }
-
-  return {
-    article: { id: row.id, title: row.title, titleEdited: true },
-    previous: { title: before.title },
-    changed: true,
-  };
 }
