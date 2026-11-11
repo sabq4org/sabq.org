@@ -1274,6 +1274,29 @@ export const articleEditRequests = pgTable("article_edit_requests", {
 
 export type ArticleEditRequest = typeof articleEditRequests.$inferSelect;
 
+// فحص ظل لتطابق العنوان مع المتن (Gemini Decisions). صف واحد لكل خبر يُحدَّث
+// بعد كل حفظ منشور يغيّر العنوان أو المتن. معلوماتي فقط: لا يمنع النشر.
+// جدول مستقل لا عمود في articles حتى لا يلمس updatedAt ولا يسابق حفظ المحرر.
+// يُنشأ على الإنتاج عبر migrations/20261111_article_title_checks.sql.
+export const articleTitleChecks = pgTable("article_title_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull().unique(),
+  inputHash: text("input_hash").notNull(),
+  probability: real("probability"),
+  decision: text("decision").notNull(), // consistent | review_title | error
+  flagged: boolean("flagged").notNull().default(false),
+  model: text("model").notNull().default("gemini-decision-1"),
+  latencyMs: integer("latency_ms"),
+  inputTokens: integer("input_tokens"),
+  error: text("error"),
+  checkedAt: timestamp("checked_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_title_checks_flagged_checked").on(table.flagged, table.checkedAt.desc()),
+]);
+
+export type ArticleTitleCheck = typeof articleTitleChecks.$inferSelect;
+export type InsertArticleTitleCheck = typeof articleTitleChecks.$inferInsert;
+
 // تجاوز مسؤول لبوابة الحساسية. قابل للاستعلام ويُعرض في تاريخ المقال.
 export const articlePublishOverrides = pgTable("article_publish_overrides", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

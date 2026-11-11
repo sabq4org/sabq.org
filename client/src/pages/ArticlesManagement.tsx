@@ -52,6 +52,7 @@ import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib
 import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { cn } from "@/lib/utils";
 import { DraftLockBadge, DraftLockButton, DraftLockFilterChip, useDraftLockSummary } from "@/components/articles/DraftLockControls";
+import { TitleCheckBadge, useTitleCheckFlags } from "@/components/articles/TitleCheckBadge";
 import { draftLockBlocksUser } from "@shared/draftLock";
 import { EditRequestLabel, EditRequestsFilter, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests } from "@/components/articles/ArticleEditRequests";
 import { articleAcceptsEditRequests, isEditRequestOwner } from "@shared/articleEditRequests";
@@ -1280,6 +1281,7 @@ export default function ArticlesManagement() {
   // Fetch articles with filters and pagination
   const [draftLockedOnly, setDraftLockedOnly] = useState(false);
   const draftLockSummary = useDraftLockSummary(!!canViewArticles);
+  const { data: titleCheckFlags } = useTitleCheckFlags(!!user && hasAnyPermission(user, "articles.view"));
   useEffect(() => {
     if (activeStatus !== "draft") setDraftLockedOnly(false);
   }, [activeStatus]);
@@ -2449,6 +2451,7 @@ export default function ArticlesManagement() {
                               />
                               {renderEditRequestRow(article)}
                               <DraftLockBadge article={article} userId={user?.id} testId={`draft-lock-badge-desktop-${article.id}`} />
+                              {article.status === "published" && <TitleCheckBadge articleId={article.id} flags={titleCheckFlags} testId={`badge-title-check-desktop-${article.id}`} />}
                               {article.status === "draft" && (
                                 <EditorialDraftReviewCue
                                   article={article}
@@ -2552,6 +2555,7 @@ export default function ArticlesManagement() {
                       />
                       {renderEditRequestRow(article)}
                       <DraftLockBadge article={article} userId={user?.id} testId={`draft-lock-badge-mobile-${article.id}`} />
+                      {article.status === "published" && <TitleCheckBadge articleId={article.id} flags={titleCheckFlags} testId={`badge-title-check-mobile-${article.id}`} />}
 
                       {article.status === "archived" && (article as any).reviewNotes && (
                         <div

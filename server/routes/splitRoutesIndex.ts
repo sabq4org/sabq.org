@@ -102,6 +102,9 @@ import socialPublishingRouter from "./socialPublishing";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
 import articleResurfaceRouter from "./articleResurface";
+import titleChecksRouter from "./titleChecks";
+import { storage } from "../storage";
+import { installTitleCheckStorageHooks } from "../services/titleConsistencyHooks";
 import articlePrClientReportRouter from "./articlePrClientReport";
 import keywordRouter from "./keywordRoutes";
 import editorAlertsRouter from "./editorAlerts";
@@ -253,6 +256,9 @@ export function registerSplitRoutes(app: Express) {
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
   app.use(articleResurfaceRouter);
+  // فحص الظل لتطابق العنوان مع المتن (مطفأ افتراضياً): القائمة + ربط حفظ storage.
+  app.use(titleChecksRouter);
+  installTitleCheckStorageHooks(storage);
   app.use(articlePrClientReportRouter);
   app.use(keywordRouter);
   app.use(editorAlertsRouter);
