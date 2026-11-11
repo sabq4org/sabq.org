@@ -39,6 +39,8 @@ struct ContactSheet: View {
     /// Tracks which form field has focus. We watch this and use a
     /// ScrollViewReader to bring the active field above the keyboard.
     @FocusState private var focusedField: Field?
+    /// تركيز حقل الهاتف (UIKit) منفصل: FocusState لا يصل إلى UIViewRepresentable.
+    @State private var phoneFieldFocused = false
 
     /// Canonical subjects — MUST match the backend Zod enum exactly, otherwise
     /// the POST returns 400 "بيانات غير صالحة". See `server/routes.ts` contact
@@ -159,6 +161,7 @@ struct ContactSheet: View {
                 .onChange(of: errorMessage) { _, newError in
                     guard newError != nil else { return }
                     focusedField = nil // dismiss keyboard so banner is visible
+                    phoneFieldFocused = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                             proxy.scrollTo(Field.errorBanner, anchor: .top)
@@ -178,7 +181,7 @@ struct ContactSheet: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("تم") { focusedField = nil }
+                    Button("تم") { focusedField = nil; phoneFieldFocused = false }
                         .font(SabqType.button.font)
                         .foregroundStyle(SabqTheme.primary)
                 }
@@ -275,16 +278,38 @@ struct ContactSheet: View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel(label)
 
-            TextField(placeholder, text: text)
-                .font(SabqType.rowTitle.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .keyboardType(keyboard)
-                .textInputAutocapitalization(disableAutocap ? .never : .sentences)
-                .autocorrectionDisabled(disableAutocap)
-                .focused($focusedField, equals: field)
-                .submitLabel(.next)
+            if keyboard == .phonePad {
+                // حقل UIKit: TextField مع لوحة الأرقام لا يرسم ما يُكتب على جهاز لغته عربية
+                // (انظر DigitEntryField). "+" مقبولة لمفتاح الدولة.
+                DigitEntryField(
+                    text: text,
+                    placeholder: placeholder,
+                    maxLength: 16,
+                    keyboard: .phonePad,
+                    extraAllowed: "+",
+                    contentType: .telephoneNumber,
+                    textColor: UIColor(SabqTheme.textPrimary),
+                    placeholderColor: UIColor(SabqTheme.textTertiary),
+                    tintColor: UIColor(SabqTheme.primary),
+                    alignment: .right,
+                    accessibilityLabel: label,
+                    isFocused: $phoneFieldFocused
+                )
+                .frame(maxWidth: .infinity, minHeight: 24)
                 .modifier(SabqInputSurface())
-                .overlay(focusRing(focusedField == field))
+                .overlay(focusRing(phoneFieldFocused))
+            } else {
+                TextField(placeholder, text: text)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .keyboardType(keyboard)
+                    .textInputAutocapitalization(disableAutocap ? .never : .sentences)
+                    .autocorrectionDisabled(disableAutocap)
+                    .focused($focusedField, equals: field)
+                    .submitLabel(.next)
+                    .modifier(SabqInputSurface())
+                    .overlay(focusRing(focusedField == field))
+            }
         }
     }
 
