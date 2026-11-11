@@ -542,13 +542,16 @@ private struct PhoneLoginFlow: View {
                     .environment(\.layoutDirection, .leftToRight)
                     Rectangle().fill(SabqTheme.outline).frame(width: 1, height: 22)
                     // حقل UIKit لا TextField: الأخير مع لوحة الأرقام لا يرسم ما يُكتب حين تكون
-                    // لغة الجهاز عربية (iOS 26+)، فيظن القارئ أن رقمه لم يُدخل. التفاصيل في SabqDigitField.
+                    // لغة الجهاز عربية (iOS 26+)، فيظن القارئ أن رقمه لم يُدخل. التفاصيل في DigitEntryField.
                     // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized.
-                    SabqDigitField(
+                    DigitEntryField(
                         text: $number,
                         placeholder: "5XXXXXXXX",
                         maxLength: 14,
                         contentType: .telephoneNumber,
+                        textColor: UIColor(SabqTheme.textPrimary),
+                        placeholderColor: UIColor(SabqTheme.textTertiary),
+                        tintColor: UIColor(SabqTheme.primary),
                         accessibilityLabel: "رقم الجوال",
                         isFocused: $phoneFocused
                     )

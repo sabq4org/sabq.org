@@ -1,6 +1,7 @@
 import SabqDeskDesign
 import SabqDeskKit
 import SwiftUI
+import UIKit
 
 /// «تحديث رصيد OpenAI»: a new top-up or the balance shown on the provider's
 /// billing page (estimated providers), or the monthly budget (Gemini), with
@@ -18,7 +19,7 @@ struct UpdateBalanceSheet: View {
     @State private var threshold: ThresholdChoice
     @State private var saving = false
     @State private var error: String?
-    @FocusState private var amountFocused: Bool
+    @State private var amountFocused = false
 
     init(balance: StaffAIBalance, onSaved: @escaping (StaffAIBalance) -> Void) {
         self.balance = balance
@@ -142,15 +143,21 @@ struct UpdateBalanceSheet: View {
                     Text(verbatim: "$")
                         .deskText(DeskType.sectionHeading)
                         .foregroundStyle(DeskTheme.textSecondary)
-                    TextField("0.00", text: $amountText)
-                        .keyboardType(.decimalPad)
-                        .focused($amountFocused)
-                        .deskText(DeskType.sectionHeading)
-                        .foregroundStyle(DeskTheme.textPrimary)
-                        .monospacedDigit()
-                        .accessibilityLabel(amountLabel)
-                        // Hug the figure so «$ 500.00» sits at the start, as in the concept.
-                        .fixedSize(horizontal: true, vertical: false)
+                    // حقل UIKit: TextField مع لوحة الأرقام لا يرسم ما يُكتب على جهاز لغته عربية
+                    // (انظر DigitEntryField). «$ 500.00» يبقى في البداية لأن الحقل LTR.
+                    DigitEntryField(
+                        text: $amountText,
+                        placeholder: "0.00",
+                        maxLength: 12,
+                        keyboard: .decimalPad,
+                        extraAllowed: ".",
+                        font: .monospacedDigitSystemFont(ofSize: 20, weight: .bold),
+                        textColor: UIColor(DeskTheme.textPrimary),
+                        placeholderColor: UIColor(DeskTheme.textTertiary),
+                        accessibilityLabel: amountLabel,
+                        isFocused: $amountFocused
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 Spacer(minLength: DeskLayout.space8)
@@ -353,10 +360,16 @@ struct ThresholdChips: View {
                             .deskText(DeskType.rowTitle)
                             .foregroundStyle(DeskTheme.textSecondary)
                     }
-                    TextField(unit == .characters ? "عدد الأحرف" : "المبلغ", text: $choice.custom)
-                        .keyboardType(.decimalPad)
-                        .deskText(DeskType.rowTitle)
-                        .monospacedDigit()
+                    DigitEntryField(
+                        text: $choice.custom,
+                        placeholder: unit == .characters ? "عدد الأحرف" : "المبلغ",
+                        maxLength: 12,
+                        keyboard: unit == .characters ? .numberPad : .decimalPad,
+                        extraAllowed: unit == .characters ? "" : ".",
+                        textColor: UIColor(DeskTheme.textPrimary),
+                        placeholderColor: UIColor(DeskTheme.textTertiary)
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 24)
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 .padding(.horizontal, DeskLayout.space16)

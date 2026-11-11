@@ -113,12 +113,15 @@ struct ForgotPasswordSheet: View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel("رمز التحقق")
             // حقل UIKit: TextField مع لوحة الأرقام لا يرسم ما يُكتب على جهاز لغته عربية
-            // (انظر SabqDigitField). .oneTimeCode يبقي تعبئة الرمز من البريد/الرسائل.
-            SabqDigitField(
+            // (انظر DigitEntryField). .oneTimeCode يبقي تعبئة الرمز من البريد/الرسائل.
+            DigitEntryField(
                 text: $code,
                 placeholder: "رمز التحقق (6 أرقام)",
                 maxLength: 6,
                 contentType: .oneTimeCode,
+                textColor: UIColor(SabqTheme.textPrimary),
+                placeholderColor: UIColor(SabqTheme.textTertiary),
+                tintColor: UIColor(SabqTheme.primary),
                 alignment: .right,
                 accessibilityLabel: "رمز التحقق"
             )

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // حسابي — مركز الإعدادات: ملف العضو + «فِرقي» (المفضّل محلّي بلا دخول + المتابَعة)
 // + تنبيهات المباريات (مجمّعة) + عن التطبيق (روابط فعلية). تصميم قوائم مجمّعة
@@ -1060,9 +1061,17 @@ struct SpPhoneLoginFlow: View {
     @State private var number = ""     // أرقام المشترك فقط (5XXXXXXXX)
     @State private var code = ""
     @State private var resend = 0      // عدّاد إعادة الإرسال (ثوانٍ)
-    @FocusState private var phoneFocused: Bool
+    @State private var phoneFocused = false
 
-    private var normalized: String { String(number.filter(\.isNumber).prefix(9)) }
+    // يحذف بادئات 00966/966/0 قبل القص — من يكتب 05XXXXXXXX كان يُقص إلى 9 خانات
+    // بصفره فيبقى الزر معطلًا (نفس إصلاح تطبيق سبق).
+    private var normalized: String {
+        var d = number
+        if d.hasPrefix("00966") { d.removeFirst(5) }
+        else if d.hasPrefix("966") { d.removeFirst(3) }
+        if d.hasPrefix("0") { d.removeFirst() }
+        return String(d.prefix(9))
+    }
     private var phoneValid: Bool { normalized.count == 9 && normalized.first == "5" }
     private var e164Display: String { "+966 " + normalized }
 
@@ -1082,18 +1091,20 @@ struct SpPhoneLoginFlow: View {
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 Rectangle().fill(SpTheme.outline).frame(width: 1, height: 22)
-                // خط النظام الموحّد للأرقام — الخط العربي المخصّص كان يخفي الأحرف أثناء الكتابة أحيانًا.
-                TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SpTheme.onDarkFaint))
-                    .keyboardType(.numberPad)
-                    .textContentType(.telephoneNumber)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(SpTheme.onDark)
-                    .tint(SpTheme.green)
-                    .multilineTextAlignment(.leading)
-                    .focused($phoneFocused)
-                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
+                // حقل UIKit لا TextField: الأخير مع لوحة الأرقام لا يرسم ما يُكتب حين تكون
+                // لغة الجهاز عربية (iOS 26+). التفاصيل في DigitEntryField أسفل الملف.
+                DigitEntryField(
+                    text: $number,
+                    placeholder: "5XXXXXXXX",
+                    maxLength: 14,
+                    contentType: .telephoneNumber,
+                    font: .monospacedDigitSystemFont(ofSize: 17, weight: .semibold),
+                    textColor: UIColor(SpTheme.onDark),
+                    placeholderColor: UIColor(SpTheme.onDarkFaint),
+                    tintColor: UIColor(SpTheme.green),
+                    isFocused: $phoneFocused
+                )
+                .frame(maxWidth: .infinity, minHeight: 24)
             }
             // الصفّ كاملًا LTR: المفتاح +966 يسار، الرقم يمينه (كالويب).
             .environment(\.layoutDirection, .leftToRight)
@@ -1232,7 +1243,7 @@ struct SpOtpBoxes: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
                 .onChange(of: code) { _, v in
-                    let d = String(v.filter(\.isNumber).prefix(length))
+                    let d = String(DigitEntryField.latinDigits(v).prefix(length))
                     if d != code { code = d }
                     if d.count == length { focused = false; onComplete() }
                 }
@@ -1430,5 +1441,105 @@ struct SpCompleteNameForm: View {
             email: nil
         )
         if ok { onDone() }
+    }
+}
+
+// MARK: - حقل الأرقام
+
+/// حقل أرقام مبني على `UITextField` مباشرة (مطابق في كل تطبيقات سبق على iOS).
+///
+/// لماذا لا `TextField` من SwiftUI؟ على iOS 26 و27 (أُعيد إنتاجه على المحاكي 2026-11-11)
+/// حين تكون لغة الجهاز عربية، `TextField` مع لوحة أرقام (`numberPad` /
+/// `asciiCapableNumberPad` / `phonePad` / `decimalPad`) يقبل الأرقام في قيمته لكنه لا يرسمها:
+/// يكتب المستخدم رقمه فلا يرى شيئًا ويظن أنه لم يُدخل. `UITextField` بنفس اللوحة يرسمها سليمة.
+/// القيمة تُحوّل إلى أرقام لاتينية 0-9 لأن لوحة الجهاز العربي تكتب «٥١٢…».
+struct DigitEntryField: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    var maxLength: Int
+    var keyboard: UIKeyboardType = .numberPad
+    /// رموز تُقبل مع الأرقام، مثل "+" للهاتف الدولي أو "." للمبالغ.
+    var extraAllowed: String = ""
+    var contentType: UITextContentType? = nil
+    var font: UIFont = .monospacedDigitSystemFont(ofSize: 16, weight: .medium)
+    var textColor: UIColor = .label
+    var placeholderColor: UIColor = .placeholderText
+    var tintColor: UIColor? = nil
+    var alignment: NSTextAlignment = .left
+    var accessibilityLabel: String? = nil
+    var isFocused: Binding<Bool>? = nil
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.keyboardType = keyboard
+        field.textContentType = contentType
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.semanticContentAttribute = .forceLeftToRight
+        field.adjustsFontForContentSizeCategory = true
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        field.textAlignment = alignment
+        field.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: font)
+        field.textColor = textColor
+        if let tintColor { field.tintColor = tintColor }
+        field.attributedPlaceholder = NSAttributedString(
+            string: placeholder, attributes: [.foregroundColor: placeholderColor])
+        field.accessibilityLabel = accessibilityLabel ?? placeholder
+        if field.text != text { field.text = text }
+        guard let isFocused else { return }
+        if isFocused.wrappedValue, !field.isFirstResponder {
+            // بعد دورة العرض: عند الظهور الأول قد لا يكون الحقل في نافذة بعد.
+            DispatchQueue.main.async { if field.window != nil { field.becomeFirstResponder() } }
+        } else if !isFocused.wrappedValue, field.isFirstResponder {
+            DispatchQueue.main.async { field.resignFirstResponder() }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    /// أرقام لاتينية فقط (يحوّل ٠-٩ و۰-۹، والفاصلة العشرية «٫» إلى "." إن كانت "." مقبولة)
+    /// مع إبقاء الرموز المسموح بها في `extra`، وحذف ما سواها.
+    static func latinDigits(_ text: String, extra: String = "") -> String {
+        let allowed = Set(extra.unicodeScalars.map(\.value))
+        var out = String.UnicodeScalarView()
+        for s in text.unicodeScalars {
+            switch s.value {
+            case 0x30...0x39: out.append(s)
+            case 0x660...0x669: out.append(Unicode.Scalar(s.value - 0x660 + 0x30)!)
+            case 0x6F0...0x6F9: out.append(Unicode.Scalar(s.value - 0x6F0 + 0x30)!)
+            case 0x66B where allowed.contains(0x2E): out.append(".")
+            default: if allowed.contains(s.value) { out.append(s) }
+            }
+        }
+        return String(out)
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: DigitEntryField
+        init(_ parent: DigitEntryField) { self.parent = parent }
+
+        @objc func editingChanged(_ field: UITextField) {
+            let clean = String(DigitEntryField.latinDigits(field.text ?? "", extra: parent.extraAllowed)
+                .prefix(parent.maxLength))
+            if field.text != clean { field.text = clean }
+            if parent.text != clean { parent.text = clean }
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            if parent.isFocused?.wrappedValue == false { parent.isFocused?.wrappedValue = true }
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            if parent.isFocused?.wrappedValue == true { parent.isFocused?.wrappedValue = false }
+        }
     }
 }
