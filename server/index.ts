@@ -1736,6 +1736,8 @@ if (!(globalThis as any).__sabqServer) {
             startDatabaseCleanupJob();
             const { startBreakingNewsExpiryJob } = await import("./jobs/breakingNewsExpiryJob");
             startBreakingNewsExpiryJob();
+            const { startImageRelocationJob } = await import("./jobs/imageRelocationJob");
+            startImageRelocationJob();
           } catch (error) {
             console.error("[Server] Error starting cleanup jobs:", error);
           }

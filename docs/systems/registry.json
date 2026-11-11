@@ -799,6 +799,9 @@
         "tests/unit/mediaSubjectRanking.integration.test.ts",
         "server/services/media*.ts",
         "server/services/newsImageStorageService.ts",
+        "server/services/imageRelocationService.ts",
+        "server/jobs/imageRelocationJob.ts",
+        "tests/unit/imageRelocationService.test.ts",
         "server/routes/mediaLibrary.ts",
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx",
@@ -815,7 +818,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-10-31"
+      "lastReviewed": "2026-11-11"
     },
     {
       "id": "sports-tournaments",
