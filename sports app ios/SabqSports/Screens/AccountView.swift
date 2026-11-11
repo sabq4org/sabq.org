@@ -1528,14 +1528,33 @@ struct DigitEntryField: UIViewRepresentable {
         init(_ parent: DigitEntryField) { self.parent = parent }
 
         @objc func editingChanged(_ field: UITextField) {
-            let clean = String(DigitEntryField.latinDigits(field.text ?? "", extra: parent.extraAllowed)
+            let raw = field.text ?? ""
+            let clean = String(DigitEntryField.latinDigits(raw, extra: parent.extraAllowed)
                 .prefix(parent.maxLength))
-            if field.text != clean { field.text = clean }
+            if raw != clean {
+                // إعادة كتابة النص («٥» → 5) ترمي المؤشر إلى النهاية، فيُكتب الرقم التالي
+                // في غير مكانه (مثلًا بعد +966 الجاهزة). نحفظ موضعه بعدد الخانات قبله.
+                var caret = clean.count
+                if let range = field.selectedTextRange {
+                    let utf16Offset = field.offset(from: field.beginningOfDocument, to: range.start)
+                    let before = (raw as NSString).substring(to: min(max(utf16Offset, 0), (raw as NSString).length))
+                    caret = min(DigitEntryField.latinDigits(before, extra: parent.extraAllowed).count, clean.count)
+                }
+                field.text = clean
+                if let pos = field.position(from: field.beginningOfDocument, offset: caret) {
+                    field.selectedTextRange = field.textRange(from: pos, to: pos)
+                }
+            }
             if parent.text != clean { parent.text = clean }
         }
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
             if parent.isFocused?.wrappedValue == false { parent.isFocused?.wrappedValue = true }
+            // ابدأ في نهاية النص (حقل الهاتف يبدأ بـ +966).
+            DispatchQueue.main.async {
+                let end = textField.endOfDocument
+                textField.selectedTextRange = textField.textRange(from: end, to: end)
+            }
         }
 
         func textFieldDidEndEditing(_ textField: UITextField) {
