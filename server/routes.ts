@@ -7517,6 +7517,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         articleData.status = "published";
         articleData.reviewStatus = null;
         if (!articleData.publishedAt) articleData.publishedAt = new Date();
+        { const banned = await denyBannedWords({ userId: req.user.id, nextStatus: "published", content: articleData, surface: "dashboard" }); if (banned) return res.status(banned.httpStatus).json(banned); }
       } else if (!isTrustedPub) {
         const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
         const hasEditAny = await userHasPermission(req.user.id, PERMISSION_CODES.ARTICLES_EDIT_ANY);
@@ -8063,6 +8064,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           if (!updateData.publishedAt && !existingArticle.publishedAt) {
             updateData.publishedAt = new Date();
           }
+          { const banned = await denyBannedWords({ userId: req.user.id, nextStatus: "published", content: { ...existingArticle, ...updateData }, previous: existingArticle, articleId, surface: "dashboard" }); if (banned) return res.status(banned.httpStatus).json(banned); }
         } else if (existingArticle.reviewStatus !== "pending_review") {
           const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
           if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });

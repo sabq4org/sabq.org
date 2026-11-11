@@ -5,7 +5,7 @@
  * قاعدة البيانات) لا يوقف النشر، بل يُسجَّل ويمر الخبر. تعطّل غرفة الأخبار
  * أسوأ من مرور كلمة.
  */
-import { and, desc, eq, gte, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import * as Sentry from "@sentry/node";
 import { articles, publishBannedWordBlocks, publishBannedWords, users } from "@shared/schema";
 import {
@@ -155,15 +155,19 @@ export async function denyBannedWords(input: {
 // ── صفحة الإدارة ─────────────────────────────────────────────────────
 
 export async function listBannedWords() {
-  const [words, blocks] = await Promise.all([
+  const monthAgo = new Date(Date.now() - IMPACT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const [words, blocks, [monthly]] = await Promise.all([
     db.select().from(publishBannedWords).orderBy(desc(publishBannedWords.createdAt)),
     db
       .select()
       .from(publishBannedWordBlocks)
       .orderBy(desc(publishBannedWordBlocks.createdAt))
       .limit(20),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(publishBannedWordBlocks)
+      .where(gte(publishBannedWordBlocks.createdAt, monthAgo)),
   ]);
-  const monthAgo = new Date(Date.now() - IMPACT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   return {
     words: words.map((row) => ({
       id: row.id,
@@ -183,7 +187,7 @@ export async function listBannedWords() {
       surface: row.surface,
       createdAt: row.createdAt.toISOString(),
     })),
-    blockedThisMonth: blocks.filter((row) => row.createdAt >= monthAgo).length,
+    blockedThisMonth: monthly?.total ?? 0,
   };
 }
 
@@ -195,8 +199,11 @@ export async function previewBannedWordImpact(rawWord: unknown) {
   const word = cleanBannedWordInput(rawWord);
   if (!word) throw new PublishBannedWordsError(400, "اكتب كلمة أو عبارة من حرفين على الأقل");
   const since = new Date(Date.now() - IMPACT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  const firstToken = word.split(" ")[0];
+  // الترشيح في القاعدة بالتوحيد نفسه (همزات، تشكيل، تطويل) وعلى كل الحقول
+  // التي يفحصها المنع، ثم المطابقة الدقيقة في الكود.
+  const firstToken = normalizeBannedText(word).split(" ")[0];
   const pattern = `%${firstToken.replace(/[%_\\]/g, "\\$&")}%`;
+  const haystack = sql`regexp_replace(translate(lower(concat_ws(' ', ${articles.title}, ${articles.subtitle}, ${articles.excerpt}, ${articles.content}, ${articles.seo}::text)), ${"\u0623\u0625\u0622\u0671\u0649\u0629\u0624\u0626"}, ${"\u0627\u0627\u0627\u0627\u064A\u0647\u0648\u064A"}), ${"[\u064B-\u0652\u0670\u0640]"}, '', 'g')`;
   const candidates = await db
     .select({
       id: articles.id,
@@ -212,7 +219,7 @@ export async function previewBannedWordImpact(rawWord: unknown) {
       and(
         eq(articles.status, "published"),
         gte(articles.publishedAt, since),
-        or(ilike(articles.title, pattern), ilike(articles.content, pattern)),
+        sql`${haystack} like ${pattern}`,
       ),
     )
     .orderBy(desc(articles.publishedAt))
