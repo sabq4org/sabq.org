@@ -15,6 +15,7 @@ import { memoryCache } from "../memoryCache";
 import { AR_SITEMAP_BUCKETS } from "./archiveSeo";
 import { invalidateArticleWrite } from "./contentInvalidation";
 import { clearNewsSitemapMemoryCache } from "./newsSitemapMemoryCache";
+import { scheduleTitleConsistencyCheck } from "./titleConsistencyService";
 
 export interface BotDraftReleaseRow {
   id: string;
@@ -112,6 +113,7 @@ export function queueBotDraftPublishEffects(
   setImmediate(() => {
     void runPublishFanout(article, options);
   });
+  scheduleTitleConsistencyCheck(article);
 }
 
 /** إبطال قوائم اللوحة وتنبيه الجدولة. لا IndexNow: الصفحة ليست عامة بعد. */
@@ -311,6 +313,7 @@ export function queueBotDraftPublishedContentEffects(article: BotDraftReleaseRow
   } catch (error) {
     console.error("[BotDrafts] published-content cache invalidation failed:", error);
   }
+  scheduleTitleConsistencyCheck(article);
 }
 
 /**

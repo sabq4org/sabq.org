@@ -22,6 +22,7 @@ import {
 } from "./notificationMemoryService";
 
 import { retryWithBackoff } from "./utils/retryWithBackoff";
+import { scheduleTitleConsistencyCheck } from "./services/titleConsistencyService";
 
 function withRetry<T>(
   fn: () => Promise<T>,
@@ -394,6 +395,7 @@ async function publishScheduledArticles() {
         }
 
         console.log(`[ScheduledPublisher] Published article: ${article.id} - ${article.title}`);
+        scheduleTitleConsistencyCheck({ ...article, status: "published" });
 
         // Make the freshly-published article visible immediately on every pod + edge.
         try {
