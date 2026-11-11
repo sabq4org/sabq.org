@@ -9,22 +9,6 @@ import UIKit
 
 private enum LoginMode { case phone, email }
 
-extension String {
-    /// أرقام لاتينية فقط (0-9): يحوّل الأرقام الهندية (٠-٩) والفارسية (۰-۹) ويحذف ما سواها.
-    /// لوحة الأرقام في جهاز لغته العربية تكتب «٥١٢…»؛ كانت تبقى كما هي فلا تُرسم في
-    /// حقل الجوال ولا تطابق شرط البدء بـ 5، فيبقى زر الإرسال معطلًا.
-    var sabqLatinDigits: String {
-        String(unicodeScalars.compactMap { scalar -> Character? in
-            switch scalar.value {
-            case 0x30...0x39: return Character(scalar)
-            case 0x660...0x669: return Character(UnicodeScalar(scalar.value - 0x660 + 0x30)!)
-            case 0x6F0...0x6F9: return Character(UnicodeScalar(scalar.value - 0x6F0 + 0x30)!)
-            default: return nil
-            }
-        })
-    }
-}
-
 struct LoginSheet: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(\.dismiss) private var dismiss
@@ -524,7 +508,7 @@ private struct PhoneLoginFlow: View {
     @State private var number = ""
     @State private var code = ""
     @State private var resend = 0
-    @FocusState private var phoneFocused: Bool
+    @State private var phoneFocused = false
 
     // يحذف بادئات 00966/966/0 قبل القص — من يكتب رقمه بالصيغة المحلية المعتادة
     // (05XXXXXXXX) كان يُقص إلى 9 خانات بصفره فيبقى الزر معطلًا بصمت.
@@ -557,24 +541,18 @@ private struct PhoneLoginFlow: View {
                     }
                     .environment(\.layoutDirection, .leftToRight)
                     Rectangle().fill(SabqTheme.outline).frame(width: 1, height: 22)
-                    // خط النظام للأرقام — الخط العربي المخصّص كان يخفي الأحرف أثناء الكتابة أحيانًا.
-                    TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SabqTheme.textTertiary))
-                        .accessibilityLabel("رقم الجوال")
-                        .keyboardType(.numberPad)
-                        .textContentType(.telephoneNumber)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(SabqType.rowTitle.font.monospacedDigit())
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .tint(SabqTheme.primary)
-                        .multilineTextAlignment(.leading)
-                        .focused($phoneFocused)
-                        // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized —
-                        // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
-                        .onChange(of: number) { _, v in
-                            let d = String(v.sabqLatinDigits.prefix(14))
-                            if d != number { number = d }
-                        }
+                    // حقل UIKit لا TextField: الأخير مع لوحة الأرقام لا يرسم ما يُكتب حين تكون
+                    // لغة الجهاز عربية (iOS 26+)، فيظن القارئ أن رقمه لم يُدخل. التفاصيل في SabqDigitField.
+                    // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized.
+                    SabqDigitField(
+                        text: $number,
+                        placeholder: "5XXXXXXXX",
+                        maxLength: 14,
+                        contentType: .telephoneNumber,
+                        accessibilityLabel: "رقم الجوال",
+                        isFocused: $phoneFocused
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 24)
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 .modifier(SabqInputSurface())

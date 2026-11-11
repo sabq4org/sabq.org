@@ -112,22 +112,18 @@ struct ForgotPasswordSheet: View {
 
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel("رمز التحقق")
-            textInput(
-                "رمز التحقق (6 أرقام)",
+            // حقل UIKit: TextField مع لوحة الأرقام لا يرسم ما يُكتب على جهاز لغته عربية
+            // (انظر SabqDigitField). .oneTimeCode يبقي تعبئة الرمز من البريد/الرسائل.
+            SabqDigitField(
                 text: $code,
-                keyboard: .numberPad,
-                // .oneTimeCode lets iOS auto-fill the code from Mail/SMS
-                // AND fixes the paste-doesn't-render-until-tap SwiftUI
-                // bug the editor reported on 2026-05-19. Confirmed by
-                // pasting then immediately scrolling: the value appears
-                // straight away.
-                contentType: .oneTimeCode
+                placeholder: "رمز التحقق (6 أرقام)",
+                maxLength: 6,
+                contentType: .oneTimeCode,
+                alignment: .right,
+                accessibilityLabel: "رمز التحقق"
             )
-            .onChange(of: code) { _, new in
-                // أرقام لاتينية فقط: لوحة الجهاز العربي تكتب «١٢٣» والخادم يتوقع 123.
-                let digits = String(new.sabqLatinDigits.prefix(6))
-                if digits != code { code = digits }
-            }
+            .frame(maxWidth: .infinity, minHeight: 24)
+            .modifier(SabqInputSurface())
         }
 
         // الحقلان مجموعة واحدة بعنوان مثل حقل الرمز، بدل تباعد 24 بين كل حقل.
