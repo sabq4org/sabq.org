@@ -158,6 +158,7 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
 |---------|--------|--------|------|-------|
 | `GET` | `/api/internal/bot-desk/opinion/drafts?weekStart=YYYY-MM-DD` | view | `getStaffOpinionBoard` | لوحة الأسبوع كما في التطبيق (`weekStart`, `days`, `slots`, `unslotted`, `pendingCount`) + `items`: قائمة مسطّحة بانتظار المكتب أولاً (`new_draft`، `in_prep`) ثم `scheduled` ثم `published`. كل عنصر فيه `writer` (مع `slotLabel` للموعد الثابت) و`slotAt` و`article.status`. |
 | `GET` | `/api/internal/bot-desk/opinion/drafts/:id` | view | `getStaffOpinionItem` + `getOpinionDraftContent` + `checkOpinionSlotClashes` + `getOpinionPrepJob` | `{ item, nextSlot, draft, warnings, prep }`. `draft` = العنوان والعنوان الفرعي والنص (HTML) والمقتطف والصورة وألبوم الصور والتصنيف والملخص الذكي وSEO (`metaTitle`, `metaDescription`, `keywords`) وحالة المراجعة. `warnings` = تعارض موعد الكاتب مع كاتب آخر (للمسودات المعلّقة). `prep` = آخر تجهيز أو `null`. |
+| `PATCH` | `/api/internal/bot-desk/opinion/drafts/:id` | schedule | `editOpinionDraftFromDesk` (منذ 2026-11-11) | تعديل النص و/أو العنوان. جسم `{ "content"?, "title"?, "contentFormat"? }` وحقل واحد على الأقل (strict). `content` 20–300000 حرف، يمر بتطبيع Bot Drafts نفسه (`normalizeDraftContent`: نص خام ← فقرات `<p>` بفاصل سطر فارغ، HTML ← `sanitizeArticleHtml`)؛ `contentFormat` = `text`/`html` (إن غاب يُكتشف من الوسوم). `title` بقواعد تعديل العنوان في التطبيق (5–200 حرف، سطر واحد). **لا يغيّر `status` ولا `scheduledAt` ولا `slug`**؛ يكتب `content`/`title`/`updatedAt` فقط (و`seo.metaTitle` إن كان مطابقًا للعنوان القديم، وعلامة «عُدّل العنوان»). مسموح لـ `new_draft`/`in_prep`/`scheduled` فقط. يعيد شكل `GET` نفسه `{ item, nextSlot, draft, warnings, prep }` + `changed` + `changedFields`. `409`: منشور، أو ليس بانتظار المكتب (مثل `needs_changes`)، أو تجهيز جارٍ، أو قفل/تعديل متزامن. `400` لجسم غير صالح. الملحقات (الملخص، SEO description…) **لا تُعاد توليدها**. |
 | `GET` | `/api/internal/bot-desk/opinion/drafts/:id/slot-check?scheduledAt=<ISO>` | schedule | `checkOpinionSlotClashes` | `{ scheduledAt, warnings }` دون كتابة. |
 | `POST` | `/api/internal/bot-desk/opinion/drafts/:id/prepare` | schedule | **`startOpinionPrep`** | «جهّز وجدول» نفسه: تدقيق العنوان والنص ← الملحقات (ملخص، كلمات مفتاحية، SEO، اختيار التصنيف) ← صورة GPT ← جدولة في موعد الكاتب الثابت أو `scheduledAt`. جسم `{}` أو `{ "scheduledAt": "<ISO مع المنطقة>" }`. يعيد `202 { job }` ويكمل في الخلفية. `409` إن لم يكن المقال `new_draft`/`in_prep` أو النص قصيراً أو المقال مقفلاً لمحرر آخر أو لا موعد ثابت ولا `scheduledAt`؛ `400` لموعد ماضٍ. |
 | `GET` | `/api/internal/bot-desk/opinion/drafts/:id/prepare` | view | `getOpinionPrepJob` | `{ job }`: `status` (`running`/`done`/`failed`)، `step`، `stepLabel`، `scheduledAt`، `titleChanged`، `contentFixes`، `image`، `categoryName`، `message`. `404` إن لم يبدأ تجهيز. |
@@ -165,7 +166,7 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
 | `POST` | `/api/internal/bot-desk/opinion/drafts/:id/publish` | publish | `publishOpinionFromDesk` | نشر فوري بجسم فارغ `{}`. `409` إن كان منشوراً. |
 | `POST` | `/api/internal/bot-desk/opinion/drafts/:id/return` | returnToWriter | `returnOpinionToWriterFromDesk` | إعادة للكاتب `{ "note": "..." }` (3–2000 حرف) مع إشعاره. |
 
-حدود المعدّل: أفعال الكتابة تمر على `BOT_DESK_WRITE_RATE_LIMIT` (60/دقيقة) و`BOT_DESK_OPINION_RATE_LIMIT` (30 / 5 دقائق لكل مالك توكن، مثل حد تطبيق الديسك)، والنشر أيضاً على `BOT_DESK_PUBLISH_RATE_LIMIT`. كل فعل يُسجَّل في `activity_logs` بقناة `bot-desk-api` والأفعال `opinion_prepare_start` / `opinion_schedule` / `opinion_publish` / `opinion_return_to_writer`. أخطاء الخدمة تمر كما هي (`{ code, message }` مع `404`/`409`/`400`).
+حدود المعدّل: أفعال الكتابة تمر على `BOT_DESK_WRITE_RATE_LIMIT` (60/دقيقة) و`BOT_DESK_OPINION_RATE_LIMIT` (30 / 5 دقائق لكل مالك توكن، مثل حد تطبيق الديسك)، والنشر أيضاً على `BOT_DESK_PUBLISH_RATE_LIMIT`. كل فعل يُسجَّل في `activity_logs` بقناة `bot-desk-api` والأفعال `opinion_prepare_start` / `opinion_schedule` / `opinion_publish` / `opinion_return_to_writer` / `opinion_edit` (القيم القديمة/الجديدة: العنوان إن تغيّر وطول النص، والبيانات: `fields` و`status` و`scheduledAt`). أخطاء الخدمة تمر كما هي (`{ code, message }` مع `404`/`409`/`400`).
 
 **مسار البوت المقترح:** بريد `type=opinion_draft` ← `GET` رابط `bot_api` من البريد ← قراءة `draft` و`warnings` ← `POST …/prepare` ← متابعة `GET …/prepare` كل 10–20 ثانية حتى `done`/`failed` ← إبلاغ المحرر بالنتيجة (الموعد، تغيّر العنوان، عدد التصحيحات، الصورة، التصنيف). إن رأى البوت أن المقال يحتاج تعديلاً من الكاتب: `POST …/return`.
 
@@ -214,6 +215,22 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<art
   -H "Content-Type: application/json" \
   -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
   -d '{"note":"نرجو اختصار المقدمة وتوثيق الرقم في الفقرة الثانية."}'
+
+# 8) تعديل نص مقال مجدول (أو مسودة) دون المساس بموعده — نص خام من ملف
+jq -Rs '{content: ., contentFormat: "text"}' new-text.txt > body.json
+curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  --data-binary @body.json
+# ← 200 { item, nextSlot, draft, warnings, prep, changed: true, changedFields: ["content"] }
+
+# 9) تعديل العنوان فقط
+curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<articleId>" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  -d '{"title":"العنوان الجديد للمقال"}'
 ```
 
 ---

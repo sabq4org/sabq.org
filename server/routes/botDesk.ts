@@ -21,6 +21,7 @@
 //   POST  /api/internal/bot-desk/social/tweets   (تغريدة المحرر: نشر مباشر أو مقترح للمكتب حسب الصلاحية)
 //   GET   /api/internal/bot-desk/opinion/drafts
 //   GET   /api/internal/bot-desk/opinion/drafts/:id
+//   PATCH /api/internal/bot-desk/opinion/drafts/:id   (تعديل content/title لمسودة أو مجدول؛ الموعد كما هو)
 //   GET   /api/internal/bot-desk/opinion/drafts/:id/slot-check
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/prepare   («جهّز وجدول» — نفس startOpinionPrep)
 //   GET   /api/internal/bot-desk/opinion/drafts/:id/prepare
@@ -44,6 +45,7 @@ import {
   botDeskSocialPendingQuerySchema,
   botDeskEditorTweetPreviewSchema,
   botDeskEditorTweetSchema,
+  botDeskOpinionEditSchema,
   botDeskSocialPublishSchema,
   botDeskSocialRejectSchema,
   botDeskSocialScheduleSchema,
@@ -94,6 +96,7 @@ import {
   scheduleOpinionFromDesk,
 } from "../services/staffOpinionDeskService";
 import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
+import { editOpinionDraftFromDesk } from "../services/staffOpinionContentService";
 import { resolveStaffCapabilitiesAndRoles } from "../services/staffAppService";
 import {
   staffOpinionBoardQuerySchema,
@@ -850,24 +853,84 @@ router.get(
   },
 );
 
+/** شكل GET /opinion/drafts/:id — يعيده PATCH أيضاً بعد التعديل. */
+async function loadOpinionDetail(articleId: string) {
+  const { item, nextSlot } = await getStaffOpinionItem(articleId);
+  const [draft, prep] = await Promise.all([
+    getOpinionDraftContent(articleId),
+    getOpinionPrepJob(articleId),
+  ]);
+  const pending = item.article?.status === "new_draft" || item.article?.status === "in_prep";
+  const warnings = pending && item.slotAt
+    ? await checkOpinionSlotClashes(articleId, new Date(item.slotAt))
+    : [];
+  return { item, nextSlot, draft, warnings, prep };
+}
+
 router.get(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id`,
   requireBotDeskAuth,
   requireOpinionCapability("view"),
   async (req: BotDeskRequest, res: Response) => {
     try {
-      const { item, nextSlot } = await getStaffOpinionItem(req.params.id);
-      const [draft, prep] = await Promise.all([
-        getOpinionDraftContent(req.params.id),
-        getOpinionPrepJob(req.params.id),
-      ]);
-      const pending = item.article?.status === "new_draft" || item.article?.status === "in_prep";
-      const warnings = pending && item.slotAt
-        ? await checkOpinionSlotClashes(req.params.id, new Date(item.slotAt))
-        : [];
-      res.json({ item, nextSlot, draft, warnings, prep });
+      res.json(await loadOpinionDetail(req.params.id));
     } catch (error) {
       handleOpinionError(res, error, "تعذر جلب المقال");
+    }
+  },
+);
+
+/**
+ * تعديل نص مقال الرأي و/أو عنوانه (مسودة بانتظار المكتب أو مجدول). لا يغيّر
+ * الحالة ولا الموعد. المنشور أو غير المنتظر → 409. يعيد شكل GET نفسه.
+ */
+router.patch(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id`,
+  requireBotDeskAuth,
+  requireOpinionCapability("schedule"),
+  botDeskWriteLimiter,
+  botDeskOpinionActionLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = botDeskOpinionEditSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "أرسل content أو title",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await editOpinionDraftFromDesk({
+        articleId: req.params.id,
+        actorId: req.botPrincipal!.userId,
+        title: parsed.data.title,
+        content: parsed.data.content,
+        contentFormat: parsed.data.contentFormat,
+      });
+      if (result.changed) {
+        await auditBotDeskWrite(req, {
+          action: "opinion_edit",
+          entityType: "article",
+          entityId: result.article.id,
+          oldValue: {
+            ...(result.changedFields.includes("title") ? { title: result.previous.title } : {}),
+            contentLength: result.previous.contentLength,
+          },
+          newValue: {
+            ...(result.changedFields.includes("title") ? { title: result.article.title } : {}),
+            contentLength: result.article.contentLength,
+          },
+          extraMetadata: {
+            fields: result.changedFields,
+            status: result.article.status,
+            scheduledAt: result.article.scheduledAt,
+          },
+        });
+      }
+      const detail = await loadOpinionDetail(result.article.id);
+      res.json({ ...detail, changed: result.changed, changedFields: result.changedFields });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر حفظ تعديل المقال");
     }
   },
 );

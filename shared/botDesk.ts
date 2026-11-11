@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { opinionTicketStatuses } from "./schema";
+import {
+  STAFF_OPINION_TITLE_MAX,
+  STAFF_OPINION_TITLE_MIN,
+  normalizeOpinionTitle,
+} from "./staffOpinionTitle";
 
 export const BOT_DESK_BASE_PATH = "/api/internal/bot-desk" as const;
 export const BOT_DESK_AUDIT_CHANNEL = "bot-desk-api" as const;
@@ -93,12 +98,47 @@ export const botDeskSocialScheduleSchema = z
   })
   .strict();
 
+/**
+ * PATCH /api/internal/bot-desk/opinion/drafts/:id — تعديل نص مقال الرأي و/أو عنوانه
+ * (مسودة بانتظار المكتب أو مجدول). لا يغيّر الحالة ولا الموعد. حقل واحد على الأقل.
+ * العنوان بقواعد تعديل العنوان في تطبيق الديسك؛ النص بحدود Bot Drafts نفسها.
+ */
+export const botDeskOpinionEditSchema = z
+  .object({
+    title: z
+      .string()
+      .transform(normalizeOpinionTitle)
+      .pipe(
+        z
+          .string()
+          .min(STAFF_OPINION_TITLE_MIN, `العنوان قصير جداً (${STAFF_OPINION_TITLE_MIN} أحرف على الأقل)`)
+          .max(STAFF_OPINION_TITLE_MAX, `العنوان طويل جداً (${STAFF_OPINION_TITLE_MAX} حرفاً على الأكثر)`),
+      )
+      .optional(),
+    content: z
+      .string()
+      .trim()
+      .min(20, "النص قصير جداً")
+      .max(300_000, "النص يتجاوز الحد المسموح")
+      .optional(),
+    /** html أو text؛ إن غاب يُكتشف من وجود وسوم (مثل Bot Drafts). */
+    contentFormat: z.enum(["html", "text"]).optional(),
+  })
+  .strict()
+  .refine((value) => value.title !== undefined || value.content !== undefined, {
+    message: "أرسل content أو title (واحد على الأقل)",
+  })
+  .refine((value) => value.contentFormat === undefined || value.content !== undefined, {
+    message: "contentFormat يحتاج content",
+  });
+
 export type BotDeskTicketsQuery = z.infer<typeof botDeskTicketsQuerySchema>;
 export type BotDeskTicketReplyInput = z.infer<typeof botDeskTicketReplySchema>;
 export type BotDeskTicketStatusInput = z.infer<typeof botDeskTicketStatusSchema>;
 export type BotDeskSocialPendingQuery = z.infer<typeof botDeskSocialPendingQuerySchema>;
 export type BotDeskSocialRejectInput = z.infer<typeof botDeskSocialRejectSchema>;
 export type BotDeskSocialScheduleInput = z.infer<typeof botDeskSocialScheduleSchema>;
+export type BotDeskOpinionEditInput = z.infer<typeof botDeskOpinionEditSchema>;
 
 export type BotDeskErrorCode =
   | "unauthorized"

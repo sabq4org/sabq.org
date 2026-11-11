@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   renotifyOpinionDraftFromDesk: vi.fn(),
   startOpinionPrep: vi.fn(),
   getOpinionPrepJob: vi.fn(),
+  editOpinionDraftFromDesk: vi.fn(),
   sendEmailNotification: vi.fn(),
   createNotification: vi.fn(),
 }));
@@ -110,6 +111,9 @@ vi.mock("../../server/services/staffOpinionDeskService", async () => {
 vi.mock("../../server/services/staffOpinionPrepareService", () => ({
   startOpinionPrep: (...a: unknown[]) => mocks.startOpinionPrep(...a),
   getOpinionPrepJob: (...a: unknown[]) => mocks.getOpinionPrepJob(...a),
+}));
+vi.mock("../../server/services/staffOpinionContentService", () => ({
+  editOpinionDraftFromDesk: (...a: unknown[]) => mocks.editOpinionDraftFromDesk(...a),
 }));
 vi.mock("../../server/services/email", () => ({
   sendEmailNotification: (...a: unknown[]) => mocks.sendEmailNotification(...a),
@@ -232,6 +236,7 @@ describe("bot-desk opinion — auth & permissions", () => {
       ["POST", "/a1/schedule", {}],
       ["POST", "/a1/publish", {}],
       ["POST", "/a1/return", { note: "عدّل المقدمة" }],
+      ["PATCH", "/a1", { content: "نص جديد كامل للمقال بعد التعديل" }],
     ] as const) {
       const res = await bot(method, path, body);
       expect(res.status, `${method} ${path}`).toBe(403);
@@ -444,5 +449,136 @@ describe("bot-desk opinion — schedule / publish / return", () => {
       action: "opinion_return_to_writer",
       metadata: expect.objectContaining({ channel: "bot-desk-api", noteLength: 12 }),
     }));
+  });
+});
+
+describe("bot-desk opinion — PATCH edit content/title", () => {
+  const scheduledItem = {
+    ...item("a1", "scheduled", "2026-11-12T10:45:00.000Z"),
+  };
+  const draftAfter = {
+    id: "a1", title: "عنوان جديد للمقال", subtitle: null, slug: "a1", status: "scheduled", reviewStatus: "approved",
+    reviewNotes: null, content: "<p>نص جديد كامل للمقال بعد التعديل</p>", excerpt: null, imageUrl: null, albumImages: [],
+    isAiGeneratedImage: false, category: null, aiSummary: null, seo: null, updatedAt: "2026-11-11T07:00:00.000Z",
+  };
+  const edited = {
+    changed: true,
+    changedFields: ["title", "content"],
+    previous: { title: "مقال a1", contentLength: 1664, status: "scheduled", scheduledAt: "2026-11-12T10:45:00.000Z" },
+    article: { id: "a1", title: "عنوان جديد للمقال", contentLength: 40, status: "scheduled", scheduledAt: "2026-11-12T10:45:00.000Z" },
+  };
+
+  function primeDetail() {
+    mocks.getStaffOpinionItem.mockResolvedValue({ item: scheduledItem, nextSlot: null });
+    mocks.getOpinionDraftContent.mockResolvedValue(draftAfter);
+    mocks.getOpinionPrepJob.mockResolvedValue(null);
+  }
+
+  it("needs the schedule capability (reviewer-only owner → 403, service untouched)", async () => {
+    granted = ["opinion.review"];
+    const res = await bot("PATCH", "/a1", { content: "نص جديد كامل للمقال بعد التعديل" });
+    expect(res.status).toBe(403);
+    expect(mocks.editOpinionDraftFromDesk).not.toHaveBeenCalled();
+    expect((await bot("PATCH", "/a1", { title: "عنوان جديد" }, null)).status).toBe(401);
+  });
+
+  it("validates the body: at least one of content/title, strict, sane lengths", async () => {
+    for (const body of [
+      {},
+      { status: "published" },
+      { scheduledAt: "2026-11-12T10:45:00Z", content: "نص جديد كامل للمقال بعد التعديل" },
+      { title: " اب " },
+      { title: "ع".repeat(201) },
+      { content: "قصير" },
+      { contentFormat: "text" },
+      { content: "نص جديد كامل للمقال بعد التعديل", contentFormat: "markdown" },
+    ]) {
+      const res = await bot("PATCH", "/a1", body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect((await res.json()).code).toBe("validation_error");
+    }
+    expect(mocks.editOpinionDraftFromDesk).not.toHaveBeenCalled();
+  });
+
+  it("edits via the service with the bot owner as actor; returns the GET shape + audit", async () => {
+    primeDetail();
+    mocks.editOpinionDraftFromDesk.mockResolvedValue(edited);
+    const res = await bot("PATCH", "/a1", {
+      title: "  عنوان   جديد للمقال ",
+      content: "نص جديد كامل للمقال بعد التعديل",
+      contentFormat: "text",
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(mocks.editOpinionDraftFromDesk).toHaveBeenCalledWith({
+      articleId: "a1",
+      actorId: BOT_PRINCIPAL.userId,
+      title: "عنوان جديد للمقال",
+      content: "نص جديد كامل للمقال بعد التعديل",
+      contentFormat: "text",
+    });
+    expect(json).toEqual({
+      item: scheduledItem,
+      nextSlot: null,
+      draft: draftAfter,
+      warnings: [],
+      prep: null,
+      changed: true,
+      changedFields: ["title", "content"],
+    });
+    // مجدول: لا فحص تعارض مواعيد (مثل GET) ولا أي جدولة.
+    expect(mocks.checkOpinionSlotClashes).not.toHaveBeenCalled();
+    expect(mocks.scheduleOpinionFromDesk).not.toHaveBeenCalled();
+    expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      action: "opinion_edit",
+      entityType: "article",
+      entityId: "a1",
+      oldValue: { title: "مقال a1", contentLength: 1664 },
+      newValue: { title: "عنوان جديد للمقال", contentLength: 40 },
+      metadata: expect.objectContaining({
+        channel: "bot-desk-api",
+        tokenId: BOT_PRINCIPAL.tokenId,
+        fields: ["title", "content"],
+        status: "scheduled",
+        scheduledAt: "2026-11-12T10:45:00.000Z",
+      }),
+    }));
+  });
+
+  it("content only: title stays out of the audit; unchanged edit writes no audit", async () => {
+    primeDetail();
+    mocks.editOpinionDraftFromDesk.mockResolvedValueOnce({ ...edited, changedFields: ["content"] });
+    expect((await bot("PATCH", "/a1", { content: "نص جديد كامل للمقال بعد التعديل" })).status).toBe(200);
+    expect(mocks.editOpinionDraftFromDesk).toHaveBeenLastCalledWith({
+      articleId: "a1", actorId: BOT_PRINCIPAL.userId, title: undefined,
+      content: "نص جديد كامل للمقال بعد التعديل", contentFormat: undefined,
+    });
+    expect(mocks.logActivity).toHaveBeenLastCalledWith(expect.objectContaining({
+      oldValue: { contentLength: 1664 },
+      newValue: { contentLength: 40 },
+    }));
+
+    mocks.logActivity.mockClear();
+    mocks.editOpinionDraftFromDesk.mockResolvedValueOnce({ ...edited, changed: false, changedFields: [] });
+    const same = await bot("PATCH", "/a1", { content: "نص جديد كامل للمقال بعد التعديل" });
+    expect(same.status).toBe(200);
+    expect((await same.json()).changed).toBe(false);
+    expect(mocks.logActivity).not.toHaveBeenCalled();
+  });
+
+  it("published / not-awaiting / running prep → 409 passthrough; missing → 404", async () => {
+    for (const message of [
+      "المقال منشور؛ عدّله من لوحة التحكم",
+      "التعديل متاح لمسودة رأي بانتظار المكتب أو لمقال مجدول فقط",
+      "التجهيز جارٍ على هذا المقال؛ انتظر حتى ينتهي ثم أعد المحاولة",
+    ]) {
+      mocks.editOpinionDraftFromDesk.mockRejectedValueOnce(new StaffOpinionDeskError(409, "conflict", message));
+      const res = await bot("PATCH", "/a1", { title: "عنوان جديد للمقال" });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ code: "conflict", message });
+    }
+    mocks.editOpinionDraftFromDesk.mockRejectedValueOnce(new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود"));
+    expect((await bot("PATCH", "/missing", { title: "عنوان جديد للمقال" })).status).toBe(404);
+    expect(mocks.logActivity).not.toHaveBeenCalled();
   });
 });
