@@ -137,6 +137,19 @@ describe("relocateCloudflareImageToR2", () => {
     expect(state.writes[0]).toMatchObject({ status: "failed" });
   });
 
+  it("keeps the small-variant request when a queued avatar fails, so the retry still honours it", async () => {
+    state.existing = [{ status: "pending_thumb", newUrl: null }];
+    fetchMock.mockRejectedValue(new Error("network down"));
+    await relocateCloudflareImageToR2(ref);
+    expect(state.writes[0]).toMatchObject({ status: "failed_thumb" });
+
+    state.existing = [{ status: "failed_thumb", completedAt: new Date("2026-11-11T01:00:00Z") }];
+    fetchMock.mockResolvedValue(imageResponse());
+    upload.mockResolvedValue({ success: true, deliveryUrl: NEW, thumbnailUrl: THUMB });
+    const retried = await relocateCloudflareImageToR2(ref, { now: new Date("2026-11-11T12:00:00Z") });
+    expect(retried.newUrl).toBe(THUMB);
+  });
+
   it("does not hammer an image that failed less than six hours ago", async () => {
     const now = new Date("2026-11-11T12:00:00Z");
     state.existing = [{ status: "failed", error: "source responded 404", completedAt: new Date("2026-11-11T11:00:00Z") }];

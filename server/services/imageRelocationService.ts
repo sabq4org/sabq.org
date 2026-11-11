@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, like, lt, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditLocks, articles, imageMigrations } from "@shared/schema";
 import { newsImageStorageService } from "./newsImageStorageService";
@@ -25,6 +25,15 @@ export const RELOCATION_PENDING = "pending";
 export const RELOCATION_PENDING_THUMBNAIL = "pending_thumb";
 export const RELOCATION_COMPLETED = "completed";
 export const RELOCATION_FAILED = "failed";
+/** فشل صف طلب النسخة الصغيرة؛ يحفظ الطلب حتى إعادة المحاولة. */
+export const RELOCATION_FAILED_THUMBNAIL = "failed_thumb";
+
+const FAILED_STATUSES = [RELOCATION_FAILED, RELOCATION_FAILED_THUMBNAIL];
+const PENDING_STATUSES = [RELOCATION_PENDING, RELOCATION_PENDING_THUMBNAIL];
+
+export function wantsThumbnail(status: string | null | undefined): boolean {
+  return status === RELOCATION_PENDING_THUMBNAIL || status === RELOCATION_FAILED_THUMBNAIL;
+}
 
 export interface CloudflareImageRef {
   accountHash: string;
@@ -128,10 +137,14 @@ export async function relocateCloudflareImageToR2(
   if (existing?.status === RELOCATION_COMPLETED && existing.newUrl) {
     return { ok: true, newUrl: existing.newUrl, reused: true };
   }
-  if (existing?.status === RELOCATION_FAILED && !shouldRetryFailedRelocation(existing.completedAt, now)) {
+  if (
+    existing &&
+    FAILED_STATUSES.includes(existing.status) &&
+    !shouldRetryFailedRelocation(existing.completedAt, now)
+  ) {
     return { ok: false, error: existing.error || "previous attempt failed" };
   }
-  const preferThumbnail = options.preferThumbnail || existing?.status === RELOCATION_PENDING_THUMBNAIL;
+  const preferThumbnail = options.preferThumbnail || wantsThumbnail(existing?.status);
 
   try {
     const source = await downloadSource(ref.canonicalUrl);
@@ -163,7 +176,7 @@ export async function relocateCloudflareImageToR2(
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     const failed = {
       cloudflareId: ref.imageId,
-      status: RELOCATION_FAILED,
+      status: preferThumbnail ? RELOCATION_FAILED_THUMBNAIL : RELOCATION_FAILED,
       error: message,
       completedAt: now,
     };
@@ -175,12 +188,21 @@ export async function relocateCloudflareImageToR2(
   }
 }
 
-/** صفوف الطابور التي أدخلها المالك عبر SQL (صور شخصية وصور قديمة نشطة). */
+/**
+ * صفوف الطابور التي أدخلها المالك عبر SQL (صور شخصية وصور قديمة نشطة)، ومعها
+ * الصفوف الفاشلة التي مضت مهلة إعادة محاولتها.
+ */
 export async function processRelocationQueue(limit: number): Promise<{ done: number; failed: number }> {
+  const retryBefore = new Date(Date.now() - FAILED_RETRY_AFTER_MS);
   const queued = await db
     .select({ oldUrl: imageMigrations.oldUrl, status: imageMigrations.status })
     .from(imageMigrations)
-    .where(inArray(imageMigrations.status, [RELOCATION_PENDING, RELOCATION_PENDING_THUMBNAIL]))
+    .where(
+      or(
+        inArray(imageMigrations.status, PENDING_STATUSES),
+        and(inArray(imageMigrations.status, FAILED_STATUSES), lt(imageMigrations.completedAt, retryBefore)),
+      ),
+    )
     .orderBy(asc(imageMigrations.id))
     .limit(limit);
 
@@ -196,9 +218,7 @@ export async function processRelocationQueue(limit: number): Promise<{ done: num
       failed += 1;
       continue;
     }
-    const result = await relocateCloudflareImageToR2(ref, {
-      preferThumbnail: row.status === RELOCATION_PENDING_THUMBNAIL,
-    });
+    const result = await relocateCloudflareImageToR2(ref, { preferThumbnail: wantsThumbnail(row.status) });
     if (result.ok) done += 1;
     else failed += 1;
   }
@@ -215,6 +235,10 @@ export async function relocateRecentArticleImages(
   windowDays = 3,
 ): Promise<{ swapped: number; failed: number }> {
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+  const retryBefore = new Date(Date.now() - FAILED_RETRY_AFTER_MS);
+  const noLiveEditLock = sql`not exists (select 1 from ${articleEditLocks} l where l.article_id = ${articles.id} and l.expires_at > (clock_timestamp() at time zone 'UTC'))`;
+  // صورة فشل نقلها قبل قليل لا تحجز مكانًا في الدفعة، حتى تصل المهمة إلى بقية الأخبار.
+  const notRecentlyFailed = sql`not exists (select 1 from ${imageMigrations} m where m.old_url = regexp_replace(${articles.imageUrl}, '/[^/]+$', '/public') and m.status in ('failed', 'failed_thumb') and m.completed_at > (${retryBefore.toISOString()}::timestamptz at time zone 'UTC'))`;
   const candidates = await db
     .select({
       id: articles.id,
@@ -227,7 +251,8 @@ export async function relocateRecentArticleImages(
         eq(articles.status, "published"),
         gt(articles.publishedAt, since),
         like(articles.imageUrl, `${CF_IMAGES_PREFIX}%`),
-        sql`not exists (select 1 from ${articleEditLocks} l where l.article_id = ${articles.id} and l.expires_at > (clock_timestamp() at time zone 'UTC'))`,
+        noLiveEditLock,
+        notRecentlyFailed,
       ),
     )
     .orderBy(desc(articles.publishedAt))
@@ -243,14 +268,22 @@ export async function relocateRecentArticleImages(
       failed += 1;
       continue;
     }
-    // الشرط على الرابط القديم يمنع الكتابة فوق صورة غيّرها المحرر للتو.
+    // الشروط تُفحص عند الكتابة نفسها: النسخ يأخذ ثواني قد يفتح فيها المحرر الخبر،
+    // أو يغيّر صورته، أو يعيده مسودة.
     const updated = await db
       .update(articles)
       .set({
         imageUrl: result.newUrl,
         liteOptimizedImageUrl: relocatedLiteUrl(article.liteOptimizedImageUrl, ref, result.newUrl),
       })
-      .where(and(eq(articles.id, article.id), eq(articles.imageUrl, article.imageUrl)))
+      .where(
+        and(
+          eq(articles.id, article.id),
+          eq(articles.imageUrl, article.imageUrl),
+          eq(articles.status, "published"),
+          noLiveEditLock,
+        ),
+      )
       .returning({ id: articles.id });
     if (updated.length > 0) {
       swapped += 1;
