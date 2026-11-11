@@ -108,7 +108,7 @@ export function StatusActionDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !mutation.isPending && onClose()}>
       <DialogContent dir="rtl" className="max-w-md">
-        <DialogHeader className="text-right sm:text-right">
+        <DialogHeader className="pr-6 text-right sm:text-right">
           <DialogTitle>{copy.title}</DialogTitle>
           <DialogDescription>
             {user?.name}
@@ -160,12 +160,16 @@ export function ResetPasswordDialog({ user, onClose }: { user: { id: string; nam
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
 
+  // نصفّر الحقل عند فتح النافذة لمستخدم مختلف فقط. صفحة الملف تمرّر كائنًا جديدًا
+  // في كل إعادة رسم، فالاعتماد على الكائن نفسه كان يمسح ما يُكتب أو يُولَّد فور
+  // أي إعادة رسم للصفحة (تمرير الصفحة أو ظهور لوحة المفاتيح على الجوال).
+  const userId = user?.id ?? null;
   useEffect(() => {
-    if (user) {
+    if (userId) {
       setPassword("");
       setDone(false);
     }
-  }, [user]);
+  }, [userId]);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -180,7 +184,7 @@ export function ResetPasswordDialog({ user, onClose }: { user: { id: string; nam
   return (
     <Dialog open={!!user} onOpenChange={(o) => !o && onClose()}>
       <DialogContent dir="rtl" className="max-w-md">
-        <DialogHeader className="text-right sm:text-right">
+        <DialogHeader className="pr-6 text-right sm:text-right">
           <DialogTitle>إعادة تعيين كلمة المرور</DialogTitle>
           <DialogDescription>{user?.name}. تُنهى كل جلساته الحالية. أبلغه بكلمة المرور بقناة آمنة.</DialogDescription>
         </DialogHeader>
@@ -251,7 +255,7 @@ export function PermanentDeleteDialog({ user, onClose }: { user: { id: string; n
   return (
     <Dialog open={!!user} onOpenChange={(o) => !o && !mutation.isPending && onClose()}>
       <DialogContent dir="rtl" className="max-w-md">
-        <DialogHeader className="text-right sm:text-right">
+        <DialogHeader className="pr-6 text-right sm:text-right">
           <DialogTitle>حذف نهائي لحساب {user?.name}</DialogTitle>
           <DialogDescription>
             لا رجعة فيه: تُحذف بيانات الحساب المرتبطة به. الحذف متاح للحسابات المحظورة فقط.
