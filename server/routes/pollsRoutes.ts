@@ -158,22 +158,40 @@ router.post("/:pollId/vote", voteLimiter, async (req: Request, res: Response) =>
       return res.status(400).json({ message: "لقد قمت بالتصويت مسبقاً" });
     }
 
-    // الصوت وعدّاداه في معاملة واحدة: فشل أحدها لا يترك عدّادًا بلا صوت.
-    await db.transaction(async (tx) => {
-      await tx.insert(pollVotes).values({
+    // الصوت وعدّاداه في معاملة واحدة. القفل الاستشاري على (الاستطلاع، المصوّت)
+    // يجعل طلبين متوازيين من المصوّت نفسه يمران واحدًا تلو الآخر، فالثاني يرى
+    // صوت الأول في إعادة الفحص. والقيد الفريد (migration 20261111) خط أخير:
+    // إن اصطدم الإدراج به فلا تُرفع العدّادات.
+    const voterKey = userId ? `u:${userId}` : `s:${sessionId}`;
+    const recorded = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`poll-vote:${pollId}:${voterKey}`}, 0))`);
+      if (!poll.allowMultipleVotes) {
+        const [already] = await tx
+          .select({ id: pollVotes.id })
+          .from(pollVotes)
+          .where(and(eq(pollVotes.pollId, pollId), voteCondition))
+          .limit(1);
+        if (already) return false;
+      }
+      const inserted = await tx.insert(pollVotes).values({
         pollId,
         optionId,
         userId: userId || null,
         sessionId,
         ipAddress,
-      });
+      }).onConflictDoNothing().returning({ id: pollVotes.id });
+      if (inserted.length === 0) return false;
       await tx.update(pollOptions)
         .set({ votesCount: sql`${pollOptions.votesCount} + 1` })
         .where(and(eq(pollOptions.id, optionId), eq(pollOptions.pollId, pollId)));
       await tx.update(articlePolls)
         .set({ totalVotes: sql`${articlePolls.totalVotes} + 1`, updatedAt: new Date() })
         .where(eq(articlePolls.id, pollId));
+      return true;
     });
+    if (!recorded) {
+      return res.status(400).json({ message: "لقد قمت بالتصويت مسبقاً" });
+    }
 
     // Invalidate poll cache for this article so vote counts refresh
     if (poll.articleId) {

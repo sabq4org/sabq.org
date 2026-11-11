@@ -13236,6 +13236,14 @@ export const pollVotes = pgTable("poll_votes", {
   index("idx_poll_votes_option").on(table.optionId),
   index("idx_poll_votes_user").on(table.userId),
   index("idx_poll_votes_session").on(table.sessionId),
+  // migrations/20261111_poll_votes_unique.sql — على الخيار لا على الاستطلاع:
+  // allowMultipleVotes يسمح بأكثر من خيار للمصوّت نفسه.
+  uniqueIndex("uq_poll_votes_option_user")
+    .on(table.pollId, table.optionId, table.userId)
+    .where(sql`user_id IS NOT NULL`),
+  uniqueIndex("uq_poll_votes_option_session")
+    .on(table.pollId, table.optionId, table.sessionId)
+    .where(sql`user_id IS NULL AND session_id IS NOT NULL`),
 ]);
 
 export const articlePollsRelations = relations(articlePolls, ({ one, many }) => ({
