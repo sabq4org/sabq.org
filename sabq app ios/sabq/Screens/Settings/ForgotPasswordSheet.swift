@@ -124,8 +124,9 @@ struct ForgotPasswordSheet: View {
                 contentType: .oneTimeCode
             )
             .onChange(of: code) { _, new in
-                let digits = new.filter(\.isNumber)
-                code = String(digits.prefix(6))
+                // أرقام لاتينية فقط: لوحة الجهاز العربي تكتب «١٢٣» والخادم يتوقع 123.
+                let digits = String(new.sabqLatinDigits.prefix(6))
+                if digits != code { code = digits }
             }
         }
 

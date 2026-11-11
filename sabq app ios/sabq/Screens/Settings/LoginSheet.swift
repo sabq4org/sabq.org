@@ -9,6 +9,22 @@ import UIKit
 
 private enum LoginMode { case phone, email }
 
+extension String {
+    /// أرقام لاتينية فقط (0-9): يحوّل الأرقام الهندية (٠-٩) والفارسية (۰-۹) ويحذف ما سواها.
+    /// لوحة الأرقام في جهاز لغته العربية تكتب «٥١٢…»؛ كانت تبقى كما هي فلا تُرسم في
+    /// حقل الجوال ولا تطابق شرط البدء بـ 5، فيبقى زر الإرسال معطلًا.
+    var sabqLatinDigits: String {
+        String(unicodeScalars.compactMap { scalar -> Character? in
+            switch scalar.value {
+            case 0x30...0x39: return Character(scalar)
+            case 0x660...0x669: return Character(UnicodeScalar(scalar.value - 0x660 + 0x30)!)
+            case 0x6F0...0x6F9: return Character(UnicodeScalar(scalar.value - 0x6F0 + 0x30)!)
+            default: return nil
+            }
+        })
+    }
+}
+
 struct LoginSheet: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(\.dismiss) private var dismiss
@@ -513,7 +529,7 @@ private struct PhoneLoginFlow: View {
     // يحذف بادئات 00966/966/0 قبل القص — من يكتب رقمه بالصيغة المحلية المعتادة
     // (05XXXXXXXX) كان يُقص إلى 9 خانات بصفره فيبقى الزر معطلًا بصمت.
     private var normalized: String {
-        var d = number.filter(\.isNumber)
+        var d = number.sabqLatinDigits
         if d.hasPrefix("00966") { d.removeFirst(5) }
         else if d.hasPrefix("966") { d.removeFirst(3) }
         if d.hasPrefix("0") { d.removeFirst() }
@@ -555,7 +571,10 @@ private struct PhoneLoginFlow: View {
                         .focused($phoneFocused)
                         // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized —
                         // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
-                        .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(14)) }
+                        .onChange(of: number) { _, v in
+                            let d = String(v.sabqLatinDigits.prefix(14))
+                            if d != number { number = d }
+                        }
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 .modifier(SabqInputSurface())
@@ -718,7 +737,7 @@ private struct LoginOtpBoxes: View {
                 .frame(height: SabqLayout.controlHeight)
                 .accessibilityLabel("رمز التحقق")
                 .onChange(of: code) { _, v in
-                    let d = String(v.filter(\.isNumber).prefix(length))
+                    let d = String(v.sabqLatinDigits.prefix(length))
                     if d != code { code = d; return }
                     if d.count < length { didSubmit = false }
                     guard d.count == length, !didSubmit else { return }
