@@ -14,7 +14,10 @@
 import { getUserPermissionData } from "../rbac";
 import { getPublishingGate } from "./publisherPortalService";
 import { decidePublish, isPublishingStatus, type PublishDenial } from "./publishGateRules";
+import { BANNED_WORD_FIELDS, type BannedWordContent, type BannedWordMatch } from "@shared/publishBannedWords";
+import { denyBannedWords } from "./publishBannedWordsService";
 
+export { denyBannedWords };
 export {
   PUBLISHING_STATUSES,
   isPublishingStatus,
@@ -54,5 +57,37 @@ export async function denyPublish(
     gate,
     permissions: permissionData.permissions,
     deniedPermissionCodes: permissionData.deniedPermissionCodes,
+  });
+}
+
+/**
+ * بوابة الحفظ الكاملة لمسارات المقالات: صلاحية النشر (عند تغيّر الحالة) ثم
+ * الكلمات المحظورة من النشر (server/services/publishBannedWordsService.ts).
+ *
+ * `existing` = الصف الحالي في التحديث، وغيابه = إنشاء. الحقول الغائبة عن جسم
+ * التحديث تؤخذ من الصف الحالي حتى يُفحص النص الذي سيُنشر فعلًا.
+ */
+export async function denyPublishOnSave(
+  userId: string | undefined | null,
+  update: BannedWordContent & { status?: unknown },
+  existing?: (BannedWordContent & { id?: string; status?: unknown }) | null,
+): Promise<(PublishDenial & { bannedWords?: BannedWordMatch[] }) | null> {
+  const nextStatus = update.status ?? existing?.status;
+  if (!existing || (update.status && update.status !== existing.status)) {
+    const denial = await denyPublish(userId, existing ? update.status : nextStatus);
+    if (denial) return denial;
+  }
+  if (!isPublishingStatus(nextStatus)) return null;
+  const merged: BannedWordContent = { ...(existing ?? {}) };
+  for (const field of [...BANNED_WORD_FIELDS, "seo"] as const) {
+    if (update[field] !== undefined) merged[field] = update[field];
+  }
+  return denyBannedWords({
+    userId,
+    nextStatus,
+    content: merged,
+    previous: existing ?? null,
+    articleId: existing?.id ?? null,
+    surface: "dashboard",
   });
 }

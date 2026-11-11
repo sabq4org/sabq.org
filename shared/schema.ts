@@ -15979,3 +15979,36 @@ export const staffDeskEvents = pgTable("staff_desk_events", {
 ]);
 
 export type StaffDeskEventRow = typeof staffDeskEvents.$inferSelect;
+
+// كلمات محظورة من النشر — قائمة يديرها مدير النظام؛ مادة يرد فيها أحد
+// عناصرها لا تُنشر ولا تُجدول (shared/publishBannedWords.ts).
+export const publishBannedWords = pgTable("publish_banned_words", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  word: text("word").notNull(),
+  normalizedWord: text("normalized_word").notNull().unique(),
+  note: text("note"),
+  isActive: boolean("is_active").default(true).notNull(),
+  blockedCount: integer("blocked_count").default(0).notNull(),
+  addedBy: varchar("added_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// سجل المحاولات التي مُنعت (للعرض في صفحة الإدارة فقط).
+export const publishBannedWordBlocks = pgTable("publish_banned_word_blocks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  wordId: varchar("word_id"),
+  word: text("word").notNull(),
+  articleId: varchar("article_id"),
+  articleTitle: text("article_title"),
+  actorId: varchar("actor_id"),
+  actorLabel: text("actor_label"),
+  action: text("action").notNull(), // publish | schedule | edit
+  surface: text("surface").notNull(), // dashboard | desk | bot
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("publish_banned_word_blocks_created_idx").on(table.createdAt),
+]);
+
+export type PublishBannedWordRow = typeof publishBannedWords.$inferSelect;
+export type PublishBannedWordBlockRow = typeof publishBannedWordBlocks.$inferSelect;

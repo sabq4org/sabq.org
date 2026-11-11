@@ -1828,6 +1828,19 @@ async function throwIfEditLocked(
  * ونافذة الوكالة. تفويض البوت هو توكن Bearer على صف `source=bot` فقط.
  */
 async function assertBotDraftBylineMayPublish(bot: BotIdentity, row: ArticleRow): Promise<void> {
+  // الكلمات المحظورة من النشر تسبق كل استثناء: الرسالة نفسها التي في اللوحة.
+  const { denyBannedWords } = await import("./publishBannedWordsService");
+  const banned = await denyBannedWords({
+    userId: bot.personal?.userId ?? null,
+    nextStatus: "published",
+    content: row,
+    articleId: row.id,
+    actorLabel: bot.personal ? "نشر سبق" : `bot:${bot.name}`,
+    surface: "bot",
+  });
+  if (banned) {
+    throw new BotDraftError(403, "forbidden_action", banned.message, { reason: "banned_word", bannedWords: banned.bannedWords });
+  }
   if (isPersonalBotNewspaperNews(bot, row)) return;
   const [{ assertMediaLicenseAllowsSubmission }, { resolveContentBylineUserId }] = await Promise.all([
     import("./mediaLicenseService"),

@@ -347,6 +347,7 @@ const ReportersPage = lazy(() => retryImport(() => import("@/pages/dashboard/Rep
 const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/QuizManagement")));
 
 // === LAZY IMPORTS (Dashboard Tools) ===
+const PublishBannedWords = lazy(() => retryImport(() => import("@/pages/dashboard/PublishBannedWords")));
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
 const MawaeedManagement = lazy(() => retryImport(() => import("@/pages/dashboard/MawaeedManagement")));
@@ -1328,6 +1329,17 @@ function Router() {
             </ProtectedRoute>
           )}
         </Route>
+        {/* كلمات محظورة من النشر — للمسؤول ومدير النظام ("*") فقط */}
+        <Route path="/dashboard/publish-banned-words">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["publish_banned_words.manage"]}>
+              <Suspense fallback={<PageLoader />}>
+                <PublishBannedWords />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
+
         {/* Breaking Ticker - requires breaking_ticker.manage permission */}
         <Route path="/dashboard/breaking-ticker">
           {() => (
