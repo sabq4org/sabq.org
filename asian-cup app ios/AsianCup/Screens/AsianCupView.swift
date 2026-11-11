@@ -1063,7 +1063,8 @@ struct AcPhoneLoginFlow: View {
                     ForEach(AcDialCountry.all) { item in
                         Button {
                             country = item
-                            number = String(number.filter(\.isNumber).prefix(item.nationalLength.upperBound))
+                            // نفس سقف الحقل (+5 لبادئة 00 ومفتاح الدولة) حتى لا يضيع آخر رقم من 05XXXXXXXX.
+                            number = String(DigitEntryField.latinDigits(number).prefix(item.nationalLength.upperBound + 5))
                         } label: {
                             Text("\(item.flag)  \(item.name)  +\(item.dial)")
                         }
