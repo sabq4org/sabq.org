@@ -130,6 +130,7 @@ import editorialImagesRouter from "./editorialImages";
 import infographicStudioRouter from "./infographicStudio";
 import videoResolverRouter from "./videoResolver";
 import mawaeedRouter from "./mawaeed";
+import publishBannedWordsRouter from "./publishBannedWords";
 import infathRouter from "./infath";
 import servicePagesRouter from "./servicePages";
 
@@ -286,6 +287,7 @@ export function registerSplitRoutes(app: Express) {
   // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
   app.use(videoResolverRouter);
   app.use(mawaeedRouter);
+  app.use(publishBannedWordsRouter);
   app.use(infathRouter);
   app.use(servicePagesRouter);
 }

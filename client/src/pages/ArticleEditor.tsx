@@ -112,6 +112,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { BannedWordNotice, type BannedWordBlock } from "@/components/editor/BannedWordNotice";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
@@ -1606,6 +1607,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     }
   };
 
+  const [bannedWordBlock, setBannedWordBlock] = useState<BannedWordBlock | null>(null);
   const saveArticleMutation = useMutation({
     mutationFn: async ({
       publishNow,
@@ -1847,6 +1849,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       }
     },
     onSuccess: async (data, variables) => {
+      setBannedWordBlock(null);
       // Get the article ID (from response for new articles, or from params for existing)
       const savedArticleId = data?.id || id;
 
@@ -1954,6 +1957,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     onError: (error: Error) => {
       serverAutosave.resumeAfterManualSave();
       console.error('[Save Article] Error:', error.message, error);
+      const banned = error as Error & { code?: string; bannedWords?: BannedWordBlock["bannedWords"] };
+      if (banned.code === "BANNED_WORD" && Array.isArray(banned.bannedWords)) {
+        setBannedWordBlock({ message: banned.message, bannedWords: banned.bannedWords });
+        return;
+      }
       toast({
         title: "خطأ",
         description: error.message || "فشل في حفظ المقال",
@@ -2683,6 +2691,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
   return (
     <DashboardLayout>
+      <BannedWordNotice block={bannedWordBlock} content={content} onDismiss={() => setBannedWordBlock(null)} />
       {/* Draft Recovery Dialog */}
       {/* Title Proofread Dialog */}
       <TitleProofreadDialog

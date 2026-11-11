@@ -33,6 +33,7 @@ import {
   Newspaper,
   User,
   Flame,
+  Ban,
   Boxes,
   Lightbulb,
   Target,
@@ -372,6 +373,15 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/gulf-events",
         icon: Shield,
         roles: ["admin", "editor", "content_manager"],
+      },
+      {
+        id: "publish_banned_words",
+        labelKey: "nav.publish_banned_words",
+        labelAr: "كلمات محظورة من النشر",
+        path: "/dashboard/publish-banned-words",
+        icon: Ban,
+        roles: ["admin", "system_admin"],
+        permissions: ["publish_banned_words.manage"],
       },
       {
         id: "breaking_ticker",

@@ -37,6 +37,7 @@ import {
   type BotDraftReleaseRow,
 } from "./botDraftPublishEffects";
 import { logArticleEvent } from "./articleEventsService";
+import { denyBannedWords } from "./publishBannedWordsService";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SITE_ORIGIN = "https://sabq.org";
@@ -324,6 +325,18 @@ function releaseRow(article: Article): BotDraftReleaseRow {
   return article as unknown as BotDraftReleaseRow;
 }
 
+/** الكلمات المحظورة من النشر: الرسالة نفسها التي تظهر في اللوحة. */
+async function assertNoBannedWords(article: Article, actorId: string, nextStatus: "published" | "scheduled"): Promise<void> {
+  const banned = await denyBannedWords({
+    userId: actorId,
+    nextStatus,
+    content: article,
+    articleId: article.id,
+    surface: "desk",
+  });
+  if (banned) throw new StaffNewsDeskError(403, "forbidden", banned.message);
+}
+
 /** «انشر الآن» من المكتب: نفس أثر زر النشر في اللوحة، باسم المحرر. */
 export async function publishNewsFromDesk(input: {
   articleId: string;
@@ -334,6 +347,7 @@ export async function publishNewsFromDesk(input: {
 }): Promise<{ article: { id: string; status: string; publishedAt: string | null; url: string }; previous: { status: string; reviewStatus: string | null } }> {
   const existing = await loadNewsArticle(input.articleId);
   assertDecidable(existing);
+  await assertNoBannedWords(existing, input.actorId, "published");
   const categoryId = await assertCategory(input.categoryId);
   const now = new Date();
 
@@ -403,6 +417,7 @@ export async function scheduleNewsFromDesk(input: {
   if (error) throw new StaffNewsDeskError(400, "validation_error", error);
   const existing = await loadNewsArticle(input.articleId);
   assertDecidable(existing);
+  await assertNoBannedWords(existing, input.actorId, "scheduled");
   const categoryId = await assertCategory(input.categoryId);
   const now = new Date();
 

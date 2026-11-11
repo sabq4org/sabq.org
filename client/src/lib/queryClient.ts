@@ -359,6 +359,10 @@ async function throwIfResNotOk(res: Response, silent = false) {
         if (data.errors) {
           console.error("[API] Validation errors:", data.errors);
         }
+        // منع الكلمات المحظورة يحمل تفاصيل يحتاجها المحرر (الكلمة ومواضعها).
+        if (data.code === "BANNED_WORD") {
+          throw Object.assign(new Error(data.message), { code: data.code, bannedWords: data.bannedWords });
+        }
         throw new Error(formatApiErrorMessage(data.message, data.errors));
       }
     } catch (e) {

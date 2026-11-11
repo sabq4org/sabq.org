@@ -27,7 +27,7 @@ import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { getRealIp as getTrustedRealIp } from "./utils/trustedProxyIp";
 import { toPublicUser } from "./utils/publicUser";
-import { denyPublish } from "./services/publishGate";
+import { denyPublish, denyPublishOnSave, denyBannedWords } from "./services/publishGate";
 import {
   editorDisplayName,
   prepareDashboardArticleSave,
@@ -7483,9 +7483,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Publishing gate — covers "scheduled" as well as "published", plus the
       // publisher publishing-window check. See server/services/publishGate.ts.
       {
-        const denial = await denyPublish(req.user.id, parsed.data.status);
+        const denial = await denyPublishOnSave(req.user.id, parsed.data);
         if (denial) {
-          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
         }
       }
 
@@ -7517,6 +7517,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         articleData.status = "published";
         articleData.reviewStatus = null;
         if (!articleData.publishedAt) articleData.publishedAt = new Date();
+        { const banned = await denyBannedWords({ userId: req.user.id, nextStatus: "published", content: articleData, surface: "dashboard" }); if (banned) return res.status(banned.httpStatus).json(banned); }
       } else if (!isTrustedPub) {
         const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
         const hasEditAny = await userHasPermission(req.user.id, PERMISSION_CODES.ARTICLES_EDIT_ANY);
@@ -7983,10 +7984,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Any move into a publishing status: "scheduled" counts, since the
       // scheduler promotes it with no check of its own. See publishGate.ts.
-      if (parsed.data.status !== existingArticle.status) {
-        const denial = await denyPublish(req.user.id, parsed.data.status);
+      {
+        const denial = await denyPublishOnSave(req.user.id, parsed.data, existingArticle);
         if (denial) {
-          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
         }
       }
 
@@ -8063,6 +8064,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           if (!updateData.publishedAt && !existingArticle.publishedAt) {
             updateData.publishedAt = new Date();
           }
+          { const banned = await denyBannedWords({ userId: req.user.id, nextStatus: "published", content: { ...existingArticle, ...updateData }, previous: existingArticle, articleId, surface: "dashboard" }); if (banned) return res.status(banned.httpStatus).json(banned); }
         } else if (existingArticle.reviewStatus !== "pending_review") {
           const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
           if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
@@ -8558,6 +8560,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (article.status !== "draft" && article.status !== "scheduled") {
         return res.status(409).json({ message: "المقال ليس مسودة ولا مجدولًا، فلا يُنشر من هنا", code: "ARTICLE_NOT_PUBLISHABLE" });
       }
+      { const banned = await denyBannedWords({ userId, nextStatus: "published", content: article, articleId, surface: "dashboard" }); if (banned) return res.status(banned.httpStatus).json(banned); }
       // الشرط نفسه داخل UPDATE يحسم السباق (ضغطتان معًا)، ومعه قفل التحرير.
       const publishableNow = and(
         eq(articles.id, articleId),
@@ -14950,10 +14953,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // "scheduled" counts as publishing — see publishGate.ts.
-      if (parsed.data.status !== existingArticle.status) {
-        const denial = await denyPublish(req.user.id, parsed.data.status);
+      {
+        const denial = await denyPublishOnSave(req.user.id, parsed.data, existingArticle);
         if (denial) {
-          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
         }
       }
 
@@ -15941,9 +15944,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // The role check above admits `reporter` and `status` comes from the
       // body; the scheduledAt check earlier doesn't cover status="scheduled".
-      const denial = await denyPublish(userId, parsed.data.status);
+      const denial = await denyPublishOnSave(userId, parsed.data);
       if (denial) {
-        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
       }
 
       const article = await storage.createArticle(parsed.data);
@@ -16178,10 +16181,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       delete articleData.republish;
 
       // Legacy path had no publish gate at all.
-      if (articleData.status && articleData.status !== article.status) {
-        const denial = await denyPublish(userId, articleData.status);
+      {
+        const denial = await denyPublishOnSave(userId, articleData, article);
         if (denial) {
-          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
         }
       }
 
@@ -27664,9 +27667,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const validatedData = insertEnArticleSchema.parse(req.body);
 
-      const denial = await denyPublish(user.id, validatedData.status);
+      const denial = await denyPublishOnSave(user.id, validatedData);
       if (denial) {
-        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
       }
 
       // Set published_at if status is published
@@ -27722,10 +27725,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       // No publish gate existed here.
-      if (req.body.status && req.body.status !== existing[0].status) {
-        const denial = await denyPublish(user.id, req.body.status);
+      {
+        const denial = await denyPublishOnSave(user.id, req.body, existing[0]);
         if (denial) {
-          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
         }
       }
 
@@ -29384,9 +29387,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       // The old check sat INSIDE the block above, after its unconditional
       // `return` — dead code that never ran once.
-      const denial = await denyPublish(userId, parsed.data.status);
+      const denial = await denyPublishOnSave(userId, parsed.data);
       if (denial) {
-        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
       }
 
       const { article } = await runWithExclusiveUrBreaking(
@@ -29466,10 +29469,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       // No publish gate existed here.
-      if (parsed.data.status && parsed.data.status !== oldArticle.status) {
-        const denial = await denyPublish(userId, parsed.data.status);
+      {
+        const denial = await denyPublishOnSave(userId, parsed.data, oldArticle);
         if (denial) {
-          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code, bannedWords: denial.bannedWords });
         }
       }
 

@@ -1538,6 +1538,20 @@ async function updatePublishedArticle(
   if (patch.categoryId !== undefined) contentPatch.categoryId = patch.categoryId;
   if (input.imageUrl !== undefined) contentPatch.imageUrl = input.imageUrl;
   if (input.riskLabel !== undefined) contentPatch.riskLabel = input.riskLabel;
+  // تعديل خبر منشور: يُمنع فقط ما أدخله هذا التعديل من الكلمات المحظورة.
+  const { denyBannedWords } = await import("./publishBannedWordsService");
+  const banned = await denyBannedWords({
+    userId: bot.personal?.userId ?? null,
+    nextStatus: "published",
+    content: { ...existing, ...patch },
+    previous: existing,
+    articleId: existing.id,
+    actorLabel: bot.personal ? "نشر سبق" : `bot:${bot.name}`,
+    surface: "bot",
+  });
+  if (banned) {
+    throw new BotDraftError(403, "forbidden_action", banned.message, { reason: "banned_word", bannedWords: banned.bannedWords });
+  }
   const plan = await maybePlanPublishedRevision({
     existingStatus: existing.status,
     existing,
@@ -1828,6 +1842,19 @@ async function throwIfEditLocked(
  * ونافذة الوكالة. تفويض البوت هو توكن Bearer على صف `source=bot` فقط.
  */
 async function assertBotDraftBylineMayPublish(bot: BotIdentity, row: ArticleRow): Promise<void> {
+  // الكلمات المحظورة من النشر تسبق كل استثناء: الرسالة نفسها التي في اللوحة.
+  const { denyBannedWords } = await import("./publishBannedWordsService");
+  const banned = await denyBannedWords({
+    userId: bot.personal?.userId ?? null,
+    nextStatus: "published",
+    content: row,
+    articleId: row.id,
+    actorLabel: bot.personal ? "نشر سبق" : `bot:${bot.name}`,
+    surface: "bot",
+  });
+  if (banned) {
+    throw new BotDraftError(403, "forbidden_action", banned.message, { reason: "banned_word", bannedWords: banned.bannedWords });
+  }
   if (isPersonalBotNewspaperNews(bot, row)) return;
   const [{ assertMediaLicenseAllowsSubmission }, { resolveContentBylineUserId }] = await Promise.all([
     import("./mediaLicenseService"),

@@ -338,6 +338,7 @@ curl -sS "$B/api/internal/bot-drafts/by-public-id/abc12xy" \
 | `publicId` فارغ بعد القص أو أطول من 300 حرف | `400 validation_error` |
 | توكن مفقود أو خاطئ | `401 unauthorized` |
 | توكن شخصي بلا صلاحية `read` | `403 forbidden_action` |
+| ورد في المادة عنصر من «الكلمات المحظورة من النشر» عند النشر أو الجدولة | `403 forbidden_action` مع `details.reason="banned_word"` و`details.bannedWords`؛ اعرض `message` كما هي |
 
 ### نشر فوري — `POST /api/internal/bot-drafts/:id/publish`
 
