@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { articleEvents, users } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
+import { scheduleTitleConsistencyCheckById } from './titleConsistencyService';
 
 interface LogArticleEventParams {
   articleId: string;
@@ -11,6 +12,8 @@ interface LogArticleEventParams {
 }
 
 export async function logArticleEvent(params: LogArticleEventParams) {
+  // كل مسار نشر يسجّل حدث «published»؛ فحص ظل للعنوان (مطفأ افتراضياً، لا يرمي).
+  if (params.eventType === 'published') scheduleTitleConsistencyCheckById(params.articleId);
   return db.insert(articleEvents).values({
     articleId: params.articleId,
     eventType: params.eventType,

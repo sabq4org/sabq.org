@@ -200,6 +200,7 @@ import {
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { ArticleEditRequestsBanner } from "@/components/articles/ArticleEditRequests";
+import { EditorTitleCheckNotice } from "@/components/articles/TitleCheckBadge";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
 import { uploadNewsImage, newsImageUploadLabel, NEWS_IMAGE_MAX_BYTES, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 
@@ -3469,6 +3470,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </Button>
                   )}
                 </div>
+                {!isOpinionAuthor && <EditorTitleCheckNotice articleId={id} />}
                 {!isOpinionAuthor && (
                   <InlineHeadlineSuggestions
                     language="ar"

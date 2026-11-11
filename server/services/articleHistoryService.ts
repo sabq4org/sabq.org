@@ -22,6 +22,7 @@ import { logArticleEvent, getArticleEventsWithActor } from "./articleEventsServi
 import { articleLockAllowsWriter, nextArticleVersion } from "./articleWriteVersion";
 import { maybePlanPublishedRevision, recordArticleRevision, editorDisplayName } from "./publishFirstService";
 import { runWithExclusiveBreaking } from "./breakingNewsService";
+import { scheduleTitleConsistencyCheck } from "./titleConsistencyService";
 
 type ArticleRow = Article;
 
@@ -112,6 +113,13 @@ export async function recordArticleSave(input: {
 }) {
   const articleId = input.after.id;
   const actorId = input.actorId ?? null;
+  // فحص ظل للعنوان (مطفأ افتراضياً)؛ لا ينتظر ولا يرمي.
+  scheduleTitleConsistencyCheck(input.after, {
+    touched: !input.before
+      || input.before.title !== input.after.title
+      || input.before.content !== input.after.content
+      || input.before.status !== input.after.status,
+  });
   const beforeSnap = input.before ? snapshotFromArticle(input.before) : null;
   const afterSnap = snapshotFromArticle(input.after);
   const fields = changedSnapshotFields(beforeSnap, afterSnap);
