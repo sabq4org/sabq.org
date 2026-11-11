@@ -21,6 +21,8 @@ region = "aws:us-east-1"
 [vars]
 API_ORIGIN = "https://sabq-api-virginia.onrender.com"
 
+# 1% عينة: السجلات الكاملة كلّفت 24 دولارًا في فاتورة نوفمبر 2026 (57 مليون طلب شهريًا).
+# ارفعها مؤقتًا عند تشخيص مشكلة ثم أعدها.
 [observability]
 enabled = true
-head_sampling_rate = 1
+head_sampling_rate = 0.01

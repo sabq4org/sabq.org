@@ -1,6 +1,6 @@
 # مكتبة الوسائط (`media-library`)
 
-> آخر مراجعة: 2026-10-31 | المالك: content
+> آخر مراجعة: 2026-11-11 | المالك: content
 
 ## الغرض
 تخزين وبحث وحوكمة وأوصاف أصول الوسائط. توليد الصور من المحرر يُنسب لنظام `editorial`.
@@ -29,6 +29,15 @@
 - المساران القديمان `/api/payments/webhook` و`/api/advertiser-payments/webhook` خارج هذه الدفعة، ويحتاجان مراجعة مستقلة لعقد التوقيع وترتيب middleware؛ لم يتغير `tapPaymentService.verifyWebhookSignature` المشترك.
 
 - **وسم الصور المولدة في نسخ R2 (2026-10-13):** `prepareR2Objects` يكتب وسم IPTC `trainedAlgorithmicMedia` (XMP) في كل نسخة WebP إن كان الغرض ينتهي بـ`-ai-generated` أو `-openai-generated` (`isAiGeneratedImagePurpose`). الصور الحقيقية لا تُوسم، والأصل يُحفظ كما رُفع دون تغيير.
+
+## نقل صور Cloudflare Images النشطة إلى R2 — 2026-11-11
+
+- السبب: Cloudflare Images يحتسب كل تسليم حتى من الكاش (314 دولارًا في فاتورة نوفمبر 2026). الرفع الجديد على R2، والباقي على الخدمة المدفوعة هو ما يُعاد استخدامه من المكتبة القديمة والصور الشخصية.
+- `server/services/imageRelocationService.ts` + `server/jobs/imageRelocationJob.ts` (كل دقيقتين، القائد فقط): ينسخ الصورة إلى R2 عبر `newsImageStorageService.upload` بـ`forceR2` (بلا fallback إلى Cloudflare Images) ويسجل المقابلة في `image_migrations` (`old_url` = رابط `/public`، `new_url`، `status`).
+- **ننسخ ولا نحذف:** الأصل يبقى على `imagedelivery.net`، فلا ينكسر رابط قديم، والتراجع استعادة الرابط من `image_migrations`.
+- الأخبار: يبدّل `image_url` (و`lite_optimized_image_url` إن كانت للصورة نفسها) للأخبار **المنشورة** خلال آخر 3 أيام فقط، بشرط مطابقة الرابط القديم، ويتجاوز الخبر المفتوح في المحرر (قفل تحرير حي). لا يغيّر `updated_at` (مثل `articleDerivedWrites`). المسودات لا تُلمس.
+- الطابور: صفوف `pending` أو `pending_thumb` (النسخة الصغيرة، للصور الشخصية) يدخلها المالك عبر SQL. المهمة تنسخ فقط؛ تبديل روابط `users` والأخبار القديمة يتم بملف SQL ينفذه المالك.
+- فشل صورة يسجَّل `failed` ويعاد بعد 6 ساعات. الإيقاف: `CF_IMAGE_RELOCATION=off`. الصلاحيات: `migrations/20261111_image_relocation_runtime_grants.sql`.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف + runbook R2 عند لمس التخزين
