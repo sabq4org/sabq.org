@@ -3,9 +3,10 @@ import SabqDeskKit
 import SwiftUI
 import UserNotifications
 
-/// «التنبيهات» (approved mockup 2026-10-29): the bell's timeline of tweets,
-/// opinion articles and news published from «نشر سبق», grouped by day, with
-/// filter tabs and one button per row that opens the item.
+/// «التنبيهات» (approved mockup 2026-11-12): one timeline split by day only.
+/// Each row is one item (a tweet, a news story, an article, a ticket) with all
+/// its stages on one line; the sender's photo or logo sits on the rail. A tap
+/// opens the item and a swipe clears it.
 struct NotificationsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -23,8 +24,8 @@ struct NotificationsView: View {
     @State private var confirmsClear = false
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+        List {
+            VStack(alignment: .leading, spacing: 16) {
                 header
                 if filters.count > 2 {
                     SectionChipBar(sections: filters, selection: $filter, title: \.title,
@@ -34,12 +35,15 @@ struct NotificationsView: View {
                 if let loadError {
                     ErrorLine(message: loadError)
                 }
-                content
             }
-            .padding(.horizontal, DeskLayout.pageMargin + 4)
             .padding(.top, 8)
-            .padding(.bottom, 32)
+            .listRowInsets(EdgeInsets(top: 0, leading: NotifLayout.margin, bottom: 0, trailing: NotifLayout.margin))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            content
         }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 1)
         .scrollContentBackground(.hidden)
         .background(NotifInk.page.ignoresSafeArea())
         .refreshable { await load() }
@@ -118,37 +122,54 @@ struct NotificationsView: View {
         if !hasLoaded && items.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity, minHeight: 200)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
         } else if items.isEmpty {
             DeskEmptyState(title: filter.emptyTitle, message: filter.emptyMessage)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 40)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
         } else {
-            let split = StaffNotificationTimeline.split(items)
-            if !split.decisions.isEmpty {
-                NotificationDecisionGroup(items: split.decisions,
-                                          open: { item in open(item) }, clear: { item in clear(item) })
-            }
-            if !split.days.isEmpty {
-                // «للعلم» is named only when it sits under the decisions.
-                if !split.decisions.isEmpty {
-                    NotificationSectionTitle(systemImage: "info.circle", title: "للعلم", tint: DeskTheme.textSecondary)
-                        .padding(.top, 4)
+            ForEach(StaffNotificationTimeline.days(items)) { day in
+                NotificationDayTitle(day: day)
+                    .listRowInsets(EdgeInsets(top: 18, leading: NotifLayout.margin + 6, bottom: 8, trailing: NotifLayout.margin))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                ForEach(Array(day.items.enumerated()), id: \.element.id) { index, item in
+                    let isFirst = index == 0
+                    let isLast = index == day.items.count - 1
+                    NotificationTimelineRow(item: item, isFirst: isFirst, isLast: isLast) { open(item) }
+                        .listRowInsets(EdgeInsets(top: 0, leading: NotifLayout.margin + 14,
+                                                  bottom: 0, trailing: NotifLayout.margin + 14))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(
+                            UnevenRoundedRectangle(topLeadingRadius: isFirst ? 20 : 0, bottomLeadingRadius: isLast ? 20 : 0,
+                                                   bottomTrailingRadius: isLast ? 20 : 0, topTrailingRadius: isFirst ? 20 : 0,
+                                                   style: .continuous)
+                                .fill(Color.white)
+                                .padding(.horizontal, NotifLayout.margin)
+                        )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("مسح", role: .destructive) { clear(item) }
+                        }
                 }
-                ForEach(split.days) { day in
-                    NotificationDayGroup(day: day, open: { item in open(item) }, clear: { item in clear(item) })
+            }
+            Group {
+                if nextCursor != nil {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .task { await loadMore() }
+                } else {
+                    Text("نحتفظ بتنبيهات آخر 30 يومًا · اسحب التنبيه لمسحه")
+                        .deskText(DeskType.timestamp)
+                        .foregroundStyle(DeskTheme.textTertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
                 }
             }
-            if nextCursor != nil {
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .task { await loadMore() }
-            } else {
-                Text("نحتفظ بتنبيهات آخر 30 يومًا")
-                    .deskText(DeskType.timestamp)
-                    .foregroundStyle(DeskTheme.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 4)
-            }
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
     }
 
@@ -320,8 +341,7 @@ private enum NotificationFilter: Hashable, Identifiable {
 
 enum NotifInk {
     static let page = Color(red: 0xF5 / 255, green: 0xF7 / 255, blue: 0xFA / 255)
-    /// The bot's tile: the one dark mark on the screen, so a machine never reads as a person.
-    static let bot = DeskTheme.navy
+    static let rail = Color(red: 0xE3 / 255, green: 0xEA / 255, blue: 0xF1 / 255)
 
     static func tint(_ category: StaffNotificationCategory) -> Color {
         switch category {
@@ -342,152 +362,215 @@ enum NotifInk {
     }
 }
 
-/// «تحتاج قرارك» / «للعلم» above a group.
-private struct NotificationSectionTitle: View {
-    let systemImage: String
-    let title: String
-    var count: Int?
-    let tint: Color
+enum NotifLayout {
+    static let margin: CGFloat = DeskLayout.pageMargin
+    static let avatar: CGFloat = 36
+}
+
+/// The three text sizes of a row: a small grey sender line, a large dark
+/// title, and a small status line (approved 2026-11-12).
+private enum NotifType {
+    static let by = DeskTextRole(size: 12, weight: .regular, style: .caption, lineSpacing: 0)
+    static let byName = DeskTextRole(size: 12, weight: .medium, style: .caption, lineSpacing: 0)
+    static let titleNew = DeskTextRole(size: 16, weight: .semibold, style: .callout, lineSpacing: 2)
+    static let titleRead = DeskTextRole(size: 16, weight: .medium, style: .callout, lineSpacing: 2)
+    static let status = DeskTextRole(size: 12, weight: .regular, style: .caption, lineSpacing: 0)
+    static let statusStrong = DeskTextRole(size: 12, weight: .semibold, style: .caption, lineSpacing: 0)
+}
+
+/// «اليوم · الخميس 12 نوفمبر» above a day's rows.
+private struct NotificationDayTitle: View {
+    let day: StaffNotificationDay
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint)
-                .accessibilityHidden(true)
-            Text(title)
+        HStack(spacing: 4) {
+            Text(day.title)
                 .deskText(DeskType.metaEmphasis)
                 .foregroundStyle(DeskInk.strong)
-            if let count {
-                Text(verbatim: "\(count)")
+            if day.title != day.date {
+                // The dot is its own Text: leading a string, a neutral mark
+                // would drift to the far end of a right-to-left line.
+                Text(verbatim: "·")
                     .deskText(DeskType.meta)
-                    .monospacedDigit()
+                    .foregroundStyle(DeskTheme.textTertiary)
+                Text(day.date)
+                    .deskText(DeskType.meta)
                     .foregroundStyle(DeskTheme.textSecondary)
             }
         }
-        .padding(.horizontal, 6)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
 }
 
-/// What still waits for the desk: full rows with the button that opens each.
-private struct NotificationDecisionGroup: View {
-    let items: [StaffNotification]
-    let open: (StaffNotification) -> Void
-    let clear: (StaffNotification) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            NotificationSectionTitle(systemImage: "hand.raised.fill", title: "تحتاج قرارك",
-                                     count: items.count, tint: DeskTheme.danger)
-            VStack(spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    NotificationDecisionRow(item: item, isLast: index == items.count - 1,
-                                            open: { open(item) }, clear: { clear(item) })
-                }
-            }
-            .padding(.horizontal, 14)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        }
-    }
-}
-
-/// One day of «للعلم»: «اليوم · الخميس 29 أكتوبر», then its compact rows.
-private struct NotificationDayGroup: View {
-    let day: StaffNotificationDay
-    let open: (StaffNotification) -> Void
-    let clear: (StaffNotification) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text(day.title)
-                    .deskText(DeskType.meta)
-                    .foregroundStyle(DeskInk.strong)
-                if day.title != day.date {
-                    Text(day.date)
-                        .deskText(DeskType.meta)
-                        .foregroundStyle(DeskTheme.textSecondary)
-                }
-            }
-            .padding(.horizontal, 6)
-            .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 0) {
-                ForEach(Array(day.items.enumerated()), id: \.element.id) { index, item in
-                    NotificationNoteRow(item: item, isLast: index == day.items.count - 1,
-                                        open: { open(item) }, clear: { clear(item) })
-                }
-            }
-            .padding(.horizontal, 14)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        }
-    }
-}
-
-/// Who is behind the item: a person's photo in a circle, an agency's logo in
-/// a square, a dark square for a bot, a clock for the scheduler. Without a
-/// photo or logo the name's initials stand in.
-private struct NotificationSourceTile: View {
+/// One item on the timeline: who sent it (small, grey), what it is (large,
+/// dark), and where it stands (type in its colour, then its stages, or
+/// «بانتظار قرارك» in red with the way in).
+private struct NotificationTimelineRow: View {
     let item: StaffNotification
-    let size: CGFloat
+    let isFirst: Bool
+    let isLast: Bool
+    let open: () -> Void
 
-    private var square: RoundedRectangle { RoundedRectangle(cornerRadius: size * 0.28, style: .continuous) }
+    private var hasAction: Bool { item.link != nil || item.articleURL != nil }
 
     var body: some View {
-        Group {
-            switch item.actor {
-            case .bot:
-                if let art = NotifBotArt.image(for: item.actorName) {
-                    art.resizable().scaledToFill()
-                        .frame(width: size, height: size)
-                        .clipShape(square)
-                } else {
-                    Image(systemName: "cpu")
-                        .font(.system(size: size * 0.5, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: size, height: size)
-                        .background(NotifInk.bot, in: square)
-                }
-            case .system:
-                Image(systemName: "clock")
-                    .font(.system(size: size * 0.45, weight: .semibold))
-                    .foregroundStyle(NotifInk.ink(item.category))
-                    .frame(width: size, height: size)
-                    .background(NotifInk.tint(item.category), in: Circle())
-            case .agency:
-                remote(fit: true) {
-                    initials
-                        .foregroundStyle(DeskTheme.warning)
-                        .frame(width: size, height: size)
-                        .background(NotifInk.tint(.opinion))
-                }
-                .frame(width: size, height: size)
-                .background(Color.white)
-                .clipShape(square)
-                .overlay(square.strokeBorder(DeskTheme.separator, lineWidth: 1))
-            case .person, .unknown:
-                remote(fit: false) {
-                    initials
-                        .foregroundStyle(DeskTheme.link)
-                        .frame(width: size, height: size)
-                        .background(DeskTheme.softBlue)
-                }
-                .frame(width: size, height: size)
-                .clipShape(Circle())
+        HStack(alignment: .top, spacing: 12) {
+            NotificationAvatar(item: item)
+            VStack(alignment: .leading, spacing: 4) {
+                byLine
+                Text(item.title)
+                    .deskText(item.isUnread ? NotifType.titleNew : NotifType.titleRead)
+                    .foregroundStyle(DeskInk.strong)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                statusLine
             }
         }
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .leading) { rail }
+        .overlay(alignment: .bottom) {
+            if !isLast { Rectangle().fill(DeskTheme.hairline).frame(height: 1) }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if hasAction { open() } }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(hasAction ? .isButton : [])
+        .accessibilityAction(named: Text(item.actionLabel)) { if hasAction { open() } }
+    }
+
+    private var byLine: some View {
+        HStack(spacing: 4) {
+            Text(item.actorName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackName)
+                .deskText(NotifType.byName)
+                .foregroundStyle(DeskTheme.textSecondary)
+                .lineLimit(1)
+            if let role = shownRole {
+                Text(verbatim: "·")
+                    .deskText(NotifType.by)
+                    .foregroundStyle(DeskTheme.textTertiary)
+                Text(role)
+                    .deskText(NotifType.by)
+                    .foregroundStyle(DeskTheme.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            Spacer(minLength: 6)
+            LTRText(text: StaffNotificationTimeline.time(item.createdAt))
+                .fixedSize()
+            if item.isUnread {
+                Circle()
+                    .fill(DeskInk.action)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel("جديد")
+            }
+        }
+    }
+
+    /// «قروك بوت · بوت» says it twice: the role is dropped when the name already holds it.
+    private var shownRole: String? {
+        guard let role = item.roleLabel else { return nil }
+        return (item.actorName ?? "").contains(role) ? nil : role
+    }
+
+    private var fallbackName: String {
+        item.actor == .system ? "نشر آلي" : item.category.tag
+    }
+
+    @ViewBuilder private var statusLine: some View {
+        HStack(spacing: 6) {
+            Text(item.category.tag)
+                .deskText(NotifType.statusStrong)
+                .foregroundStyle(NotifInk.ink(item.category))
+                .fixedSize()
+            if item.waitsForDecision {
+                Text("بانتظار قرارك")
+                    .deskText(NotifType.statusStrong)
+                    .foregroundStyle(DeskTheme.danger)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if hasAction {
+                    Text(item.actionLabel)
+                        .deskText(NotifType.statusStrong)
+                        .foregroundStyle(DeskInk.link)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            } else {
+                Text(item.statusLine)
+                    .deskText(NotifType.status)
+                    .foregroundStyle(DeskTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.top, 1)
+    }
+
+    /// The rail runs through the avatars, from the day's first row to its last.
+    private var rail: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(isFirst ? Color.clear : NotifInk.rail).frame(width: 2, height: 13)
+            Spacer(minLength: NotifLayout.avatar)
+            Rectangle().fill(isLast ? Color.clear : NotifInk.rail).frame(width: 2)
+        }
+        .frame(width: NotifLayout.avatar)
         .accessibilityHidden(true)
     }
+}
 
-    /// The photo or logo, with `fallback` while it loads, when it fails and when there is none.
+/// Every sender is a circle of one size on white: a person's photo, an
+/// agency's logo shown whole, a bot's glyph on light grey, or a clock for the
+/// scheduler. Initials stand in when there is no picture.
+private struct NotificationAvatar: View {
+    let item: StaffNotification
+    private let size = NotifLayout.avatar
+
+    var body: some View {
+        content
+            .frame(width: size, height: size)
+            .background(Color.white)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(DeskTheme.separator, lineWidth: 1))
+            .background(Circle().fill(Color.white).padding(-3))
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch item.actor {
+        case .bot:
+            if let art = NotifBotArt.image(for: item.actorName) {
+                art.resizable().scaledToFill()
+            } else {
+                Image(systemName: "cpu")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(DeskInk.strong)
+                    .frame(width: size, height: size)
+                    .background(DeskTheme.chipGrey)
+            }
+        case .system:
+            Image(systemName: "clock")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(NotifInk.ink(item.category))
+                .frame(width: size, height: size)
+                .background(NotifInk.tint(item.category))
+        case .agency:
+            remote(fit: true) { initials(ink: DeskTheme.warning, fill: NotifInk.tint(.opinion)) }
+        case .person, .unknown:
+            remote(fit: false) { initials(ink: DeskTheme.link, fill: DeskTheme.softBlue) }
+        }
+    }
+
     @ViewBuilder
     private func remote<Fallback: View>(fit: Bool, @ViewBuilder fallback: @escaping () -> Fallback) -> some View {
         if let url = item.actorAvatarURL {
             AsyncImage(url: url) { phase in
                 if let image = phase.image {
                     if fit {
-                        image.resizable().scaledToFit().padding(size * 0.08)
+                        image.resizable().scaledToFit().padding(5)
                     } else {
                         image.resizable().scaledToFill()
                     }
@@ -500,21 +583,26 @@ private struct NotificationSourceTile: View {
         }
     }
 
-    @ViewBuilder private var initials: some View {
-        if let name = item.actorName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            Text(verbatim: DeskInitials.of(name))
-                .font(DeskFonts.app(size: size * 0.36, weight: .bold, relativeTo: .caption))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-        } else {
-            Image(systemName: item.actor == .agency ? "building.2.fill" : "person.fill")
-                .font(.system(size: size * 0.42, weight: .semibold))
+    private func initials(ink: Color, fill: Color) -> some View {
+        Group {
+            if let name = item.actorName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty {
+                Text(verbatim: DeskInitials.of(name))
+                    .font(DeskFonts.app(size: 13, weight: .bold, relativeTo: .caption))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            } else {
+                Image(systemName: item.actor == .agency ? "building.2.fill" : "person.fill")
+                    .font(.system(size: 15, weight: .semibold))
+            }
         }
+        .foregroundStyle(ink)
+        .frame(width: size, height: size)
+        .background(fill)
     }
 }
 
 /// A bot's own picture, when one ships in the asset catalog: «BotNashrSabq»
-/// for «نشر سبق», «BotGrok» for «قروك بوت». Absent art falls back to the dark tile.
+/// for «نشر سبق», «BotGrok» for «قروك بوت». Without art the grey glyph stands in.
 enum NotifBotArt {
     static func assetName(for botName: String?) -> String? {
         let name = (botName ?? "").lowercased()
@@ -529,133 +617,8 @@ enum NotifBotArt {
     }
 }
 
-/// The first line of every row: the type tag (one colour per type), who it
-/// came from, then the time and the «new» dot.
-private struct NotificationHeadline: View {
-    let item: StaffNotification
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(item.category.tag)
-                .deskText(DeskType.tag)
-                .foregroundStyle(NotifInk.ink(item.category))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 2)
-                .background(NotifInk.tint(item.category), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .fixedSize()
-            Text(item.sourceLine)
-                .deskText(DeskType.meta)
-                .foregroundStyle(DeskTheme.textSecondary)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            LTRText(text: StaffNotificationTimeline.time(item.createdAt))
-                .fixedSize()
-            if item.isUnread {
-                Circle()
-                    .fill(DeskInk.action)
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel("جديد")
-            }
-        }
-    }
-}
-
-private struct NotificationDecisionRow: View {
-    let item: StaffNotification
-    let isLast: Bool
-    let open: () -> Void
-    let clear: () -> Void
-
-    private var hasAction: Bool { item.link != nil || item.articleURL != nil }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            NotificationSourceTile(item: item, size: 40)
-            VStack(alignment: .leading, spacing: 6) {
-                NotificationHeadline(item: item)
-                Text(item.title)
-                    .deskText(DeskRowType.subjectStrong)
-                    .foregroundStyle(DeskInk.strong)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    if hasAction {
-                        Button(action: open) {
-                            Text(item.actionLabel)
-                                .deskText(DeskType.tag)
-                                .foregroundStyle(NotifInk.ink(item.category))
-                                .padding(.horizontal, 14)
-                                .frame(minHeight: 32)
-                                .background(NotifInk.tint(item.category), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer(minLength: 4)
-                    Button(action: clear) {
-                        Text("مسح")
-                            .deskText(DeskType.tag)
-                            .foregroundStyle(DeskTheme.textSecondary)
-                            .padding(.horizontal, 10)
-                            .frame(minHeight: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("مسح التنبيه")
-                }
-                .padding(.top, 2)
-            }
-        }
-        .padding(.vertical, 14)
-        .overlay(alignment: .bottom) {
-            if !isLast { Rectangle().fill(DeskTheme.hairline).frame(height: 1) }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { if hasAction { open() } }
-        .accessibilityElement(children: .combine)
-        .accessibilityAction(named: Text(item.actionLabel)) { if hasAction { open() } }
-        .accessibilityAction(named: Text("مسح التنبيه")) { clear() }
-    }
-}
-
-/// «للعلم»: two lines, no button. A tap opens the item; the small cross clears it.
-private struct NotificationNoteRow: View {
-    let item: StaffNotification
-    let isLast: Bool
-    let open: () -> Void
-    let clear: () -> Void
-
-    private var hasAction: Bool { item.link != nil || item.articleURL != nil }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            NotificationSourceTile(item: item, size: 30)
-            VStack(alignment: .leading, spacing: 4) {
-                NotificationHeadline(item: item)
-                Text(item.title)
-                    .deskText(DeskRowType.preview)
-                    .foregroundStyle(DeskInk.strong)
-                    .lineLimit(1)
-            }
-            Button(action: clear) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DeskTheme.textTertiary)
-                    .frame(width: 30, height: DeskLayout.touchTarget)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("مسح التنبيه")
-        }
-        .padding(.vertical, 6)
-        .overlay(alignment: .bottom) {
-            if !isLast { Rectangle().fill(DeskTheme.hairline).frame(height: 1) }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { if hasAction { open() } }
-        .accessibilityElement(children: .combine)
-        .accessibilityAction(named: Text(item.actionLabel)) { if hasAction { open() } }
-        .accessibilityAction(named: Text("مسح التنبيه")) { clear() }
-    }
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
 
 /// The bell in the home headers: a white circle with a blue count badge.

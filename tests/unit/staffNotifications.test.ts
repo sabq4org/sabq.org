@@ -3,6 +3,9 @@ import {
   botDraftsPublisherDisplayName,
   buildStaffDeskEventDetail,
   buildStaffDeskEventSource,
+  buildStaffDeskEventTrail,
+  formatStaffDeskStageTime,
+  staffDeskActorRole,
   resolveStaffDeskActorKind,
   staffDeskEventIsDecisionKind,
   STAFF_DESK_EVENT_KINDS,
@@ -213,5 +216,95 @@ describe("staff desk notifications (shared)", () => {
     );
     expect(line("ticket_message", "نورة", "person")).toBe("من كاتب · نورة");
     expect(line("news_edit_request", null, "person")).toBe("طلب تعديل");
+  });
+
+  it("maps every «نشر سبق» bot token to its display name", () => {
+    expect(botDraftsPublisherDisplayName("nashr-x")).toBe("نشر سبق");
+    expect(botDraftsPublisherDisplayName("nashr-sabq")).toBe("نشر سبق");
+    expect(botDraftsPublisherDisplayName("grok-bot")).toBe("قروك بوت");
+    expect(botDraftsPublisherDisplayName("other-bot")).toBe("other-bot");
+  });
+
+  it("names the sender's role under their name", () => {
+    expect(staffDeskActorRole("news_draft", "person")).toBe("مراسل");
+    expect(staffDeskActorRole("opinion_draft", "person")).toBe("كاتب رأي");
+    expect(staffDeskActorRole("ticket_message", "person")).toBe("كاتب");
+    expect(staffDeskActorRole("tweet_draft", "person")).toBeNull();
+    expect(staffDeskActorRole("tweet_draft", "agency")).toBe("وكالة");
+    expect(staffDeskActorRole("news_bot_draft", "bot")).toBe("بوت");
+    expect(staffDeskActorRole("tweet_published", "system")).toBeNull();
+  });
+
+  it("writes a stage time without ص/م, with the day when it differs", () => {
+    const ref = new Date("2026-11-12T14:03:00Z"); // 5:03 م الرياض
+    expect(formatStaffDeskStageTime(new Date("2026-11-12T14:02:00Z"), ref)).toBe("5:02");
+    expect(formatStaffDeskStageTime(new Date("2026-11-11T20:45:00Z"), ref)).toBe("أمس 11:45");
+    expect(formatStaffDeskStageTime(new Date("2026-11-09T06:00:00Z"), ref)).toBe("الاثنين 9:00");
+  });
+
+  it("joins an item's events into one trail", () => {
+    const at = (iso: string) => new Date(iso);
+    // مقترح وكالة نشره المكتب.
+    expect(
+      buildStaffDeskEventTrail(
+        [
+          { kind: "tweet_draft", actorName: "شركة عنوان", createdAt: at("2026-11-12T10:44:00Z"), scheduledAt: null },
+          { kind: "tweet_published", actorName: "مكتب سبق", createdAt: at("2026-11-12T10:46:00Z"), scheduledAt: null },
+        ],
+        "شركة عنوان",
+        NOW,
+      ),
+    ).toBe("مقترحة 1:44 ← نشرها مكتب سبق 1:46");
+    // صاحب المقترح نشره بنفسه: لا يتكرر اسمه.
+    expect(
+      buildStaffDeskEventTrail(
+        [
+          { kind: "tweet_draft", actorName: "ياسر", createdAt: at("2026-11-12T00:52:00Z"), scheduledAt: null },
+          { kind: "tweet_published", actorName: "ياسر", createdAt: at("2026-11-12T00:52:30Z"), scheduledAt: null },
+        ],
+        "ياسر",
+        NOW,
+      ),
+    ).toBe("مقترحة 3:52 ← نُشرت 3:52");
+    // مسودة بوت نُشرت.
+    expect(
+      buildStaffDeskEventTrail(
+        [
+          { kind: "news_bot_draft", actorName: "قروك بوت", createdAt: at("2026-11-12T14:02:00Z"), scheduledAt: null },
+          { kind: "news_published", actorName: "قروك بوت", createdAt: at("2026-11-12T14:03:00Z"), scheduledAt: null },
+        ],
+        "قروك بوت",
+        NOW,
+      ),
+    ).toBe("مسودة 5:02 ← نُشر 5:03");
+    // نشر آلي في الموعد.
+    expect(
+      buildStaffDeskEventTrail(
+        [{ kind: "tweet_published", actorName: null, createdAt: at("2026-11-11T20:45:00Z"), scheduledAt: null }],
+        null,
+        NOW,
+      ),
+    ).toBe("نُشرت تلقائيًا 11:45");
+    // رسائل التذكرة الواحدة تُعدّ ولا تتكرر.
+    const msg = (iso: string) => ({ kind: "ticket_message" as const, actorName: "نورة", createdAt: at(iso), scheduledAt: null });
+    expect(
+      buildStaffDeskEventTrail([msg("2026-11-12T07:00:00Z"), msg("2026-11-12T08:00:00Z"), msg("2026-11-12T09:10:00Z")], "نورة", NOW),
+    ).toBe("3 رسائل · آخرها 12:10");
+    // أكثر من ثلاث مراحل: تُعرض الثلاث الأخيرة.
+    const d = (k: "tweet_draft" | "tweet_scheduled" | "tweet_published", iso: string, sch: string | null = null) => ({
+      kind: k, actorName: "سارة", createdAt: at(iso), scheduledAt: sch ? at(sch) : null,
+    });
+    expect(
+      buildStaffDeskEventTrail(
+        [
+          d("tweet_draft", "2026-10-29T05:00:00Z"),
+          d("tweet_scheduled", "2026-10-29T05:10:00Z", "2026-10-29T09:00:00Z"),
+          d("tweet_scheduled", "2026-10-29T05:20:00Z", "2026-10-29T10:00:00Z"),
+          d("tweet_published", "2026-10-29T10:00:00Z"),
+        ],
+        "سارة",
+        NOW,
+      ),
+    ).toBe("… ← موعدها اليوم 12:00 م ← موعدها اليوم 1:00 م ← نُشرت 1:00");
   });
 });

@@ -67,12 +67,19 @@ public struct StaffNotification: Codable, Sendable, Equatable, Identifiable, Has
     public var source: String?
     /// The person's photo or the agency's logo (absolute https), when the server has one.
     public var actorAvatarUrl: String?
+    /// One timeline row per item (server, 2026-11-12): the sender's role
+    /// («مراسل», «بوت», «وكالة»), the item's stages in one line, and how
+    /// many events it holds. Absent on an older server.
+    public var actorRole: String?
+    public var trail: String?
+    public var stageCount: Int?
 
     public init(id: String, kind: String, category: StaffNotificationCategory, label: String, actionLabel: String,
                 title: String, detail: String, actorName: String? = nil, targetId: String, linkUrl: String? = nil,
                 deeplink: String? = nil, scheduledAt: Date? = nil, createdAt: Date, isUnread: Bool = false,
                 actorKind: StaffNotificationActorKind? = nil, needsDecision: Bool? = nil, source: String? = nil,
-                actorAvatarUrl: String? = nil) {
+                actorAvatarUrl: String? = nil, actorRole: String? = nil, trail: String? = nil,
+                stageCount: Int? = nil) {
         self.id = id
         self.kind = kind
         self.category = category
@@ -91,6 +98,21 @@ public struct StaffNotification: Codable, Sendable, Equatable, Identifiable, Has
         self.needsDecision = needsDecision
         self.source = source
         self.actorAvatarUrl = actorAvatarUrl
+        self.actorRole = actorRole
+        self.trail = trail
+        self.stageCount = stageCount
+    }
+
+    /// The line under the title: the item's stages, or the source line on an older server.
+    public var statusLine: String {
+        let text = trail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? sourceLine : text
+    }
+
+    /// «مراسل», «بوت», … beside the name; nil when there is none.
+    public var roleLabel: String? {
+        let text = actorRole?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? nil : text
     }
 
     /// Only an https link is ever loaded.
@@ -245,12 +267,6 @@ public struct StaffNotificationDay: Sendable, Equatable, Identifiable {
 }
 
 public enum StaffNotificationTimeline {
-    /// «تحتاج قرارك» first (newest on top), then everything else by day.
-    public static func split(_ items: [StaffNotification], now: Date = Date())
-        -> (decisions: [StaffNotification], days: [StaffNotificationDay]) {
-        (items.filter(\.waitsForDecision), days(items.filter { !$0.waitsForDecision }, now: now))
-    }
-
     /// Groups newest-first items by Riyadh day, keeping their order.
     public static func days(_ items: [StaffNotification], now: Date = Date()) -> [StaffNotificationDay] {
         let calendar = RiyadhTime.calendar

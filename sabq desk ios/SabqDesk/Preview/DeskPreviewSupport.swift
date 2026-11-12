@@ -459,30 +459,16 @@ extension DeskPreviewTransport {
         }
         return """
         {"items":[
-          {"id":"n1","kind":"news_bot_draft","category":"news","label":"مسودة خبر من بوت","actionLabel":"مراجعة المسودة",
-           "title":"أمانة الرياض تعلن اكتمال مشروع تطوير طريق الملك فهد","detail":"من: قروك بوت · بانتظار قرارك","actorName":"قروك بوت",
-           "targetId":"preview-news-1","linkUrl":null,"deeplink":"sabqdesk://news/preview-news-1","createdAt":"\(at(4))","isUnread":true,"actorKind":"bot","needsDecision":true,"source":"مسودة من بوت · قروك بوت"},
-          {"id":"n2","kind":"tweet_published","category":"tweet","label":"نُشرت تغريدة","actionLabel":"فتح التغريدة",
-           "title":"عاجل | وزارة التعليم تعلن موعد بدء الفصل الدراسي الثاني","detail":"نُشرت تلقائيًا في موعدها",
-           "targetId":"preview-social-3","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-3","createdAt":"\(at(26))","isUnread":true,"actorKind":"system","needsDecision":false,"source":"نُشرت تلقائيًا في موعدها"},
-          {"id":"n3","kind":"news_draft","category":"news","label":"خبر من مراسل","actionLabel":"مراجعة الخبر",
-           "title":"افتتاح معرض الكتاب في جدة بمشاركة 400 دار نشر","detail":"من: سالم العتيبي","actorName":"سالم العتيبي",
-           "targetId":"preview-news-1","linkUrl":null,"deeplink":"sabqdesk://news/preview-news-1","createdAt":"\(at(58))","isUnread":true,"actorKind":"person","needsDecision":true,"source":"من مراسل · سالم العتيبي","actorAvatarUrl":"https://sabq.org/apple-touch-icon.png"},
-          {"id":"n7","kind":"tweet_draft","category":"tweet","label":"مسودة تغريدة جديدة","actionLabel":"مراجعة المسودة",
-           "title":"انطلاق أعمال المنتدى السعودي للإعلام غدًا في الرياض","detail":"من: وكالة الأفق","actorName":"وكالة الأفق",
-           "targetId":"preview-social-1","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-1","createdAt":"\(at(70))","isUnread":false,
-           "actorKind":"agency","needsDecision":true,"source":"مقترح من وكالة الأفق","actorAvatarUrl":"https://sabq.org/branding/sabq-logo.png"},
-          {"id":"n4","kind":"ticket_message","category":"message","label":"رسالة من كاتب","actionLabel":"فتح الرسالة",
-           "title":"استفسار عن موعد نشر مقال الأسبوع","detail":"من: نورة القحطاني","actorName":"نورة القحطاني",
-           "targetId":"preview-ticket-1","linkUrl":null,"deeplink":"sabqdesk://ticket/preview-ticket-1","createdAt":"\(at(95))","isUnread":false,"actorKind":"person","needsDecision":true,"source":"من كاتب · نورة القحطاني"},
-          {"id":"n5","kind":"news_published","category":"news","label":"خبر جديد عبر بوت النشر","actionLabel":"فتح الخبر",
-           "title":"الأرصاد: أمطار رعدية على منطقة عسير حتى المساء","detail":"الناشر: قروك بوت","actorName":"قروك بوت",
-           "targetId":"preview-a5","linkUrl":"https://sabq.org/article/preview","deeplink":"sabqdesk://notifications","createdAt":"\(at(140))","isUnread":false,"actorKind":"bot","needsDecision":false,"source":"نشره بوت · قروك بوت"},
-          {"id":"n6","kind":"opinion_scheduled","category":"opinion","label":"جُدول مقال رأي","actionLabel":"معاينة المقال",
-           "title":"المدن الذكية وأسئلة الخصوصية","detail":"خالد الحربي · يُنشر غدًا 9:00 ص","actorName":"خالد الحربي",
-           "targetId":"preview-op-4","linkUrl":null,"deeplink":"sabqdesk://opinion/preview-op-4","createdAt":"\(at(200))","isUnread":false,"actorKind":"person","needsDecision":false,"source":"يُنشر غدًا 9:00 ص · خالد الحربي"}
+          {"id":"n1","kind":"news_draft","category":"news","label":"خبر من مراسل","actionLabel":"مراجعة الخبر","title":"الاستخبارات السورية تفكك خلية تابعة لتنظيم داعش في ريف دمشق","detail":"","actorName":"منصور الشلاقي","targetId":"preview-news-1","linkUrl":null,"deeplink":"sabqdesk://news/preview-news-1","createdAt":"\(at(3))","isUnread":true,"actorKind":"person","needsDecision":true,"source":"","actorAvatarUrl":null,"actorRole":"مراسل","trail":"أُرسل 7:44","stageCount":2},
+          {"id":"n2","kind":"news_published","category":"news","label":"خبر جديد عبر بوت النشر","actionLabel":"فتح الخبر","title":"«إنفيديا» تعلن استقالة جينسن هوانغ.. وكوليت كريس رئيسة تنفيذية","detail":"","actorName":"قروك بوت","targetId":"preview-n2","linkUrl":"https://sabq.org/article/preview","deeplink":"sabqdesk://notifications","createdAt":"\(at(40))","isUnread":true,"actorKind":"bot","needsDecision":false,"source":"","actorAvatarUrl":null,"actorRole":"بوت","trail":"مسودة 5:02 ← نُشر 5:03","stageCount":2},
+          {"id":"n3","kind":"tweet_published","category":"tweet","label":"نُشرت تغريدة","actionLabel":"فتح التغريدة","title":"«تريند إيه آي» تدمج نماذج «نيموترون» الذكية من إنفيديا في منصتها","detail":"","actorName":"شركة عنوان العقارية","targetId":"preview-social-3","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-3","createdAt":"\(at(95))","isUnread":true,"actorKind":"agency","needsDecision":false,"source":"","actorAvatarUrl":"https://sabq.org/branding/sabq-logo.png","actorRole":"وكالة","trail":"مقترحة 1:44 ← نشرها مكتب سبق 1:46","stageCount":2},
+          {"id":"n4","kind":"ticket_message","category":"message","label":"رسالة من كاتب","actionLabel":"فتح الرسالة","title":"استفسار عن موعد نشر مقال الأسبوع","detail":"","actorName":"نورة القحطاني","targetId":"preview-ticket-1","linkUrl":null,"deeplink":"sabqdesk://ticket/preview-ticket-1","createdAt":"\(at(130))","isUnread":false,"actorKind":"person","needsDecision":true,"source":"","actorAvatarUrl":null,"actorRole":"كاتب","trail":"رسالتان · آخرها 11:50","stageCount":2},
+          {"id":"n5","kind":"tweet_published","category":"tweet","label":"نُشرت تغريدة","actionLabel":"فتح التغريدة","title":"مسائل لا يستغني عنها محامٍ في قضايا غسل الأموال","detail":"","actorName":"سلطان بن ناصر","targetId":"preview-social-1","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-1","createdAt":"\(at(170))","isUnread":false,"actorKind":"person","needsDecision":false,"source":"","actorAvatarUrl":"https://sabq.org/apple-touch-icon.png","actorRole":null,"trail":"مقترحة 11:29 ← نُشرت 11:33","stageCount":2},
+          {"id":"n6","kind":"tweet_published","category":"tweet","label":"نُشرت تغريدة","actionLabel":"فتح التغريدة","title":"أعلنت الشركة السعودية للصناعات المتطورة «سامي» توقيع اتفاقية جديدة","detail":"","actorName":"نشر سبق","targetId":"preview-social-2","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-2","createdAt":"\(at(210))","isUnread":false,"actorKind":"bot","needsDecision":false,"source":"","actorAvatarUrl":null,"actorRole":"بوت","trail":"مقترحة 9:04 ← نُشرت 9:04","stageCount":2},
+          {"id":"n7","kind":"tweet_published","category":"tweet","label":"نُشرت تغريدة","actionLabel":"فتح التغريدة","title":"إنجاز دولي جديد لـ«مغربي الصحية»","detail":"","actorName":null,"targetId":"preview-social-4","linkUrl":null,"deeplink":"sabqdesk://social/preview-social-4","createdAt":"\(at(1500))","isUnread":false,"actorKind":"system","needsDecision":false,"source":"","actorAvatarUrl":null,"actorRole":null,"trail":"نُشرت تلقائيًا 11:45","stageCount":2},
+          {"id":"n8","kind":"opinion_scheduled","category":"opinion","label":"جُدول مقال رأي","actionLabel":"معاينة المقال","title":"المدن الذكية وأسئلة الخصوصية","detail":"","actorName":"خالد الحربي","targetId":"preview-op-4","linkUrl":null,"deeplink":"sabqdesk://opinion/preview-op-4","createdAt":"\(at(1560))","isUnread":false,"actorKind":"person","needsDecision":false,"source":"","actorAvatarUrl":null,"actorRole":"كاتب رأي","trail":"وصل أمس 2:10 ← يُنشر غدًا 9:00 ص","stageCount":2}
         ],"nextCursor":null,"categories":["tweet","opinion","news","message"],
-         "counts":{"all":7,"tweet":2,"opinion":1,"news":3,"message":1},"unreadCount":3,"seenAt":null}
+         "counts":{"all":8,"tweet":4,"opinion":1,"news":2,"message":1},"unreadCount":3,"seenAt":null}
         """
     }
 }

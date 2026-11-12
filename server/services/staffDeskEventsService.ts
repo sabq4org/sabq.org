@@ -24,6 +24,8 @@ import {
   botDraftsPublisherDisplayName,
   buildStaffDeskEventDetail,
   buildStaffDeskEventSource,
+  buildStaffDeskEventTrail,
+  staffDeskActorRole,
   resolveStaffDeskActorKind,
   clipStaffDeskTitle,
   decodeStaffDeskEventCursor,
@@ -450,8 +452,9 @@ interface SeenState {
   clearedIds: string[];
 }
 
-const MAX_READ_IDS = 200;
-const MAX_CLEARED_IDS = 300;
+// الصف مادة كاملة (حتى 50 حدثاً)، فالسقف أكبر مما كان لحدث واحد.
+const MAX_READ_IDS = 1000;
+const MAX_CLEARED_IDS = 1000;
 const EMPTY_SEEN: SeenState = { seenAt: null, readIds: [], clearedAt: {}, clearedIds: [] };
 
 /** يقرأ القيمة المخزنة؛ أي حقل تالف يُهمل. دالة نقية للاختبار. */
@@ -542,30 +545,50 @@ const EMPTY_CONTEXT: NotificationContext = {
   agencies: new Map(),
 };
 
+type EventRow = typeof staffDeskEvents.$inferSelect;
+
+/**
+ * المادة الواحدة صف واحد (2026-11-12): آخر أحداثها يحدد العنوان والحالة
+ * والمعرّف، وأول أحداثها يحدد صاحبها وصورته. `group` بترتيب زمني تصاعدي.
+ */
 function toNotification(
-  row: typeof staffDeskEvents.$inferSelect,
+  group: readonly EventRow[],
   since: Date,
   readIds: Set<string>,
   now: Date,
   context: NotificationContext = EMPTY_CONTEXT,
 ): StaffDeskNotification {
+  const row = group[group.length - 1];
+  const origin = group[0];
   const kind = row.kind as StaffDeskEventKind;
+  const originKind = origin.kind as StaffDeskEventKind;
   const labels = STAFF_DESK_EVENT_LABELS[kind] ?? { label: row.kind, action: "فتح" };
   const tweetBotName = row.category === "tweet" ? context.tweetBots.get(row.targetId) ?? null : null;
-  const actorKey = row.actorName?.trim() ?? "";
+  const originKey = origin.actorName?.trim() ?? "";
   const actorKind = resolveStaffDeskActorKind({
+    kind: originKind,
+    actorName: origin.actorName,
+    actorUserId: origin.actorUserId,
+    tweetBotName,
+    isAgency: Boolean(originKey && context.agencies.has(originKey)),
+  });
+  const rawActor = tweetBotName ?? origin.actorName;
+  const actorName = actorKind === "bot" && rawActor ? botDraftsPublisherDisplayName(rawActor) : rawActor;
+  const actorAvatarUrl =
+    actorKind === "agency"
+      ? context.agencies.get(originKey) ?? null
+      : actorKind === "person" && origin.actorUserId
+        ? context.userAvatars.get(origin.actorUserId) ?? null
+        : null;
+  // للنسخ الأقدم من التطبيق: سطر المصدر يصف آخر حدث كما كان.
+  const latestKey = row.actorName?.trim() ?? "";
+  const latestKind = resolveStaffDeskActorKind({
     kind,
     actorName: row.actorName,
     actorUserId: row.actorUserId,
     tweetBotName,
-    isAgency: Boolean(actorKey && context.agencies.has(actorKey)),
+    isAgency: Boolean(latestKey && context.agencies.has(latestKey)),
   });
-  const actorAvatarUrl =
-    actorKind === "agency"
-      ? context.agencies.get(actorKey) ?? null
-      : actorKind === "person" && row.actorUserId
-        ? context.userAvatars.get(row.actorUserId) ?? null
-        : null;
   return {
     id: row.id,
     kind,
@@ -574,21 +597,72 @@ function toNotification(
     actionLabel: labels.action,
     title: row.title,
     detail: buildStaffDeskEventDetail({ kind, actorName: row.actorName, scheduledAt: row.scheduledAt }, now),
-    actorName: row.actorName,
+    actorName,
     targetId: row.targetId,
     linkUrl: row.linkUrl,
     deeplink: staffDeskEventDeeplink(kind, row.targetId),
     scheduledAt: row.scheduledAt ? row.scheduledAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
-    isUnread: row.createdAt.getTime() > since.getTime() && !readIds.has(row.id),
+    isUnread: group.some((e) => e.createdAt.getTime() > since.getTime() && !readIds.has(e.id)),
     actorKind,
     actorAvatarUrl,
     needsDecision: staffDeskEventIsDecisionKind(kind) && !context.settled?.has(row.id),
     source: buildStaffDeskEventSource(
-      { kind, actorName: tweetBotName ?? row.actorName, actorKind, scheduledAt: row.scheduledAt },
+      { kind, actorName: tweetBotName ?? row.actorName, actorKind: latestKind, scheduledAt: row.scheduledAt },
       now,
     ),
+    actorRole: staffDeskActorRole(originKind, actorKind),
+    trail: buildStaffDeskEventTrail(
+      group.map((e) => ({
+        kind: e.kind as StaffDeskEventKind,
+        // تغريدة البوت تُكتب باسم حساب خدمة: المرحلة تُنسب للبوت.
+        actorName: actorKind === "bot" && e.category === "tweet" ? actorName : e.actorName,
+        createdAt: e.createdAt,
+        scheduledAt: e.scheduledAt,
+      })),
+      actorName,
+      now,
+    ),
+    stageCount: group.length,
   };
+}
+
+/** كل أحداث المواد الظاهرة في الصفحة (بترتيب زمني)، مجمّعة بالمادة. لا يرمي. */
+async function loadTargetGroups(
+  page: readonly EventRow[],
+  seen: SeenState,
+  start: Date,
+): Promise<Map<string, EventRow[]>> {
+  const groups = new Map<string, EventRow[]>();
+  const key = (r: Pick<EventRow, "category" | "targetId">) => `${r.category}:${r.targetId}`;
+  for (const row of page) groups.set(key(row), []);
+  const targetIds = [...new Set(page.map((r) => r.targetId))];
+  if (targetIds.length > 0) {
+    try {
+      const rows = await db
+        .select()
+        .from(staffDeskEvents)
+        .where(
+          and(
+            inArray(staffDeskEvents.targetId, targetIds),
+            gte(staffDeskEvents.createdAt, start),
+            notClearedSql(seen),
+          ),
+        )
+        .orderBy(staffDeskEvents.createdAt, staffDeskEvents.id);
+      for (const row of rows) groups.get(key(row))?.push(row);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} تعذر جلب مراحل التنبيهات:`, err);
+    }
+  }
+  // الصف نفسه آخر المراحل دائماً، حتى لو فشل الجلب.
+  for (const row of page) {
+    const group = groups.get(key(row))!;
+    if (group[group.length - 1]?.id !== row.id) {
+      groups.set(key(row), [...group.filter((e) => e.id !== row.id && e.createdAt <= row.createdAt), row]);
+    }
+  }
+  return groups;
 }
 
 /**
@@ -706,30 +780,36 @@ export async function listStaffDeskNotifications(
   const start = windowStart(now);
   const since = unreadSince(seenAt, now);
 
-  const items =
-    shown.length === 0
-      ? []
-      : await db
-          .select()
-          .from(staffDeskEvents)
-          .where(
-            and(
-              inArray(staffDeskEvents.category, shown),
-              gte(staffDeskEvents.createdAt, start),
-              notClearedSql(seen),
-              cursor
-                ? or(
-                    lt(staffDeskEvents.createdAt, new Date(cursor.createdAt)),
-                    and(
-                      eq(staffDeskEvents.createdAt, new Date(cursor.createdAt)),
-                      lt(staffDeskEvents.id, cursor.id),
-                    ),
-                  )
-                : undefined,
-            ),
-          )
-          .orderBy(desc(staffDeskEvents.createdAt), desc(staffDeskEvents.id))
-          .limit(query.limit + 1);
+  // آخر حدث «ظاهر» لكل مادة: النافذة والممسوح يُطبَّقان قبل الترتيب، فلا تختفي
+  // مادة مُسح أحدث أحداثها وبقي أقدمها. مسح واحد على فهرس (category, created_at).
+  const items: EventRow[] = [];
+  if (shown.length > 0) {
+    const latest = await db.execute<{ id: string }>(sql`
+      select id from (
+        select ${staffDeskEvents.id} as id, ${staffDeskEvents.createdAt} as created_at,
+          row_number() over (
+            partition by ${staffDeskEvents.category}, ${staffDeskEvents.targetId}
+            order by ${staffDeskEvents.createdAt} desc, ${staffDeskEvents.id} desc
+          ) as rn
+        from ${staffDeskEvents}
+        where ${and(inArray(staffDeskEvents.category, shown), gte(staffDeskEvents.createdAt, start), notClearedSql(seen))}
+      ) latest
+      where rn = 1
+        ${cursor ? sql`and (created_at < ${new Date(cursor.createdAt)} or (created_at = ${new Date(cursor.createdAt)} and id < ${cursor.id}))` : sql``}
+      order by created_at desc, id desc
+      limit ${query.limit + 1}
+    `);
+    const ids = latest.rows.map((r) => r.id);
+    if (ids.length > 0) {
+      const byId = new Map(
+        (await db.select().from(staffDeskEvents).where(inArray(staffDeskEvents.id, ids))).map((r) => [r.id, r]),
+      );
+      for (const id of ids) {
+        const row = byId.get(id);
+        if (row) items.push(row);
+      }
+    }
+  }
 
   const page = items.slice(0, query.limit);
   const last = page[page.length - 1];
@@ -741,8 +821,9 @@ export async function listStaffDeskNotifications(
   const countRows = await db
     .select({
       category: staffDeskEvents.category,
-      total: sql<number>`count(*)::int`,
-      unread: sql<number>`count(*) filter (where ${staffDeskEvents.createdAt} > ${since} and ${notReadSql(seen.readIds)})::int`,
+      // مادة لا حدث: صف واحد لكل مادة، و«جديدة» إن كان فيها حدث جديد لم يُقرأ.
+      total: sql<number>`count(distinct ${staffDeskEvents.targetId})::int`,
+      unread: sql<number>`count(distinct ${staffDeskEvents.targetId}) filter (where ${staffDeskEvents.createdAt} > ${since} and ${notReadSql(seen.readIds)})::int`,
     })
     .from(staffDeskEvents)
     .where(and(inArray(staffDeskEvents.category, categories), gte(staffDeskEvents.createdAt, start), notClearedSql(seen)))
@@ -757,10 +838,11 @@ export async function listStaffDeskNotifications(
   }
   counts.all = counts.tweet + counts.opinion + counts.news + counts.message;
 
-  const context = await loadNotificationContext(page);
+  const groups = await loadTargetGroups(page, seen, start);
+  const context = await loadNotificationContext([...groups.values()].flat());
   const readIds = new Set(seen.readIds);
   return {
-    items: page.map((row) => toNotification(row, since, readIds, now, context)),
+    items: page.map((row) => toNotification(groups.get(`${row.category}:${row.targetId}`)!, since, readIds, now, context)),
     nextCursor,
     categories,
     counts,
@@ -804,8 +886,9 @@ export async function getStaffDeskUnreadDetailed(
   const [[countRow], [latestRow]] = await Promise.all([
     db
       .select({
-        unread: sql<number>`count(*)::int`,
-        kept: sql<number>`count(*) filter (where ${keptSql})::int`,
+        // مادة لا حدث، كما في القائمة.
+        unread: sql<number>`count(distinct ${staffDeskEvents.category} || ':' || ${staffDeskEvents.targetId})::int`,
+        kept: sql<number>`count(distinct ${staffDeskEvents.category} || ':' || ${staffDeskEvents.targetId}) filter (where ${keptSql})::int`,
       })
       .from(staffDeskEvents)
       .where(
@@ -827,7 +910,7 @@ export async function getStaffDeskUnreadDetailed(
   ]);
   return {
     unreadCount: Math.min(Number(countRow?.unread) || 0, STAFF_DESK_UNREAD_CAP),
-    latest: latestRow ? toNotification(latestRow, since, new Set(seen.readIds), now) : null,
+    latest: latestRow ? toNotification([latestRow], since, new Set(seen.readIds), now) : null,
     unreadExcludingKinds: Math.min(Number(countRow?.kept) || 0, STAFF_DESK_UNREAD_CAP),
   };
 }
@@ -864,10 +947,12 @@ export async function clearStaffDeskNotifications(
   return targets;
 }
 
-/** يلحق معرّفاً بقائمة في صف العضو ذرياً (أحدث `max`)، دون لمس بقية الحقول. */
-async function appendSeenStateId(userId: string, field: "readIds" | "clearedIds", eventId: string, max: number, now: Date) {
+/** يلحق معرّفات بقائمة في صف العضو ذرياً (أحدث `max`)، دون لمس بقية الحقول. */
+async function appendSeenStateIds(userId: string, field: "readIds" | "clearedIds", eventIds: string[], max: number, now: Date) {
+  if (eventIds.length === 0) return;
   const key = seenKey(userId);
-  const initial = JSON.stringify({ seenAt: null, readIds: [], [field]: [eventId] });
+  const ids = JSON.stringify(eventIds);
+  const initial = JSON.stringify({ seenAt: null, readIds: [], [field]: eventIds.slice(-max) });
   await db.execute(sql`
     INSERT INTO system_settings (key, value, category, is_public)
     VALUES (${key}, ${initial}::jsonb, 'staff_app', false)
@@ -882,8 +967,8 @@ async function appendSeenStateId(userId: string, field: "readIds" | "clearedIds"
             FROM jsonb_array_elements(
               (CASE WHEN jsonb_typeof(system_settings.value->(${field}::text)) = 'array'
                     THEN system_settings.value->(${field}::text) ELSE '[]'::jsonb END)
-              - ${eventId}::text
-              || jsonb_build_array(${eventId}::text)
+              - ARRAY(SELECT jsonb_array_elements_text(${ids}::jsonb))
+              || ${ids}::jsonb
             ) WITH ORDINALITY AS e(id, ord)
             ORDER BY e.ord DESC
             LIMIT ${max}
@@ -895,14 +980,46 @@ async function appendSeenStateId(userId: string, field: "readIds" | "clearedIds"
   `);
 }
 
-/** مسح تنبيه واحد عن هذا العضو وحده. */
-export async function clearStaffDeskNotification(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
-  await appendSeenStateId(userId, "clearedIds", eventId, MAX_CLEARED_IDS, now);
+/**
+ * كل أحداث المادة التي ينتمي إليها التنبيه (الصف في الخط الزمني مادة كاملة)،
+ * أو التنبيه وحده إن تعذّر الجلب. أحدث 50 حدثاً.
+ */
+async function eventIdsOfSameTarget(eventId: string): Promise<string[]> {
+  try {
+    const [row] = await db
+      .select({ category: staffDeskEvents.category, targetId: staffDeskEvents.targetId })
+      .from(staffDeskEvents)
+      .where(eq(staffDeskEvents.id, eventId))
+      .limit(1);
+    if (!row) return [eventId];
+    const rows = await db
+      .select({ id: staffDeskEvents.id })
+      .from(staffDeskEvents)
+      .where(
+        and(
+          eq(staffDeskEvents.category, row.category),
+          eq(staffDeskEvents.targetId, row.targetId),
+          // نافذة المركز نفسها: على فهرس (category, created_at) لا مسح للجدول كله.
+          gte(staffDeskEvents.createdAt, windowStart(new Date())),
+        ),
+      )
+      .orderBy(staffDeskEvents.createdAt)
+      .limit(50);
+    const ids = rows.map((r) => r.id);
+    return ids.includes(eventId) ? ids : [...ids, eventId];
+  } catch {
+    return [eventId];
+  }
 }
 
-/** فتح تنبيه واحد يعلّمه مقروءاً دون غيره. */
+/** مسح تنبيه واحد (المادة كلها) عن هذا العضو وحده. */
+export async function clearStaffDeskNotification(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
+  await appendSeenStateIds(userId, "clearedIds", await eventIdsOfSameTarget(eventId), MAX_CLEARED_IDS, now);
+}
+
+/** فتح تنبيه واحد يعلّم مادته كلها مقروءة دون غيرها. */
 // تحديث ذري في قاعدة البيانات: طلبا قراءة متزامنان (أو قراءة مع «تعليم الكل») لا يلغي أحدهما الآخر،
 // لأن هذا المسار يلمس readIds وحدها ويبقي seenAt كما هي في الصف لحظة الكتابة.
 export async function markStaffDeskNotificationRead(userId: string, eventId: string, now: Date = new Date()): Promise<void> {
-  await appendSeenStateId(userId, "readIds", eventId, MAX_READ_IDS, now);
+  await appendSeenStateIds(userId, "readIds", await eventIdsOfSameTarget(eventId), MAX_READ_IDS, now);
 }
