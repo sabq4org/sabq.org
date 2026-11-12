@@ -42,6 +42,20 @@ describe("personal bot schedules", () => {
     expect(deps.credit).toHaveBeenCalledWith({ authorUserId: "agency-owner", articleId: "a", actorId: "u" });
     expect(deps.event).toHaveBeenCalledWith(expect.objectContaining({ actorId: "u", eventType: "published" }));
   });
+  it("charges agency news inside the scheduled release and refuses it without credit", async () => {
+    const tx = {} as any;
+    deps.charge.mockResolvedValue("deducted");
+    await expect(chargePersonalBotScheduledPublish(tx, article)).resolves.toBeUndefined();
+    expect(deps.charge).toHaveBeenCalledWith(tx, { publisherId: "agency", articleId: "a", performedBy: "u", note: "عنوان" });
+    deps.charge.mockResolvedValue("already_charged");
+    await expect(chargePersonalBotScheduledPublish(tx, article)).resolves.toBeUndefined();
+    deps.charge.mockResolvedValue("no_credits");
+    await expect(chargePersonalBotScheduledPublish(tx, article)).rejects.toBeInstanceOf(ScheduledPublishNoCreditsError);
+  });
+  it("leaves non-agency scheduled news out of the credit ledger", async () => {
+    await chargePersonalBotScheduledPublish({} as any, { ...article, publisherId: null });
+    expect(deps.charge).not.toHaveBeenCalled();
+  });
 });
 
 const localUrl = process.env.BOT_OWNERSHIP_TEST_URL;
@@ -68,18 +82,4 @@ it.skipIf(!isLocal)("SQL write gate rejects revocation after the earlier authori
     await client.query(`UPDATE articles SET reporter_id='RnP7eDOAl5T5rGpib9_8d', source_metadata='{\"publisherUserId\":\"other-user\",\"publisherTokenId\":\"t\"}' WHERE source='bot'`);
     expect((await client.query(`SELECT 1 FROM articles WHERE ${query.sql}`, query.params)).rowCount).toBe(0);
   } finally { await client.end(); }
-  it("charges agency news inside the scheduled release and refuses it without credit", async () => {
-    const tx = {} as any;
-    deps.charge.mockResolvedValue("deducted");
-    await expect(chargePersonalBotScheduledPublish(tx, article)).resolves.toBeUndefined();
-    expect(deps.charge).toHaveBeenCalledWith(tx, { publisherId: "agency", articleId: "a", performedBy: "u", note: "عنوان" });
-    deps.charge.mockResolvedValue("already_charged");
-    await expect(chargePersonalBotScheduledPublish(tx, article)).resolves.toBeUndefined();
-    deps.charge.mockResolvedValue("no_credits");
-    await expect(chargePersonalBotScheduledPublish(tx, article)).rejects.toBeInstanceOf(ScheduledPublishNoCreditsError);
-  });
-  it("leaves non-agency scheduled news out of the credit ledger", async () => {
-    await chargePersonalBotScheduledPublish({} as any, { ...article, publisherId: null });
-    expect(deps.charge).not.toHaveBeenCalled();
-  });
 });
