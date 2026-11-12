@@ -58,6 +58,45 @@ function reconcileLog(context: Record<string, unknown>, error?: unknown) {
   );
 }
 
+/** رسالة اللوحة نفسها عند انتهاء رصيد الوكالة — تُعرض كما هي في كل قناة نشر. */
+export const PUBLISHER_NO_CREDITS_MESSAGE =
+  "لا يوجد رصيد كافٍ لنشر المقالات. يرجى التواصل مع الإدارة لتجديد الباقة.";
+
+/** A package the agency can publish against right now. */
+function usablePackageWhere(publisherId: string, now: Date) {
+  return and(
+    eq(publisherCredits.publisherId, publisherId),
+    eq(publisherCredits.isActive, true),
+    // باقة تجديد مفعلة مسبقًا لا تُستهلك قبل موعد بدايتها
+    lte(publisherCredits.startDate, now),
+    or(
+      eq(publisherCredits.isUnlimited, true),
+      sql`${publisherCredits.remainingCredits} > 0`,
+    ),
+    or(
+      isNull(publisherCredits.expiryDate),
+      gte(publisherCredits.expiryDate, now),
+    ),
+  );
+}
+
+/**
+ * Read-only: does the agency have a usable package now? Used where nothing is
+ * charged yet (scheduling). It reserves nothing — the charge at publish time
+ * stays the authority.
+ */
+export async function publisherHasUsableCredit(
+  publisherId: string,
+  tx: Pick<CreditTx, "select"> = db,
+): Promise<boolean> {
+  const [credit] = await tx
+    .select({ id: publisherCredits.id })
+    .from(publisherCredits)
+    .where(usablePackageWhere(publisherId, new Date()))
+    .limit(1);
+  return Boolean(credit);
+}
+
 /**
  * Charge one credit for `articleId` against the agency's usable package.
  * Must run inside a transaction (the advisory lock is transaction-scoped).
@@ -88,20 +127,7 @@ export async function chargePublishInTx(
     .select()
     .from(publisherCredits)
     .where(
-      and(
-        eq(publisherCredits.publisherId, publisherId),
-        eq(publisherCredits.isActive, true),
-        // باقة تجديد مفعلة مسبقًا لا تُستهلك قبل موعد بدايتها
-        lte(publisherCredits.startDate, now),
-        or(
-          eq(publisherCredits.isUnlimited, true),
-          sql`${publisherCredits.remainingCredits} > 0`,
-        ),
-        or(
-          isNull(publisherCredits.expiryDate),
-          gte(publisherCredits.expiryDate, now),
-        ),
-      ),
+      usablePackageWhere(publisherId, now),
     )
     .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
     .limit(1);

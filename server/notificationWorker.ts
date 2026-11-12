@@ -1,4 +1,9 @@
-import { personalBotScheduledWriteCondition, stopUnauthorizedPersonalSchedule } from "./services/botPersonalScheduleService";
+import {
+  chargePersonalBotScheduledPublish,
+  personalBotScheduledWriteCondition,
+  ScheduledPublishNoCreditsError,
+  stopUnauthorizedPersonalSchedule,
+} from "./services/botPersonalScheduleService";
 import { isLeader } from "./leaderElection";
 import type { ScheduledTask } from "node-cron";
 import cron from "./leaderCron";
@@ -370,7 +375,16 @@ async function publishScheduledArticles() {
           if (rows[0] && isBreakingNewsType(article.newsType)) {
             clearedBreaking = await clearOtherBreakingArticles(article.id, tx);
           }
+          // خبر وكالة مجدول من «نشر سبق»: الخصم داخل المعاملة؛ بلا رصيد لا يُنشر.
+          if (rows[0] && article.source === "bot") {
+            await chargePersonalBotScheduledPublish(tx, article);
+          }
           return rows;
+        }).catch(async (error) => {
+          if (!(error instanceof ScheduledPublishNoCreditsError)) throw error;
+          console.warn(`[ScheduledPublisher] agency has no credits, schedule stopped for ${article.id}`);
+          await stopUnauthorizedPersonalSchedule(article, "no_credits");
+          return [];
         });
         if (!published) continue;
         if (clearedBreaking.length > 0) {

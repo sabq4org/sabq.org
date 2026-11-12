@@ -339,6 +339,7 @@ curl -sS "$B/api/internal/bot-drafts/by-public-id/abc12xy" \
 | توكن مفقود أو خاطئ | `401 unauthorized` |
 | توكن شخصي بلا صلاحية `read` | `403 forbidden_action` |
 | ورد في المادة عنصر من «الكلمات المحظورة من النشر» عند النشر أو الجدولة | `403 forbidden_action` مع `details.reason="banned_word"` و`details.bannedWords`؛ اعرض `message` كما هي |
+| خبر وكالة (`publisherId` من التوكن) وباقة الوكالة بلا رصيد صالح، عند النشر أو الجدولة | `403 forbidden_action` مع `details.reason="no_credits"` والرسالة نفسها التي في لوحة الناشر؛ اعرض `message` كما هي. الخصم يتم داخل معاملة النشر نفسها (رصيد واحد لكل خبر، مرة واحدة)، فلا يُنشر خبر وكالة بلا خصم. الجدولة تفحص وجود رصيد دون حجزه؛ إن انتهى الرصيد قبل الموعد تُعاد المادة مسودة مع `scheduleFailure` ولا تُنشر |
 
 ### نشر فوري — `POST /api/internal/bot-drafts/:id/publish`
 

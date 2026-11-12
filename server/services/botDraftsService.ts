@@ -38,6 +38,7 @@ import {
 } from "@shared/botDrafts";
 import { resolveUniqueArticleSlug } from "./articleSlugService";
 import { logArticleEvent } from "./articleEventsService";
+import { chargePublishInTx, publisherHasUsableCredit, PUBLISHER_NO_CREDITS_MESSAGE } from "./publisherCreditService";
 import { recordArticleSave } from "./articleHistoryService";
 import { matchesArticleVersion } from "./articleWriteVersion";
 import {
@@ -1903,6 +1904,11 @@ export async function recordBotReviewerVerdict(
   };
 }
 
+/** رصيد الوكالة منتهٍ: الرسالة نفسها التي تعرضها لوحة الناشر. */
+function publisherNoCreditsError(): BotDraftError {
+  return new BotDraftError(403, "forbidden_action", PUBLISHER_NO_CREDITS_MESSAGE, { reason: "no_credits" });
+}
+
 export async function publishBotDraft(
   bot: BotIdentity,
   articleId: string,
@@ -1970,6 +1976,17 @@ export async function publishBotDraft(
     if (!updated) throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
     if (isBreakingNewsType(updated.newsType)) {
       clearedBreaking = await clearOtherBreakingArticles(updated.id, tx);
+    }
+    // خبر وكالة: الخصم داخل معاملة النشر نفسها كما في اللوحة. بلا رصيد تتراجع
+    // المعاملة كلها ولا يُنشر الخبر. الخصم اللاحق في آثار النشر يجد «already_charged».
+    if (updated.publisherId) {
+      const charge = await chargePublishInTx(tx, {
+        publisherId: updated.publisherId,
+        articleId,
+        performedBy: bot.personal?.userId ?? null,
+        note: updated.title,
+      });
+      if (charge === "no_credits") throw publisherNoCreditsError();
     }
     row = updated;
     const [category] = await tx.select({ slug: categories.slug }).from(categories).where(eq(categories.id, row.categoryId ?? "")).limit(1);
@@ -2095,6 +2112,10 @@ export async function scheduleBotDraft(
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId, bot, existing);
   await assertBotDraftBylineMayPublish(bot, existing);
+  // خبر وكالة بلا رصيد صالح الآن لا يُجدول. الفحص لا يحجز رصيداً؛ الخصم الفعلي عند موعد النشر.
+  if (existing!.publisherId) {
+    if (!await publisherHasUsableCredit(existing!.publisherId)) throw publisherNoCreditsError();
+  }
 
   const now = new Date();
   const patch: BotDraftScheduleUpdate & { englishSlug?: string } = buildBotDraftScheduleUpdate(publishAt, now);
