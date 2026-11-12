@@ -176,14 +176,29 @@ final class NotificationsTests: XCTestCase {
         XCTAssertEqual(items[2].sourceLine, "من: قروك بوت")
         XCTAssertFalse(items[3].waitsForDecision)
 
-        let split = StaffNotificationTimeline.split(items, now: try XCTUnwrap(StaffJSON.parseDate("2026-11-12T09:00:00.000Z")))
-        XCTAssertEqual(split.decisions.map(\.id), ["c"])
-        XCTAssertEqual(split.days.map { $0.items.map(\.id) }, [["a", "b"], ["d"]])
+        let days = StaffNotificationTimeline.days(items, now: try XCTUnwrap(StaffJSON.parseDate("2026-11-12T09:00:00.000Z")))
+        XCTAssertEqual(days.map { $0.items.map(\.id) }, [["a", "b", "c"], ["d"]])
         XCTAssertEqual(StaffNotificationCategory.news.tag, "خبر")
         // Only https photos are loaded; an agency keeps its own kind.
         XCTAssertNil(items[0].actorAvatarURL)
         XCTAssertNil(items[2].actorAvatarURL)
         XCTAssertEqual(items[3].actor, .agency)
         XCTAssertEqual(items[3].actorAvatarURL?.host, "media.sabq.org")
+    }
+
+    func testTimelineRowFieldsFallBackOnAnOlderServer() throws {
+        let json = #"""
+        [{"id":"a","kind":"tweet_published","category":"tweet","label":"l","actionLabel":"a","title":"t","detail":"نشرها: سارة",
+          "targetId":"x","createdAt":"2026-11-12T08:10:00.000Z","isUnread":true,"source":"نشرها سارة",
+          "actorRole":"وكالة","trail":"مقترحة 1:44 ← نشرها مكتب سبق 1:46","stageCount":2},
+         {"id":"b","kind":"tweet_published","category":"tweet","label":"l","actionLabel":"a","title":"t","detail":"نُشرت تلقائيًا في موعدها",
+          "targetId":"y","createdAt":"2026-11-12T08:00:00.000Z","isUnread":false,"actorRole":" ","trail":""}]
+        """#
+        let items = try decoder.decode([StaffNotification].self, from: Data(json.utf8))
+        XCTAssertEqual(items[0].statusLine, "مقترحة 1:44 ← نشرها مكتب سبق 1:46")
+        XCTAssertEqual(items[0].roleLabel, "وكالة")
+        XCTAssertEqual(items[0].stageCount, 2)
+        XCTAssertEqual(items[1].statusLine, "نُشرت تلقائيًا في موعدها")
+        XCTAssertNil(items[1].roleLabel)
     }
 }

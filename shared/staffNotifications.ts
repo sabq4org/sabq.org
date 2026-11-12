@@ -53,7 +53,8 @@ export const STAFF_DESK_EVENT_LABELS: Record<StaffDeskEventKind, { label: string
 export function botDraftsPublisherDisplayName(botName: string): string {
   const name = botName.trim().toLowerCase();
   if (name.includes("grok")) return "قروك بوت";
-  if (name === "nashr-sabq") return "نشر سبق";
+  // nashr-sabq وnashr-x وأي بوت آخر من عائلة «نشر سبق».
+  if (name.startsWith("nashr")) return "نشر سبق";
   return botName.trim();
 }
 
@@ -232,6 +233,127 @@ export function buildStaffDeskEventSource(
   }
 }
 
+/** صفة الفاعل تحت اسمه في الخط الزمني: «مراسل»، «بوت»، «وكالة»… أو null. */
+export function staffDeskActorRole(originKind: StaffDeskEventKind, actorKind: StaffDeskActorKind): string | null {
+  if (actorKind === "bot") return "بوت";
+  if (actorKind === "agency") return "وكالة";
+  if (actorKind === "system") return null;
+  switch (originKind) {
+    case "news_draft":
+    case "news_edit_request":
+      return "مراسل";
+    case "opinion_draft":
+    case "opinion_scheduled":
+      return "كاتب رأي";
+    case "ticket_message":
+      return "كاتب";
+    case "news_published":
+      return "عبر «نشر سبق»";
+    default:
+      return null;
+  }
+}
+
+/** «9:04» بتوقيت الرياض بلا ص/م، وقبله «أمس» أو اسم اليوم إن لم يكن يوم `ref`. */
+export function formatStaffDeskStageTime(date: Date, ref: Date): string {
+  const parts = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Riyadh",
+  }).formatToParts(date);
+  const time = parts
+    .filter((p) => p.type === "hour" || p.type === "minute" || p.type === "literal")
+    .map((p) => p.value)
+    .join("")
+    .trim();
+  const day = riyadhParts(date);
+  const refDay = riyadhParts(ref);
+  if (day.dayKey === refDay.dayKey) return time;
+  const yesterday = riyadhParts(new Date(ref.getTime() - 24 * 60 * 60 * 1000));
+  return `${day.dayKey === yesterday.dayKey ? "أمس" : day.weekday} ${time}`;
+}
+
+export interface StaffDeskTrailEvent {
+  kind: StaffDeskEventKind;
+  actorName: string | null;
+  createdAt: Date;
+  scheduledAt: Date | null;
+}
+
+/**
+ * مراحل المادة الواحدة في سطر: «مقترحة 1:44 ← نشرها مكتب سبق 1:46»،
+ * «مسودة 5:02 ← نُشر 5:03»، «3 رسائل · آخرها 4:10». الأحداث بترتيبها الزمني،
+ * و`originActor` اسم صاحب المادة فلا يتكرر في المراحل. آخر ثلاث مراحل فقط.
+ */
+export function buildStaffDeskEventTrail(
+  events: readonly StaffDeskTrailEvent[],
+  originActor: string | null,
+  now: Date = new Date(),
+): string {
+  if (events.length === 0) return "";
+  const ref = events[events.length - 1].createdAt;
+  const at = (d: Date) => formatStaffDeskStageTime(d, ref);
+  const origin = originActor?.trim() || null;
+  const other = (name: string | null) => {
+    const n = name?.trim() || null;
+    return n && n !== origin ? n : null;
+  };
+  const stages: string[] = [];
+  const messages = events.filter((e) => e.kind === "ticket_message");
+  for (const e of events) {
+    const when = e.scheduledAt ? formatStaffDeskWhen(e.scheduledAt, now) : null;
+    switch (e.kind) {
+      case "tweet_draft":
+        stages.push(`مقترحة ${at(e.createdAt)}`);
+        break;
+      case "tweet_scheduled":
+        stages.push(when ? `موعدها ${when}` : `جُدولت ${at(e.createdAt)}`);
+        break;
+      case "tweet_published": {
+        const by = other(e.actorName);
+        stages.push(
+          by ? `نشرها ${by} ${at(e.createdAt)}` : e.actorName ? `نُشرت ${at(e.createdAt)}` : `نُشرت تلقائيًا ${at(e.createdAt)}`,
+        );
+        break;
+      }
+      case "opinion_draft":
+        stages.push(`وصل ${at(e.createdAt)}`);
+        break;
+      case "opinion_scheduled":
+        stages.push(when ? `يُنشر ${when}` : `جُدول ${at(e.createdAt)}`);
+        break;
+      case "news_bot_draft":
+        stages.push(`مسودة ${at(e.createdAt)}`);
+        break;
+      case "news_draft":
+        stages.push(`أُرسل ${at(e.createdAt)}`);
+        break;
+      case "news_edit_request":
+        stages.push(`طلب تعديل ${at(e.createdAt)}`);
+        break;
+      case "news_published": {
+        const by = other(e.actorName);
+        stages.push(by ? `نشره ${by} ${at(e.createdAt)}` : `نُشر ${at(e.createdAt)}`);
+        break;
+      }
+      case "ticket_message":
+        if (e === messages[messages.length - 1]) {
+          stages.push(
+            messages.length === 1
+              ? `رسالة ${at(e.createdAt)}`
+              : `${messages.length === 2 ? "رسالتان" : `${messages.length} رسائل`} · آخرها ${at(e.createdAt)}`,
+          );
+        }
+        break;
+      default:
+        stages.push(at(e.createdAt));
+    }
+  }
+  const shown = stages.slice(-3);
+  return (stages.length > 3 ? "… ← " : "") + shown.join(" ← ");
+}
+
 export interface StaffDeskNotification {
   id: string;
   kind: StaffDeskEventKind;
@@ -256,6 +378,15 @@ export interface StaffDeskNotification {
   needsDecision: boolean;
   /** سطر المصدر الجديد؛ `detail` يبقى للنسخ الأقدم من التطبيق. */
   source: string;
+  /**
+   * منذ الخط الزمني الموحّد (2026-11-12): كل مادة صف واحد يمثّله آخر أحداثها،
+   * والفاعل (`actorName`، `actorKind`، `actorAvatarUrl`) صاحب أول حدث فيها.
+   */
+  actorRole: string | null;
+  /** مراحل المادة في سطر واحد. */
+  trail: string;
+  /** عدد أحداث المادة في نافذة الثلاثين يوماً. */
+  stageCount: number;
 }
 
 export interface StaffDeskNotificationsResponse {
