@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   botDraftsPublisherDisplayName,
   buildStaffDeskEventDetail,
+  buildStaffDeskEventSource,
+  resolveStaffDeskActorKind,
+  staffDeskEventIsDecisionKind,
+  STAFF_DESK_EVENT_KINDS,
   clipStaffDeskTitle,
   decodeStaffDeskEventCursor,
   encodeStaffDeskEventCursor,
@@ -156,5 +160,58 @@ describe("staff desk notifications (shared)", () => {
     );
     expect(buildStaffDeskEventDetail({ kind: "news_edit_request", actorName: "سالم", scheduledAt: null }, NOW)).toBe("طلبه: سالم");
     expect(buildStaffDeskEventDetail({ kind: "ticket_message", actorName: null, scheduledAt: null }, NOW)).toBe("رسالة بانتظار الرد");
+  });
+
+  it("splits kinds into «تحتاج قرارك» and «للعلم»", () => {
+    const decision = STAFF_DESK_EVENT_KINDS.filter(staffDeskEventIsDecisionKind);
+    expect(decision).toEqual([
+      "tweet_draft",
+      "opinion_draft",
+      "news_bot_draft",
+      "news_draft",
+      "news_edit_request",
+      "ticket_message",
+    ]);
+  });
+
+  it("tells a bot from a person and from the scheduler", () => {
+    const base = { actorName: "سالم", actorUserId: "u1" };
+    expect(resolveStaffDeskActorKind({ kind: "news_bot_draft", ...base })).toBe("bot");
+    expect(resolveStaffDeskActorKind({ kind: "news_draft", ...base })).toBe("person");
+    // خبر منشور بلا صاحب توكن = بوت بتوكن البيئة.
+    expect(resolveStaffDeskActorKind({ kind: "news_published", actorName: "قروك بوت", actorUserId: null })).toBe("bot");
+    expect(resolveStaffDeskActorKind({ kind: "news_published", ...base })).toBe("person");
+    // تغريدة البوت تُكتب باسم حساب خدمة، فيُعرف البوت من مفتاحه.
+    expect(resolveStaffDeskActorKind({ kind: "tweet_published", ...base, tweetBotName: "نشر سبق" })).toBe("bot");
+    expect(resolveStaffDeskActorKind({ kind: "tweet_published", actorName: null, actorUserId: null })).toBe("system");
+    expect(resolveStaffDeskActorKind({ kind: "tweet_draft", actorName: null, actorUserId: null })).toBe("person");
+    // اسم يطابق وكالة مسجّلة = وكالة، حتى لو نشر عضو منها بتوكنه.
+    expect(resolveStaffDeskActorKind({ kind: "news_published", ...base, isAgency: true })).toBe("agency");
+    expect(resolveStaffDeskActorKind({ kind: "tweet_draft", ...base, isAgency: true })).toBe("agency");
+    // البوت يتقدم على الوكالة.
+    expect(resolveStaffDeskActorKind({ kind: "news_bot_draft", ...base, isAgency: true })).toBe("bot");
+    // اسم بوت لا يحوّل رسالة كاتب إلى بوت.
+    expect(resolveStaffDeskActorKind({ kind: "ticket_message", ...base, tweetBotName: "نشر سبق" })).toBe("person");
+  });
+
+  it("writes the source line beside the type tag", () => {
+    const line = (kind: Parameters<typeof buildStaffDeskEventSource>[0]["kind"], actorName: string | null,
+      actorKind: "person" | "bot" | "system", scheduledAt: Date | null = null) =>
+      buildStaffDeskEventSource({ kind, actorName, actorKind, scheduledAt }, NOW);
+    expect(line("news_bot_draft", "قروك بوت", "bot")).toBe("مسودة من بوت · قروك بوت");
+    expect(line("news_bot_draft", null, "bot")).toBe("مسودة من بوت");
+    expect(line("news_draft", "سالم العتيبي", "person")).toBe("من مراسل · سالم العتيبي");
+    expect(line("news_published", "قروك بوت", "bot")).toBe("نشره بوت · قروك بوت");
+    expect(line("news_published", "خالد", "person")).toBe("نُشر عبر «نشر سبق» · خالد");
+    expect(line("tweet_published", null, "system")).toBe("نُشرت تلقائيًا في موعدها");
+    expect(line("tweet_published", "نشر سبق", "bot")).toBe("نشرها بوت · نشر سبق");
+    expect(line("tweet_scheduled", "خالد", "person", new Date("2026-10-29T09:30:00Z"))).toBe(
+      "تُنشر اليوم 12:30 م · جدولها خالد",
+    );
+    expect(line("opinion_scheduled", "خالد الحربي", "person", new Date("2026-10-30T06:00:00Z"))).toBe(
+      "يُنشر غدًا 9:00 ص · خالد الحربي",
+    );
+    expect(line("ticket_message", "نورة", "person")).toBe("من كاتب · نورة");
+    expect(line("news_edit_request", null, "person")).toBe("طلب تعديل");
   });
 });

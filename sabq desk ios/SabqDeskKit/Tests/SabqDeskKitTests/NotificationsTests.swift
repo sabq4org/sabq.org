@@ -146,4 +146,44 @@ final class NotificationsTests: XCTestCase {
         let body = try JSONSerialization.jsonObject(with: StaffJSON.makeEncoder().encode(StaffAlertPrefsUpdate(publishFollow: true)))
         XCTAssertEqual((body as? [String: Any])?["publishFollow"] as? Bool, true)
     }
+
+    func testSourceFieldsDecodeAndFallBack() throws {
+        let json = #"""
+        [{"id":"a","kind":"news_bot_draft","category":"news","label":"l","actionLabel":"a","title":"t","detail":"من: قروك بوت",
+          "targetId":"x","createdAt":"2026-11-12T08:10:00.000Z","isUnread":true,
+          "actorKind":"bot","needsDecision":false,"source":"مسودة من بوت · قروك بوت",
+          "actorAvatarUrl":"http://insecure.example/a.png"},
+         {"id":"b","kind":"tweet_published","category":"tweet","label":"l","actionLabel":"a","title":"t","detail":"نُشرت تلقائيًا في موعدها",
+          "targetId":"y","createdAt":"2026-11-12T08:00:00.000Z","isUnread":false,
+          "actorKind":"robot-v2","needsDecision":false,"source":""},
+         {"id":"c","kind":"news_bot_draft","category":"news","label":"l","actionLabel":"a","title":"t","detail":"من: قروك بوت",
+          "targetId":"z","createdAt":"2026-11-12T07:00:00.000Z","isUnread":false},
+         {"id":"d","kind":"news_published","category":"news","label":"l","actionLabel":"a","title":"t","detail":"الناشر: خالد",
+          "targetId":"w","createdAt":"2026-11-11T07:00:00.000Z","isUnread":false,
+          "actorKind":"agency","actorAvatarUrl":"https://media.sabq.org/logos/a.png"}]
+        """#
+        let items = try decoder.decode([StaffNotification].self, from: Data(json.utf8))
+        // The server's verdict wins: a decided bot draft is no longer waiting.
+        XCTAssertFalse(items[0].waitsForDecision)
+        XCTAssertEqual(items[0].actor, .bot)
+        XCTAssertEqual(items[0].sourceLine, "مسودة من بوت · قروك بوت")
+        // An unknown actor kind and an empty source fall back quietly.
+        XCTAssertEqual(items[1].actor, .person)
+        XCTAssertEqual(items[1].sourceLine, "نُشرت تلقائيًا في موعدها")
+        // An older server: the kind decides.
+        XCTAssertTrue(items[2].waitsForDecision)
+        XCTAssertEqual(items[2].actor, .bot)
+        XCTAssertEqual(items[2].sourceLine, "من: قروك بوت")
+        XCTAssertFalse(items[3].waitsForDecision)
+
+        let split = StaffNotificationTimeline.split(items, now: try XCTUnwrap(StaffJSON.parseDate("2026-11-12T09:00:00.000Z")))
+        XCTAssertEqual(split.decisions.map(\.id), ["c"])
+        XCTAssertEqual(split.days.map { $0.items.map(\.id) }, [["a", "b"], ["d"]])
+        XCTAssertEqual(StaffNotificationCategory.news.tag, "خبر")
+        // Only https photos are loaded; an agency keeps its own kind.
+        XCTAssertNil(items[0].actorAvatarURL)
+        XCTAssertNil(items[2].actorAvatarURL)
+        XCTAssertEqual(items[3].actor, .agency)
+        XCTAssertEqual(items[3].actorAvatarURL?.host, "media.sabq.org")
+    }
 }
