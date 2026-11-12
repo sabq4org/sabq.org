@@ -16,6 +16,8 @@ const state = vi.hoisted(() => {
     queueCount: 0,
     transactionQueue: Promise.resolve(),
     inTransaction: false,
+    charges: [] as any[],
+    chargeOutcome: "deducted" as string,
   };
 
   const kind = (table: any): string => {
@@ -154,6 +156,11 @@ vi.mock("../../server/rbac", () => ({
 vi.mock("../../server/memoryCache", () => ({ memoryCache: { invalidatePattern: vi.fn() } }));
 vi.mock("../../server/services/articleEventsService", () => ({ logArticleEvent: vi.fn(async () => undefined) }));
 vi.mock("../../server/services/botDraftPublishEffects", () => ({ queueBotDraftPublishEffects: () => { state.s.queueCount += 1; } }));
+vi.mock("../../server/services/publisherCreditService", () => ({
+  PUBLISHER_NO_CREDITS_MESSAGE: "لا يوجد رصيد كافٍ لنشر المقالات. يرجى التواصل مع الإدارة لتجديد الباقة.",
+  chargePublishInTx: vi.fn(async (_tx: unknown, params: unknown) => { state.s.charges.push(params); return state.s.chargeOutcome; }),
+  publisherHasUsableCredit: vi.fn(async () => state.s.chargeOutcome !== "no_credits"),
+}));
 vi.mock("../../server/services/mediaLicenseService", () => ({ assertMediaLicenseAllowsSubmission: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@shared/mediaLicense", () => ({ resolveContentBylineUserId: () => "author" }));
 vi.mock("../../server/services/publishFirstService", async (importOriginal) => {
@@ -167,6 +174,7 @@ vi.mock("../../server/services/publishFirstService", async (importOriginal) => {
 import {
   getBotDraftPublishOperation,
   publishBotDraft,
+  scheduleBotDraft,
   type BotIdentity,
 } from "../../server/services/botDraftsService";
 
@@ -203,6 +211,12 @@ const personalAdmin: BotIdentity = {
   personal: { userId: "user-1", publisherId: null, tokenId: "token-1", capabilities: ["publish"] } as any,
 };
 
+const agencyBot: BotIdentity = {
+  name: "publisher-user-2",
+  personal: { userId: "user-2", publisherId: "agency-1", publisherOwnerUserId: "owner-1", tokenId: "token-2", capabilities: ["publish", "schedule"] } as any,
+};
+const agencyArticle = { publisherId: "agency-1", isPublisherNews: true };
+
 function reset(over: Record<string, unknown> = {}) {
   Object.assign(state.s, {
     article: makeArticle(over),
@@ -219,6 +233,8 @@ function reset(over: Record<string, unknown> = {}) {
     queueCount: 0,
     transactionQueue: Promise.resolve(),
     inTransaction: false,
+    charges: [],
+    chargeOutcome: "deducted",
   });
 }
 
@@ -311,5 +327,53 @@ describe("BotDraft publish operation receipts", () => {
     await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId })).resolves.toMatchObject({ status: "succeeded" });
     expect(state.s.article.status).toBe("published");
     expect(state.s.article.riskLabel).toBe("sensitive");
+  });
+});
+
+describe("agency news published from «نشر سبق» — package credit", () => {
+  beforeEach(() => reset(agencyArticle));
+
+  it("charges the agency inside the publish transaction", async () => {
+    await expect(publishBotDraft(agencyBot, "art-1", {}, { operationId })).resolves.toMatchObject({ status: "succeeded" });
+    expect(state.s.article.status).toBe("published");
+    expect(state.s.charges).toEqual([{ publisherId: "agency-1", articleId: "art-1", performedBy: "user-2", note: "خبر تجريبي" }]);
+  });
+
+  it("refuses to publish with the dashboard message when the package has no credit", async () => {
+    state.s.chargeOutcome = "no_credits";
+    await expect(publishBotDraft(agencyBot, "art-1", {}, { operationId })).rejects.toMatchObject({
+      httpStatus: 403,
+      code: "forbidden_action",
+      message: "لا يوجد رصيد كافٍ لنشر المقالات. يرجى التواصل مع الإدارة لتجديد الباقة.",
+      details: { reason: "no_credits" },
+    });
+    // The whole transaction rolled back: still a draft, no publish effects.
+    expect(state.s.article.status).toBe("draft");
+    expect(state.s.queueCount).toBe(0);
+    await expect(getBotDraftPublishOperation(agencyBot, "art-1", operationId)).resolves.toMatchObject({ status: "failed" });
+  });
+
+  it("publishes again with a new operation once the package is renewed", async () => {
+    state.s.chargeOutcome = "no_credits";
+    await expect(publishBotDraft(agencyBot, "art-1")).rejects.toMatchObject({ httpStatus: 403 });
+    state.s.chargeOutcome = "deducted";
+    await expect(publishBotDraft(agencyBot, "art-1")).resolves.toMatchObject({ status: "published" });
+  });
+
+  it("never touches the credit ledger for non-agency news", async () => {
+    reset();
+    await publishBotDraft(personalAdmin, "art-1");
+    expect(state.s.charges).toEqual([]);
+  });
+
+  it("refuses to schedule agency news while the package has no credit", async () => {
+    state.s.chargeOutcome = "no_credits";
+    await expect(scheduleBotDraft(agencyBot, "art-1", new Date(Date.now() + 3_600_000))).rejects.toMatchObject({
+      httpStatus: 403,
+      code: "forbidden_action",
+      details: { reason: "no_credits" },
+    });
+    expect(state.s.article.status).toBe("draft");
+    expect(state.s.articleUpdates).toBe(0);
   });
 });

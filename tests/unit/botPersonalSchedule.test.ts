@@ -2,12 +2,12 @@ import pg from "pg";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../server/db", () => ({ db: {} }));
-const deps = vi.hoisted(() => ({ auth: vi.fn(), license: vi.fn(), credit: vi.fn(), event: vi.fn(), activity: vi.fn() }));
+const deps = vi.hoisted(() => ({ auth: vi.fn(), license: vi.fn(), credit: vi.fn(), charge: vi.fn(), event: vi.fn(), activity: vi.fn() }));
 vi.mock("../../server/services/botPublisherTokenService", () => ({ authenticatePublisherTokenId: deps.auth }));
-vi.mock("../../server/services/publisherCreditService", () => ({ deductPublisherCreditSafely: deps.credit }));
+vi.mock("../../server/services/publisherCreditService", () => ({ deductPublisherCreditSafely: deps.credit, chargePublishInTx: deps.charge, PUBLISHER_NO_CREDITS_MESSAGE: "لا يوجد رصيد كافٍ" }));
 vi.mock("../../server/services/articleEventsService", () => ({ logArticleEvent: deps.event }));
 vi.mock("../../server/rbac", () => ({ logActivity: deps.activity }));
-import { personalBotScheduledReleaseAllowed, recordPersonalBotScheduledPublish, personalBotScheduledWriteCondition } from "../../server/services/botPersonalScheduleService";
+import { chargePersonalBotScheduledPublish, ScheduledPublishNoCreditsError, personalBotScheduledReleaseAllowed, recordPersonalBotScheduledPublish, personalBotScheduledWriteCondition } from "../../server/services/botPersonalScheduleService";
 const article = {
   id: "a",
   title: "عنوان",
@@ -68,4 +68,18 @@ it.skipIf(!isLocal)("SQL write gate rejects revocation after the earlier authori
     await client.query(`UPDATE articles SET reporter_id='RnP7eDOAl5T5rGpib9_8d', source_metadata='{\"publisherUserId\":\"other-user\",\"publisherTokenId\":\"t\"}' WHERE source='bot'`);
     expect((await client.query(`SELECT 1 FROM articles WHERE ${query.sql}`, query.params)).rowCount).toBe(0);
   } finally { await client.end(); }
+  it("charges agency news inside the scheduled release and refuses it without credit", async () => {
+    const tx = {} as any;
+    deps.charge.mockResolvedValue("deducted");
+    await expect(chargePersonalBotScheduledPublish(tx, article)).resolves.toBeUndefined();
+    expect(deps.charge).toHaveBeenCalledWith(tx, { publisherId: "agency", articleId: "a", performedBy: "u", note: "عنوان" });
+    deps.charge.mockResolvedValue("already_charged");
+    await expect(chargePersonalBotScheduledPublish(tx, article)).resolves.toBeUndefined();
+    deps.charge.mockResolvedValue("no_credits");
+    await expect(chargePersonalBotScheduledPublish(tx, article)).rejects.toBeInstanceOf(ScheduledPublishNoCreditsError);
+  });
+  it("leaves non-agency scheduled news out of the credit ledger", async () => {
+    await chargePersonalBotScheduledPublish({} as any, { ...article, publisherId: null });
+    expect(deps.charge).not.toHaveBeenCalled();
+  });
 });

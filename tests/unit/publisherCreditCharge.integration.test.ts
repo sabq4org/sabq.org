@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 // The service imports the app db; these tests hand it their own transaction.
 vi.mock("../../server/db", () => ({ db: {} }));
-import { chargePublishInTx, type CreditTx } from "../../server/services/publisherCreditService";
+import { chargePublishInTx, publisherHasUsableCredit, type CreditTx } from "../../server/services/publisherCreditService";
 
 const url = process.env.EDITORIAL_LIST_TEST_DATABASE_URL ?? process.env.SESSION_REVOCATION_TEST_URL;
 const local = url && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(new URL(url).hostname);
@@ -149,5 +149,20 @@ async function logs(articleId: string) {
        VALUES ('agency', 'limited', 'a1', 'credit_refunded', 4, 1, 5)`,
     );
     expect(await charge("a1")).toBe("deducted");
+  });
+
+  it("reports usable credit read-only, matching what a charge would find", async () => {
+    const has = () => publisherHasUsableCredit("agency", drizzle(pool) as unknown as CreditTx);
+    expect(await has()).toBe(false);
+    await addPackage({ id: "expired", remaining: 5, expiresInDays: -1 });
+    await addPackage({ id: "future", remaining: 5, startsInDays: 3 });
+    await addPackage({ id: "off", remaining: 5, active: false });
+    expect(await has()).toBe(false);
+    await addPackage({ id: "last", remaining: 1 });
+    expect(await has()).toBe(true);
+    expect(await pkg("last")).toEqual({ used: 0, remaining: 1 });
+    expect(await charge("a1")).toBe("deducted");
+    expect(await has()).toBe(false);
+    expect(await charge("a2")).toBe("no_credits");
   });
 });

@@ -3,7 +3,7 @@ import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { authenticatePublisherTokenId } from "./botPublisherTokenService";
-import { deductPublisherCreditSafely } from "./publisherCreditService";
+import { chargePublishInTx, deductPublisherCreditSafely, PUBLISHER_NO_CREDITS_MESSAGE, type CreditTx } from "./publisherCreditService";
 import { logArticleEvent } from "./articleEventsService";
 import { logActivity } from "../rbac";
 
@@ -78,16 +78,48 @@ export function personalBotScheduledWriteCondition(article: ScheduledArticle): S
 }
 
 /** A permanently rejected schedule returns to draft, preventing worker starvation. */
-export async function stopUnauthorizedPersonalSchedule(article: typeof articles.$inferSelect): Promise<void> {
+export async function stopUnauthorizedPersonalSchedule(
+  article: typeof articles.$inferSelect,
+  cause: "authorization" | "no_credits" = "authorization",
+): Promise<void> {
   const now = new Date();
-  const reason = "أوقفت الجدولة وأعيدت المادة مسودة لأن اعتماد المستخدم أو صلاحية النشر لم تعد صالحة. أعد الربط واعتماد الموعد بعد تصحيح الصلاحية.";
+  const reason = cause === "no_credits"
+    ? `أوقفت الجدولة وأعيدت المادة مسودة: ${PUBLISHER_NO_CREDITS_MESSAGE}`
+    : "أوقفت الجدولة وأعيدت المادة مسودة لأن اعتماد المستخدم أو صلاحية النشر لم تعد صالحة. أعد الربط واعتماد الموعد بعد تصحيح الصلاحية.";
   const [changed] = await db.update(articles).set({
     status: "draft", scheduledAt: null, updatedAt: now,
     sourceMetadata: { ...article.sourceMetadata!, scheduleFailure: { at: now.toISOString(), reason } },
   }).where(and(eq(articles.id, article.id), eq(articles.status, "scheduled"), eq(articles.updatedAt, article.updatedAt))).returning({ id: articles.id });
   if (!changed) return;
   await Promise.allSettled([
-    logArticleEvent({ articleId: article.id, eventType: "unpublished", actorId: article.sourceMetadata!.publisherUserId!, summary: reason, metadata: { channel: "bot-drafts-api", reason: "schedule_authorization_lost" } }),
+    logArticleEvent({ articleId: article.id, eventType: "unpublished", actorId: article.sourceMetadata!.publisherUserId!, summary: reason, metadata: { channel: "bot-drafts-api", reason: cause === "no_credits" ? "schedule_no_credits" : "schedule_authorization_lost" } }),
     logActivity({ userId: article.sourceMetadata!.publisherUserId!, action: "bot_schedule_stopped", entityType: "article", entityId: article.id, newValue: { status: "draft", reason } }),
   ]);
+}
+
+/** Thrown inside the scheduled-publish transaction so the release rolls back. */
+export class ScheduledPublishNoCreditsError extends Error {
+  constructor() {
+    super("NO_CREDITS");
+    this.name = "ScheduledPublishNoCreditsError";
+  }
+}
+
+/**
+ * Agency news scheduled from «نشر سبق»: charge inside the transaction that
+ * releases it, exactly like an immediate publish. No usable package → throw so
+ * the article stays unpublished; the caller then returns it to draft.
+ */
+export async function chargePersonalBotScheduledPublish(
+  tx: CreditTx,
+  article: Pick<ScheduledArticle, "id" | "title" | "sourceMetadata" | "publisherId">,
+): Promise<void> {
+  if (!article.publisherId || !article.sourceMetadata?.publisherUserId) return;
+  const charge = await chargePublishInTx(tx, {
+    publisherId: article.publisherId,
+    articleId: article.id,
+    performedBy: article.sourceMetadata.publisherUserId,
+    note: article.title,
+  });
+  if (charge === "no_credits") throw new ScheduledPublishNoCreditsError();
 }
