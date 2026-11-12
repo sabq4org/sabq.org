@@ -5,7 +5,17 @@
 // قبل تشغيل الترحيل) يُسجَّل في السجل فقط.
 import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articles, publishers, socialPostBotKeys, staffDeskEvents, systemSettings, users } from "@shared/schema";
+import {
+  articleEditRequests,
+  articles,
+  opinionTickets,
+  publishers,
+  socialPostBotKeys,
+  socialPosts,
+  staffDeskEvents,
+  systemSettings,
+  users,
+} from "@shared/schema";
 import {
   STAFF_DESK_EVENTS_WINDOW_DAYS,
   STAFF_DESK_EVENT_CATEGORIES,
@@ -13,11 +23,14 @@ import {
   STAFF_DESK_UNREAD_CAP,
   botDraftsPublisherDisplayName,
   buildStaffDeskEventDetail,
+  buildStaffDeskEventSource,
+  resolveStaffDeskActorKind,
   clipStaffDeskTitle,
   decodeStaffDeskEventCursor,
   encodeStaffDeskEventCursor,
   staffDeskEventCategory,
   staffDeskEventDedupeKey,
+  staffDeskEventIsDecisionKind,
   staffDeskEventDeeplink,
   staffDeskIncludesMessages,
   visibleStaffDeskCategories,
@@ -27,7 +40,7 @@ import {
   type StaffDeskNotificationsResponse,
   type StaffDeskUnreadResponse,
 } from "@shared/staffNotifications";
-import type { StaffCapabilities } from "@shared/staffApp";
+import { safeStaffAvatarUrl, type StaffCapabilities } from "@shared/staffApp";
 
 const LOG_PREFIX = "[StaffDeskEvents]";
 const SEEN_KEY_PREFIX = "staff_app.notif_seen:";
@@ -510,14 +523,49 @@ function unreadSince(seenAt: Date | null, now: Date): Date {
   return seenAt ?? new Date(now.getTime() - 24 * 60 * 60 * 1000);
 }
 
+/** ما لا يُعرف من صف الحدث وحده: بوت التغريدة، وهل ما زال الهدف ينتظر قراراً. */
+interface NotificationContext {
+  /** postId → اسم البوت المعروض. */
+  tweetBots: Map<string, string>;
+  /** معرّفات الأحداث التي حُسم هدفها؛ null = تعذّر الفحص فيُكتفى بالنوع. */
+  settled: Set<string> | null;
+  /** userId → صورة الحساب. */
+  userAvatars: Map<string, string>;
+  /** اسم الوكالة (مقصوص الأطراف) → شعارها أو null. */
+  agencies: Map<string, string | null>;
+}
+
+const EMPTY_CONTEXT: NotificationContext = {
+  tweetBots: new Map(),
+  settled: null,
+  userAvatars: new Map(),
+  agencies: new Map(),
+};
+
 function toNotification(
   row: typeof staffDeskEvents.$inferSelect,
   since: Date,
   readIds: Set<string>,
   now: Date,
+  context: NotificationContext = EMPTY_CONTEXT,
 ): StaffDeskNotification {
   const kind = row.kind as StaffDeskEventKind;
   const labels = STAFF_DESK_EVENT_LABELS[kind] ?? { label: row.kind, action: "فتح" };
+  const tweetBotName = row.category === "tweet" ? context.tweetBots.get(row.targetId) ?? null : null;
+  const actorKey = row.actorName?.trim() ?? "";
+  const actorKind = resolveStaffDeskActorKind({
+    kind,
+    actorName: row.actorName,
+    actorUserId: row.actorUserId,
+    tweetBotName,
+    isAgency: Boolean(actorKey && context.agencies.has(actorKey)),
+  });
+  const actorAvatarUrl =
+    actorKind === "agency"
+      ? context.agencies.get(actorKey) ?? null
+      : actorKind === "person" && row.actorUserId
+        ? context.userAvatars.get(row.actorUserId) ?? null
+        : null;
   return {
     id: row.id,
     kind,
@@ -533,7 +581,107 @@ function toNotification(
     scheduledAt: row.scheduledAt ? row.scheduledAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     isUnread: row.createdAt.getTime() > since.getTime() && !readIds.has(row.id),
+    actorKind,
+    actorAvatarUrl,
+    needsDecision: staffDeskEventIsDecisionKind(kind) && !context.settled?.has(row.id),
+    source: buildStaffDeskEventSource(
+      { kind, actorName: tweetBotName ?? row.actorName, actorKind, scheduledAt: row.scheduledAt },
+      now,
+    ),
   };
+}
+
+/**
+ * يفحص أهداف صفحة واحدة: أي تغريدة من بوت، وأي حدث «يحتاج قراراً» حُسم هدفه
+ * (تغريدة لم تعد مسودة، خبر أو مقال نُشر أو أُعيد، طلب تعديل بُتّ فيه، تذكرة
+ * أُجيب عنها). استعلام واحد بالمفتاح الأساسي لكل جدول. لا يرمي: عند الفشل
+ * يبقى التصنيف بالنوع وحده.
+ */
+async function loadNotificationContext(
+  rows: Array<typeof staffDeskEvents.$inferSelect>,
+): Promise<NotificationContext> {
+  const ids = (kinds: readonly string[]) => [
+    ...new Set(rows.filter((r) => kinds.includes(r.kind)).map((r) => r.targetId)),
+  ];
+  const tweetIds = [...new Set(rows.filter((r) => r.category === "tweet").map((r) => r.targetId))];
+  const articleIds = ids(["opinion_draft", "news_bot_draft", "news_draft"]);
+  const requestIds = ids(["news_edit_request"]);
+  const ticketIds = ids(["ticket_message"]);
+  const actorUserIds = [...new Set(rows.map((r) => r.actorUserId).filter((id): id is string => Boolean(id)))];
+  const actorNames = [...new Set(rows.map((r) => r.actorName?.trim()).filter((n): n is string => Boolean(n)))];
+  try {
+    const [bots, openTweets, openArticles, openRequests, openTickets, people, agencyRows] = await Promise.all([
+      tweetIds.length
+        ? db
+            .select({ postId: socialPostBotKeys.postId, botName: socialPostBotKeys.botName })
+            .from(socialPostBotKeys)
+            .where(inArray(socialPostBotKeys.postId, tweetIds))
+        : [],
+      tweetIds.length
+        ? db
+            .select({ id: socialPosts.id })
+            .from(socialPosts)
+            .where(and(inArray(socialPosts.id, tweetIds), inArray(socialPosts.status, ["draft", "failed"])))
+        : [],
+      articleIds.length
+        ? db
+            .select({ id: articles.id })
+            .from(articles)
+            .where(
+              and(
+                inArray(articles.id, articleIds),
+                eq(articles.status, "draft"),
+                sql`${articles.reviewStatus} is distinct from 'needs_changes'`,
+                sql`${articles.reviewStatus} is distinct from 'rejected'`,
+              ),
+            )
+        : [],
+      requestIds.length
+        ? db
+            .select({ id: articleEditRequests.id })
+            .from(articleEditRequests)
+            .where(and(inArray(articleEditRequests.id, requestIds), eq(articleEditRequests.status, "pending")))
+        : [],
+      ticketIds.length
+        ? db
+            .select({ id: opinionTickets.id })
+            .from(opinionTickets)
+            .where(and(inArray(opinionTickets.id, ticketIds), eq(opinionTickets.status, "open")))
+        : [],
+      actorUserIds.length
+        ? db
+            .select({ id: users.id, imageUrl: users.profileImageUrl })
+            .from(users)
+            .where(inArray(users.id, actorUserIds))
+        : [],
+      actorNames.length
+        ? db
+            .select({ name: sql<string>`trim(${publishers.agencyName})`, logoUrl: publishers.logoUrl })
+            .from(publishers)
+            .where(inArray(sql`trim(${publishers.agencyName})`, actorNames))
+        : [],
+    ]);
+    const userAvatars = new Map<string, string>();
+    for (const person of people) {
+      const url = safeStaffAvatarUrl(person.imageUrl);
+      if (url) userAvatars.set(person.id, url);
+    }
+    const open = new Set([...openTweets, ...openArticles, ...openRequests, ...openTickets].map((r) => r.id));
+    const settled = new Set(
+      rows
+        .filter((r) => staffDeskEventIsDecisionKind(r.kind as StaffDeskEventKind) && !open.has(r.targetId))
+        .map((r) => r.id),
+    );
+    return {
+      tweetBots: new Map(bots.map((b) => [b.postId, botDraftsPublisherDisplayName(b.botName)])),
+      settled,
+      userAvatars,
+      agencies: new Map(agencyRows.map((a) => [a.name, safeStaffAvatarUrl(a.logoUrl)])),
+    };
+  } catch (err) {
+    console.error(`${LOG_PREFIX} تعذر فحص أهداف التنبيهات:`, err);
+    return EMPTY_CONTEXT;
+  }
 }
 
 export async function listStaffDeskNotifications(
@@ -609,8 +757,10 @@ export async function listStaffDeskNotifications(
   }
   counts.all = counts.tweet + counts.opinion + counts.news + counts.message;
 
+  const context = await loadNotificationContext(page);
+  const readIds = new Set(seen.readIds);
   return {
-    items: page.map((row) => toNotification(row, since, new Set(seen.readIds), now)),
+    items: page.map((row) => toNotification(row, since, readIds, now, context)),
     nextCursor,
     categories,
     counts,

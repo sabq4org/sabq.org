@@ -19,6 +19,27 @@ public enum StaffNotificationCategory: String, Codable, Sendable, CaseIterable, 
         case .message: return "رسائل"
         }
     }
+
+    /// The tag on one row: «خبر», «تغريدة», «مقال رأي», «رسالة».
+    public var tag: String {
+        switch self {
+        case .tweet: return "تغريدة"
+        case .opinion: return "مقال رأي"
+        case .news: return "خبر"
+        case .message: return "رسالة"
+        }
+    }
+}
+
+/// Who is behind a notification (server, 2026-11-12). An unknown value from
+/// a newer server reads as `.unknown` and draws like a person.
+public enum StaffNotificationActorKind: String, Codable, Sendable {
+    case person, agency, bot, system, unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = StaffNotificationActorKind(rawValue: raw) ?? .unknown
+    }
 }
 
 public struct StaffNotification: Codable, Sendable, Equatable, Identifiable, Hashable {
@@ -40,10 +61,18 @@ public struct StaffNotification: Codable, Sendable, Equatable, Identifiable, Has
     public var scheduledAt: Date?
     public var createdAt: Date
     public var isUnread: Bool
+    /// The three below are absent on a server older than 2026-11-12.
+    public var actorKind: StaffNotificationActorKind?
+    public var needsDecision: Bool?
+    public var source: String?
+    /// The person's photo or the agency's logo (absolute https), when the server has one.
+    public var actorAvatarUrl: String?
 
     public init(id: String, kind: String, category: StaffNotificationCategory, label: String, actionLabel: String,
                 title: String, detail: String, actorName: String? = nil, targetId: String, linkUrl: String? = nil,
-                deeplink: String? = nil, scheduledAt: Date? = nil, createdAt: Date, isUnread: Bool = false) {
+                deeplink: String? = nil, scheduledAt: Date? = nil, createdAt: Date, isUnread: Bool = false,
+                actorKind: StaffNotificationActorKind? = nil, needsDecision: Bool? = nil, source: String? = nil,
+                actorAvatarUrl: String? = nil) {
         self.id = id
         self.kind = kind
         self.category = category
@@ -58,6 +87,37 @@ public struct StaffNotification: Codable, Sendable, Equatable, Identifiable, Has
         self.scheduledAt = scheduledAt
         self.createdAt = createdAt
         self.isUnread = isUnread
+        self.actorKind = actorKind
+        self.needsDecision = needsDecision
+        self.source = source
+        self.actorAvatarUrl = actorAvatarUrl
+    }
+
+    /// Only an https link is ever loaded.
+    public var actorAvatarURL: URL? { DeskAvatarURL.https(actorAvatarUrl) }
+
+    /// Kinds that wait for a decision; the rest are «للعلم».
+    static let decisionKinds: Set<String> = [
+        "tweet_draft", "opinion_draft", "news_bot_draft", "news_draft", "news_edit_request", "ticket_message",
+    ]
+
+    /// True while the item still waits for the desk. An older server sends
+    /// no verdict, so the kind alone decides.
+    public var waitsForDecision: Bool {
+        needsDecision ?? Self.decisionKinds.contains(kind)
+    }
+
+    /// Bot, person or the scheduler; inferred from the kind on an older server.
+    public var actor: StaffNotificationActorKind {
+        if let actorKind, actorKind != .unknown { return actorKind }
+        return kind == "news_bot_draft" ? .bot : .person
+    }
+
+    /// The line beside the type tag («مسودة من بوت · قروك بوت»); the old
+    /// second line on an older server.
+    public var sourceLine: String {
+        let text = source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? detail : text
     }
 
     /// Where the row's button goes inside the app: the tweet, the opinion
@@ -185,6 +245,12 @@ public struct StaffNotificationDay: Sendable, Equatable, Identifiable {
 }
 
 public enum StaffNotificationTimeline {
+    /// «تحتاج قرارك» first (newest on top), then everything else by day.
+    public static func split(_ items: [StaffNotification], now: Date = Date())
+        -> (decisions: [StaffNotification], days: [StaffNotificationDay]) {
+        (items.filter(\.waitsForDecision), days(items.filter { !$0.waitsForDecision }, now: now))
+    }
+
     /// Groups newest-first items by Riyadh day, keeping their order.
     public static func days(_ items: [StaffNotification], now: Date = Date()) -> [StaffNotificationDay] {
         let calendar = RiyadhTime.calendar

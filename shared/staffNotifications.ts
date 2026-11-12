@@ -150,6 +150,88 @@ export function buildStaffDeskEventDetail(
   }
 }
 
+/** من وراء الحدث: شخص، وكالة، بوت، أو النظام (نشر آلي في موعده). */
+export const STAFF_DESK_ACTOR_KINDS = ["person", "agency", "bot", "system"] as const;
+export type StaffDeskActorKind = (typeof STAFF_DESK_ACTOR_KINDS)[number];
+
+/** الأنواع التي تنتظر قراراً من المكتب؛ الباقي «للعلم». */
+export const STAFF_DESK_DECISION_KINDS: readonly StaffDeskEventKind[] = [
+  "tweet_draft",
+  "opinion_draft",
+  "news_bot_draft",
+  "news_draft",
+  "news_edit_request",
+  "ticket_message",
+];
+
+export function staffDeskEventIsDecisionKind(kind: StaffDeskEventKind): boolean {
+  return STAFF_DESK_DECISION_KINDS.includes(kind);
+}
+
+/**
+ * مصدر الحدث. تغريدة البوت تُعرف من `tweetBotName` (social_post_bot_keys)؛
+ * مسودة خبر البوت بوت دائماً؛ الخبر المنشور بلا صاحب توكن = بوت بتوكن البيئة؛
+ * وحدث نشر أو جدولة بلا فاعل = النظام.
+ */
+export function resolveStaffDeskActorKind(event: {
+  kind: StaffDeskEventKind;
+  actorName: string | null;
+  actorUserId: string | null;
+  tweetBotName?: string | null;
+  /** اسم الفاعل يطابق اسم وكالة مسجّلة (publishers.agencyName). */
+  isAgency?: boolean;
+}): StaffDeskActorKind {
+  if (event.kind === "news_bot_draft") return "bot";
+  if (event.kind.startsWith("tweet_") && event.tweetBotName) return "bot";
+  if (event.isAgency) return "agency";
+  if (event.kind === "news_published") return event.actorUserId ? "person" : "bot";
+  const automatic =
+    event.kind === "tweet_scheduled" || event.kind === "tweet_published" || event.kind === "opinion_scheduled";
+  if (automatic && !event.actorName?.trim()) return "system";
+  return "person";
+}
+
+/** سطر المصدر بجانب وسم النوع: «مسودة من بوت · قروك بوت»، «من مراسل · سالم». */
+export function buildStaffDeskEventSource(
+  event: {
+    kind: StaffDeskEventKind;
+    actorName: string | null;
+    actorKind: StaffDeskActorKind;
+    scheduledAt: Date | null;
+  },
+  now: Date = new Date(),
+): string {
+  const actor = event.actorName?.trim() || null;
+  const bot = event.actorKind === "bot";
+  const when = event.scheduledAt ? formatStaffDeskWhen(event.scheduledAt, now) : null;
+  const join = (...parts: Array<string | null>) => parts.filter(Boolean).join(" · ");
+  switch (event.kind) {
+    case "tweet_draft":
+      return bot ? join("مقترح من بوت", actor) : actor ? `مقترح من ${actor}` : "مقترح بانتظار المراجعة";
+    case "tweet_scheduled":
+      // الموعد أولاً: السطر يُقص في الصف المختصر، والموعد أهم من الاسم.
+      return join(when ? `تُنشر ${when}` : "جُدولت", bot ? join("جدولها بوت", actor) : actor ? `جدولها ${actor}` : null);
+    case "tweet_published":
+      return bot ? join("نشرها بوت", actor) : actor ? `نشرها ${actor}` : "نُشرت تلقائيًا في موعدها";
+    case "opinion_draft":
+      return join("من كاتب", actor);
+    case "opinion_scheduled":
+      return join(when ? `يُنشر ${when}` : "جُدول", actor);
+    case "news_published":
+      return bot ? join("نشره بوت", actor) : join("نُشر عبر «نشر سبق»", actor);
+    case "news_bot_draft":
+      return join("مسودة من بوت", actor);
+    case "news_draft":
+      return join("من مراسل", actor);
+    case "news_edit_request":
+      return join("طلب تعديل", actor);
+    case "ticket_message":
+      return join("من كاتب", actor);
+    default:
+      return actor ?? "";
+  }
+}
+
 export interface StaffDeskNotification {
   id: string;
   kind: StaffDeskEventKind;
@@ -166,6 +248,14 @@ export interface StaffDeskNotification {
   scheduledAt: string | null;
   createdAt: string;
   isUnread: boolean;
+  /** منذ 2026-11-12: شخص، وكالة، بوت، أو النظام. */
+  actorKind: StaffDeskActorKind;
+  /** صورة الشخص أو شعار الوكالة (https مطلق)، وإلا null. */
+  actorAvatarUrl: string | null;
+  /** ينتظر قراراً الآن (النوع يحتاج قراراً وهدفه لم يُحسم بعد). */
+  needsDecision: boolean;
+  /** سطر المصدر الجديد؛ `detail` يبقى للنسخ الأقدم من التطبيق. */
+  source: string;
 }
 
 export interface StaffDeskNotificationsResponse {
