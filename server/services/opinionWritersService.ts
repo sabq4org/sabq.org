@@ -931,6 +931,7 @@ export async function notifyOpinionDraftDeskChannels(input: {
   nextSlot: string | null;
   notice: { title: string; body: string; slotLine: string };
 }): Promise<OpinionDraftDeskChannelsResult> {
+  const deskBotAlerts = await import("./deskBotAlerts");
   const [pushSent, email] = await Promise.all([
     (async (): Promise<number> => {
       try {
@@ -950,14 +951,9 @@ export async function notifyOpinionDraftDeskChannels(input: {
     })(),
     (async (): Promise<{ recipients: number; delivered: number }> => {
       try {
-        const {
-          buildDeskOpinionDraftAlertEmail,
-          getDeskBotAlertRecipients,
-          sendDeskAlertEmails,
-        } = await import("./deskBotAlerts");
-        const recipients = await getDeskBotAlertRecipients();
+        const recipients = await deskBotAlerts.getDeskBotAlertRecipients();
         if (recipients.length === 0) return { recipients: 0, delivered: 0 };
-        const payload = buildDeskOpinionDraftAlertEmail({
+        const payload = deskBotAlerts.buildDeskOpinionDraftAlertEmail({
           articleId: input.articleId,
           articleTitle: input.articleTitle,
           authorName: input.authorName,
@@ -965,11 +961,35 @@ export async function notifyOpinionDraftDeskChannels(input: {
           slotLine: input.notice.slotLine,
           nextSlotIso: input.nextSlot,
         });
-        const delivered = await sendDeskAlertEmails(recipients, payload, "[opinion-writers] desk bot email");
+        const delivered = await deskBotAlerts.sendDeskAlertEmails(
+          recipients,
+          payload,
+          "[opinion-writers] desk bot email",
+        );
         return { recipients: recipients.length, delivered: Number(delivered) || 0 };
       } catch (mailErr) {
         console.error("[opinion-writers] desk bot email for opinion draft failed:", mailErr);
         return { recipients: 0, delivered: 0 };
+      }
+    })(),
+    (async (): Promise<void> => {
+      try {
+        const authorDisplayName =
+          input.authorName?.trim() && input.authorName.trim() !== "كاتب رأي"
+            ? input.authorName.trim()
+            : null;
+        await deskBotAlerts.sendDeskAlertWebhook(
+          {
+            type: "opinion_draft",
+            id: input.articleId,
+            title: deskBotAlerts.clipDeskAlertExcerpt(input.articleTitle || "مقال رأي", 120),
+            author: authorDisplayName,
+            url: deskBotAlerts.buildDeskOpinionDraftAlertUrl(input.articleId),
+          },
+          { logPrefix: "[opinion-writers] desk bot webhook" },
+        );
+      } catch (webhookErr) {
+        console.warn("[opinion-writers] desk bot webhook for opinion draft failed:", webhookErr);
       }
     })(),
   ]);

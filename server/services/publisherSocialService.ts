@@ -28,8 +28,10 @@ import { button, emailShell, escapeHtml } from "./publisherRenewalService";
 import {
   AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL,
   buildDeskSocialProposalAlertEmail,
+  clipDeskAlertExcerpt,
   loadDeskBotSettingEmails,
   resolveAgencySocialAlertRecipients,
+  sendDeskAlertWebhook,
 } from "./deskBotAlerts";
 import { notifyStaffDeskOfSocialProposal } from "./staffAppPushService";
 
@@ -278,6 +280,17 @@ export async function saveAgencySocialPost(
       isUpdate: false,
       occurredAt: now,
     });
+    void sendDeskAlertWebhook(
+      {
+        type: "social_proposal",
+        id: post.id,
+        title: status.article.title?.trim() || clipDeskAlertExcerpt(text || "", 120),
+        author: publisher.agencyName?.trim() || null,
+        url: AGENCY_REQUESTS_URL,
+        sentAt: now,
+      },
+      { logPrefix: "[Agency Social]" },
+    ).catch((err) => console.warn("[Agency Social] webhook notice failed:", err));
     const immediateRecipients = resolveAgencySocialAlertRecipients();
     for (const to of immediateRecipients) {
       void sendEmailNotification({

@@ -32,9 +32,12 @@ import { activeSocialTransport, publerProvider } from "./publerApiClient";
 import { notifyAuthorOfSocialPostStatus } from "../editorialNotifications";
 import {
   buildDeskSocialProposalAlertEmail,
+  buildDeskSocialProposalAlertUrl,
+  clipDeskAlertExcerpt,
   getDeskBotAlertRecipients,
   isMeaningfulProposalTextChange,
   sendDeskAlertEmails,
+  sendDeskAlertWebhook,
 } from "../deskBotAlerts";
 import {
   notifyStaffAdminsOfSocialFailure,
@@ -1292,8 +1295,15 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
   let senderName = input.authorName?.trim() || "";
   let senderRole = "opinion_author";
   try {
-    const recipients = await getDeskBotAlertRecipients();
-    if (recipients.length > 0 && !senderName) {
+    let recipients: string[] = [];
+    try {
+      recipients = await getDeskBotAlertRecipients();
+    } catch (recipientErr) {
+      console.error(`${LOG_PREFIX} فشل جلب مستلمي تنبيه مقترح كاتب الرأي:`, recipientErr);
+    }
+
+    const webhookConfigured = Boolean(process.env.DESK_ALERT_WEBHOOK_URL?.trim());
+    if ((recipients.length > 0 || webhookConfigured) && !senderName) {
       try {
         const rows = await db
           .select({
@@ -1317,7 +1327,24 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
         // Ignore user lookup failure; use default label
       }
     }
+    const resolvedAuthorName =
+      senderName && senderName !== "كاتب رأي" ? senderName : null;
     if (!senderName) senderName = "كاتب رأي";
+
+    const dashboardUrl = buildDeskSocialProposalAlertUrl({ proposalKind: "author" });
+    const webhookPromise = sendDeskAlertWebhook(
+      {
+        type: "social_proposal",
+        id: input.post.id,
+        title: input.articleTitle?.trim() || clipDeskAlertExcerpt(input.post.text || "", 120),
+        author: resolvedAuthorName,
+        url: dashboardUrl,
+      },
+      { logPrefix: "[SocialPublish AuthorProposal]" },
+    ).catch((err) => {
+      console.warn(`${LOG_PREFIX} فشل إرسال webhook مقترح كاتب الرأي:`, err);
+      return false;
+    });
 
     if (recipients.length > 0) {
       const emailPayload = buildDeskSocialProposalAlertEmail({
@@ -1328,6 +1355,7 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
         text: input.post.text,
         articleTitle: input.articleTitle,
         articleUrl: input.articleUrl,
+        dashboardUrl,
         isUpdate: input.isUpdate,
         ...(isEditor
           ? {
@@ -1339,6 +1367,8 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
       });
       await sendDeskAlertEmails(recipients, emailPayload, "[SocialPublish AuthorProposal]");
     }
+
+    await webhookPromise;
   } catch (err) {
     console.error(`${LOG_PREFIX} فشل إرسال تنبيه مقترح كاتب الرأي:`, err);
   }

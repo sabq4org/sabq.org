@@ -21,6 +21,7 @@ const h = vi.hoisted(() => {
     notifyStaffDeskOfOpinionDraft: vi.fn(async () => 1),
     getDeskBotAlertRecipients: vi.fn(async () => ["desk-bot@example.com"]),
     sendDeskAlertEmails: vi.fn(async () => undefined),
+    sendDeskAlertWebhook: vi.fn(async () => false),
     emit: vi.fn(),
   };
 });
@@ -39,6 +40,7 @@ vi.mock("../../server/services/deskBotAlerts", async (importOriginal) => {
     ...actual,
     getDeskBotAlertRecipients: h.getDeskBotAlertRecipients,
     sendDeskAlertEmails: h.sendDeskAlertEmails,
+    sendDeskAlertWebhook: h.sendDeskAlertWebhook,
   };
 });
 vi.mock("../../server/services/email", () => ({ sendEmailNotification: vi.fn() }));
@@ -186,16 +188,46 @@ describe("notifyOpinionArticleSubmittedForReview", () => {
     const [recipients, payload] = h.sendDeskAlertEmails.mock.calls[0] as any[];
     expect(recipients).toEqual(["desk-bot@example.com"]);
     expect(payload.subject).toContain("[sabq-desk] type=opinion_draft id=art-1");
+
+    expect(h.sendDeskAlertWebhook).toHaveBeenCalledTimes(1);
+    expect(h.sendDeskAlertWebhook).toHaveBeenCalledWith(
+      {
+        type: "opinion_draft",
+        id: "art-1",
+        title: "مقال تجريبي",
+        author: "سعد الكاتب",
+        url: "https://sabq.org/dashboard/articles?status=draft&id=art-1",
+      },
+      { logPrefix: "[opinion-writers] desk bot webhook" },
+    );
   });
 
-  it("never throws when the push or the email fail", async () => {
+  it("never throws when the push, the email, or the webhook fail, and email still runs when webhook rejects", async () => {
     h.rowsQueue.push([{ firstName: "سعد", lastName: "" }], []);
     h.notifyStaffDeskOfOpinionDraft.mockRejectedValueOnce(new Error("apns down"));
     h.getDeskBotAlertRecipients.mockRejectedValueOnce(new Error("db down"));
+    h.sendDeskAlertWebhook.mockRejectedValueOnce(new Error("webhook socket hang up"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     await expect(notifyOpinionArticleSubmittedForReview(article)).resolves.toBeUndefined();
     await flush();
     expect(h.sendDraftSubmittedNotification).toHaveBeenCalledTimes(1);
+
+    // Webhook rejection alone does not prevent email or push from succeeding
+    h.sendDeskAlertWebhook.mockRejectedValueOnce(new Error("webhook timeout"));
+    h.sendDeskAlertEmails.mockResolvedValueOnce(1 as never);
+    const res = await notifyOpinionDraftDeskChannels({
+      articleId: "art-webhook-err",
+      articleTitle: "مقال",
+      authorId: "writer-1",
+      authorName: "سعد الكاتب",
+      nextSlot: null,
+      notice: { title: "t", body: "b", slotLine: "بلا موعد ثابت" },
+    });
+    expect(res).toEqual({ pushSent: 1, emailRecipients: 1, emailSent: true });
+    expect(h.sendDeskAlertEmails).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
     errSpy.mockRestore();
   });
 
@@ -258,6 +290,16 @@ describe("desk renotify (POST /api/v1/staff/opinion/:id/renotify)", () => {
     });
     const [, payload] = h.sendDeskAlertEmails.mock.calls[0] as any[];
     expect(payload.subject).toContain("[sabq-desk] type=opinion_draft id=art-9");
+    expect(h.sendDeskAlertWebhook).toHaveBeenCalledWith(
+      {
+        type: "opinion_draft",
+        id: "art-9",
+        title: "مقال بانتظار المكتب",
+        author: "سعد الكاتب",
+        url: "https://sabq.org/dashboard/articles?status=draft&id=art-9",
+      },
+      { logPrefix: "[opinion-writers] desk bot webhook" },
+    );
     expect(h.sendDraftSubmittedNotification).not.toHaveBeenCalled();
     expect(h.mockDb.insert).not.toHaveBeenCalled();
     expect(h.emit).not.toHaveBeenCalled();
