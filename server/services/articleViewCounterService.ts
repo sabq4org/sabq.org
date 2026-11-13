@@ -16,10 +16,16 @@ import { flushArticleOpenBuckets, recordArticleOpens } from "./articleOpenBucket
  */
 
 const FLUSH_INTERVAL_MS = 10_000;
-const MERGE_INTERVAL_MS = 10_000;
+/**
+ * 20 ثانية بدل 10 ودفعة 100 بدل 50: السعة نفسها (300 مقال/دقيقة) بنصف عدد
+ * عبارات UPDATE على articles، وكل عبارة ~1.5ث تحت مهلة 3ث. كل تحديث لـ views
+ * يعيد كتابة الصف وفهارسه الـ17 (views مفهرس فلا HOT)، وكان الدمج وحده 18.8%
+ * من وقت القاعدة (مراجعة 2026-11-02). القارئ يرى العدّاد متأخراً حتى 30ث بدل 20ث.
+ */
+const MERGE_INTERVAL_MS = 20_000;
 /** صغر الدفعة — عبارات قصيرة تحت ضغط الذروة. */
 const CHUNK_SIZE = Number(process.env.VIEW_COUNTER_CHUNK_SIZE) || 50;
-const MERGE_CHUNK_SIZE = Number(process.env.VIEW_COUNTER_MERGE_CHUNK_SIZE) || 50;
+const MERGE_CHUNK_SIZE = Number(process.env.VIEW_COUNTER_MERGE_CHUNK_SIZE) || 100;
 const MAX_PENDING = Number(process.env.VIEW_COUNTER_MAX_PENDING) || 50_000;
 const FLUSH_LOCK_TIMEOUT_MS = Number(process.env.VIEW_COUNTER_LOCK_TIMEOUT_MS) || 1_000;
 const FLUSH_STATEMENT_TIMEOUT_MS = Number(process.env.VIEW_COUNTER_STATEMENT_TIMEOUT_MS) || 3_000;
