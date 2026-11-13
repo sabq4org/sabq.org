@@ -290,10 +290,21 @@ struct HomeFeedView: View {
             }
             // شريط "⬆️ X أخبار جديدة" عائم أسفل الشاشة فوق شريط التبويبات —
             // في الأعلى كان يغطي زر البحث في رأس الرئيسية. يسمح باللمس فقط
-            // عندما يظهر الشريط.
+            // عندما يظهر الشريط. يسبقه تلاشي ناعم يمنع تداخل العناوين مع التبويبات.
             .overlay(alignment: .bottom) {
-                newArticlesBanner(proxy: scrollProxy)
-                    .allowsHitTesting(articlesStore.newArticlesCount > 0)
+                ZStack(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [SabqTheme.background.opacity(0), SabqTheme.background.opacity(0.92)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 68)
+                    .ignoresSafeArea(edges: .bottom)
+                    .allowsHitTesting(false)
+
+                    newArticlesBanner(proxy: scrollProxy)
+                        .allowsHitTesting(articlesStore.newArticlesCount > 0)
+                }
             }
             // استطلاع خفيف لإشارة إبطال الكاش (نفس نمط الويب):
             // GET /api/cache-invalidation/check كل 30ث — وجلب الرئيسية فقط
@@ -607,9 +618,9 @@ struct HomeFeedView: View {
                                         .frame(width: 10, height: 10)
                                         .overlay(
                                             Circle()
-                                                .stroke(SabqTheme.background, lineWidth: 2)
+                                                .stroke(SabqTheme.surface, lineWidth: 2)
                                         )
-                                        .padding(10)
+                                        .padding(7)
                                 }
                             }
                     }
@@ -630,8 +641,14 @@ struct HomeFeedView: View {
 
     private func headerIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
-            .font(SabqType.sectionHeading.font.weight(.regular))
-            .foregroundStyle(SabqTheme.textPrimary)
+            .font(SabqType.rowTitle.font.weight(.medium))
+            .foregroundStyle(SabqTheme.textSecondary)
+            .frame(width: 36, height: 36)
+            .background(
+                Circle()
+                    .fill(SabqTheme.surface)
+                    .overlay(Circle().strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
+            )
             .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
             .contentShape(Rectangle())
     }
