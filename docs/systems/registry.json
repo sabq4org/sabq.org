@@ -489,7 +489,12 @@
         "server/services/enArticleTranslationService.ts",
         "server/jobs/enAutoTranslateJob.ts",
         "server/routes/enAutoTranslate.ts",
-        "tests/unit/enAutoTranslate.test.ts"
+        "tests/unit/enAutoTranslate.test.ts",
+        "client/src/lib/editorPresencePolicy.ts",
+        "client/src/hooks/useEditorPresence.ts",
+        "client/src/components/admin/EditorPresenceBar.tsx",
+        "server/services/editorPresenceGuard.ts",
+        "tests/unit/editorPresence.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
