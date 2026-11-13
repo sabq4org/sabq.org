@@ -27,10 +27,10 @@ struct SportsPortalStrip: View {
                 } else {
                     Text("الرياضة")
                         .font(SabqType.tag.scaled(compactType).font)
-                        .foregroundStyle(SabqTheme.primary)
+                        .foregroundStyle(SabqTheme.teal)
                         .padding(.horizontal, SabqLayout.space8)
-                        .padding(.vertical, 2)
-                        .background(SabqTheme.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                        .padding(.vertical, 2.5)
+                        .background(SabqTheme.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                 }
 
                 if let match = headline?.match {
@@ -55,8 +55,10 @@ struct SportsPortalStrip: View {
                 }
                 Spacer(minLength: SabqLayout.space4)
                 Image(systemName: "chevron.left")
-                    .font(SabqType.metaEmphasis.scaled(compactType).font)
-                    .foregroundStyle(SabqTheme.textTertiary)
+                    .font(SabqType.meta.scaled(compactType).font.weight(.semibold))
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(SabqTheme.surface))
             }
             .frame(minHeight: SabqLayout.controlHeight)
             .padding(.horizontal, SabqLayout.space16)
@@ -93,12 +95,9 @@ private struct StripSurface: ViewModifier {
     let card: Bool
 
     func body(content: Content) -> some View {
-        if card {
-            content.sabqSkyCardSurface()
-        } else {
-            // بطاقة بيضاء بهوامش الصفحة كبقية بلوكات الرئيسية؛ الشريط الممتد من
-            // حافة إلى حافة كان يختفي على الخلفية الرمادية ويترك فراغًا حوله.
-            content.sabqBlockSurface()
-        }
+        // خلفية سماوية هادئة تفصل شريط الرياضة بصريًا عن البطاقات البيضاء
+        // المحيطة (الهيرو والاقتصاد) في الهاتف وعمود Duo معًا.
+        let _ = card
+        content.sabqSkyCardSurface()
     }
 }

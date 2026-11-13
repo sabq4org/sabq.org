@@ -56,6 +56,8 @@ nonisolated enum SabqTheme {
     static let skyTint = adaptive(0xF3F8FD, 0x13202E)
     /// إطار سماوي ناعم للبطاقات التحريرية المميزة.
     static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
+    /// حدّ شعري ناعم للبطاقات البيضاء يفصلها بهدوء عن خلفية الصفحة.
+    static let cardBorder = adaptive(0xDCEAF7, 0x223244)
     /// خط رفيع بين الأخبار داخل القائمة.
     static let separator = adaptive(0xE2E9F0, 0x24313F)
     /// حدود عناصر التحكم (حقول، أزرار ثانوية).
@@ -257,6 +259,9 @@ extension View {
         return background(
             shape.fill(SabqTheme.surface)
                 .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+        )
+        .overlay(
+            shape.strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75)
         )
     }
 

@@ -1598,7 +1598,7 @@ struct FeaturedCarousel: View {
 
             if articles.count > 1 {
                 pageDots
-                    .padding(.top, SabqLayout.space12)
+                    .padding(.top, SabqLayout.space8)
                     .padding(.bottom, SabqLayout.space12)
             } else {
                 Color.clear.frame(height: SabqLayout.space12)
@@ -1628,6 +1628,15 @@ struct FeaturedCarousel: View {
                             .environment(\.sabqImageLoadFailed, true)
                     }
                 }
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [.clear, Color.black.opacity(0.22)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 36)
+                    .allowsHitTesting(false)
+                }
                 .clipped()
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
@@ -1653,10 +1662,10 @@ struct FeaturedCarousel: View {
                 } else {
                     Text(article.categoryTitle)
                         .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.primary)
+                        .foregroundStyle(article.category.tint)
                         .padding(.horizontal, SabqLayout.space8)
                         .padding(.vertical, 2.5)
-                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                        .background(Capsule(style: .continuous).fill(article.category.tint.opacity(0.10)))
                     if article.isInfographic { InfographicPill() }
                 }
                 if article.isFreshlyPublished {
@@ -2332,13 +2341,15 @@ extension View {
     /// `SabqTheme.surfaceMuted` كي يتمايز البلوك عن الصفحة.
     func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-        // هوية المكتب: الأبيض بظل خفيف بلا حدّ؛ التعبئة الهادئة داخل صفحة بيضاء بلا ظل.
         let raised = fill == SabqTheme.surface
         return clipShape(shape)
             .background(
                 shape.fill(fill)
                     .shadow(color: raised ? SabqTheme.shadow : .clear,
                             radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+            )
+            .overlay(
+                shape.strokeBorder(raised ? SabqTheme.cardBorder : .clear, lineWidth: 0.75)
             )
     }
 

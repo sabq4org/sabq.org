@@ -136,8 +136,8 @@ struct LatestTimelineRail: View {
     var body: some View {
         HStack(spacing: 0) {
             Rectangle()
-                .fill(SabqTheme.outline)
-                .frame(width: LatestTimelineStyle.railLine)
+                .fill(SabqTheme.outline.opacity(0.65))
+                .frame(width: 1.5)
                 .frame(width: LatestTimelineStyle.railWidth)
             Spacer(minLength: 0)
         }
@@ -211,6 +211,11 @@ struct LatestTimelineRow: View {
                 .fill(article.category.tint)
                 .frame(width: LatestTimelineStyle.dotSize, height: LatestTimelineStyle.dotSize)
                 .overlay(Circle().stroke(SabqTheme.surface, lineWidth: 3))
+                .background(
+                    Circle()
+                        .fill(isNew ? article.category.tint.opacity(0.18) : .clear)
+                        .frame(width: LatestTimelineStyle.dotSize + 7, height: LatestTimelineStyle.dotSize + 7)
+                )
                 .frame(width: LatestTimelineStyle.railWidth)
                 .padding(.top, 5)
                 .accessibilityHidden(true)

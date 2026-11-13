@@ -271,9 +271,11 @@ struct EconomyWeeklyHomeCard: View {
                 .lineLimit(1)
             Button(action: toggle) {
                 Image(systemName: "chevron.down")
-                    .font(SabqType.metaEmphasis.scaled(compactType).font)
+                    .font(SabqType.meta.scaled(compactType).font.weight(.semibold))
                     .foregroundStyle(SabqTheme.primary)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(SabqTheme.primary.opacity(0.10)))
                     .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
                     .contentShape(Rectangle())
             }
@@ -325,12 +327,15 @@ struct EconomyWeeklyHomeCard: View {
         let pct = weekly.totalChangePct
         let up = pct >= 0
         let tint = up ? EconomyTone.up : EconomyTone.down
-        return HStack(spacing: SabqLayout.space4) {
+        return HStack(spacing: SabqLayout.space8) {
             Text("\(up ? "▲" : "▼") \(EconomyFormat.fmtPct(pct))")
                 .font(SabqType.metaEmphasis.scaled(compactType).font)
                 .foregroundStyle(tint)
                 .monospacedDigit()
                 .environment(\.layoutDirection, .leftToRight)
+                .padding(.horizontal, SabqLayout.space8)
+                .padding(.vertical, 2)
+                .background(Capsule(style: .continuous).fill(tint.opacity(0.09)))
             Text("عن الأسبوع السابق")
                 .font(SabqType.meta.scaled(compactType).font)
                 .foregroundStyle(SabqTheme.textTertiary)
@@ -342,10 +347,16 @@ struct EconomyWeeklyHomeCard: View {
         let maxV = max(series.max() ?? 1, 1)
         return HStack(alignment: .bottom, spacing: SabqLayout.space4) {
             ForEach(Array(series.enumerated()), id: \.offset) { index, value in
-                Rectangle()
-                    .fill(index == series.count - 1 ? SabqTheme.primary : SabqTheme.primary.opacity(0.25))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: max(10, 54 * CGFloat(value / maxV)))
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 4,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 4,
+                    style: .continuous
+                )
+                .fill(index == series.count - 1 ? SabqTheme.primary : SabqTheme.primary.opacity(0.22))
+                .frame(maxWidth: .infinity)
+                .frame(height: max(10, 54 * CGFloat(value / maxV)))
             }
         }
     }

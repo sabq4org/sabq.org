@@ -397,20 +397,22 @@ enum ArticleCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    /// لوحة تصنيفات تحريرية متزنة وعالية التباين في الوضعين النهاري والليلي،
+    /// تتجنب التنافر مع أزرق الإجراءات وأحمر العاجل.
     var tint: Color {
         switch self {
-        case .saudi:      Self.color(hex: "3498db")
-        case .regions:    Self.color(hex: "84cc16")
-        case .culture:    Self.color(hex: "d946ef")
-        case .community:  Self.color(hex: "f97316")
-        case .sports:     Self.color(hex: "2ecc71")
-        case .tourism:    Self.color(hex: "14b8a6")
-        case .technology: Self.color(hex: "6366f1")
-        case .business:   Self.color(hex: "ca8a04")
-        case .life:       Self.color(hex: "F472B6")
-        case .cars:       Self.color(hex: "0EA5E9")
-        case .stations:   Self.color(hex: "FBBF24")
-        case .world:      Self.color(hex: "e74c3c")
+        case .saudi:      SabqTheme.adaptive(0x096EBD, 0x5CC4FF)
+        case .regions:    SabqTheme.adaptive(0x4E7E42, 0x8CD17D)
+        case .culture:    SabqTheme.adaptive(0x7C4D8B, 0xC09AD0)
+        case .community:  SabqTheme.adaptive(0xB8561A, 0xF09B64)
+        case .sports:     SabqTheme.adaptive(0x08785F, 0x70DCC0)
+        case .tourism:    SabqTheme.adaptive(0x0E7490, 0x5EC7DF)
+        case .technology: SabqTheme.adaptive(0x4F46B8, 0x9995F7)
+        case .business:   SabqTheme.adaptive(0x946000, 0xE2B45A)
+        case .life:       SabqTheme.adaptive(0xA64272, 0xE48CB6)
+        case .cars:       SabqTheme.adaptive(0x0A78B8, 0x67C4F7)
+        case .stations:   SabqTheme.adaptive(0xA16207, 0xE2B45A)
+        case .world:      SabqTheme.adaptive(0x0F5E9C, 0x7CCFFF)
         }
     }
 
