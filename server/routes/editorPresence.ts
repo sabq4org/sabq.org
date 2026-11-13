@@ -4,6 +4,11 @@ import Redis from "ioredis";
 import { requireAuth, requireAnyPermission } from "../rbac";
 import { isLeader } from "../leaderElection";
 import { redisRetryDelay } from "../utils/redisRetry";
+import {
+  evaluateLegacyHeartbeat,
+  pruneLegacyTracker,
+  type LegacyHeartbeatRecord,
+} from "../services/editorPresenceGuard";
 
 const router: Router = Router();
 
@@ -25,6 +30,12 @@ const PRESENCE_HASH_TTL_SEC = 300;
 // older than PRESENCE_TTL_MS even if no pod currently knows about that user.
 const LEADER_SWEEP_INTERVAL_MS = 60_000;
 const presence = new Map<string, PresenceEntry>();
+const legacyHeartbeatTracker = new Map<string, LegacyHeartbeatRecord>();
+
+function buildSessionKey(userId: string, req: Request): string {
+  const sessionId = (req as Request & { sessionID?: string }).sessionID || "default";
+  return `${userId}:${sessionId}`;
+}
 
 interface PublishedEvent {
   articleId: string;
@@ -218,6 +229,7 @@ function cleanupStale() {
       // ignore
     }
   }
+  pruneLegacyTracker(legacyHeartbeatTracker, now);
   return changed;
 }
 
@@ -316,6 +328,7 @@ const heartbeatSchema = z.object({
   articleId: z.string().nullable().optional(),
   articleTitle: z.string().max(300).optional().default(""),
   articleSummary: z.string().max(400).optional().default(""),
+  idleAware: z.boolean().optional(),
 });
 
 router.post("/api/editor-presence/heartbeat", requireAuth, (req: Request, res: Response) => {
@@ -327,6 +340,31 @@ router.post("/api/editor-presence/heartbeat", requireAuth, (req: Request, res: R
   const user: any = (req as any).user;
   if (!user?.id) {
     return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const now = Date.now();
+  const articleId = parsed.data.articleId ?? null;
+  const articleTitle = (parsed.data.articleTitle || "").trim();
+  const articleSummary = (parsed.data.articleSummary || "").trim();
+  const signature = `${articleId ?? ""}\0${articleTitle}\0${articleSummary}`;
+
+  const guard = evaluateLegacyHeartbeat(
+    legacyHeartbeatTracker,
+    buildSessionKey(user.id, req),
+    signature,
+    now,
+    parsed.data.idleAware === true,
+  );
+  if (guard.suppress) {
+    const removed = presence.delete(user.id);
+    if (removed) {
+      broadcastLocalPresence();
+    }
+    if (removed || guard.newlySuppressed) {
+      deleteSharedState(user.id);
+      publishRedis(CH_LEAVE, { userId: user.id });
+    }
+    return res.json({ ok: true, suppressed: true });
   }
 
   // Prefer Arabic/full name from session. Session used to omit firstName/lastName
@@ -342,10 +380,10 @@ router.post("/api/editor-presence/heartbeat", requireAuth, (req: Request, res: R
     userId: user.id,
     userName,
     userAvatar: user.profileImageUrl || null,
-    articleId: parsed.data.articleId ?? null,
-    articleTitle: (parsed.data.articleTitle || "").trim(),
-    articleSummary: (parsed.data.articleSummary || "").trim(),
-    updatedAt: Date.now(),
+    articleId,
+    articleTitle,
+    articleSummary,
+    updatedAt: now,
   };
 
   presence.set(user.id, entry);
@@ -361,6 +399,7 @@ const leaveHandler = (req: Request, res: Response) => {
   if (!user?.id) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+  legacyHeartbeatTracker.delete(buildSessionKey(user.id, req));
   if (presence.delete(user.id)) {
     broadcastLocalPresence();
   }
