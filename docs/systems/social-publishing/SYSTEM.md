@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-11-10 (تغريدة المحرر من «نشر سبق» عبر `POST /api/internal/bot-desk/social/tweets`: نشر مباشر لصاحب `social_publish.publish_now` أو مقترح للمكتب بعلامة `requestedAt` بلا وكالة؛ مقفلة حتى `BOT_DESK_EDITOR_TWEETS=on`، المنطق في `editorTweetService.ts`)؛ قبلها 2026-11-03 (مهلة طلب التغريدة صارت 72 ساعة لكتّاب الرأي والوكالات)؛ قبلها 2026-10-24 (مسارات `/api/internal/bot-desk/social/*` لمراجعة مقترحات الكتّاب والوكالات وتنبيهات البريد القابلة للتحليل آلياً) | المالك: editorial + platform
+> آخر مراجعة: 2026-11-13 (Webhook مباشر لتنبيهات مقترحات التغريدات `type=social_proposal` عبر `sendDeskAlertWebhook` بجانب البريد عند ضبط `DESK_ALERT_WEBHOOK_URL`)؛ قبلها 2026-11-10 (تغريدة المحرر من «نشر سبق» عبر `POST /api/internal/bot-desk/social/tweets`: نشر مباشر لصاحب `social_publish.publish_now` أو مقترح للمكتب بعلامة `requestedAt` بلا وكالة؛ مقفلة حتى `BOT_DESK_EDITOR_TWEETS=on`، المنطق في `editorTweetService.ts`)؛ قبلها 2026-11-03 (مهلة طلب التغريدة صارت 72 ساعة لكتّاب الرأي والوكالات)؛ قبلها 2026-10-24 (مسارات `/api/internal/bot-desk/social/*` لمراجعة مقترحات الكتّاب والوكالات وتنبيهات البريد القابلة للتحليل آلياً) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -122,7 +122,7 @@
   وصورته المعتمدين حصراً وبلا صلاحية نشر مباشر أو جدولة للكاتب. يظهر المقترح
   في `/dashboard/social-publishing` بشارة «مقترح كاتب رأي»، ويملك فريق سبق
   المخوّل (أو بوت الديسك عبر `/api/internal/bot-desk/social/*`) تعديل النص واعتماد النشر الفوري أو الجدولة أو الرفض (`status=canceled`).
-  عند إنشاء المقترح أو تغيير نصه فعلياً يُرسل تنبيه بريدي للمستلمين المضبوطين في `DESK_BOT_ALERT_EMAILS` / `editor_alerts.deskBotAlertEmails` مع السطر القابل للتحليل آلياً `[sabq-desk] type=social_proposal id=<postId>`.
+  عند إنشاء المقترح أو تغيير نصه فعلياً يُرسل تنبيه بريدي للمستلمين المضبوطين في `DESK_BOT_ALERT_EMAILS` / `editor_alerts.deskBotAlertEmails` مع السطر القابل للتحليل آلياً `[sabq-desk] type=social_proposal id=<postId>`، ويُرسل بالتوازي Webhook مباشر (`sendDeskAlertWebhook`) عند ضبط `DESK_ALERT_WEBHOOK_URL` بترويسة `DESK_ALERT_WEBHOOK_HEADER` (افتراضياً `Authorization`) وقيمة `DESK_ALERT_WEBHOOK_SECRET` كما هي دون حجب البريد عند الفشل.
   انتهاء الـ72 ساعة بعد الإرسال لا يحذف المقترح من نظام مراجعة فريق سبق.
 
 ## متغيرات البيئة

@@ -92,7 +92,8 @@ export async function getAgencySocialAlertRecipients(): Promise<string[]> {
 
 export type DeskAlertType = "ticket" | "social_proposal" | "opinion_draft";
 
-export const DESK_ALERT_WEBHOOK_HEADER = "X-Desk-Alert-Key";
+export const DESK_ALERT_WEBHOOK_DEFAULT_HEADER = "Authorization";
+export const DESK_ALERT_WEBHOOK_HEADER = DESK_ALERT_WEBHOOK_DEFAULT_HEADER;
 export const DESK_ALERT_WEBHOOK_TIMEOUT_MS = 5_000;
 
 export interface DeskAlertWebhookPayload {
@@ -444,8 +445,9 @@ function redactSecret(text: string, secret: string): string {
 
 /**
  * إرسال تنبيه مباشر عبر Webhook لبوت الديسك بجانب البريد الإلكتروني.
- * يقرأ الرابط من DESK_ALERT_WEBHOOK_URL والمفتاح السري من DESK_ALERT_WEBHOOK_SECRET
- * في الترويسة X-Desk-Alert-Key. عند غياب الرابط لا يفعل شيئاً. لا يرمي أبداً.
+ * يقرأ الرابط من DESK_ALERT_WEBHOOK_URL واسم ترويسة المصادقة من DESK_ALERT_WEBHOOK_HEADER
+ * (الافتراضي Authorization) وقيمتها الخام من DESK_ALERT_WEBHOOK_SECRET كما هي دون تعديل.
+ * عند غياب الرابط لا يفعل شيئاً، وعند فراغ السر لا يرسل ترويسة مصادقة. لا يرمي أبداً.
  */
 export async function sendDeskAlertWebhook(
   payload: DeskAlertWebhookInput,
@@ -454,6 +456,9 @@ export async function sendDeskAlertWebhook(
   const webhookUrl = (process.env.DESK_ALERT_WEBHOOK_URL ?? "").trim();
   if (!webhookUrl) return false;
 
+  const headerName =
+    (process.env.DESK_ALERT_WEBHOOK_HEADER ?? "").trim() ||
+    DESK_ALERT_WEBHOOK_DEFAULT_HEADER;
   const secret = (process.env.DESK_ALERT_WEBHOOK_SECRET ?? "").trim();
   const logPrefix = options?.logPrefix ?? "[DeskBotAlerts]";
   const timeoutMs = options?.timeoutMs ?? DESK_ALERT_WEBHOOK_TIMEOUT_MS;
@@ -478,7 +483,7 @@ export async function sendDeskAlertWebhook(
     "Content-Type": "application/json",
   };
   if (secret) {
-    headers[DESK_ALERT_WEBHOOK_HEADER] = secret;
+    headers[headerName] = secret;
   }
 
   const controller = new AbortController();

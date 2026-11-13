@@ -837,15 +837,16 @@ describe("Desk Bot Alerts — Recipient Resolution & Machine-Parseable Headers",
     }
   });
 
-  it("sendDeskAlertWebhook POSTs JSON body and X-Desk-Alert-Key header (author null when absent)", async () => {
-    const testCredentialVal = "test-desk-webhook-auth-val";
+  it("sendDeskAlertWebhook POSTs JSON body with default Authorization header (verbatim value), supports custom DESK_ALERT_WEBHOOK_HEADER, and omits auth header when empty", async () => {
+    const rawBearerVal = "Bearer raw-paste-cred-val";
     vi.stubEnv("DESK_ALERT_WEBHOOK_URL", "https://desk-bot.example.test/webhook");
-    vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", testCredentialVal);
+    vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", `  ${rawBearerVal}  `);
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 
     try {
+      // 1) Default Authorization header with verbatim value ("Bearer ..." kept as-is)
       const okTicket = await sendDeskAlertWebhook({
         type: "ticket",
         id: "ticket-42",
@@ -859,10 +860,10 @@ describe("Desk Bot Alerts — Recipient Resolution & Machine-Parseable Headers",
       const [calledUrl, init] = fetchSpy.mock.calls[0]!;
       expect(calledUrl).toBe("https://desk-bot.example.test/webhook");
       expect(init?.method).toBe("POST");
-      expect((init?.headers as Record<string, string>)[DESK_ALERT_WEBHOOK_HEADER]).toBe(
-        testCredentialVal,
-      );
-      expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+      const firstHeaders = init?.headers as Record<string, string>;
+      expect(firstHeaders[DESK_ALERT_WEBHOOK_HEADER]).toBe(rawBearerVal);
+      expect(firstHeaders["Authorization"]).toBe(rawBearerVal);
+      expect(firstHeaders["Content-Type"]).toBe("application/json");
       expect(JSON.parse(String(init?.body))).toEqual({
         type: "ticket",
         id: "ticket-42",
@@ -872,7 +873,12 @@ describe("Desk Bot Alerts — Recipient Resolution & Machine-Parseable Headers",
         sentAt: "2026-11-13T10:00:00.000Z",
       });
 
-      const okNullAuthor = await sendDeskAlertWebhook({
+      // 2) Custom header name via DESK_ALERT_WEBHOOK_HEADER and bare value passed verbatim (no Bearer added)
+      const bareVal = "bare-custom-header-val-77";
+      vi.stubEnv("DESK_ALERT_WEBHOOK_HEADER", "X-Custom-Desk-Auth");
+      vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", bareVal);
+
+      const okCustomHeader = await sendDeskAlertWebhook({
         type: "social_proposal",
         id: "post-77",
         title: "مقترح تغريدة",
@@ -880,8 +886,11 @@ describe("Desk Bot Alerts — Recipient Resolution & Machine-Parseable Headers",
         url: buildDeskSocialProposalAlertUrl({ proposalKind: "author" }),
         sentAt: "2026-11-13T10:05:00.000Z",
       });
-      expect(okNullAuthor).toBe(true);
+      expect(okCustomHeader).toBe(true);
       const [, secondInit] = fetchSpy.mock.calls[1]!;
+      const secondHeaders = secondInit?.headers as Record<string, string>;
+      expect(secondHeaders["X-Custom-Desk-Auth"]).toBe(bareVal);
+      expect(secondHeaders["Authorization"]).toBeUndefined();
       expect(JSON.parse(String(secondInit?.body))).toEqual({
         type: "social_proposal",
         id: "post-77",
@@ -890,6 +899,24 @@ describe("Desk Bot Alerts — Recipient Resolution & Machine-Parseable Headers",
         url: "https://sabq.org/dashboard/social-publishing",
         sentAt: "2026-11-13T10:05:00.000Z",
       });
+
+      // 3) Empty secret sends no auth header at all
+      vi.stubEnv("DESK_ALERT_WEBHOOK_HEADER", "");
+      vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", "   ");
+
+      const okNoAuth = await sendDeskAlertWebhook({
+        type: "opinion_draft",
+        id: "art-88",
+        title: "مقال رأي",
+        author: "سعد الكاتب",
+        url: buildDeskOpinionDraftAlertUrl("art-88"),
+        sentAt: "2026-11-13T10:06:00.000Z",
+      });
+      expect(okNoAuth).toBe(true);
+      const [, thirdInit] = fetchSpy.mock.calls[2]!;
+      const thirdHeaders = thirdInit?.headers as Record<string, string>;
+      expect(Object.keys(thirdHeaders)).toEqual(["Content-Type"]);
+      expect(thirdHeaders["Authorization"]).toBeUndefined();
     } finally {
       fetchSpy.mockRestore();
       vi.unstubAllEnvs();
