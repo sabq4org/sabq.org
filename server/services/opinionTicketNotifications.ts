@@ -16,7 +16,9 @@ import {
 } from "./opinionTicketNotice";
 import {
   buildDeskTicketAlertEmail,
+  clipDeskAlertExcerpt,
   getDeskBotAlertRecipients,
+  sendDeskAlertWebhook,
 } from "./deskBotAlerts";
 import { SABQ_DESK_BUNDLE_ID, sendPushToUserApp } from "./userAppPushService";
 import { applyStaffDeskPrefs, loadStaffDeskPrefs } from "./staffAppPushService";
@@ -132,32 +134,51 @@ export async function notifyDeskOfWriterInquiry(input: {
     );
   }
 
+  const origin = (process.env.FRONTEND_URL || "https://sabq.org").replace(/\/$/, "");
+  const deeplinkUrl = `${origin}${notice.deeplink}`;
+  const occurredAt = input.occurredAt ?? new Date();
+
+  const webhookPromise = sendDeskAlertWebhook(
+    {
+      type: "ticket",
+      id: input.ticketId,
+      title: clipDeskAlertExcerpt(input.title || "استفسار", 80),
+      author: input.writerName?.trim() || null,
+      url: deeplinkUrl,
+      sentAt: occurredAt,
+    },
+    { logPrefix: "[opinion-tickets]" },
+  ).catch((err) => {
+    console.warn("[opinion-tickets] webhook notify failed", err);
+    return false;
+  });
+
   const emailRecipients = await getDeskBotAlertRecipients({
     extraEmails: recipients.map((r) => r.email),
   });
-  if (emailRecipients.length === 0) return;
-
-  const origin = (process.env.FRONTEND_URL || "https://sabq.org").replace(/\/$/, "");
-  const deeplinkUrl = `${origin}${notice.deeplink}`;
-  const emailPayload = buildDeskTicketAlertEmail({
-    ticketId: input.ticketId,
-    kind: input.kind,
-    title: input.title,
-    senderName: input.writerName,
-    senderRole: input.writerRole || "writer",
-    message: input.message,
-    deeplinkUrl,
-    occurredAt: input.occurredAt,
-  });
-
-  for (const to of emailRecipients) {
-    void sendEmailNotification({
-      to,
-      subject: emailPayload.subject,
-      text: emailPayload.text,
-      html: emailPayload.html,
-    }).catch((err) => {
-      console.error("[opinion-tickets] email notify failed", err);
+  if (emailRecipients.length > 0) {
+    const emailPayload = buildDeskTicketAlertEmail({
+      ticketId: input.ticketId,
+      kind: input.kind,
+      title: input.title,
+      senderName: input.writerName,
+      senderRole: input.writerRole || "writer",
+      message: input.message,
+      deeplinkUrl,
+      occurredAt,
     });
+
+    for (const to of emailRecipients) {
+      void sendEmailNotification({
+        to,
+        subject: emailPayload.subject,
+        text: emailPayload.text,
+        html: emailPayload.html,
+      }).catch((err) => {
+        console.error("[opinion-tickets] email notify failed", err);
+      });
+    }
   }
+
+  await webhookPromise;
 }

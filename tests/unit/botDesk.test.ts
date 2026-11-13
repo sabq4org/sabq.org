@@ -95,14 +95,19 @@ import { isCsrfExemptRequest } from "../../server/csrf";
 import { OpinionTicketServiceError } from "../../server/services/opinionTicketsService";
 import {
   AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL,
+  DESK_ALERT_WEBHOOK_HEADER,
   buildDeskAlertHeader,
+  buildDeskOpinionDraftAlertUrl,
   buildDeskSocialProposalAlertEmail,
+  buildDeskSocialProposalAlertUrl,
   buildDeskTicketAlertEmail,
   isMeaningfulProposalTextChange,
   resolveAgencySocialAlertRecipients,
   resolveDeskBotAlertRecipients,
+  sendDeskAlertWebhook,
 } from "../../server/services/deskBotAlerts";
 import { notifyDeskOfWriterInquiry } from "../../server/services/opinionTicketNotifications";
+import { notifyDeskOfAuthorSocialProposal } from "../../server/services/socialPublishing/socialPublishingService";
 
 const VALID_CREDENTIAL = "botpub_valid_personal_credential";
 const REVOKED_CREDENTIAL = "botpub_revoked_personal_credential";
@@ -810,5 +815,196 @@ describe("Desk Bot Alerts — Recipient Resolution & Machine-Parseable Headers",
         text: expect.stringContaining("[sabq-desk] type=ticket id=t-bot-alert-1"),
       }),
     );
+  });
+
+  it("sendDeskAlertWebhook is a no-op when DESK_ALERT_WEBHOOK_URL is unset", async () => {
+    vi.stubEnv("DESK_ALERT_WEBHOOK_URL", "");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      const ok = await sendDeskAlertWebhook({
+        type: "ticket",
+        id: "t-noop-1",
+        title: "عنوان",
+        author: "كاتب",
+        url: "https://sabq.org/dashboard/opinion-tickets/t-noop-1",
+        sentAt: "2026-11-13T10:00:00.000Z",
+      });
+      expect(ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("sendDeskAlertWebhook POSTs JSON body with default Authorization header (verbatim value), supports custom DESK_ALERT_WEBHOOK_HEADER, and omits auth header when empty", async () => {
+    const rawBearerVal = "Bearer raw-paste-cred-val";
+    vi.stubEnv("DESK_ALERT_WEBHOOK_URL", "https://desk-bot.example.test/webhook");
+    vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", `  ${rawBearerVal}  `);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    try {
+      // 1) Default Authorization header with verbatim value ("Bearer ..." kept as-is)
+      const okTicket = await sendDeskAlertWebhook({
+        type: "ticket",
+        id: "ticket-42",
+        title: "سؤال عن موعد النشر",
+        author: "د. سعد",
+        url: "https://sabq.org/dashboard/opinion-tickets/ticket-42",
+        sentAt: new Date("2026-11-13T10:00:00.000Z"),
+      });
+      expect(okTicket).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [calledUrl, init] = fetchSpy.mock.calls[0]!;
+      expect(calledUrl).toBe("https://desk-bot.example.test/webhook");
+      expect(init?.method).toBe("POST");
+      const firstHeaders = init?.headers as Record<string, string>;
+      expect(firstHeaders[DESK_ALERT_WEBHOOK_HEADER]).toBe(rawBearerVal);
+      expect(firstHeaders["Authorization"]).toBe(rawBearerVal);
+      expect(firstHeaders["Content-Type"]).toBe("application/json");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        type: "ticket",
+        id: "ticket-42",
+        title: "سؤال عن موعد النشر",
+        author: "د. سعد",
+        url: "https://sabq.org/dashboard/opinion-tickets/ticket-42",
+        sentAt: "2026-11-13T10:00:00.000Z",
+      });
+
+      // 2) Custom header name via DESK_ALERT_WEBHOOK_HEADER and bare value passed verbatim (no Bearer added)
+      const bareVal = "bare-custom-header-val-77";
+      vi.stubEnv("DESK_ALERT_WEBHOOK_HEADER", "X-Custom-Desk-Auth");
+      vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", bareVal);
+
+      const okCustomHeader = await sendDeskAlertWebhook({
+        type: "social_proposal",
+        id: "post-77",
+        title: "مقترح تغريدة",
+        author: "   ",
+        url: buildDeskSocialProposalAlertUrl({ proposalKind: "author" }),
+        sentAt: "2026-11-13T10:05:00.000Z",
+      });
+      expect(okCustomHeader).toBe(true);
+      const [, secondInit] = fetchSpy.mock.calls[1]!;
+      const secondHeaders = secondInit?.headers as Record<string, string>;
+      expect(secondHeaders["X-Custom-Desk-Auth"]).toBe(bareVal);
+      expect(secondHeaders["Authorization"]).toBeUndefined();
+      expect(JSON.parse(String(secondInit?.body))).toEqual({
+        type: "social_proposal",
+        id: "post-77",
+        title: "مقترح تغريدة",
+        author: null,
+        url: "https://sabq.org/dashboard/social-publishing",
+        sentAt: "2026-11-13T10:05:00.000Z",
+      });
+
+      // 3) Empty secret sends no auth header at all
+      vi.stubEnv("DESK_ALERT_WEBHOOK_HEADER", "");
+      vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", "   ");
+
+      const okNoAuth = await sendDeskAlertWebhook({
+        type: "opinion_draft",
+        id: "art-88",
+        title: "مقال رأي",
+        author: "سعد الكاتب",
+        url: buildDeskOpinionDraftAlertUrl("art-88"),
+        sentAt: "2026-11-13T10:06:00.000Z",
+      });
+      expect(okNoAuth).toBe(true);
+      const [, thirdInit] = fetchSpy.mock.calls[2]!;
+      const thirdHeaders = thirdInit?.headers as Record<string, string>;
+      expect(Object.keys(thirdHeaders)).toEqual(["Content-Type"]);
+      expect(thirdHeaders["Authorization"]).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("catches fetch rejection and timeout without throwing, redacts credential in warn logs, and keeps email path running", async () => {
+    const testCredentialVal = "redact-me-webhook-val-999";
+    vi.stubEnv("DESK_BOT_ALERT_EMAILS", "sohba@mail.grokbot.com");
+    vi.stubEnv("DESK_ALERT_WEBHOOK_URL", "https://desk-bot.example.test/webhook");
+    vi.stubEnv("DESK_ALERT_WEBHOOK_SECRET", testCredentialVal);
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementationOnce(async () => {
+      throw new Error(`connect ECONNREFUSED (header=${testCredentialVal})`);
+    });
+
+    try {
+      await expect(
+        notifyDeskOfWriterInquiry({
+          kind: "new_ticket",
+          ticketId: "t-webhook-fail-1",
+          title: "استفسار مع عطل webhook",
+          writerName: "فهد الشمري",
+          writerRole: "reporter",
+          message: "هل وصل البريد؟",
+          senderId: "writer-9",
+          occurredAt: new Date("2026-11-13T10:10:00.000Z"),
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(mocks.sendEmailNotification).toHaveBeenCalledTimes(1);
+      expect(mocks.sendEmailNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "sohba@mail.grokbot.com",
+          subject: expect.stringContaining("[sabq-desk] type=ticket id=t-webhook-fail-1"),
+        }),
+      );
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const loggedLine = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(loggedLine).toContain("t-webhook-fail-1");
+      expect(loggedLine).not.toContain(testCredentialVal);
+      expect(loggedLine).toContain("[REDACTED]");
+
+      // Timeout via AbortController does not throw
+      fetchSpy.mockImplementationOnce(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted", "AbortError"));
+            });
+          }),
+      );
+
+      const timedOut = await sendDeskAlertWebhook(
+        {
+          type: "opinion_draft",
+          id: "art-timeout-1",
+          title: "مقال رأي",
+          author: "سعد الكاتب",
+          url: buildDeskOpinionDraftAlertUrl("art-timeout-1"),
+        },
+        { timeoutMs: 15 },
+      );
+      expect(timedOut).toBe(false);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+
+      // Social proposal also fires both webhook and email even if webhook fails
+      fetchSpy.mockResolvedValueOnce(new Response("bad gateway", { status: 502 }));
+      await expect(
+        notifyDeskOfAuthorSocialProposal({
+          post: {
+            id: "social-prop-502",
+            text: "نص تغريدة مقترحة",
+          } as any,
+          articleTitle: "عنوان الخبر",
+          articleUrl: "https://sabq.org/article/test",
+          authorUserId: "author-1",
+          authorName: "أ. نورة",
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(mocks.sendEmailNotification).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      fetchSpy.mockRestore();
+      warnSpy.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });

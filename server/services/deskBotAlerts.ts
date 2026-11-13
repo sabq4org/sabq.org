@@ -92,6 +92,28 @@ export async function getAgencySocialAlertRecipients(): Promise<string[]> {
 
 export type DeskAlertType = "ticket" | "social_proposal" | "opinion_draft";
 
+export const DESK_ALERT_WEBHOOK_DEFAULT_HEADER = "Authorization";
+export const DESK_ALERT_WEBHOOK_HEADER = DESK_ALERT_WEBHOOK_DEFAULT_HEADER;
+export const DESK_ALERT_WEBHOOK_TIMEOUT_MS = 5_000;
+
+export interface DeskAlertWebhookPayload {
+  type: DeskAlertType;
+  id: string;
+  title: string;
+  author: string | null;
+  url: string;
+  sentAt: string;
+}
+
+export interface DeskAlertWebhookInput {
+  type: DeskAlertType;
+  id: string;
+  title: string;
+  author?: string | null;
+  url: string;
+  sentAt?: string | Date;
+}
+
 export function buildDeskAlertHeader(input: {
   type: DeskAlertType;
   id: string;
@@ -209,6 +231,21 @@ export interface DeskSocialProposalAlertEmailInput {
   occurredAt?: Date;
 }
 
+export function buildDeskSocialProposalAlertUrl(input: {
+  proposalKind: "author" | "agency";
+  dashboardUrl?: string;
+}): string {
+  if (input.dashboardUrl) return input.dashboardUrl;
+  const origin = (
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    "https://sabq.org"
+  ).replace(/\/$/, "");
+  return input.proposalKind === "agency"
+    ? `${origin}/dashboard/social-publishing?filter=agency`
+    : `${origin}/dashboard/social-publishing`;
+}
+
 export function buildDeskSocialProposalAlertEmail(input: DeskSocialProposalAlertEmailInput): {
   header: string;
   subject: string;
@@ -221,12 +258,10 @@ export function buildDeskSocialProposalAlertEmail(input: DeskSocialProposalAlert
   const timeRiyadh = formatDeskAlertRiyadhTime(input.occurredAt ?? new Date());
   const excerpt = clipDeskAlertExcerpt(input.text || "", 220);
   const articleTitle = input.articleTitle ? clipDeskAlertExcerpt(input.articleTitle, 120) : null;
-  const origin = (process.env.FRONTEND_URL || process.env.PUBLIC_SITE_URL || "https://sabq.org").replace(/\/$/, "");
-  const dashboardUrl =
-    input.dashboardUrl ||
-    (input.proposalKind === "agency"
-      ? `${origin}/dashboard/social-publishing?filter=agency`
-      : `${origin}/dashboard/social-publishing`);
+  const dashboardUrl = buildDeskSocialProposalAlertUrl({
+    proposalKind: input.proposalKind,
+    dashboardUrl: input.dashboardUrl,
+  });
 
   const defaultHeadline =
     input.proposalKind === "agency"
@@ -302,6 +337,19 @@ export function buildOpinionDraftBotApiUrl(articleId: string): string {
   return `${apiOrigin}/api/internal/bot-desk/opinion/drafts/${encodeURIComponent(articleId)}`;
 }
 
+export function buildDeskOpinionDraftAlertUrl(
+  articleId: string,
+  dashboardUrl?: string,
+): string {
+  if (dashboardUrl) return dashboardUrl;
+  const origin = (
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    "https://sabq.org"
+  ).replace(/\/$/, "");
+  return `${origin}/dashboard/articles?status=draft&id=${encodeURIComponent(articleId)}`;
+}
+
 /** بريد «مقال رأي جديد» لبوت الديسك: `[sabq-desk] type=opinion_draft id=<articleId>`. */
 export function buildDeskOpinionDraftAlertEmail(input: DeskOpinionDraftAlertEmailInput): {
   header: string;
@@ -314,9 +362,7 @@ export function buildDeskOpinionDraftAlertEmail(input: DeskOpinionDraftAlertEmai
   const timeRiyadh = formatDeskAlertRiyadhTime(input.occurredAt ?? new Date());
   const articleTitle = clipDeskAlertExcerpt(input.articleTitle || "مقال رأي", 120);
   const excerpt = input.excerpt ? clipDeskAlertExcerpt(input.excerpt, 220) : "";
-  const origin = (process.env.FRONTEND_URL || process.env.PUBLIC_SITE_URL || "https://sabq.org").replace(/\/$/, "");
-  const dashboardUrl =
-    input.dashboardUrl || `${origin}/dashboard/articles?status=draft&id=${encodeURIComponent(input.articleId)}`;
+  const dashboardUrl = buildDeskOpinionDraftAlertUrl(input.articleId, input.dashboardUrl);
   const botApiUrl = input.botApiUrl || buildOpinionDraftBotApiUrl(input.articleId);
   const nextSlotDate = input.nextSlotIso ? new Date(input.nextSlotIso) : null;
   const nextSlotRiyadh =
@@ -391,3 +437,80 @@ export async function sendDeskAlertEmails(
   // عدد الرسائل التي قبلها مزوّد البريد (للتشخيص؛ المستدعون القدامى يتجاهلونه).
   return results.reduce<number>((a, b) => a + b, 0);
 }
+
+function redactSecret(text: string, secret: string): string {
+  if (!secret) return text;
+  return text.split(secret).join("[REDACTED]");
+}
+
+/**
+ * إرسال تنبيه مباشر عبر Webhook لبوت الديسك بجانب البريد الإلكتروني.
+ * يقرأ الرابط من DESK_ALERT_WEBHOOK_URL واسم ترويسة المصادقة من DESK_ALERT_WEBHOOK_HEADER
+ * (الافتراضي Authorization) وقيمتها الخام من DESK_ALERT_WEBHOOK_SECRET كما هي دون تعديل.
+ * عند غياب الرابط لا يفعل شيئاً، وعند فراغ السر لا يرسل ترويسة مصادقة. لا يرمي أبداً.
+ */
+export async function sendDeskAlertWebhook(
+  payload: DeskAlertWebhookInput,
+  options?: { timeoutMs?: number; logPrefix?: string },
+): Promise<boolean> {
+  const webhookUrl = (process.env.DESK_ALERT_WEBHOOK_URL ?? "").trim();
+  if (!webhookUrl) return false;
+
+  const headerName =
+    (process.env.DESK_ALERT_WEBHOOK_HEADER ?? "").trim() ||
+    DESK_ALERT_WEBHOOK_DEFAULT_HEADER;
+  const secret = (process.env.DESK_ALERT_WEBHOOK_SECRET ?? "").trim();
+  const logPrefix = options?.logPrefix ?? "[DeskBotAlerts]";
+  const timeoutMs = options?.timeoutMs ?? DESK_ALERT_WEBHOOK_TIMEOUT_MS;
+
+  const sentAtIso =
+    payload.sentAt instanceof Date
+      ? payload.sentAt.toISOString()
+      : typeof payload.sentAt === "string" && payload.sentAt.trim()
+        ? payload.sentAt.trim()
+        : new Date().toISOString();
+
+  const body: DeskAlertWebhookPayload = {
+    type: payload.type,
+    id: payload.id,
+    title: payload.title,
+    author: payload.author?.trim() ? payload.author.trim() : null,
+    url: payload.url,
+    sentAt: sentAtIso,
+  };
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (secret) {
+    headers[headerName] = secret;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(
+        `${logPrefix} webhook HTTP ${res.status} for type=${body.type} id=${body.id}`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `${logPrefix} webhook delivery failed for type=${body.type} id=${body.id}: ${redactSecret(rawMsg, secret)}`,
+    );
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
