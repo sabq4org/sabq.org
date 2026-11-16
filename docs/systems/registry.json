@@ -509,7 +509,15 @@
         "client/src/hooks/useEditorPresence.ts",
         "client/src/components/admin/EditorPresenceBar.tsx",
         "server/services/editorPresenceGuard.ts",
-        "tests/unit/editorPresence.test.ts"
+        "tests/unit/editorPresence.test.ts",
+        "shared/enDeskOverview.ts",
+        "server/services/enDeskOverviewService.ts",
+        "server/routes/enDashboardStats.ts",
+        "shared/enDashboardAccess.ts",
+        "client/src/pages/en/EnglishDashboard.tsx",
+        "client/src/pages/en/EnglishDashboardAnalytics.tsx",
+        "tests/unit/enDeskOverview.test.ts",
+        "tests/unit/enDashboardAccess.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
