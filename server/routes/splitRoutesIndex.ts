@@ -8,6 +8,8 @@ import articleSummaryAudioRouter from "./articleSummaryAudio";
 import audioBulletinRouter from "./audioBulletin";
 import enAutoTranslateRouter from "./enAutoTranslate";
 import enArticleSeoRouter from "./enArticleSeo";
+import enArticleViewsRouter from "./enArticleViews";
+import enArticleDeletionRouter from "./enArticleDeletion";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -152,6 +154,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(audioBulletinRouter);
   app.use(enAutoTranslateRouter);
   app.use(enArticleSeoRouter);
+  app.use(enArticleViewsRouter);
+  app.use(enArticleDeletionRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
   app.use(editAndGenerateStreamRouter);

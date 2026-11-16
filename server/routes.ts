@@ -27318,11 +27318,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         hasReacted = reactionResult.length > 0;
       }
 
-      // Fire-and-forget view increment (don't block response)
-      db.update(enArticles)
-        .set({ views: sql`${enArticles.views} + ${Math.floor(Math.random() * 6) + 5}` })
-        .where(eq(enArticles.id, baseData.article.id))
-        .catch(err => console.error("[EN article] view increment failed:", err));
+      // Views are counted by POST /api/en/articles/:id/view (routes/enArticleViews.ts).
 
       const displayAuthor = baseData.reporterData || baseData.authorData;
       const articleWithDetails: EnArticleWithDetails = {
