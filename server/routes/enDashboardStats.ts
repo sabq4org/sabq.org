@@ -2,6 +2,7 @@ import { Router } from "express";
 import { isAuthenticated } from "../auth";
 import { storage } from "../storage";
 import { canReadEnDashboardStats } from "@shared/enDashboardAccess";
+import { getInactiveRoles } from "../services/roleStatusCache";
 
 const router = Router();
 
@@ -11,7 +12,13 @@ router.get("/api/en/admin/dashboard/stats", isAuthenticated, async (req: any, re
     const user = await storage.getUser(req.user.id);
     if (!user) return res.status(403).json({ message: "Forbidden" });
     const roles = await storage.getUserRoles(user.id).catch(() => []);
-    if (!canReadEnDashboardStats(user.role, roles.map((r) => r.name))) {
+    // Disabled/archived roles grant nothing (same rule as getUserPermissionData).
+    const { names: inactive, ids: inactiveIds } = await getInactiveRoles();
+    const legacyRole = user.role && !inactive.has(user.role) ? user.role : null;
+    const activeRoleNames = roles
+      .filter((r) => !inactive.has(r.name) && !inactiveIds.has(r.id))
+      .map((r) => r.name);
+    if (!canReadEnDashboardStats(legacyRole, activeRoleNames)) {
       return res.status(403).json({ message: "Forbidden" });
     }
     res.json(await storage.getEnglishAdminDashboardStats());
