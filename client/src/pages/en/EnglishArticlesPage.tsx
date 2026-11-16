@@ -143,7 +143,11 @@ export default function EnglishArticlesPage() {
   const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
+  // ?status=draft (e.g. "All drafts" on the English Desk home) opens that tab.
+  const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">(() => {
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("status") : null;
+    return q === "scheduled" || q === "draft" || q === "archived" ? q : "published";
+  });
   const [typeFilter, setTypeFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [newsTypeFilter, setNewsTypeFilter] = useState("all");
@@ -588,25 +592,27 @@ export default function EnglishArticlesPage() {
     const cards = [
       { status: "published" as const, label: "Published", count: metrics.published || 0 },
       { status: "scheduled" as const, label: "Scheduled", count: metrics.scheduled || 0 },
-      { status: "draft" as const, label: "Draft", count: metrics.draft || 0 },
+      { status: "draft" as const, label: "Drafts", count: metrics.draft || 0 },
       { status: "archived" as const, label: "Archived", count: metrics.archived || 0 },
     ];
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Article status">
         {cards.map(({ status, label, count }) => (
           <button
             key={status}
+            type="button"
+            role="tab"
+            aria-selected={activeStatus === status}
             onClick={() => onSelect(status)}
-            className={`p-3 md:p-4 rounded-lg border transition-colors hover-elevate ${
+            className={`inline-flex h-[38px] items-center gap-1.5 rounded-full px-4 text-sm transition-colors ${
               activeStatus === status
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card border-border"
+                ? "bg-[#1E9BE6] font-semibold text-white"
+                : "border border-[#D5E1EC] bg-white text-[#1B2B3A] hover:border-[#1E9BE6]"
             }`}
             data-testid={`status-card-en-${status}`}
           >
-            <div className="text-xl md:text-2xl font-bold">{count}</div>
-            <div className="text-xs md:text-sm">{label}</div>
+            {label} <span className="tabular-nums">{new Intl.NumberFormat("en-US").format(count)}</span>
           </button>
         ))}
       </div>
@@ -697,29 +703,27 @@ export default function EnglishArticlesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold" data-testid="heading-en-title">
-              News & Articles Management
+            <p className="text-[13px] text-[#6B7B8A]">English edition</p>
+            <h1 className="mt-1 text-[28px] font-bold text-[#1B2B3A]" data-testid="heading-en-title">
+              Articles
             </h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
-              Manage news content and articles
-            </p>
           </div>
-          <Button
+          <button
+            type="button"
             onClick={() => setLocation("/en/dashboard/articles/new")}
-            className="gap-2 w-full sm:w-auto"
-            size="sm"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#1E9BE6] px-6 text-[15px] font-semibold text-white hover:bg-[#1789CC] sm:w-auto"
             data-testid="button-create-en-article"
           >
-            <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            New Article
-          </Button>
+            <Plus className="h-4 w-4" />
+            New article
+          </button>
         </div>
 
         {/* Status Cards */}
         {metricsLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <div className="flex flex-wrap gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-muted/50 rounded-lg animate-pulse" />
+              <div key={i} className="h-[38px] w-28 rounded-full bg-muted/50 animate-pulse" />
             ))}
           </div>
         ) : metrics ? (
@@ -908,8 +912,8 @@ export default function EnglishArticlesPage() {
                           </td>
                           <td className="py-3 px-4">
                             <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
+                              <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-[360px]">
+                                <span className="font-medium line-clamp-2">{article.title}</span>
                                 {article.isTranslated && (
                                   <Badge variant="outline" className="text-[10px] shrink-0 gap-1" data-testid={`badge-translated-en-${article.id}`}>
                                     <Languages className="h-3 w-3" />

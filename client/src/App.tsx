@@ -383,6 +383,7 @@ const EnglishArticleDetail = lazy(() => retryImport(() => import("@/pages/en/Eng
 const EnglishKeywordPage = lazy(() => retryImport(() => import("@/pages/en/EnglishKeywordPage")));
 const EnglishArticleEditor = lazy(() => retryImport(() => import("@/pages/en/EnglishArticleEditor")));
 const EnglishDashboard = lazy(() => retryImport(() => import("@/pages/en/EnglishDashboard")));
+const EnglishDashboardAnalytics = lazy(() => retryImport(() => import("@/pages/en/EnglishDashboardAnalytics")));
 const EnglishNewsPage = lazy(() => retryImport(() => import("@/pages/en/EnglishNewsPage")));
 const EnglishCategoriesPage = lazy(() => retryImport(() => import("@/pages/en/EnglishCategoriesPage")));
 const EnglishCategoriesListPage = lazy(() => retryImport(() => import("@/pages/en/EnglishCategoriesListPage")));
@@ -679,6 +680,7 @@ function Router() {
         <Route path="/en/dashboard/smart-blocks">{() => <LazyRoute component={EnglishSmartBlocksPage} />}</Route>
         <Route path="/en/dashboard/quad-categories">{() => <LazyRoute component={EnglishQuadCategoriesBlockSettings} />}</Route>
         <Route path="/en/dashboard/users">{() => <LazyRoute component={EnglishUsersPage} />}</Route>
+        <Route path="/en/dashboard/analytics">{() => <LazyRoute component={EnglishDashboardAnalytics} />}</Route>
         <Route path="/en/dashboard">{() => <LazyRoute component={EnglishDashboard} />}</Route>
         <Route path="/en/profile">{() => <LazyRoute component={EnglishProfile} />}</Route>
         <Route path="/en/daily-brief">{() => <LazyRoute component={EnglishDailyBrief} />}</Route>

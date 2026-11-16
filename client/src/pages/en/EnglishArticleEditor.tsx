@@ -55,6 +55,9 @@ import { NEWS_IMAGE_MAX_BYTES } from "@/lib/newsImageUpload";
 import { buildEnHeroImageSeoFields, EN_IMAGE_ALT_MAX, EN_IMAGE_CAPTION_MAX } from "@shared/enArticleImageText";
 import type { Editor } from "@tiptap/react";
 
+/** Calmer side-panel headings (English Desk redesign). */
+const EDITOR_CARD_TITLE = "text-[15px] font-bold leading-snug tracking-normal";
+
 export default function EnglishArticleEditor() {
   const params = useParams<{ id: string }>();
   const [location, navigate] = useLocation();
@@ -884,7 +887,7 @@ export default function EnglishArticleEditor() {
             {/* Title with AI */}
             <Card>
               <CardHeader>
-                <CardTitle>Title</CardTitle>
+                <CardTitle className={EDITOR_CARD_TITLE}>Title</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-2">
@@ -926,7 +929,7 @@ export default function EnglishArticleEditor() {
             {articleType !== "opinion" && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Subtitle</CardTitle>
+                  <CardTitle className={EDITOR_CARD_TITLE}>Subtitle</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Input
@@ -949,7 +952,7 @@ export default function EnglishArticleEditor() {
             {/* Featured Image */}
             <Card>
               <CardHeader>
-                <CardTitle>Featured Image</CardTitle>
+                <CardTitle className={EDITOR_CARD_TITLE}>Featured Image</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {imageUrl && (
@@ -1060,13 +1063,13 @@ export default function EnglishArticleEditor() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Article Content</CardTitle>
+                  <CardTitle className={EDITOR_CARD_TITLE}>Article Content</CardTitle>
                   <Button
-                    variant="secondary"
+                    variant="ghost"
                     size="sm"
                     onClick={handleGenerateSmartContent}
                     disabled={isGeneratingAI || !content || typeof content !== 'string' || !content.trim()}
-                    className="gap-2"
+                    className="gap-2 rounded-full bg-[#EAF7FF] text-[#0B6FA8] hover:bg-[#D9F0FF] hover:text-[#0B6FA8]"
                     data-testid="button-smart-generate-en"
                     title="Auto-generate all editorial elements"
                   >
@@ -1095,7 +1098,7 @@ export default function EnglishArticleEditor() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Excerpt</CardTitle>
+                  <CardTitle className={EDITOR_CARD_TITLE}>Excerpt</CardTitle>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1140,7 +1143,7 @@ export default function EnglishArticleEditor() {
             {/* Article Type */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className={`${EDITOR_CARD_TITLE} flex items-center gap-2`}>
                   <Hash className="h-4 w-4" />
                   Content Type
                 </CardTitle>
@@ -1164,7 +1167,7 @@ export default function EnglishArticleEditor() {
             {articleType !== "opinion" && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className={`${EDITOR_CARD_TITLE} flex items-center gap-2`}>
                     <Zap className="h-4 w-4" />
                     News Type
                   </CardTitle>
@@ -1221,7 +1224,7 @@ export default function EnglishArticleEditor() {
             {/* Category */}
             <Card>
               <CardHeader>
-                <CardTitle>Category</CardTitle>
+                <CardTitle className={EDITOR_CARD_TITLE}>Category</CardTitle>
               </CardHeader>
               <CardContent>
                 <Select value={categoryId} onValueChange={setCategoryId}>
@@ -1243,8 +1246,8 @@ export default function EnglishArticleEditor() {
             {/* SEO Optimization */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>SEO Optimization</span>
+                <CardTitle className={`${EDITOR_CARD_TITLE} flex items-center justify-between gap-2`}>
+                  <span className="whitespace-nowrap">Search and sharing</span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1296,7 +1299,7 @@ export default function EnglishArticleEditor() {
             {articleType !== "opinion" && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Reporter</CardTitle>
+                  <CardTitle className={EDITOR_CARD_TITLE}>Reporter</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ReporterSelect
@@ -1311,7 +1314,7 @@ export default function EnglishArticleEditor() {
             {articleType === "opinion" && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Author</CardTitle>
+                  <CardTitle className={EDITOR_CARD_TITLE}>Author</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <OpinionAuthorSelect
@@ -1325,7 +1328,7 @@ export default function EnglishArticleEditor() {
             {/* Publishing */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className={`${EDITOR_CARD_TITLE} flex items-center gap-2`}>
                   <Calendar className="h-4 w-4" />
                   Publishing
                 </CardTitle>
@@ -1385,7 +1388,7 @@ export default function EnglishArticleEditor() {
             {/* Slug */}
             <Card>
               <CardHeader>
-                <CardTitle>URL Slug</CardTitle>
+                <CardTitle className={EDITOR_CARD_TITLE}>URL Slug</CardTitle>
               </CardHeader>
               <CardContent>
                 <Input
@@ -1403,7 +1406,7 @@ export default function EnglishArticleEditor() {
             {/* SEO Settings */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className={`${EDITOR_CARD_TITLE} flex items-center gap-2`}>
                   <Hash className="h-4 w-4" />
                   SEO Settings
                 </CardTitle>
