@@ -40,7 +40,7 @@ type Preview = { word: string; days: number; count: number; samples: Array<{ id:
 
 const LIST_QUERY = ["/api/admin/publish-banned-words"];
 const ACTION_LABELS: Record<string, string> = { publish: "محاولة نشر", schedule: "محاولة جدولة", edit: "تعديل منشور" };
-const SURFACE_LABELS: Record<string, string> = { dashboard: "لوحة التحكم", desk: "مكتب سبق", bot: "نشر سبق" };
+const SURFACE_LABELS: Record<string, string> = { dashboard: "لوحة التحكم", desk: "مكتب سبق", bot: "نشر سبق", email: "البريد الذكي", whatsapp: "واتساب" };
 
 const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
 const timeFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: false });

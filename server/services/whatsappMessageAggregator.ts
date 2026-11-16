@@ -3,6 +3,7 @@ import { log } from "../utils/logger";
 import { PendingWhatsappMessage, tags, articleTags } from "@shared/schema";
 import { sendWhatsAppMessage, extractTokenFromMessage, removeTokenFromMessage, updateLastInboundTime } from "./whatsapp";
 import { analyzeAndEditWithSabqStyle, detectLanguage } from "../ai/contentAnalyzer";
+import { denyBannedWords } from "./publishBannedWordsService";
 import { nanoid } from "nanoid";
 import { db } from "../db";
 import { mediaFiles, articleMediaAssets } from "@shared/schema";
@@ -176,7 +177,28 @@ export async function processAggregatedMessage(pending: PendingWhatsappMessage):
     
     const slug = generateSlug(aiResult.optimized.title);
     const englishSlug = nanoid(7); // Short URL for social media sharing
-    const articleStatus = tokenData.autoPublish ? 'published' : 'draft';
+    let articleStatus: 'published' | 'draft' = tokenData.autoPublish ? 'published' : 'draft';
+    // الكلمات المحظورة تسري على النشر المباشر من واتساب: عند التطابق يُحفظ الخبر مسودة.
+    let heldReason: string | null = null;
+    if (articleStatus === 'published') {
+      const denial = await denyBannedWords({
+        userId: null, // لا استثناء لقناة آلية: القرار للمحرر
+        nextStatus: 'published',
+        content: {
+          title: aiResult.optimized.title,
+          excerpt: aiResult.optimized.lead,
+          content: aiResult.optimized.content,
+          keywords: aiResult.optimized.seoKeywords,
+        },
+        actorLabel: `واتساب — ${tokenData.label || 'رمز بلا اسم'}`,
+        surface: 'whatsapp',
+      });
+      if (denial) {
+        articleStatus = 'draft';
+        heldReason = denial.message;
+        log.info(`[WhatsApp Aggregator] Auto-publish held → draft (banned words)`);
+      }
+    }
     
     // 🔗 Prepare source metadata (include external source info for URL-extracted articles)
     const sourceMetadata = extractedFromUrl && urlExtractionResult?.article ? {
@@ -358,7 +380,7 @@ export async function processAggregatedMessage(pending: PendingWhatsappMessage):
     
     const replyMessage = articleStatus === 'published'
       ? `السلام عليكم\n✅ تم نشر الخبر بنجاح${partsInfo}\n\nhttps://sabq.org/article/${englishSlug}`
-      : `السلام عليكم\n📝 تم حفظ الخبر كمسودة${partsInfo}\nسيتم مراجعته قبل النشر`;
+      : `السلام عليكم\n📝 تم حفظ الخبر كمسودة${partsInfo}\nسيتم مراجعته قبل النشر${heldReason ? `\n${heldReason}` : ''}`;
     
     log.info(`[WhatsApp Aggregator] 📤 Sending publication reply to ${pending.phoneNumber}...`);
     log.info(`[WhatsApp Aggregator] 📤 Reply message: ${replyMessage}`);

@@ -46,6 +46,8 @@ export function normalizeEmailSubject(subject: string): string {
   for (let i = 0; i < 5 && prefix.test(s); i++) {
     s = s.replace(prefix, "").trim();
   }
+  // رمز النشر ليس جزءًا من الخبر: لا يدخل البصمة ولا يُخزَّن معها.
+  s = s.replace(/\[?\s*(?:TOKEN:\s*)?[A-Fa-f0-9]{64}\s*\]?/gi, " ").replace(/\[TOKEN\]/gi, " ");
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
@@ -172,4 +174,52 @@ export async function claimEmailDedup(params: {
   }
 
   return { claimed: true, messageKey, contentKey };
+}
+
+/**
+ * يفك بصمة المحتوى بعد رفض أو فشل، ليتمكن المرسل من إعادة الإرسال فورًا
+ * (نسي الرمز، أو تعطلت المعالجة). مفتاح Message-ID يبقى: إعادة محاولة SendGrid
+ * لنفس الرسالة لا تُعالَج مرتين.
+ */
+export async function releaseEmailContentDedup(from: string, subject: string): Promise<void> {
+  try {
+    const { db } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const contentKey = buildContentDedupKey(from, normalizeEmailSubject(subject));
+    await db.execute(sql`DELETE FROM email_agent_processed WHERE id = ${contentKey}`);
+  } catch (error) {
+    console.error("[Email Agent] تعذر فك بصمة التكرار:", (error as Error).message);
+  }
+}
+
+export const STUCK_EMAIL_MINUTES = 20;
+
+export type StuckEmailLog = { id: string; fromEmail: string; subject: string; tokenVerified: boolean };
+
+/**
+ * الرسالة تُؤكَّد لـ SendGrid قبل المعالجة، فإن أُعيد تشغيل الخادم أثناءها بقيت
+ * «مستلمة» للأبد. نحوّلها إلى «فشلت» ونفك بصمتها. UPDATE … RETURNING يضمن أن
+ * نسخة خادم واحدة فقط تستلم كل صف.
+ */
+export async function sweepStuckEmailLogs(now: Date = new Date()): Promise<StuckEmailLog[]> {
+  const { db } = await import("../db");
+  const { sql } = await import("drizzle-orm");
+  const cutoff = new Date(now.getTime() - STUCK_EMAIL_MINUTES * 60 * 1000);
+  const result = await db.execute(
+    sql`UPDATE email_webhook_logs
+        SET status = 'failed',
+            rejection_reason = 'processing_interrupted',
+            processing_error = 'انقطعت المعالجة قبل اكتمالها (إعادة تشغيل الخادم على الأرجح). يمكن للمرسل إعادة الإرسال.',
+            processed_at = ${now}
+        WHERE status = 'received' AND received_at < ${cutoff}
+        RETURNING id, from_email, subject, token_verified`,
+  );
+  const rows = (result.rows || []).map((row: any) => ({
+    id: String(row.id),
+    fromEmail: String(row.from_email || ""),
+    subject: String(row.subject || ""),
+    tokenVerified: row.token_verified === true,
+  }));
+  for (const row of rows) await releaseEmailContentDedup(row.fromEmail, row.subject);
+  return rows;
 }
