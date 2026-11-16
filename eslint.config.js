@@ -136,7 +136,8 @@ export default tseslint.config(
     // 2026-10-22: حذف بريد الكاتب من مسارَي الرأي العامّين → 36307.
     // 2026-10-23: نقل مسار «استمع» إلى routes/articleSummaryAudio.ts → 36271.
     // 2026-10-30: نقل خط الترجمة للإنجليزية إلى enArticleTranslationService → 36060.
-    rules: { "max-lines": ["error", { max: 35810 }] },
+    // 2026-11-16: نقل مخطط /api/seo/generate إلى services/seoGenerateRequest.ts → 35794.
+    rules: { "max-lines": ["error", { max: 35794 }] },
   },
   {
     files: ["server/storage.ts"],

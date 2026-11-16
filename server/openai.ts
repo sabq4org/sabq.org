@@ -120,7 +120,11 @@ function stripHtml(html: string): string {
   return text;
 }
 
-export async function summarizeArticle(text: string): Promise<string> {
+/** English summary prompt: the Arabic one below made the English editor's
+ *  "Generate summary" button return an Arabic excerpt for English articles. */
+const EN_SUMMARY_SYSTEM = `You are a senior news editor at Sabq, a Saudi news outlet. Write the article's summary in English only, in 2-3 short sentences of plain news style: who, what, where, when. No opinions, no headings, no quotes around the text, no markdown.`;
+
+export async function summarizeArticle(text: string, language: "ar" | "en" = "ar"): Promise<string> {
   try {
     console.log("[Summarize] 🚀 Starting article summarization...");
     console.log("[Summarize] Input text length:", text.length);
@@ -131,7 +135,13 @@ export async function summarizeArticle(text: string): Promise<string> {
     console.log("[Summarize] Clean text length:", cleanText.length);
     console.log("[Summarize] Clean text preview:", cleanText.substring(0, 100) + "...");
     
-    const response = await completeEditorText("editor-summarize", {
+    const response = await completeEditorText("editor-summarize", language === "en" ? {
+      system: EN_SUMMARY_SYSTEM,
+      user: `Summarize the following article in 2-3 sentences:\n\n${cleanText}`,
+      maxTokens: 1024,
+      cacheSystemPrompt: true,
+      deduplicate: true,
+    } : {
       system: `أنت محرر صحفي خبير في صحيفة سبق الإلكترونية، متخصص في كتابة الموجز الذكي للأخبار.
 
 ${SABQ_LANGUAGE_STANDARDS_AR}
@@ -582,10 +592,21 @@ ${activitiesText}
   }
 }
 
+const EN_SEO_ANALYSIS_SYSTEM = `You are an SEO expert for English-language news. Analyze the article and return JSON only, all text in English:
+1. seoTitle: search title, 50-60 characters, with the main keywords
+2. metaDescription: 150-160 characters, factual and click-worthy
+3. keywords: 5-7 main keywords (array of strings)
+4. socialTitle: social share title, up to 70 characters
+5. socialDescription: 100-120 characters
+6. imageAltText: 80-100 characters describing the lead image subject
+7. suggestions: 3-5 short SEO improvement suggestions (array of strings)
+8. score: current SEO score 0-100 (keywords in title 20, length 20, subheadings 20, clarity 20, language quality 20)`;
+
 export async function analyzeSEO(
   title: string,
   content: string,
-  excerpt?: string
+  excerpt?: string,
+  language: "ar" | "en" = "ar",
 ): Promise<{
   seoTitle: string;
   metaDescription: string;
@@ -624,8 +645,10 @@ ${excerpt ? `المقدمة: ${excerpt}\n\n` : ''}المحتوى (أول 2000 ح
 ${content.substring(0, 2000)}`;
 
     const response = await completeEditorText("editor-seo-analysis", {
-      system: systemPrompt,
-      user: userContent,
+      system: language === "en" ? EN_SEO_ANALYSIS_SYSTEM : systemPrompt,
+      user: language === "en"
+        ? `Title: ${title}\n\n${excerpt ? `Lead: ${excerpt}\n\n` : ""}Content (first 2000 characters):\n${content.substring(0, 2000)}`
+        : userContent,
       json: true,
       maxTokens: 2048,
       deduplicate: true,

@@ -18,7 +18,7 @@
  */
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { articles, articleMediaAssets } from "@shared/schema";
+import { articles, enArticles, urArticles, articleMediaAssets } from "@shared/schema";
 import { getUserPermissions } from "../rbac";
 
 export type ArticleAccess =
@@ -35,11 +35,15 @@ const FORBIDDEN = {
 /**
  * @param permissions pass the caller's permissions when you already loaded
  *        them, to avoid a second lookup.
+ * @param language which table family the id belongs to. English and Urdu
+ *        articles live in en_articles / ur_articles (no submitterId column);
+ *        looking them up in `articles` returned 404 for their own authors.
  */
 export async function authorizeArticleWrite(
   userId: string,
   articleId: string | null | undefined,
   permissions?: string[],
+  language: "ar" | "en" | "ur" = "ar",
 ): Promise<ArticleAccess> {
   if (!articleId) return NOT_FOUND;
 
@@ -48,6 +52,25 @@ export async function authorizeArticleWrite(
   // "*" هي صيغة getEffectiveUserPermissions للحساب الإداري.
   if (perms.includes("articles.edit_any") || perms.includes("*")) {
     return { ok: true, articleId };
+  }
+
+  if (language !== "ar") {
+    const table = language === "en" ? enArticles : urArticles;
+    const [translated] = await db
+      .select({
+        authorId: table.authorId,
+        reporterId: table.reporterId,
+        articleType: table.articleType,
+      })
+      .from(table)
+      .where(eq(table.id, articleId))
+      .limit(1);
+    if (!translated) return NOT_FOUND;
+    if (translated.articleType === "opinion" && perms.includes("opinion.edit_any")) {
+      return { ok: true, articleId };
+    }
+    const owns = translated.authorId === userId || translated.reporterId === userId;
+    return owns ? { ok: true, articleId } : FORBIDDEN;
   }
 
   const [row] = await db
