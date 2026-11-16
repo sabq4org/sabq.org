@@ -69,6 +69,7 @@ import { buildServicePageEdgeMeta } from "../services/servicePageEdgeMeta";
 import { isKnownSpaTopLevelPath } from "../utils/spaTopLevelRoutes";
 import { AI_POLICY_ALLOWED, AI_POLICY_FORBIDDEN, AI_POLICY_INTRO } from "@shared/aiPolicyContent";
 import { serviceLinkForArticle, withServiceLinkHtml } from "@shared/servicePages/articleLink";
+import { getEnHeroImageText } from "@shared/enArticleImageText";
 import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
 
 import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
@@ -931,6 +932,7 @@ async function buildEnArticlePayload(
       excerpt: row.excerpt || row.aiSummary || "",
       content: row.content || "",
       publishedAt: row.publishedAt,
+      imageCaption: getEnHeroImageText(row.seo, title).caption,
     }),
   });
 }
@@ -3168,6 +3170,8 @@ router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async
       ...("articleType" in row ? { articleType: row.articleType, imageAlt: row.imageAlt,
         imageCaption: row.imageCaption, imageSource: row.imageSource,
         isAiGeneratedImage: row.isAiGeneratedImage, isAiGeneratedThumbnail: row.isAiGeneratedThumbnail } : {}),
+      // English hero caption/alt live in en_articles.seo (shared/enArticleImageText.ts).
+      ...(lang === "en" ? (({ alt, caption }) => ({ imageAlt: alt, imageCaption: caption }))(getEnHeroImageText(row.seo, row.title)) : {}),
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
       author: meta.author,

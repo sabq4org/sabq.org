@@ -52,6 +52,7 @@ import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestion
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
 import { NEWS_IMAGE_MAX_BYTES } from "@/lib/newsImageUpload";
+import { buildEnHeroImageSeoFields, EN_IMAGE_ALT_MAX, EN_IMAGE_CAPTION_MAX } from "@shared/enArticleImageText";
 import type { Editor } from "@tiptap/react";
 
 export default function EnglishArticleEditor() {
@@ -98,6 +99,9 @@ export default function EnglishArticleEditor() {
   
   const [imageUrl, setImageUrl] = useState("");
   const [imageFocalPoint, setImageFocalPoint] = useState<{ x: number; y: number } | null>(null);
+  // Stored in en_articles.seo (see shared/enArticleImageText.ts).
+  const [imageCaption, setImageCaption] = useState("");
+  const [imageAltText, setImageAltText] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
   
   // New fields
@@ -194,6 +198,8 @@ export default function EnglishArticleEditor() {
       setMetaTitle(validMetaTitle);
       setMetaDescription(validMetaDescription);
       setKeywords(article.seo?.keywords || []);
+      setImageCaption((article.seo as { imageCaption?: string } | null)?.imageCaption || "");
+      setImageAltText(article.seo?.imageAltText || "");
       setStatus(article.status as any);
     }
   }, [article, isNewArticle]);
@@ -294,6 +300,7 @@ export default function EnglishArticleEditor() {
           metaTitle: metaTitle ? metaTitle.substring(0, 70) : (title ? title.substring(0, 70) : ""),
           metaDescription: metaDescription ? metaDescription.substring(0, 160) : (excerpt ? excerpt.substring(0, 160) : ""),
           keywords: keywords,
+          ...(imageUrl ? buildEnHeroImageSeoFields({ imageCaption, imageAltText }) : {}),
         },
       };
 
@@ -461,6 +468,7 @@ export default function EnglishArticleEditor() {
               metaTitle: metaTitle || title.substring(0, 70),
               metaDescription: metaDescription || excerpt.substring(0, 160),
               keywords: keywords,
+              ...(imageUrl ? buildEnHeroImageSeoFields({ imageCaption, imageAltText }) : {}),
             },
           }),
         });
@@ -952,6 +960,38 @@ export default function EnglishArticleEditor() {
                       className="h-full w-full object-cover"
                       data-testid="img-preview-en"
                     />
+                  </div>
+                )}
+                {imageUrl && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="image-caption-en">Image caption</Label>
+                      <Input
+                        id="image-caption-en"
+                        value={imageCaption}
+                        onChange={(e) => setImageCaption(e.target.value)}
+                        maxLength={EN_IMAGE_CAPTION_MAX}
+                        placeholder="Who or what is in the photo, where and when"
+                        data-testid="input-image-caption-en"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Shown under the image on the article page and read by search engines. {imageCaption.length}/{EN_IMAGE_CAPTION_MAX}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="image-alt-en">Alt text (optional)</Label>
+                      <Input
+                        id="image-alt-en"
+                        value={imageAltText}
+                        onChange={(e) => setImageAltText(e.target.value)}
+                        maxLength={EN_IMAGE_ALT_MAX}
+                        placeholder="Short description for search engines and screen readers"
+                        data-testid="input-image-alt-en"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Left empty, the caption is used, then the headline. {imageAltText.length}/{EN_IMAGE_ALT_MAX}
+                      </p>
+                    </div>
                   </div>
                 )}
                 <div className="flex gap-2 flex-wrap">

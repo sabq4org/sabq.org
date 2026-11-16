@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-31T08:23:10.464Z",
+  "generatedAt": "2026-11-16T18:27:55.890Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 418,
+      "fileCount": 452,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -87,16 +87,16 @@
     },
     {
       "id": "ai-hub",
-      "fileCount": 43,
+      "fileCount": 44,
       "samplePaths": [
         "server/ai/gateway/adapters/anthropic.ts",
         "server/ai/gateway/adapters/elevenlabs.ts",
         "server/ai/gateway/adapters/gemini.ts",
         "server/ai/gateway/adapters/openai.ts",
         "server/ai/gateway/circuitBreaker.ts",
+        "server/ai/gateway/claudeModelRules.ts",
         "server/ai/gateway/configStore.ts",
-        "server/ai/gateway/costs.ts",
-        "server/ai/gateway/defaults.ts"
+        "server/ai/gateway/costs.ts"
       ]
     },
     {
@@ -143,16 +143,16 @@
     },
     {
       "id": "media-library",
-      "fileCount": 23,
+      "fileCount": 29,
       "samplePaths": [
+        "server/mediaSearch.ts",
+        "tests/unit/mediaSearch.test.ts",
+        "tests/unit/mediaSubjectRanking.integration.test.ts",
         "server/services/mediaAutoTagService.ts",
         "server/services/mediaCaptionService.ts",
         "server/services/mediaGenerationService.ts",
         "server/services/mediaGovernanceService.ts",
-        "server/services/mediaHashService.ts",
-        "server/services/mediaHealthService.ts",
-        "server/services/mediaLibraryService.ts",
-        "server/services/mediaLicenseService.ts"
+        "server/services/mediaHashService.ts"
       ]
     },
     {
@@ -213,7 +213,7 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 81,
+      "fileCount": 82,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
@@ -290,7 +290,7 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 50,
+      "fileCount": 51,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -318,16 +318,16 @@
     },
     {
       "id": "social-publishing",
-      "fileCount": 34,
+      "fileCount": 35,
       "samplePaths": [
         "shared/socialPostText.ts",
         "server/services/socialPublishing/botSocialLogic.ts",
         "server/services/socialPublishing/botSocialService.ts",
+        "server/services/socialPublishing/editorTweetService.ts",
         "server/services/socialPublishing/imageResolver.ts",
         "server/services/socialPublishing/publerApiClient.ts",
         "server/services/socialPublishing/socialPublishingService.ts",
-        "server/services/socialPublishing/suggestService.ts",
-        "server/services/socialPublishing/tokenCrypto.ts"
+        "server/services/socialPublishing/suggestService.ts"
       ]
     },
     {
@@ -388,7 +388,7 @@
     },
     {
       "id": "platform-runtime",
-      "fileCount": 36,
+      "fileCount": 40,
       "samplePaths": [
         "server/index.ts",
         "server/bootstrap.ts",
