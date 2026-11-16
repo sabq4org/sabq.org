@@ -2003,7 +2003,15 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
         article = await storage.createArticle(articleData);
       }
 
-      createdArticle = { id: article?.id ?? null, published: publishNow };
+      // en/ur تُحفظ في جداولها، وعمود article_id في السجل يشير إلى جدول المقالات العربي فقط.
+      const linkableArticleId = editorialResult.language === "en" || editorialResult.language === "ur" ? null : article?.id ?? null;
+      createdArticle = { id: linkableArticleId, published: publishNow };
+      // أثر دائم فور الإنشاء: لو أُعيد تشغيل الخادم قبل نهاية المعالجة لا يبقى السجل «واردًا»
+      // فيُحسب منقطعًا وتُعرض إعادة معالجته (نشر مكرر).
+      await storage.updateEmailWebhookLog(webhookLog.id, {
+        status: publishNow ? "published" : "processed",
+        ...(linkableArticleId ? { articleId: linkableArticleId } : {}),
+      }).catch((linkError: any) => console.error("[Email Agent] ⚠️ تعذر ربط السجل بالمقال فور إنشائه:", linkError?.message));
       console.log("[Email Agent] ✅ Article created successfully:", article?.id);
       console.log("[Email Agent]    - Title:", articleData.title);
       console.log("[Email Agent]    - Status:", articleData.status);
@@ -2153,7 +2161,7 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
       await storage.updateEmailWebhookLog(webhookLog.id, {
         status: webhookStatus,
         trustedSenderId: trustedSender.id,
-        articleId: article?.id,
+        ...(createdArticle?.id ? { articleId: createdArticle.id } : {}),
         attachmentsCount: allAttachmentsMetadata.length,
         attachmentsData: cleanAttachmentsForLog(),
         ...(heldReason ? { processingError: heldReason } : {}),
@@ -2277,27 +2285,26 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), (req: Request
   void processInboundEmail(req, res);
 });
 
-/** يقرأ مرفقات السجل المحفوظة خاصةً ليعاد تمريرها للمعالجة كأنها وصلت الآن. */
+/**
+ * يقرأ مرفقات السجل المحفوظة خاصةً ليعاد تمريرها للمعالجة كأنها وصلت الآن.
+ * تعذّر قراءة أي مرفق يرمي خطأ: لا يُنشر الخبر ناقصًا بصمت، والرسالة تبقى قابلة للإعادة.
+ */
 async function loadStoredAttachments(log: any): Promise<Express.Multer.File[]> {
   const files: Express.Multer.File[] = [];
   const stored = Array.isArray(log.attachmentsData) ? log.attachmentsData : [];
   for (const item of stored) {
     // المسارات الخاصة فقط (ما حفظته نقطة الحفظ). لا يُجلب أي رابط خارجي.
     if (!item?.url || /^https?:\/\//i.test(item.url) || !item.url.includes("email-attachments/")) continue;
-    try {
-      const { bucketName, objectPath } = parseObjectPath(item.url);
-      const [buffer] = await objectStorageClient.bucket(bucketName).file(objectPath).download();
-      files.push({
-        fieldname: "attachment",
-        originalname: item.filename || "attachment",
-        encoding: "7bit",
-        mimetype: item.contentType || "application/octet-stream",
-        buffer,
-        size: buffer.length,
-      } as Express.Multer.File);
-    } catch (error: any) {
-      console.error("[Email Agent] تعذر قراءة مرفق محفوظ لإعادة المعالجة:", error?.message);
-    }
+    const { bucketName, objectPath } = parseObjectPath(item.url);
+    const [buffer] = await objectStorageClient.bucket(bucketName).file(objectPath).download();
+    files.push({
+      fieldname: "attachment",
+      originalname: item.filename || "attachment",
+      encoding: "7bit",
+      mimetype: item.contentType || "application/octet-stream",
+      buffer,
+      size: buffer.length,
+    } as Express.Multer.File);
   }
   return files;
 }
@@ -2325,6 +2332,15 @@ router.post("/logs/:id/reprocess", isAuthenticated, requirePermission('admin.man
     const log = await claimLogForReprocess(existing.id);
     if (!log) return res.status(409).json({ message: "الرسالة تُعالج الآن أو عولجت." });
 
+    let files: Express.Multer.File[];
+    try {
+      files = await loadStoredAttachments(log);
+    } catch (attachmentError: any) {
+      console.error("[Email Agent] تعذر قراءة مرفق محفوظ لإعادة المعالجة:", attachmentError?.message);
+      await releaseReprocessClaim(log.id, "processing_interrupted", "تعذّرت قراءة مرفق محفوظ. أعد المحاولة بعد قليل.");
+      return res.status(503).json({ message: "تعذّرت قراءة مرفقات الرسالة الآن. أعد المحاولة بعد قليل." });
+    }
+
     // المرسل ربما أعاد إرسال الخبر نفسه بعد الفشل: لا ننشره مرتين.
     const claim = await claimEmailDedup({
       messageId: `reprocess:${log.id}:${Date.now()}`,
@@ -2337,7 +2353,6 @@ router.post("/logs/:id/reprocess", isAuthenticated, requirePermission('admin.man
     }
 
     const strip = (value: string | null) => (value || "").replace(/\[TOKEN\]/g, " ");
-    const files = await loadStoredAttachments(log);
     const syntheticReq = {
       body: { from: log.fromEmail, subject: strip(log.subject).replace(/\s+/g, " ").trim(), text: strip(log.bodyText), html: strip(log.bodyHtml) },
       files,
