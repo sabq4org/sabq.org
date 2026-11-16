@@ -21587,7 +21587,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         await storage.saveSeoMetadata(
           articleId,
           language,
-          seoContent,
+          await (await import("./services/enArticleImageTextService")).keepEnHeroImageText(articleId, language, seoContent),
           seoMetadata
         );
 

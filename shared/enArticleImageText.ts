@@ -39,3 +39,17 @@ export function buildEnHeroImageSeoFields(input: {
     ...(alt ? { imageAltText: alt } : {}),
   };
 }
+
+/**
+ * For writers that replace the whole `seo` object (AI SEO generation): carry the
+ * editor-written caption and alt text over from the stored value.
+ */
+export function mergeEnHeroImageText<T extends object>(nextSeo: T, currentSeo: unknown): T {
+  const current = currentSeo && typeof currentSeo === "object" ? (currentSeo as Record<string, unknown>) : {};
+  const kept = buildEnHeroImageSeoFields({
+    imageCaption: typeof current.imageCaption === "string" ? current.imageCaption : null,
+    imageAltText: typeof current.imageAltText === "string" ? current.imageAltText : null,
+  });
+  // The editor's alt text wins over a generated one; without one the generated alt stays.
+  return { ...nextSeo, ...kept };
+}

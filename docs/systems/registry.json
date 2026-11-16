@@ -488,6 +488,7 @@
         "server/services/enAutoTranslateService.ts",
         "server/services/enArticleTranslationService.ts",
         "shared/enArticleImageText.ts",
+        "server/services/enArticleImageTextService.ts",
         "tests/unit/enArticleImageText.test.ts",
         "server/jobs/enAutoTranslateJob.ts",
         "server/routes/enAutoTranslate.ts",

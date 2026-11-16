@@ -4,6 +4,7 @@ import {
   EN_IMAGE_ALT_MAX,
   EN_IMAGE_CAPTION_MAX,
   getEnHeroImageText,
+  mergeEnHeroImageText,
 } from "@shared/enArticleImageText";
 
 describe("getEnHeroImageText", () => {
@@ -44,5 +45,26 @@ describe("buildEnHeroImageSeoFields", () => {
     expect(out.imageAltText).toBe("alt");
     expect(out.imageCaption?.startsWith("A caption x")).toBe(true);
     expect(out.imageCaption).toHaveLength(EN_IMAGE_CAPTION_MAX);
+  });
+});
+
+describe("mergeEnHeroImageText", () => {
+  const generated = { metaTitle: "T", imageAltText: "generated alt" };
+
+  it("keeps the editor caption and alt over a regenerated seo object", () => {
+    expect(mergeEnHeroImageText(generated, { imageCaption: "Stored caption", imageAltText: "Editor alt" })).toEqual({
+      metaTitle: "T",
+      imageCaption: "Stored caption",
+      imageAltText: "Editor alt",
+    });
+  });
+
+  it("leaves the generated alt when the editor wrote none", () => {
+    expect(mergeEnHeroImageText(generated, { imageCaption: "Stored caption" })).toEqual({
+      metaTitle: "T",
+      imageAltText: "generated alt",
+      imageCaption: "Stored caption",
+    });
+    expect(mergeEnHeroImageText(generated, null)).toEqual(generated);
   });
 });
