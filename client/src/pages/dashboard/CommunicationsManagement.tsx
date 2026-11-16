@@ -1,39 +1,40 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import type { TrustedEmailSender } from "@shared/schema";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Mail,
-  MessageSquare,
-  Radio,
-  Loader2,
-  Inbox,
-  FileCheck,
-  FileEdit,
-  XCircle,
-  RefreshCw,
-  ShieldAlert,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useAuth, hasAnyPermission } from "@/hooks/useAuth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import EmailAgentTab from "@/components/communications/EmailAgentTab";
+import { CommsHero } from "@/components/communications/CommsHero";
+import InboxView, { type InboxChannelFilter } from "@/components/communications/InboxView";
+import SendersView from "@/components/communications/SendersView";
 import WhatsAppTab from "@/components/communications/WhatsAppTab";
+import { RotateTokenDialog } from "@/components/communications/RotateTokenDialog";
+import { useFailedEmailLogs, useTrustedSenders } from "@/components/communications/commsQueries";
+import { describeTokenAge } from "@/components/communications/tokenAge";
+import { flowCounts, fromEmailLog } from "@/components/communications/inboxModel";
+import { PILL_PLAIN, PILL_PRIMARY, SURFACE } from "@/components/communications/commsUi";
 
-interface BadgeStats {
+interface WhatsappBadgeStats {
   newMessages: number;
   publishedToday: number;
   draftedToday?: number;
   rejectedToday: number;
 }
 
-const BADGE_STATS_REFETCH_MS = 180000;
+interface EmailTodayStats {
+  emailsReceived: number;
+  emailsPublished: number;
+  emailsDrafted: number;
+  emailsRejected: number;
+  emailsFailed: number;
+}
+
+type View = "inbox" | "senders" | "whatsapp";
+
+const STATS_REFETCH_MS = 180000;
+const WHATSAPP_PREF_ID = "sabq.comms.show-whatsapp";
 
 // البوابات الأربع القديمة (سايدبار / صفحة / بريد / واتساب) كانت متضاربة، فمستخدم
 // يملك communications.manage يرى الرابط ثم يصطدم بـ«غير مصرح». المرجع الآن الصلاحيات،
@@ -42,88 +43,78 @@ const LEGACY_ROLES = ["admin", "system_admin", "manager"];
 // مسارات البريد محروسة بـ admin.manage_settings، ومسارات الواتساب بدور admin/manager.
 const EMAIL_PERMISSIONS = ["admin.manage_settings", "communications.manage"];
 
-function ChannelSplit({ email, whatsapp }: { email: number; whatsapp: number }) {
-  return (
-    <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
-      <span className="flex items-center gap-1">
-        <Mail className="h-3 w-3" aria-hidden="true" />
-        {email}
-      </span>
-      <span className="h-3 w-px bg-border" aria-hidden="true" />
-      <span className="flex items-center gap-1">
-        <MessageSquare className="h-3 w-3" aria-hidden="true" />
-        {whatsapp}
-      </span>
-    </div>
-  );
-}
+const todayLabel = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 
-interface SummaryCardProps {
-  label: string;
-  value: number;
-  icon: LucideIcon;
-  tone: string;
-  email: number;
-  whatsapp: number;
-  testId: string;
-}
-
-function SummaryCard({ label, value, icon: Icon, tone, email, whatsapp, testId }: SummaryCardProps) {
-  return (
-    <Card className="border-border/70">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums" data-testid={testId}>
-              {value}
-            </p>
-            <ChannelSplit email={email} whatsapp={whatsapp} />
-          </div>
-          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", tone)}>
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </span>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function readWhatsappPref(): boolean {
+  try {
+    return localStorage.getItem(WHATSAPP_PREF_ID) !== "0";
+  } catch {
+    return true;
+  }
 }
 
 function AccessDenied({ message }: { message: string }) {
   return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-          <ShieldAlert className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-        </span>
-        <p className="font-medium text-foreground">لا تملك صلاحية هذا القسم</p>
-        <p className="max-w-sm text-sm text-muted-foreground">{message}</p>
-      </CardContent>
-    </Card>
+    <div className={cn(SURFACE, "flex flex-col items-center gap-3 px-6 py-16 text-center")}>
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EEF2F6] text-[#55667A]">
+        <ShieldAlert className="h-6 w-6" aria-hidden="true" />
+      </span>
+      <p className="text-[15px] font-semibold text-[#1B2B3A]">لا تملك صلاحية هذا القسم</p>
+      <p className="max-w-sm text-[13px] leading-6 text-[#55667A]">{message}</p>
+    </div>
   );
 }
 
 export default function CommunicationsManagement() {
   const { user, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("email");
+  const [view, setView] = useState<View>("inbox");
+  const [channel, setChannel] = useState<InboxChannelFilter>("all");
+  const [whatsappPref, setWhatsappPref] = useState(readWhatsappPref);
+  const [addSignal, setAddSignal] = useState(0);
+  const [rotatingSender, setRotatingSender] = useState<TrustedEmailSender | null>(null);
 
   const role = user?.role || "";
   const canUseWhatsapp = !!user && (LEGACY_ROLES.includes(role) || hasAnyPermission(user, ...EMAIL_PERMISSIONS));
   const canUseEmail = !!user && (role === "admin" || role === "system_admin" || hasAnyPermission(user, ...EMAIL_PERMISSIONS));
   const canOpenPage = canUseEmail || canUseWhatsapp;
+  const showWhatsapp = canUseWhatsapp && (whatsappPref || !canUseEmail);
 
-  const { data: whatsappStats, isFetching: whatsappFetching } = useQuery<BadgeStats>({
-    queryKey: ['/api/whatsapp/badge-stats'],
-    enabled: canUseWhatsapp,
-    refetchInterval: BADGE_STATS_REFETCH_MS,
+  const whatsappStats = useQuery<WhatsappBadgeStats>({
+    queryKey: ["/api/whatsapp/badge-stats"],
+    enabled: showWhatsapp,
+    refetchInterval: STATS_REFETCH_MS,
   });
-
-  const { data: emailStats, isFetching: emailFetching } = useQuery<BadgeStats>({
-    queryKey: ['/api/email-agent/badge-stats'],
+  const emailStats = useQuery<EmailTodayStats>({
+    queryKey: ["/api/email-agent/stats"],
     enabled: canUseEmail,
-    refetchInterval: BADGE_STATS_REFETCH_MS,
+    refetchInterval: STATS_REFETCH_MS,
   });
+  const senders = useTrustedSenders(canUseEmail);
+  const failedLogs = useFailedEmailLogs(canUseEmail);
+
+  const senderList = useMemo(() => (Array.isArray(senders.data) ? senders.data : []), [senders.data]);
+  const reprocessCount = useMemo(
+    () => (Array.isArray(failedLogs.data?.logs) ? failedLogs.data.logs : []).filter((log) => fromEmailLog(log).canReprocess).length,
+    [failedLogs.data],
+  );
+  const expiringCount = useMemo(
+    () =>
+      senderList.filter((sender) => {
+        if (sender.status !== "active") return false;
+        const tone = describeTokenAge(sender).tone;
+        return tone === "warning" || tone === "expired";
+      }).length,
+    [senderList],
+  );
+  const flow = flowCounts(emailStats.data, showWhatsapp ? whatsappStats.data : null);
+  const whatsappToday = flowCounts(null, whatsappStats.data).total;
 
   if (authLoading) {
     return (
@@ -141,154 +132,189 @@ export default function CommunicationsManagement() {
         <div className="container mx-auto px-4 py-8" dir="rtl">
           <div className="py-20 text-center">
             <p className="text-lg text-destructive">غير مصرح لك بالوصول إلى هذه الصفحة</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              يتطلب الوصول إلى هذه الصفحة صلاحية إدارة قنوات الاتصال
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">يتطلب الوصول إلى هذه الصفحة صلاحية إدارة قنوات الاتصال</p>
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
-  const emailNew = emailStats?.newMessages ?? 0;
-  const whatsappNew = whatsappStats?.newMessages ?? 0;
-  const isRefreshing = emailFetching || whatsappFetching;
-
+  const isRefreshing = emailStats.isFetching || whatsappStats.isFetching || senders.isFetching || failedLogs.isFetching;
   const refreshAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/email-agent/badge-stats'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/whatsapp/badge-stats'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/email-agent/stats'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/whatsapp/stats'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/email-agent/logs'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/whatsapp/logs'] });
+    for (const key of ["/api/email-agent/stats", "/api/email-agent/logs", "/api/email-agent/senders", "/api/whatsapp/badge-stats", "/api/whatsapp/stats", "/api/whatsapp/logs"]) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
   };
 
-  const summaryLoading = (canUseEmail && !emailStats) || (canUseWhatsapp && !whatsappStats);
+  const toggleWhatsapp = (show: boolean) => {
+    setWhatsappPref(show);
+    if (!show) {
+      setChannel("all");
+      if (view === "whatsapp") setView("senders");
+    }
+    try {
+      localStorage.setItem(WHATSAPP_PREF_ID, show ? "1" : "0");
+    } catch {
+      // التفضيل يبقى لهذه الجلسة فقط إن مُنع التخزين.
+    }
+  };
+
+  const openHowTo = () => {
+    setView("senders");
+    window.setTimeout(() => document.getElementById("how-to-send")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+
+  const needs = reprocessCount + expiringCount;
+  const tabs: Array<{ id: View | "how"; label: string; count?: number; onClick: () => void; active: boolean; show: boolean }> = [
+    { id: "inbox", label: "الوارد", count: needs > 0 ? needs : undefined, onClick: () => setView("inbox"), active: view === "inbox", show: true },
+    {
+      id: "senders",
+      label: "المرسلون والرموز",
+      count: senderList.length > 0 ? senderList.length : undefined,
+      onClick: () => setView("senders"),
+      active: view === "senders",
+      show: true,
+    },
+    { id: "how", label: "طريقة الإرسال", onClick: openHowTo, active: false, show: canUseEmail },
+    { id: "whatsapp", label: "إعدادات واتساب", onClick: () => setView("whatsapp"), active: view === "whatsapp", show: showWhatsapp },
+  ];
 
   return (
     <DashboardLayout>
       <ErrorBoundary>
-        <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
-          <DashboardPageHeader
-            icon={Radio}
-            title="قنوات الاتصال"
-            description="كل ما يصل غرفة الأخبار عبر البريد والواتساب في مكان واحد"
-            titleTestId="text-page-title"
-            actions={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={refreshAll}
-                disabled={isRefreshing}
-                data-testid="button-refresh-all"
-              >
-                <RefreshCw className={cn("ml-2 h-4 w-4", isRefreshing && "animate-spin")} aria-hidden="true" />
-                تحديث
-              </Button>
-            }
-          />
-
-          <section aria-label="ملخص اليوم" className="space-y-3">
-            <div className="flex items-baseline gap-2 px-1">
-              <h2 className="text-sm font-semibold text-foreground">ملخص اليوم</h2>
-              <span className="text-xs text-muted-foreground">مجموع القناتين — بتوقيت الرياض</span>
-            </div>
-
-            {summaryLoading ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-[104px]" />
-                ))}
+        <div className="min-h-full bg-[#F4F7FB] px-4 pb-14 pt-6 text-[#1B2B3A] sm:px-8 sm:pt-8" dir="rtl">
+          <div className="mx-auto flex max-w-[1440px] flex-col gap-[22px]">
+            <header className="flex flex-wrap items-end justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[13px] text-[#55667A]">غرفة الأخبار · {todayLabel.format(new Date())} · توقيت الرياض</span>
+                <h1 className="text-[28px] font-bold leading-[1.3] text-[#1B2B3A]" data-testid="text-page-title">
+                  قنوات الاتصال
+                </h1>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <SummaryCard
-                  label="وارد بانتظار المعالجة"
-                  value={emailNew + whatsappNew}
-                  icon={Inbox}
-                  tone="bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                  email={emailNew}
-                  whatsapp={whatsappNew}
-                  testId="summary-new"
+              <div className="flex flex-wrap gap-2.5">
+                <button type="button" className={cn(PILL_PLAIN, "font-semibold text-[#0B6FA8]")} onClick={refreshAll} disabled={isRefreshing} data-testid="button-refresh-all">
+                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} aria-hidden="true" />
+                  تحديث
+                </button>
+                {canUseEmail && (
+                  <button
+                    type="button"
+                    className={PILL_PRIMARY}
+                    onClick={() => {
+                      setView("senders");
+                      setAddSignal((value) => value + 1);
+                    }}
+                    data-testid="button-add-sender"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    إضافة مرسل
+                  </button>
+                )}
+              </div>
+            </header>
+
+            <CommsHero
+              loading={(canUseEmail && !emailStats.data && emailStats.isLoading) || (showWhatsapp && !whatsappStats.data && whatsappStats.isLoading)}
+              reprocessCount={reprocessCount}
+              expiringCount={expiringCount}
+              flow={flow}
+            />
+
+            <nav className="flex flex-wrap items-center justify-between gap-3.5" aria-label="أقسام قنوات الاتصال">
+              <div className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 py-1">
+                {tabs
+                  .filter((tab) => tab.show)
+                  .map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      aria-pressed={tab.active}
+                      onClick={tab.onClick}
+                      data-testid={`tab-${tab.id}`}
+                      className={cn("shrink-0 whitespace-nowrap", tab.active ? PILL_PRIMARY : PILL_PLAIN)}
+                    >
+                      {tab.label}
+                      {tab.count !== undefined && (
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-px text-xs font-semibold tabular-nums",
+                            tab.active ? "bg-white/25 text-white" : tab.id === "inbox" ? "bg-[#E6F4FD] text-[#0B6FA8]" : "text-[#55667A]",
+                          )}
+                        >
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+              </div>
+              {view === "inbox" && showWhatsapp && canUseEmail && (
+                <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_1px_3px_rgba(27,43,58,0.06)]" role="group" aria-label="القناة">
+                  {(
+                    [
+                      ["all", "كل القنوات"],
+                      ["email", "البريد"],
+                      ["whatsapp", "واتساب"],
+                    ] as Array<[InboxChannelFilter, string]>
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={channel === value}
+                      onClick={() => setChannel(value)}
+                      data-testid={`channel-${value}`}
+                      className={cn(
+                        "h-9 min-w-[44px] rounded-full px-4 text-[13px] font-semibold transition-colors",
+                        channel === value ? "bg-[#E6F4FD] text-[#0B6FA8]" : "text-[#55667A] hover:bg-[#F4F7FB]",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </nav>
+
+            {view === "inbox" && (
+              <InboxView
+                canUseEmail={canUseEmail}
+                showWhatsapp={showWhatsapp}
+                channel={canUseEmail ? channel : "whatsapp"}
+                senders={senderList}
+                onRotateToken={setRotatingSender}
+              />
+            )}
+
+            {view === "senders" &&
+              (canUseEmail ? (
+                <SendersView
+                  senders={senderList}
+                  isLoading={senders.isLoading}
+                  hasError={!!senders.error}
+                  addSignal={addSignal}
+                  onRotateToken={setRotatingSender}
+                  emailToday={emailStats.data?.emailsReceived ?? 0}
+                  whatsappToday={whatsappToday}
+                  canUseWhatsapp={canUseWhatsapp}
+                  showWhatsapp={showWhatsapp}
+                  onToggleWhatsapp={toggleWhatsapp}
+                  onOpenWhatsapp={() => {
+                    if (!whatsappPref) toggleWhatsapp(true);
+                    setView("whatsapp");
+                  }}
                 />
-                <SummaryCard
-                  label="منشور اليوم"
-                  value={(emailStats?.publishedToday ?? 0) + (whatsappStats?.publishedToday ?? 0)}
-                  icon={FileCheck}
-                  tone="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                  email={emailStats?.publishedToday ?? 0}
-                  whatsapp={whatsappStats?.publishedToday ?? 0}
-                  testId="summary-published"
-                />
-                <SummaryCard
-                  label="مسودات اليوم"
-                  value={(emailStats?.draftedToday ?? 0) + (whatsappStats?.draftedToday ?? 0)}
-                  icon={FileEdit}
-                  tone="bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                  email={emailStats?.draftedToday ?? 0}
-                  whatsapp={whatsappStats?.draftedToday ?? 0}
-                  testId="summary-drafted"
-                />
-                <SummaryCard
-                  label="مرفوض اليوم"
-                  value={(emailStats?.rejectedToday ?? 0) + (whatsappStats?.rejectedToday ?? 0)}
-                  icon={XCircle}
-                  tone="bg-red-500/15 text-red-600 dark:text-red-400"
-                  email={emailStats?.rejectedToday ?? 0}
-                  whatsapp={whatsappStats?.rejectedToday ?? 0}
-                  testId="summary-rejected"
-                />
+              ) : (
+                <AccessDenied message="إدارة المرسلين ورموز البريد الذكي تتطلب صلاحية إعدادات النظام (admin.manage_settings)." />
+              ))}
+
+            {view === "whatsapp" && (
+              <div className="space-y-6 rounded-[22px] bg-background p-4 text-foreground shadow-[0_2px_8px_rgba(27,43,58,0.06)] sm:p-6">
+                <WhatsAppTab />
               </div>
             )}
-          </section>
-
-          <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-            <TabsList className="mb-6 grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1 sm:max-w-md">
-              <TabsTrigger
-                value="email"
-                data-testid="tab-email"
-                className="flex items-center justify-center gap-2 rounded-lg py-2.5"
-              >
-                <Mail className="h-4 w-4" aria-hidden="true" />
-                البريد الذكي
-                {emailNew > 0 && (
-                  <Badge variant="default" className="mr-1" data-testid="badge-email-new">
-                    {emailNew}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger
-                value="whatsapp"
-                data-testid="tab-whatsapp"
-                className="flex items-center justify-center gap-2 rounded-lg py-2.5"
-              >
-                <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                واتساب
-                {whatsappNew > 0 && (
-                  <Badge variant="default" className="mr-1" data-testid="badge-whatsapp-new">
-                    {whatsappNew}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="email" className="space-y-6">
-              {canUseEmail ? (
-                <EmailAgentTab />
-              ) : (
-                <AccessDenied message="إدارة البريد الذكي تتطلب صلاحية إعدادات النظام (admin.manage_settings)." />
-              )}
-            </TabsContent>
-
-            <TabsContent value="whatsapp" className="space-y-6">
-              {canUseWhatsapp ? (
-                <WhatsAppTab />
-              ) : (
-                <AccessDenied message="إدارة واتساب تتطلب صلاحية إدارة قنوات الاتصال." />
-              )}
-            </TabsContent>
-          </Tabs>
+          </div>
         </div>
+
+        <RotateTokenDialog sender={rotatingSender} onOpenChange={(open) => !open && setRotatingSender(null)} />
       </ErrorBoundary>
     </DashboardLayout>
   );
