@@ -14,7 +14,13 @@ vi.mock("../../server/services/editorialImagesService", () => ({
   getEditorialImageJob: (...a: unknown[]) => mocks.getEditorialImageJob(...a),
 }));
 
-import { assertOpinionImageAllowed, opinionImagePromptFor } from "../../server/services/staffOpinionImageService";
+import {
+  assertOpinionImageAllowed,
+  imageUnchangedSince,
+  normalizeImageUrl,
+  opinionImagePromptFor,
+} from "../../server/services/staffOpinionImageService";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { generateOpinionImage } from "../../server/services/staffOpinionPrepareService";
 import { EditorialImageError } from "../../server/services/openaiImagesProvider";
 import { StaffOpinionDeskError } from "../../server/services/staffOpinionDeskService";
@@ -99,5 +105,28 @@ describe("generateOpinionImage — busy wait", () => {
     mocks.createEditorialImageJob.mockRejectedValueOnce(new EditorialImageError(503, "not_configured", "غير مفعّلة"));
     await expect(generateOpinionImage("p", "u1", { waitForBusyMs: 1_000, busyPollMs: 1 })).rejects.toThrow("غير مفعّلة");
     expect(mocks.createEditorialImageJob).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Regression (prod 2026-11-16, bb977479): image_url was '' not NULL. The save used
+// `image_url IS NULL`, so the UPDATE matched 0 rows and every job failed with «تغيّر المقال».
+describe("empty-string image_url (prod bb977479)", () => {
+  const dialect = new PgDialect();
+  it("treats '' and whitespace as no image", () => {
+    expect(normalizeImageUrl("")).toBeNull();
+    expect(normalizeImageUrl("   ")).toBeNull();
+    expect(normalizeImageUrl(null)).toBeNull();
+    expect(normalizeImageUrl(undefined)).toBeNull();
+    expect(normalizeImageUrl("https://media.sabq.org/x.webp")).toBe("https://media.sabq.org/x.webp");
+  });
+  it("save guard without a starting image accepts NULL or '' (not only IS NULL)", () => {
+    const q = dialect.sqlToQuery(imageUnchangedSince(normalizeImageUrl("")));
+    expect(q.sql).toBe(`("articles"."image_url" is null or btrim("articles"."image_url") = '')`);
+    expect(q.params).toEqual([]);
+  });
+  it("save guard with a starting image still requires the exact same URL", () => {
+    const q = dialect.sqlToQuery(imageUnchangedSince("https://media.sabq.org/x.webp"));
+    expect(q.sql).toBe(`"articles"."image_url" = $1`);
+    expect(q.params).toEqual(["https://media.sabq.org/x.webp"]);
   });
 });
