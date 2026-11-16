@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   transliterateToEnglish,
   generateEnglishSlug,
+  readableEnglishSlug,
   normalizeTopicSlug,
 } from "../../server/utils/slugTransliterator";
 
@@ -62,5 +63,37 @@ describe("normalizeTopicSlug", () => {
 
   it("preserves Arabic letters (topic slugs may be Arabic)", () => {
     expect(normalizeTopicSlug("موضوع جديد")).toBe("موضوع-جديد");
+  });
+});
+
+// رابط الخبر الإنجليزي المترجم: كلمات العنوان بدل رمز عشوائي.
+describe("readableEnglishSlug", () => {
+  it("turns an English headline into a hyphenated lowercase slug", () => {
+    expect(readableEnglishSlug("Royal Order Promotes and Appoints 167 Judges")).toBe(
+      "royal-order-promotes-and-appoints-167-judges",
+    );
+  });
+
+  it("drops apostrophes and punctuation without leaving stray hyphens", () => {
+    expect(readableEnglishSlug("Libya’s Food Security: Ahmed Gadalla's Case!")).toBe(
+      "libyas-food-security-ahmed-gadallas-case",
+    );
+  });
+
+  it("cuts at a word boundary and never ends with a hyphen", () => {
+    const slug = readableEnglishSlug(
+      "Interior Ministry Warns: SAR 100,000 Fine and Imprisonment for Employers Who Trade in Their Workers' Visas",
+    );
+    expect(slug.length).toBeLessThanOrEqual(80);
+    expect(slug).toBe("interior-ministry-warns-sar-100000-fine-and-imprisonment-for-employers-who-trade");
+  });
+
+  it("returns '' when the title has no Latin letters or digits", () => {
+    expect(readableEnglishSlug("أمر ملكي")).toBe("");
+    expect(readableEnglishSlug("")).toBe("");
+  });
+
+  it("strips accents instead of dropping the letter", () => {
+    expect(readableEnglishSlug("Pelé Café")).toBe("pele-cafe");
   });
 });

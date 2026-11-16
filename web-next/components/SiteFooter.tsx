@@ -19,6 +19,8 @@ const INFO_LINKS = [
   { label: "سياسة الخصوصية", href: "/ar/privacy" },
   { label: "شروط الاستخدام", href: "/ar/terms" },
   { label: "تواصل معنا", href: "/contact" },
+  // رابط قابل للزحف إلى النسخة الإنجليزية من كل صفحة يراها الزاحف.
+  { label: "English", href: "/en" },
 ];
 
 const SOCIAL: { label: string; href: string; path: string }[] = [

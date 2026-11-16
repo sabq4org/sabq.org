@@ -10,7 +10,7 @@ import { articles, categories, enArticles, enCategories, users } from "@shared/s
 import { and, eq, or, sql } from "drizzle-orm";
 import { aiGateway } from "../ai/gateway";
 import { notifySearchEngines } from "../indexNow";
-import { generateEnglishSlug } from "../utils/slugTransliterator";
+import { generateEnglishSlug, readableEnglishSlug } from "../utils/slugTransliterator";
 import {
   clearOtherBreakingArticles,
   clearOtherEnBreakingArticles,
@@ -84,25 +84,28 @@ export async function resolveEnCategoryId(
 }
 
 /**
- * Prefer the Arabic article's englishSlug for the EN URL when free,
- * so hreflang can share the same short code (/article/X ↔ /en/article/X).
+ * رابط الخبر الإنجليزي: كلمات العنوان أولًا (مقروءة للقارئ ولمحركات البحث)،
+ * ثم رمز الخبر العربي إن كان العنوان بلا حروف لاتينية أو كان رابطه محجوزًا.
+ * ربط hreflang بين العربي والإنجليزي يعتمد seoMetadata.sourceArticleId لا
+ * تطابق الرابطين، فلا يتأثر. الأخبار المنشورة سابقًا تبقى على روابطها.
  */
 export async function pickEnArticleSlug(opts: {
-  preferredFromAr: string | null | undefined;
   fromTitle: string;
+  fallbackFromAr: string | null | undefined;
+  fallbackRandom: string;
 }): Promise<string> {
-  const preferred = (opts.preferredFromAr || "").trim();
-  if (preferred) {
+  const candidates = [opts.fromTitle, opts.fallbackFromAr]
+    .map((value) => (value || "").trim())
+    .filter(Boolean);
+  for (const candidate of candidates) {
     const [taken] = await db
       .select({ id: enArticles.id })
       .from(enArticles)
-      .where(
-        or(eq(enArticles.slug, preferred), eq(enArticles.englishSlug, preferred)),
-      )
+      .where(or(eq(enArticles.slug, candidate), eq(enArticles.englishSlug, candidate)))
       .limit(1);
-    if (!taken) return preferred;
+    if (!taken) return candidate;
   }
-  return opts.fromTitle;
+  return opts.fallbackRandom;
 }
 
 /** Sync newsType onto the Arabic source linked via seoMetadata.sourceArticleId. */
@@ -272,17 +275,18 @@ Respond in valid JSON format only:
     throw new EnTranslationError("فشل الحصول على الترجمة من الذكاء الاصطناعي", "AI_FAILED");
   }
 
-  // Prefer Arabic englishSlug so AR/EN share the same short code (hreflang-safe).
+  const titleSlug = readableEnglishSlug(translated.title);
   let englishSlug = await pickEnArticleSlug({
-    preferredFromAr: article.englishSlug,
-    fromTitle: generateEnglishSlug(translated.title),
+    fromTitle: titleSlug,
+    fallbackFromAr: article.englishSlug,
+    fallbackRandom: generateEnglishSlug(),
   });
   const [slugExists] = await db
     .select({ id: enArticles.id })
     .from(enArticles)
     .where(or(eq(enArticles.slug, englishSlug), eq(enArticles.englishSlug, englishSlug)))
     .limit(1);
-  if (slugExists) englishSlug = `${generateEnglishSlug(translated.title)}-${nanoid(5)}`;
+  if (slugExists) englishSlug = `${titleSlug || generateEnglishSlug()}-${nanoid(5).toLowerCase()}`;
 
   // Always under the "Sabq Newspaper" account.
   const [sabqNewspaperUser] = await db
