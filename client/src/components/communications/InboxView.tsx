@@ -116,13 +116,13 @@ export default function InboxView({ canUseEmail, showWhatsapp, channel, senders,
   const failedLogs = useFailedEmailLogs(canUseEmail);
 
   const items = useMemo<Item[]>(() => {
-    const email = wantEmail && Array.isArray(emailLogs.data?.logs) ? emailLogs.data.logs.map((log) => fromEmailLog(log)) : [];
+    const email = wantEmail && !emailLogs.error && Array.isArray(emailLogs.data?.logs) ? emailLogs.data.logs.map((log) => fromEmailLog(log)) : [];
     const whatsapp =
-      wantWhatsapp && Array.isArray(whatsappLogs.data?.logs)
+      wantWhatsapp && !whatsappLogs.error && Array.isArray(whatsappLogs.data?.logs)
         ? whatsappLogs.data.logs.map((log) => fromWhatsappLog(log)).filter((item) => filter === "all" || item.state === filter)
         : [];
     return mergeInbox(email, whatsapp) as Item[];
-  }, [wantEmail, wantWhatsapp, emailLogs.data, whatsappLogs.data, filter]);
+  }, [wantEmail, wantWhatsapp, emailLogs.data, emailLogs.error, whatsappLogs.data, whatsappLogs.error, filter]);
 
   const needsReprocess = useMemo<Item[]>(
     () =>
@@ -141,12 +141,16 @@ export default function InboxView({ canUseEmail, showWhatsapp, channel, senders,
     [senders],
   );
 
-  const emailTotal = wantEmail ? emailLogs.data?.total ?? 0 : 0;
-  const whatsappTotal = wantWhatsapp ? whatsappLogs.data?.total ?? 0 : 0;
+  // فشل قناة لا يحجب وارد الأخرى: الخطأ الكامل فقط حين لا تنجح أي قناة مطلوبة.
+  const emailFailed = wantEmail && !!emailLogs.error;
+  const whatsappFailed = wantWhatsapp && !!whatsappLogs.error;
+  const emailTotal = wantEmail && !emailFailed ? emailLogs.data?.total ?? 0 : 0;
+  const whatsappTotal = wantWhatsapp && !whatsappFailed ? whatsappLogs.data?.total ?? 0 : 0;
   const total = emailTotal + whatsappTotal;
   const totalPages = Math.max(1, Math.ceil(emailTotal / PAGE_SIZE), Math.ceil(whatsappTotal / PAGE_SIZE));
-  const loading = (wantEmail && emailLogs.isLoading) || (wantWhatsapp && whatsappLogs.isLoading);
-  const loadError = (wantEmail && emailLogs.error) || (wantWhatsapp && whatsappLogs.error);
+  const loading = (wantEmail && emailLogs.isLoading) || (wantWhatsapp && whatsappLogs.isLoading && !whatsappFailed);
+  const loadError = (emailFailed || !wantEmail) && (whatsappFailed || !wantWhatsapp);
+  const partialError = loadError ? null : emailFailed ? "تعذّر تحميل رسائل البريد، والمعروض رسائل واتساب فقط." : whatsappFailed ? "تعذّر تحميل رسائل واتساب، والمعروض رسائل البريد فقط." : null;
 
   const selected = items.find((item) => item.key === selectedKey) ?? (wide ? items[0] : undefined);
   const senderOf = (item?: Item) =>
@@ -330,6 +334,11 @@ export default function InboxView({ canUseEmail, showWhatsapp, channel, senders,
               )}
             </div>
 
+            {partialError && (
+              <p className="border-b border-[#EEF2F6] bg-[#FFF6E5] px-[18px] py-2.5 text-[13px] text-[#6B4500]" data-testid="inbox-partial-error">
+                {partialError}
+              </p>
+            )}
             {loadError ? (
               <p className="px-[18px] py-10 text-center text-sm text-[#BF3038]">تعذّر تحميل الوارد. حدّث الصفحة وحاول ثانية.</p>
             ) : loading ? (

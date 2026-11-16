@@ -96,6 +96,13 @@ export default function CommunicationsManagement() {
     enabled: canUseEmail,
     refetchInterval: STATS_REFETCH_MS,
   });
+  // هذا المسار هو ما يكتشف الرسائل العالقة «قيد المعالجة» ويحوّلها إلى «تعطل» (sweepStuckEmailLogs)،
+  // فيبقى مستدعًى عند فتح الصفحة وتحديثها حتى تظهر في «تحتاجك الآن».
+  useQuery<unknown>({
+    queryKey: ["/api/email-agent/badge-stats"],
+    enabled: canUseEmail,
+    refetchInterval: STATS_REFETCH_MS,
+  });
   const senders = useTrustedSenders(canUseEmail);
   const failedLogs = useFailedEmailLogs(canUseEmail);
 
@@ -141,7 +148,7 @@ export default function CommunicationsManagement() {
 
   const isRefreshing = emailStats.isFetching || whatsappStats.isFetching || senders.isFetching || failedLogs.isFetching;
   const refreshAll = () => {
-    for (const key of ["/api/email-agent/stats", "/api/email-agent/logs", "/api/email-agent/senders", "/api/whatsapp/badge-stats", "/api/whatsapp/stats", "/api/whatsapp/logs"]) {
+    for (const key of ["/api/email-agent/badge-stats", "/api/email-agent/stats", "/api/email-agent/logs", "/api/email-agent/senders", "/api/whatsapp/badge-stats", "/api/whatsapp/stats", "/api/whatsapp/logs"]) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
