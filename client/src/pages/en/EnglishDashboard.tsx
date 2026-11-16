@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/queryClient";
-import { useAuth, hasRole } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
   FileText,
@@ -146,7 +146,8 @@ function Dashboard() {
 
   const { data: stats, isLoading } = useQuery<AdminDashboardStats>({
     queryKey: ["/api/en/admin/dashboard/stats"],
-    enabled: !!user && hasRole(user, "admin", "system_admin", "editor"),
+    // Server decides access (any staff role, same as the Arabic dashboard).
+    enabled: !!user,
   });
 
   // Get greeting (memoized to avoid recalculation during re-renders)
@@ -227,7 +228,7 @@ function Dashboard() {
                     <div className="absolute -inset-1 bg-primary/20 rounded-full blur-md animate-pulse"></div>
                   </div>
                   <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-l from-primary to-accent-foreground bg-clip-text text-transparent" data-testid="text-greeting">
-                    {greeting}, {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || user?.email?.split('@')[0] || "there"}
+                    {greeting}{(() => { const u = user as { firstNameEn?: string | null; lastNameEn?: string | null } | null; const en = [u?.firstNameEn, u?.lastNameEn].filter(Boolean).join(" "); return en ? `, ${en}` : ""; })()}
                   </h2>
                 </div>
                 <p className="text-muted-foreground text-lg leading-relaxed max-w-2xl" data-testid="text-motivational-quote">
