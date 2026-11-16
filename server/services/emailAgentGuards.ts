@@ -145,6 +145,7 @@ const REJECTION_TEXT: Record<string, string> = {
   no_news_value: "المحتوى لا يحمل قيمة خبرية قابلة للنشر.",
   ai_content_empty: "تعذّر تحرير النص هذه المرة. أعد الإرسال بعد قليل.",
   sender_inactive: "حسابك في البريد الذكي موقوف حاليًا. تواصل مع إدارة التحرير.",
+  token_expired: "انتهت صلاحية رمز النشر. اطلب رمزًا جديدًا من إدارة التحرير ثم أعد الإرسال.",
 };
 
 export function emailAgentRepliesEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -205,5 +206,83 @@ export function pickFallbackCategory<T extends { nameAr: string; slug?: string |
     active.find((c) => c.nameAr === "محليات" || c.slug === "local" || c.slug === "saudi") ||
     active[0] ||
     null
+  );
+}
+
+// ── تدوير الرمز وانتهاؤه ─────────────────────────────────────────────
+
+export const PREVIOUS_TOKEN_GRACE_HOURS = 48;
+export const TOKEN_EXPIRY_WARNING_DAYS = 14;
+
+export type TokenExpiryOption = "6m" | "1y" | "none";
+
+export function isTokenExpiryOption(value: unknown): value is TokenExpiryOption {
+  return value === "6m" || value === "1y" || value === "none";
+}
+
+/** تاريخ انتهاء الرمز الجديد حسب اختيار المحرر. `none` = بلا انتهاء. */
+export function resolveTokenExpiry(option: TokenExpiryOption, now: Date = new Date()): Date | null {
+  if (option === "none") return null;
+  const expires = new Date(now);
+  expires.setUTCMonth(expires.getUTCMonth() + (option === "6m" ? 6 : 12));
+  return expires;
+}
+
+function tokensEqual(provided: string, stored: string): boolean {
+  const a = Buffer.from(provided.toLowerCase());
+  const b = Buffer.from(stored.toLowerCase());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export type SenderTokenVerdict = "valid" | "valid_previous" | "expired" | "invalid";
+
+/**
+ * يطابق الرمز المرسل برمز المرسل الحالي، ثم بالسابق ما دامت مهلته قائمة.
+ * الرمز الحالي المنتهي يُرفض بسبب مستقل ليعرف المرسل أن عليه طلب رمز جديد.
+ */
+export function evaluateSenderToken(
+  provided: string | null | undefined,
+  sender: {
+    token?: string | null;
+    tokenExpiresAt?: Date | string | null;
+    previousToken?: string | null;
+    previousTokenValidUntil?: Date | string | null;
+  },
+  now: Date = new Date(),
+): SenderTokenVerdict {
+  if (!provided) return "invalid";
+  if (sender.token && tokensEqual(provided, sender.token)) {
+    const expiresAt = sender.tokenExpiresAt ? new Date(sender.tokenExpiresAt) : null;
+    if (expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() <= now.getTime()) return "expired";
+    return "valid";
+  }
+  if (sender.previousToken && sender.previousTokenValidUntil && tokensEqual(provided, sender.previousToken)) {
+    const until = new Date(sender.previousTokenValidUntil);
+    if (!Number.isNaN(until.getTime()) && until.getTime() > now.getTime()) return "valid_previous";
+  }
+  return "invalid";
+}
+
+// ── إعادة المعالجة ───────────────────────────────────────────────────
+
+const REPROCESSABLE_REASONS = new Set(["processing_error", "processing_interrupted"]);
+
+/**
+ * «أعد المعالجة» للرسالة التي فشلت بعد التحقق من مرسلها ورمزها ولم تُنشئ مقالًا.
+ * المرفوضة (رمز ناقص، مرسل غير موثوق…) لا تعاد: إعادتها تتجاوز الرمز.
+ */
+export function isReprocessableLog(log: {
+  status?: string | null;
+  rejectionReason?: string | null;
+  tokenVerified?: boolean | null;
+  trustedSenderId?: string | null;
+  articleId?: string | null;
+}): boolean {
+  return (
+    log.status === "failed" &&
+    log.tokenVerified === true &&
+    !!log.trustedSenderId &&
+    !log.articleId &&
+    REPROCESSABLE_REASONS.has(log.rejectionReason || "")
   );
 }

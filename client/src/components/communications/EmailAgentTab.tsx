@@ -7,6 +7,7 @@ import { TrustedSendersTable } from "@/components/TrustedSendersTable";
 import { AddSenderDialog } from "@/components/AddSenderDialog";
 import { WebhookLogsTable } from "@/components/WebhookLogsTable";
 import { EmailDetailsModal } from "@/components/EmailDetailsModal";
+import { RotateTokenDialog } from "@/components/communications/RotateTokenDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +32,7 @@ export default function EmailAgentTab() {
   const [selectedLog, setSelectedLog] = useState<EmailWebhookLog | null>(null);
   const [logsPage, setLogsPage] = useState(1);
   const [logsStatusFilter, setLogsStatusFilter] = useState<string>("all");
+  const [rotatingSender, setRotatingSender] = useState<TrustedEmailSender | null>(null);
 
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuery<EmailAgentStatsData>({
     queryKey: ['/api/email-agent/stats'],
@@ -202,6 +204,35 @@ export default function EmailAgentTab() {
     },
   });
 
+  const refreshLogs = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/email-agent/logs'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/email-agent/stats'] });
+  };
+
+  const reprocessLogMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest(`/api/email-agent/logs/${id}/reprocess`, { method: 'POST' });
+    },
+    onSuccess: () => {
+      refreshLogs();
+      // التحرير بالذكاء يأخذ حتى دقيقة: يُحدَّث السجل مرتين ليظهر الخبر دون تحديث يدوي.
+      window.setTimeout(refreshLogs, 25_000);
+      window.setTimeout(refreshLogs, 70_000);
+      toast({
+        title: "بدأت إعادة المعالجة",
+        description: "يظهر الخبر في السجل خلال دقيقة، منشورًا أو مسودة حسب إعداد المرسل.",
+      });
+    },
+    onError: (error: Error) => {
+      refreshLogs();
+      toast({
+        title: "لم تبدأ إعادة المعالجة",
+        description: error.message || "تعذّرت إعادة المعالجة",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddSender = () => {
     setEditingSender(null);
     setAddDialogOpen(true);
@@ -326,6 +357,7 @@ export default function EmailAgentTab() {
               onEdit={handleEditSender}
               onDelete={handleDeleteSender}
               onToggleStatus={handleToggleSenderStatus}
+              onRotateToken={setRotatingSender}
             />
           )}
         </CardContent>
@@ -360,6 +392,8 @@ export default function EmailAgentTab() {
               onRowClick={handleLogClick}
               onDelete={handleDeleteLog}
               onBulkDelete={handleBulkDeleteLogs}
+              onReprocess={(id) => reprocessLogMutation.mutate(id)}
+              reprocessingId={reprocessLogMutation.isPending ? reprocessLogMutation.variables ?? null : null}
             />
           )}
         </CardContent>
@@ -373,6 +407,11 @@ export default function EmailAgentTab() {
         isSubmitting={
           createSenderMutation.isPending || updateSenderMutation.isPending
         }
+      />
+
+      <RotateTokenDialog
+        sender={rotatingSender}
+        onOpenChange={(open) => !open && setRotatingSender(null)}
       />
 
       <EmailDetailsModal

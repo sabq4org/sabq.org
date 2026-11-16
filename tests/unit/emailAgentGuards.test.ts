@@ -138,3 +138,56 @@ describe("redaction keeps the dedup fingerprint stable", () => {
     },
   );
 });
+
+describe("token rotation and expiry", () => {
+  const now = new Date("2026-11-16T12:00:00Z");
+  const current = "a".repeat(64);
+  const previous = "b".repeat(64);
+
+  it("accepts the current token, case-insensitively", async () => {
+    const { evaluateSenderToken } = await import("../../server/services/emailAgentGuards");
+    expect(evaluateSenderToken(current.toUpperCase(), { token: current }, now)).toBe("valid");
+    expect(evaluateSenderToken(null, { token: current }, now)).toBe("invalid");
+    expect(evaluateSenderToken("c".repeat(64), { token: current }, now)).toBe("invalid");
+  });
+
+  it("rejects an expired current token with its own verdict", async () => {
+    const { evaluateSenderToken } = await import("../../server/services/emailAgentGuards");
+    expect(evaluateSenderToken(current, { token: current, tokenExpiresAt: new Date("2026-11-16T11:59:00Z") }, now)).toBe("expired");
+    expect(evaluateSenderToken(current, { token: current, tokenExpiresAt: "2027-11-16T00:00:00Z" }, now)).toBe("valid");
+  });
+
+  it("accepts the previous token only inside its grace window", async () => {
+    const { evaluateSenderToken } = await import("../../server/services/emailAgentGuards");
+    const sender = { token: current, previousToken: previous, previousTokenValidUntil: new Date("2026-11-17T00:00:00Z") };
+    expect(evaluateSenderToken(previous, sender, now)).toBe("valid_previous");
+    expect(evaluateSenderToken(previous, sender, new Date("2026-11-17T00:00:01Z"))).toBe("invalid");
+    expect(evaluateSenderToken(previous, { token: current, previousToken: previous }, now)).toBe("invalid");
+  });
+
+  it("resolves the chosen expiry", async () => {
+    const { resolveTokenExpiry, isTokenExpiryOption } = await import("../../server/services/emailAgentGuards");
+    expect(resolveTokenExpiry("none", now)).toBeNull();
+    expect(resolveTokenExpiry("6m", now)?.toISOString()).toBe("2027-05-16T12:00:00.000Z");
+    expect(resolveTokenExpiry("1y", now)?.toISOString()).toBe("2027-11-16T12:00:00.000Z");
+    expect(isTokenExpiryOption("2y")).toBe(false);
+  });
+
+  it("tells the sender when the token expired", () => {
+    const reply = buildSenderReply("خبر", { kind: "rejected", reason: "token_expired" });
+    expect(reply.text).toContain("انتهت صلاحية رمز النشر");
+  });
+});
+
+describe("isReprocessableLog", () => {
+  const base = { status: "failed", rejectionReason: "processing_interrupted", tokenVerified: true, trustedSenderId: "s1", articleId: null };
+  it("allows only verified failures without an article", async () => {
+    const { isReprocessableLog } = await import("../../server/services/emailAgentGuards");
+    expect(isReprocessableLog(base)).toBe(true);
+    expect(isReprocessableLog({ ...base, rejectionReason: "processing_error" })).toBe(true);
+    expect(isReprocessableLog({ ...base, tokenVerified: false })).toBe(false);
+    expect(isReprocessableLog({ ...base, articleId: "a1" })).toBe(false);
+    expect(isReprocessableLog({ ...base, status: "rejected", rejectionReason: "invalid_token" })).toBe(false);
+    expect(isReprocessableLog({ ...base, rejectionReason: "duplicate_content" })).toBe(false);
+  });
+});

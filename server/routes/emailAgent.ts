@@ -36,14 +36,25 @@ import {
   senderAuthEnforced,
   shouldOcrAttachedImages,
   wantsNewspaperByline,
+  evaluateSenderToken,
+  isReprocessableLog,
+  isTokenExpiryOption,
+  type SenderAuthVerdict,
   type SenderReplyOutcome,
 } from "../services/emailAgentGuards";
+import {
+  claimLogForReprocess,
+  getEmailWebhookLogById,
+  releaseReprocessClaim,
+  revokePreviousSenderToken,
+  rotateSenderToken,
+} from "../services/emailAgentTokens";
 import { denyBannedWords } from "../services/publishBannedWordsService";
 import { sendEmailNotification } from "../services/email";
 import { trackedOpenAICompletion } from "../ai/gateway/trackedOpenAI";
 import { z } from "zod";
 import { parsePage, parseLimit } from "../utils/pagination";
-import { emailTokenMatches, requireInboundWebhookSecret } from "../services/emailAgentAuth";
+import { requireInboundWebhookSecret } from "../services/emailAgentAuth";
 
 const router = Router();
 
@@ -535,15 +546,26 @@ function respondWebhook(res: Response, body: Record<string, unknown>, status = 2
 }
 
 
-router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: Request, res: Response) => {
+/**
+ * إعادة معالجة رسالة فشلت بعد التحقق من مرسلها ورمزها: تُعاد من النص والمرفقات
+ * المحفوظة في السجل نفسه، بلا رمز (حُذف من السجل) وبلا حجز تكرار جديد.
+ */
+interface ReprocessContext {
+  log: any;
+  senderAuth: SenderAuthVerdict;
+}
+
+async function processInboundEmail(req: Request, res: Response, reprocess?: ReprocessContext): Promise<unknown> {
   let webhookLog: any = null; // Define outside try block so it's accessible in catch
   let dedupKey = ''; // Will be set after parsing
   let replyToSender: (outcome: SenderReplyOutcome) => void = () => undefined;
   let dedupFrom = "";
   let dedupSubject = "";
   let tokenWasVerified = false;
-  // بعد إنشاء المقال لا تُفك بصمة التكرار ولا يُطلب من المرسل إعادة الإرسال: الإعادة تنشر الخبر مرتين.
-  let articleCreated = false;
+  // بعد إنشاء المقال لا تُفك بصمة التكرار ولا يُطلب من المرسل إعادة الإرسال ولا تُعرض
+  // «أعد المعالجة»: الإعادة تنشر الخبر مرتين.
+  let createdArticle: { id: string | null; published: boolean } | null = null;
+  let senderAuthVerdict: SenderAuthVerdict | null = null;
 
   try {
     console.log("[Email Agent] ============ WEBHOOK START ============");
@@ -637,7 +659,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     // 🔒 DEDUPLICATION — Message-ID (SendGrid retries) + sender/subject window (resends)
     // Incident 2026-07-26: same story resent 6× with new Message-IDs → 5 published copies.
     const senderEmailEarly = extractEmailAddress(from);
-    try {
+    // إعادة المعالجة حجزت البصمة قبل الوصول إلى هنا.
+    if (!reprocess) try {
       const claim = await claimEmailDedup({
         messageId,
         from,
@@ -830,7 +853,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
     
     // Extract inline images from HTML (base64 data URLs and CID references)
-    if (html && html.length > 0) {
+    // في إعادة المعالجة الصور المضمّنة محفوظة مع المرفقات: لا تُستخرج مرة ثانية.
+    if (html && html.length > 0 && !reprocess) {
       try {
         const inlineImages = await extractInlineImagesFromHtml(html, cidMap);
         if (inlineImages.length > 0) {
@@ -845,8 +869,11 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     // OCR واستخراج PDF مدفوعان (GPT-4o Vision): لا يُشغَّلان إلا لمرسل موثوق
     // نشط برمز صحيح. البريد غير الموثوق يُرفض لاحقًا وتُحفظ مرفقاته خاصةً كما كانت.
     const earlySender = attachments.length > 0 ? await storage.getTrustedSenderByEmail(senderEmailEarly) : null;
+    const earlyTokenVerdict = earlySender
+      ? evaluateSenderToken(extractTokenFromText(subject) || extractTokenFromText(text) || extractTokenFromText(html), earlySender)
+      : "invalid";
     const allowPaidExtraction = !!earlySender && earlySender.status === "active" &&
-      emailTokenMatches(extractTokenFromText(subject) || extractTokenFromText(text) || extractTokenFromText(html), earlySender.token);
+      (!!reprocess || earlyTokenVerdict === "valid" || earlyTokenVerdict === "valid_previous");
     // الخبر المكتوب كاملًا صوره صور صحفية: لا تُقرأ. تُقرأ الصورة حين يكون النص قصيرًا فقط.
     const ocrAttachedImages = allowPaidExtraction &&
       shouldOcrAttachedImages(text || (html ? html.replace(/<[^>]*>/g, " ") : ""));
@@ -1098,7 +1125,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     
     const logId = nanoid();
     // الرمز لا يُخزَّن في السجل: يقرؤه كل من يفتح صفحة قنوات الاتصال.
-    webhookLog = await storage.createEmailWebhookLog({
+    webhookLog = reprocess ? reprocess.log : await storage.createEmailWebhookLog({
       fromEmail: senderEmail,
       subject: redactEmailTokens(subject),
       bodyText: redactEmailTokens(text),
@@ -1109,12 +1136,13 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     const trustedSender = await storage.getTrustedSenderByEmail(senderEmail);
 
     // SPF/DKIM من SendGrid: هل الرسالة صادرة فعلًا من نطاق المرسل؟
-    const senderAuth = evaluateSenderAuth({
+    const senderAuth = reprocess ? reprocess.senderAuth : evaluateSenderAuth({
       fromEmail: senderEmail,
       spf: req.body.SPF,
       dkim: req.body.dkim,
       envelope: req.body.envelope,
     });
+    senderAuthVerdict = senderAuth;
     const senderAuthFailed = senderAuth === "fail" && senderAuthEnforced();
     console.log(`[Email Agent] Sender auth verdict: ${senderAuth}${senderAuthFailed ? " (auto-publish held for this message)" : ""}`);
 
@@ -1202,7 +1230,10 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       html: !!tokenInHtml,
     });
 
-    const isTokenValid = emailTokenMatches(providedToken, trustedSender.token);
+    // إعادة المعالجة لرسالة سبق التحقق من رمزها (الرمز حُذف من السجل المحفوظ).
+    const tokenVerdict = reprocess ? "valid" : evaluateSenderToken(providedToken, trustedSender);
+    const isTokenValid = tokenVerdict === "valid" || tokenVerdict === "valid_previous";
+    const tokenRejection = tokenVerdict === "expired" ? "token_expired" : "invalid_token";
 
     if (!isTokenValid) {
       console.log("[Email Agent] Token validation failed:", {
@@ -1216,7 +1247,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       
       await storage.updateEmailWebhookLog(webhookLog.id, {
         status: "rejected",
-        rejectionReason: "invalid_token",
+        rejectionReason: tokenRejection,
         senderVerified: true,
         tokenVerified: false,
         trustedSenderId: trustedSender.id,
@@ -1232,7 +1263,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       });
 
       await releaseEmailContentDedup(from, subject);
-      replyToSender({ kind: "rejected", reason: "invalid_token" });
+      replyToSender({ kind: "rejected", reason: tokenRejection });
       respondWebhook(res, {
         success: false,
         message: "Invalid token",
@@ -1248,6 +1279,25 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       tokenVerified: true,
       trustedSenderId: trustedSender.id,
     });
+
+    // نقطة حفظ لـ«أعد المعالجة»: المرفقات تُحفظ خاصةً مع السجل قبل التحرير بالذكاء،
+    // فانقطاع المعالجة (إعادة تشغيل الخادم) لا يضيّع الصور. فشلها لا يوقف النشر.
+    if (!reprocess) {
+      try {
+        const saved = cleanAttachmentsForLog();
+        for (const image of pendingImageUploads) {
+          const url = await uploadAttachmentToGCS(image.buffer, image.filename, image.contentType, false);
+          saved.push({ filename: image.filename, contentType: image.contentType, size: image.size, url });
+        }
+        await storage.updateEmailWebhookLog(webhookLog.id, {
+          attachmentsCount: saved.length,
+          attachmentsData: saved,
+          aiAnalysis: { warnings: [`sender_auth:${senderAuth}`] },
+        });
+      } catch (checkpointError: any) {
+        console.error("[Email Agent] تعذر حفظ مرفقات الرسالة قبل المعالجة:", checkpointError?.message);
+      }
+    }
 
     const systemUser = await storage.getOrCreateSystemUser();
     console.log("[Email Agent] Using system user ID:", systemUser.id);
@@ -1953,7 +2003,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         article = await storage.createArticle(articleData);
       }
 
-      articleCreated = true;
+      createdArticle = { id: article?.id ?? null, published: publishNow };
       console.log("[Email Agent] ✅ Article created successfully:", article?.id);
       console.log("[Email Agent]    - Title:", articleData.title);
       console.log("[Email Agent]    - Status:", articleData.status);
@@ -2174,15 +2224,24 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     console.error("[Email Agent] ❌ Error processing webhook:", error);
     console.error("[Email Agent] ❌ Error stack:", error.stack);
     
-    // Update webhook log to "failed" status (if it was created)
-    if (webhookLog?.id) {
+    // المقال أُنشئ ثم تعثرت خطوة لاحقة: السجل يشير إلى المقال ولا يُعرض كفاشل قابل للإعادة.
+    if (webhookLog?.id && createdArticle) {
+      await storage.updateEmailWebhookLog(webhookLog.id, {
+        status: createdArticle.published ? "published" : "processed",
+        ...(createdArticle.id ? { articleId: createdArticle.id } : {}),
+        processingError: "أُنشئ الخبر ثم تعثرت خطوة لاحقة. راجعه من لوحة الأخبار.",
+      }).catch((updateError: any) => console.error("[Email Agent] ⚠️ Failed to update webhook log status:", updateError?.message));
+    } else if (webhookLog?.id) {
       try {
         await storage.updateEmailWebhookLog(webhookLog.id, {
           status: "failed",
           rejectionReason: "processing_error",
           aiAnalysis: {
             errors: [error.message],
-            warnings: error.stack ? [error.stack.substring(0, 500)] : [], // First 500 chars of stack trace
+            warnings: [
+              ...(senderAuthVerdict ? [`sender_auth:${senderAuthVerdict}`] : []),
+              ...(error.stack ? [error.stack.substring(0, 500)] : []), // First 500 chars of stack trace
+            ],
           },
         });
         console.log("[Email Agent] ✅ Webhook log updated to 'failed' status");
@@ -2194,7 +2253,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
     
     // الفشل لا يحبس الخبر: تُفك بصمة التكرار ويُبلَّغ المرسل الموثوق ليعيد الإرسال.
-    if (!articleCreated) {
+    if (!createdArticle) {
       if (dedupFrom) await releaseEmailContentDedup(dedupFrom, dedupSubject).catch(() => undefined);
       if (tokenWasVerified) replyToSender({ kind: "failed" });
     }
@@ -2211,6 +2270,112 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       message: "Internal processing error",
       error: error.message,
     });
+  }
+}
+
+router.post("/webhook", requireInboundWebhookSecret, upload.any(), (req: Request, res: Response) => {
+  void processInboundEmail(req, res);
+});
+
+/** يقرأ مرفقات السجل المحفوظة خاصةً ليعاد تمريرها للمعالجة كأنها وصلت الآن. */
+async function loadStoredAttachments(log: any): Promise<Express.Multer.File[]> {
+  const files: Express.Multer.File[] = [];
+  const stored = Array.isArray(log.attachmentsData) ? log.attachmentsData : [];
+  for (const item of stored) {
+    // المسارات الخاصة فقط (ما حفظته نقطة الحفظ). لا يُجلب أي رابط خارجي.
+    if (!item?.url || /^https?:\/\//i.test(item.url) || !item.url.includes("email-attachments/")) continue;
+    try {
+      const { bucketName, objectPath } = parseObjectPath(item.url);
+      const [buffer] = await objectStorageClient.bucket(bucketName).file(objectPath).download();
+      files.push({
+        fieldname: "attachment",
+        originalname: item.filename || "attachment",
+        encoding: "7bit",
+        mimetype: item.contentType || "application/octet-stream",
+        buffer,
+        size: buffer.length,
+      } as Express.Multer.File);
+    } catch (error: any) {
+      console.error("[Email Agent] تعذر قراءة مرفق محفوظ لإعادة المعالجة:", error?.message);
+    }
+  }
+  return files;
+}
+
+function storedSenderAuth(log: any): SenderAuthVerdict {
+  const warnings: unknown[] = Array.isArray(log?.aiAnalysis?.warnings) ? log.aiAnalysis.warnings : [];
+  const entry = warnings.find((w) => typeof w === "string" && w.startsWith("sender_auth:"));
+  const verdict = typeof entry === "string" ? entry.slice("sender_auth:".length) : "";
+  return verdict === "pass" || verdict === "fail" ? verdict : "unknown";
+}
+
+// POST /api/email-agent/logs/:id/reprocess — «أعد المعالجة» لرسالة فشلت بعد التحقق منها
+router.post("/logs/:id/reprocess", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
+  try {
+    const existing = await getEmailWebhookLogById(req.params.id);
+    if (!existing) return res.status(404).json({ message: "الرسالة غير موجودة" });
+    if (!isReprocessableLog(existing)) {
+      return res.status(409).json({ message: "هذه الرسالة لا تُعاد معالجتها. المرفوضة يعيد المرسل إرسالها." });
+    }
+    const sender = existing.trustedSenderId ? await storage.getTrustedSenderById(existing.trustedSenderId) : null;
+    if (!sender || sender.status !== "active") {
+      return res.status(409).json({ message: "المرسل لم يعد نشطًا. فعّله أولًا ثم أعد المعالجة." });
+    }
+
+    const log = await claimLogForReprocess(existing.id);
+    if (!log) return res.status(409).json({ message: "الرسالة تُعالج الآن أو عولجت." });
+
+    // المرسل ربما أعاد إرسال الخبر نفسه بعد الفشل: لا ننشره مرتين.
+    const claim = await claimEmailDedup({
+      messageId: `reprocess:${log.id}:${Date.now()}`,
+      from: log.fromEmail,
+      subject: log.subject,
+    });
+    if (!claim.claimed) {
+      await releaseReprocessClaim(log.id, "duplicate_content", "أعاد المرسل إرسال الخبر نفسه وعولجت رسالته الجديدة.");
+      return res.status(409).json({ message: "أعاد المرسل إرسال الخبر نفسه وعولجت رسالته الجديدة." });
+    }
+
+    const strip = (value: string | null) => (value || "").replace(/\[TOKEN\]/g, " ");
+    const files = await loadStoredAttachments(log);
+    const syntheticReq = {
+      body: { from: log.fromEmail, subject: strip(log.subject).replace(/\s+/g, " ").trim(), text: strip(log.bodyText), html: strip(log.bodyHtml) },
+      files,
+    } as unknown as Request;
+    const syntheticRes = { headersSent: true, status() { return this; }, json() { return this; } } as unknown as Response;
+
+    // المعالجة تأخذ حتى دقيقة: تجري في الخلفية والصفحة تحدّث السجل.
+    void processInboundEmail(syntheticReq, syntheticRes, { log, senderAuth: storedSenderAuth(existing) });
+    return res.status(202).json({ message: "بدأت إعادة المعالجة", attachments: files.length });
+  } catch (error: any) {
+    console.error("[Email Agent] Error reprocessing log:", error);
+    return res.status(500).json({ message: "تعذّرت إعادة المعالجة" });
+  }
+});
+
+// POST /api/email-agent/senders/:id/rotate-token — رمز جديد من الخادم، والقديم يعمل 48 ساعة
+router.post("/senders/:id/rotate-token", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
+  try {
+    const expiry = req.body?.expiry ?? "1y";
+    if (!isTokenExpiryOption(expiry)) return res.status(400).json({ message: "مدة انتهاء غير صالحة" });
+    const sender = await rotateSenderToken(req.params.id, expiry);
+    if (!sender) return res.status(404).json({ message: "المرسل غير موجود" });
+    return res.json(sender);
+  } catch (error: any) {
+    console.error("[Email Agent] Error rotating token:", error?.message);
+    return res.status(500).json({ message: "تعذّر تدوير الرمز" });
+  }
+});
+
+// POST /api/email-agent/senders/:id/revoke-previous-token — «أوقف القديم الآن»
+router.post("/senders/:id/revoke-previous-token", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
+  try {
+    const sender = await revokePreviousSenderToken(req.params.id);
+    if (!sender) return res.status(404).json({ message: "المرسل غير موجود" });
+    return res.json(sender);
+  } catch (error: any) {
+    console.error("[Email Agent] Error revoking previous token:", error?.message);
+    return res.status(500).json({ message: "تعذّر إيقاف الرمز القديم" });
   }
 });
 
@@ -2450,7 +2615,7 @@ router.post("/senders", isAuthenticated, requirePermission('admin.manage_setting
     }
     // رمز الواجهة يُقبل بصيغته الكاملة فقط (64 خانة)، وإلا يولّده الخادم.
     const sender = await storage.createTrustedSender(
-      { ...parsed.data, token: resolveSenderToken(req.body?.token) } as any,
+      { ...parsed.data, token: resolveSenderToken(req.body?.token), tokenCreatedAt: new Date() } as any,
       userId,
     );
     return res.status(201).json(sender);
