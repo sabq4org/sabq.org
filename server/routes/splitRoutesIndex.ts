@@ -8,6 +8,8 @@ import articleSummaryAudioRouter from "./articleSummaryAudio";
 import audioBulletinRouter from "./audioBulletin";
 import enAutoTranslateRouter from "./enAutoTranslate";
 import enArticleSeoRouter from "./enArticleSeo";
+import enArticleViewsRouter from "./enArticleViews";
+import enArticleDeletionRouter from "./enArticleDeletion";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -16,6 +18,7 @@ import newsMapRouter from "./newsMap";
 import trendingKeywordsRouter from "./trendingKeywords";
 import socialFollowingRouter from "./socialFollowing";
 import liveNewsRouter from "./liveNews";
+import enLiveNewsRouter from "./enLiveNews";
 import setupRouter from "./setup";
 import smartInterestsRouter from "./smartInterests";
 import homepageRouter from "./homepage";
@@ -45,6 +48,7 @@ import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
 import botDraftsRouter from "./botDrafts";
 import enBotDraftsRouter from "./enBotDrafts";
+import enSearchRouter from "./enSearch";
 import botDeskRouter from "./botDesk";
 import staffAppMobileRouter from "./staffAppMobile";
 import mobileEditorialRouter from "./mobileEditorial";
@@ -152,6 +156,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(audioBulletinRouter);
   app.use(enAutoTranslateRouter);
   app.use(enArticleSeoRouter);
+  app.use(enArticleViewsRouter);
+  app.use(enArticleDeletionRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
   app.use(editAndGenerateStreamRouter);
@@ -163,6 +169,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(trendingKeywordsRouter);
   app.use(socialFollowingRouter);
   app.use(liveNewsRouter);
+  app.use(enLiveNewsRouter);
   app.use(setupRouter);
   app.use(smartInterestsRouter);
   app.use(homepageRouter);
@@ -191,6 +198,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(meetingMinutesRouter);
   // النسخة الإنجليزية أولاً حتى لا يلتقط راوتر العربية المسار /en كمعرّف مادة.
   app.use(enBotDraftsRouter);
+  // بحث القارئ في النسخة الإنجليزية — GET /api/en/search (en_articles المنشورة فقط)
+  app.use(enSearchRouter);
   // مسودات البوتات (نشر سبق / Grok) — /api/internal/bot-drafts، Bearer لكل بوت، draft فقط
   app.use(botDraftsRouter);
   // بوت الديسك (استفسارات المساهمين + مقترحات النشر الاجتماعي) — /api/internal/bot-desk، Bearer botpub_*

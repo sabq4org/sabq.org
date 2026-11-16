@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { isPublicEnCategoryStatus } from "@shared/enCategoryStatus";
+import { apiUrl } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +20,7 @@ export default function EnglishCategoriesListPage() {
   const { data: categoriesRaw, isLoading } = useQuery<EnCategoryWithStats[]>({
     queryKey: ["/api/en/categories", "withStats"],
     queryFn: async () => {
-      const res = await fetch("/api/en/categories?withStats=true", { credentials: 'include' });
+      const res = await fetch(apiUrl("/api/en/categories?withStats=true"), { credentials: 'include' });
       if (!res.ok) throw new Error("Failed to fetch categories");
       return res.json();
     },
@@ -59,7 +61,7 @@ export default function EnglishCategoriesListPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {categories
-              .filter((cat) => cat.status === "visible" && cat.type === "core")
+              .filter((cat) => isPublicEnCategoryStatus(cat.status) && cat.type === "core")
               .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
               .map((category) => (
                 <Link key={category.id} href={`/en/category/${category.slug}`}>

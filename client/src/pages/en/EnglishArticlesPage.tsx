@@ -249,8 +249,10 @@ export default function EnglishArticlesPage() {
   // Publish mutation
   const publishMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest(`/api/en/dashboard/articles/${id}/publish`, {
-        method: "POST",
+      // No /publish route for English: publishing is a PATCH, which runs the publish gate and cache refresh.
+      return await apiRequest(`/api/en/dashboard/articles/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "published" }),
       });
     },
     onSuccess: () => {
@@ -453,7 +455,7 @@ export default function EnglishArticlesPage() {
   // Update articles order mutation
   const updateOrderMutation = useMutation({
     mutationFn: async (articleOrders: Array<{ id: string; displayOrder: number }>) => {
-      return await apiRequest("/api/en/dashboard/articles/update-order", {
+      return await apiRequest("/api/en/dashboard/articles/reorder", {
         method: "POST",
         body: JSON.stringify({ articleOrders }),
         headers: { "Content-Type": "application/json" },

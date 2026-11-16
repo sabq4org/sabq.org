@@ -163,11 +163,23 @@ export default function EnglishArticleDetail() {
     };
   }, []);
 
-  // Track article view via POST request (works even when GET is cached by CDN)
+  // Count a view after 10s of foreground reading, like the Arabic page;
+  // the server also de-dupes per visitor.
   useEffect(() => {
-    if (article?.id) {
-      fetch(apiUrl(`/api/en/articles/${article.id}/view`), { method: 'POST' }).catch(() => {});
-    }
+    if (!article?.id) return;
+    const articleId = article.id;
+    let elapsed = 0;
+    let lastTick = Date.now();
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      if (document.visibilityState === "visible") elapsed += now - lastTick;
+      lastTick = now;
+      if (elapsed >= 10000) {
+        clearInterval(intervalId);
+        fetch(apiUrl(`/api/en/articles/${articleId}/view`), { method: "POST" }).catch(() => {});
+      }
+    }, 1000);
+    return () => clearInterval(intervalId);
   }, [article?.id]);
 
   useAnalyticsPageMetadata(article?.title ? `${article.title} | Sabq` : isLoading ? null : "Article Not Found | Sabq");
