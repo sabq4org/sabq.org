@@ -191,3 +191,14 @@ describe("isReprocessableLog", () => {
     expect(isReprocessableLog({ ...base, rejectionReason: "duplicate_content" })).toBe(false);
   });
 });
+
+describe("resolvePreviousTokenGrace", () => {
+  const now = new Date("2026-11-16T12:00:00Z");
+  it("gives 48 hours, capped at the old token's own expiry, and nothing to an expired token", async () => {
+    const { resolvePreviousTokenGrace } = await import("../../server/services/emailAgentGuards");
+    expect(resolvePreviousTokenGrace(null, now)?.toISOString()).toBe("2026-11-18T12:00:00.000Z");
+    expect(resolvePreviousTokenGrace("2027-01-01T00:00:00Z", now)?.toISOString()).toBe("2026-11-18T12:00:00.000Z");
+    expect(resolvePreviousTokenGrace("2026-11-17T00:00:00Z", now)?.toISOString()).toBe("2026-11-17T00:00:00.000Z");
+    expect(resolvePreviousTokenGrace("2026-11-16T11:00:00Z", now)).toBeNull();
+  });
+});

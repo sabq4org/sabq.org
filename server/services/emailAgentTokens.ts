@@ -4,14 +4,15 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { emailWebhookLogs, trustedEmailSenders, type EmailWebhookLog, type TrustedEmailSender } from "@shared/schema";
 import {
-  PREVIOUS_TOKEN_GRACE_HOURS,
+  resolvePreviousTokenGrace,
   resolveTokenExpiry,
   type TokenExpiryOption,
 } from "./emailAgentGuards";
 
 /**
  * يصدر رمزًا جديدًا من الخادم. الرمز السابق يبقى مقبولًا 48 ساعة حتى يبدّله
- * المراسل، فلا يتعطل إرساله لحظة التدوير.
+ * المراسل، فلا يتعطل إرساله لحظة التدوير. المهلة لا تتجاوز انتهاء الرمز السابق،
+ * والمنتهي لا يُحتفظ به.
  */
 export async function rotateSenderToken(
   senderId: string,
@@ -20,14 +21,15 @@ export async function rotateSenderToken(
 ): Promise<TrustedEmailSender | null> {
   const [current] = await db.select().from(trustedEmailSenders).where(eq(trustedEmailSenders.id, senderId)).limit(1);
   if (!current) return null;
+  const graceUntil = resolvePreviousTokenGrace(current.tokenExpiresAt, now);
   const [updated] = await db
     .update(trustedEmailSenders)
     .set({
       token: crypto.randomBytes(32).toString("hex"),
       tokenCreatedAt: now,
       tokenExpiresAt: resolveTokenExpiry(expiry, now),
-      previousToken: current.token,
-      previousTokenValidUntil: new Date(now.getTime() + PREVIOUS_TOKEN_GRACE_HOURS * 60 * 60 * 1000),
+      previousToken: graceUntil ? current.token : null,
+      previousTokenValidUntil: graceUntil,
       updatedAt: now,
     })
     .where(and(eq(trustedEmailSenders.id, senderId), eq(trustedEmailSenders.token, current.token)))

@@ -228,6 +228,19 @@ export function resolveTokenExpiry(option: TokenExpiryOption, now: Date = new Da
   return expires;
 }
 
+/**
+ * مهلة الرمز السابق بعد التدوير: 48 ساعة، ولا تتجاوز انتهاءه الأصلي.
+ * الرمز المنتهي أصلًا لا يُمنح مهلة (null): التدوير لا يحيي رمزًا انتهى.
+ */
+export function resolvePreviousTokenGrace(currentExpiresAt: Date | string | null | undefined, now: Date = new Date()): Date | null {
+  const grace = new Date(now.getTime() + PREVIOUS_TOKEN_GRACE_HOURS * 60 * 60 * 1000);
+  if (!currentExpiresAt) return grace;
+  const expires = new Date(currentExpiresAt);
+  if (Number.isNaN(expires.getTime())) return grace;
+  if (expires.getTime() <= now.getTime()) return null;
+  return expires.getTime() < grace.getTime() ? expires : grace;
+}
+
 function tokensEqual(provided: string, stored: string): boolean {
   const a = Buffer.from(provided.toLowerCase());
   const b = Buffer.from(stored.toLowerCase());

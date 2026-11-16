@@ -63,6 +63,12 @@ export function RotateTokenDialog({ sender, onOpenChange }: RotateTokenDialogPro
     },
   });
 
+  // المهلة 48 ساعة ولا تتجاوز انتهاء الرمز القديم؛ المنتهي أصلًا لا مهلة له.
+  const graceUntil = rotated?.previousTokenValidUntil ? new Date(rotated.previousTokenValidUntil) : null;
+  const graceHours = graceUntil ? Math.max(1, Math.round((graceUntil.getTime() - Date.now()) / 3_600_000)) : 0;
+  const oldInactive = oldStopped || !graceUntil;
+  const graceLabel = graceHours >= 47 ? "48 ساعة" : `${graceHours} ساعة`;
+
   const copyToken = async () => {
     if (!rotated?.token) return;
     try {
@@ -102,11 +108,11 @@ export function RotateTokenDialog({ sender, onOpenChange }: RotateTokenDialogPro
               <div>
                 <p className="text-[15px] font-semibold">الرمز القديم</p>
                 <p className="text-[13px] text-muted-foreground">
-                  {oldStopped ? "أُوقف، ولا يقبل النشر الآن" : "يبقى يعمل حتى يبدّله المراسل"}
+                  {oldInactive ? "لا يقبل النشر الآن" : "يبقى يعمل حتى يبدّله المراسل"}
                 </p>
               </div>
-              <span className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${oldStopped ? "bg-[#FDECEC] text-[#BF3038]" : "bg-[#FFF6E5] text-[#946000]"}`}>
-                {oldStopped ? "موقوف" : "48 ساعة"}
+              <span className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${oldInactive ? "bg-[#FDECEC] text-[#BF3038]" : "bg-[#FFF6E5] text-[#946000]"}`}>
+                {oldInactive ? "موقوف" : graceLabel}
               </span>
             </div>
 
@@ -114,7 +120,7 @@ export function RotateTokenDialog({ sender, onOpenChange }: RotateTokenDialogPro
               <Button onClick={() => onOpenChange(false)} className="h-[46px] rounded-full bg-[#1E9BE6] px-7 text-[15px] text-white hover:bg-[#1787cc]" data-testid="button-rotate-done">
                 تم
               </Button>
-              {!oldStopped && (
+              {!oldInactive && (
                 <Button
                   variant="ghost"
                   onClick={() => revokeMutation.mutate()}
