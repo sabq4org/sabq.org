@@ -35,6 +35,7 @@ const EnAiArticleStats = lazy(() =>
 import { EnglishRecommendationsWidget } from "@/components/EnglishRecommendationsWidget";
 import { EnglishFooter } from "@/components/en/EnglishFooter";
 import { ImageWithCaption } from "@/components/ImageWithCaption";
+import { getEnHeroImageText } from "@shared/enArticleImageText";
 import { DigitalPassportButton } from "@/components/passport/DigitalPassportButton";
 import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
 import { PassportTrustBadge } from "@/components/passport/PassportTrustBadge";
@@ -321,13 +322,15 @@ export default function EnglishArticleDetail() {
               const heroImageAsset = mediaAssets?.find(
                 (asset: any) => asset.displayOrder === 0
               );
+              // English rows keep the caption in `seo` (no media-asset row).
+              const heroText = getEnHeroImageText((article as any).seo, article.title);
               
               return (
                 <ImageWithCaption
                   imageUrl={article.imageUrl}
-                  altText={heroImageAsset?.altText || article.title}
+                  altText={heroImageAsset?.altText || heroText.alt}
                   captionHtml={heroImageAsset?.captionHtml}
-                  captionPlain={heroImageAsset?.captionPlain}
+                  captionPlain={heroImageAsset?.captionPlain || heroText.caption || undefined}
                   sourceName={heroImageAsset?.sourceName}
                   sourceUrl={heroImageAsset?.sourceUrl}
                   relatedArticleSlugs={heroImageAsset?.relatedArticleSlugs}

@@ -7001,6 +7001,8 @@ export const enArticles = pgTable("en_articles", {
     socialTitle?: string;
     socialDescription?: string;
     imageAltText?: string;
+    /** Hero caption shown under the image (shared/enArticleImageText.ts). */
+    imageCaption?: string;
     ogImageUrl?: string;
   }>(),
   seoMetadata: jsonb("seo_metadata").$type<{
