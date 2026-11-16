@@ -14809,18 +14809,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      // Validate reporterId if provided
+      // Same publish gate as PATCH (banned words; "scheduled" counts as publishing).
+      const createDenial = await denyPublishOnSave(req.user.id, parsed.data, null);
+      if (createDenial) return res.status(createDenial.httpStatus).json({ message: createDenial.message, code: createDenial.code, bannedWords: createDenial.bannedWords });
       if (parsed.data.reporterId) {
-        const [reporter] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, parsed.data.reporterId))
-          .limit(1);
-        
-        if (!reporter) {
-          return res.status(422).json({ message: "Reporter not found" });
-        }
-      // Check publish permission if status is "published"
+        const [reporter] = await db.select().from(users).where(eq(users.id, parsed.data.reporterId)).limit(1);
+        if (!reporter) return res.status(422).json({ message: "Reporter not found" });
       }
       if (parsed.data.status === 'published') {
         const userPermissions = await getUserPermissions(req.user.id);
@@ -14877,23 +14871,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           code: "DUPLICATE_SLUG",
         });
       }
-      // Log article created event
-      logArticleEvent({
-        articleId: newArticle.id,
-        eventType: 'created',
-        actorId: req.user?.id,
-        summary: 'تم إنشاء الخبر',
-      }).catch(err => console.error("[CREATE ARTICLE] Failed to log event:", err));
-
-      // Log published event if article was created as published
-      if (newArticle.status === 'published') {
-        logArticleEvent({
-          articleId: newArticle.id,
-          eventType: 'published',
-          actorId: req.user?.id,
-          summary: 'تم نشر الخبر',
-        }).catch(err => console.error("[CREATE ARTICLE] Failed to log publish event:", err));
-      }
       res.status(500).json({ message: "Failed to create English article" });
     }
   });
@@ -14930,8 +14907,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(403).json({ message: "You don't have permission to edit this article" });
       }
 
-      const parsed = insertEnArticleSchema.partial().safeParse(req.body);
-
+      const { coerceEnArticleDates } = await import("@shared/enArticleDates");
+      const parsed = insertEnArticleSchema.partial().safeParse(coerceEnArticleDates(req.body ?? {}));
       if (!parsed.success) {
         return res.status(400).json({
           message: "Invalid data",
@@ -14960,14 +14937,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Convert timestamp fields
       const updateData: any = { ...parsed.data };
-      const timestampFields = ['publishedAt', 'scheduledAt'];
-      timestampFields.forEach(field => {
-        if (updateData[field] && typeof updateData[field] === 'string') {
-          updateData[field] = new Date(updateData[field]);
-        }
-      });
 
       // Handle republish feature
       if (req.body.republish === true) {
@@ -15027,7 +14997,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       memoryCache.invalidatePattern('^article:id:');
       memoryCache.invalidatePattern('^articles:');
       memoryCache.invalidatePattern('^sidebar:');
-      if (updatedArticle.status === "published" && existingArticle.status !== "published") void import("./services/enBotDraftPublishEffects").then((m) => m.queueEnBotDraftSurfaceEffects(updatedArticle, "publish")).catch(() => {});
+      const enSurfaceKind = updatedArticle.status === "published" ? (existingArticle.status !== "published" ? "publish" : "update") : existingArticle.status === "published" ? "archive" : null;
+      if (enSurfaceKind) void import("./services/enBotDraftPublishEffects").then((m) => m.queueEnBotDraftSurfaceEffects(updatedArticle, enSurfaceKind)).catch(() => {});
 
       res.json(updatedArticle);
     } catch (error: any) {
@@ -15096,7 +15067,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
-      // iOS in-app push (replaces the rejection email)
+      if (article.status === "published") void import("./services/enBotDraftPublishEffects").then((m) => m.queueEnBotDraftSurfaceEffects(updatedArticle, "archive")).catch(() => {});
       setImmediate(async () => {
         try {
           await notifyArticleStakeholders(
@@ -15355,7 +15326,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         })
         .where(inArray(enArticles.id, articleIds));
 
-      // Invalidate caches when articles are bulk archived
+      memoryCache.invalidatePattern('^en:article:base:'); // public EN article reads cache 2 min
       memoryCache.invalidatePattern('^homepage');
       memoryCache.invalidatePattern('^blocks:');
       memoryCache.invalidatePattern('^insights:');
@@ -15445,7 +15416,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         })
         .where(inArray(enArticles.id, articleIds));
 
-      // Invalidate caches when articles are bulk archived
+      memoryCache.invalidatePattern('^en:article:base:'); // public EN article reads cache 2 min
       memoryCache.invalidatePattern('^homepage');
       memoryCache.invalidatePattern('^blocks:');
       memoryCache.invalidatePattern('^insights:');

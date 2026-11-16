@@ -558,6 +558,16 @@ async function publishScheduledArticles() {
     } catch (error) {
       console.error("[ScheduledPublisher] English bot schedule failed:", error);
     }
+    // مواد الإنجليزية المجدولة من لوحة /en/dashboard (غير البوت).
+    try {
+      const { publishDueScheduledEnDashboardArticles } = await import("./services/enScheduledPublishService");
+      const publishedEnDashboard = await publishDueScheduledEnDashboardArticles(now);
+      if (publishedEnDashboard > 0) {
+        console.log(`[ScheduledPublisher] Published ${publishedEnDashboard} scheduled English dashboard articles`);
+      }
+    } catch (error) {
+      console.error("[ScheduledPublisher] English dashboard schedule failed:", error);
+    }
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     alertCriticalFailure("publishScheduledArticles", err);

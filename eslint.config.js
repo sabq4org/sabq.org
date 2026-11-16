@@ -137,7 +137,8 @@ export default tseslint.config(
     // 2026-10-23: نقل مسار «استمع» إلى routes/articleSummaryAudio.ts → 36271.
     // 2026-10-30: نقل خط الترجمة للإنجليزية إلى enArticleTranslationService → 36060.
     // 2026-11-16: نقل مخطط /api/seo/generate إلى services/seoGenerateRequest.ts → 35794.
-    rules: { "max-lines": ["error", { max: 35794 }] },
+    // 2026-11-16: تنظيف مسارات EN dashboard (حذف تسجيل خاطئ داخل catch) → 35765.
+    rules: { "max-lines": ["error", { max: 35765 }] },
   },
   {
     files: ["server/storage.ts"],

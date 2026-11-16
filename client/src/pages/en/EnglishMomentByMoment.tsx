@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react";
+import { isPublicEnCategoryStatus } from "@shared/enCategoryStatus";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { formatDistanceToNow, parseISO, startOfDay, subDays, subHours, differenceInMinutes } from "date-fns";
@@ -30,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { queryClient } from "@/lib/queryClient";
+import { apiUrl, queryClient } from "@/lib/queryClient";
 import { EnglishLayout } from "@/components/en/EnglishLayout";
 import { EnglishFooter } from "@/components/en/EnglishFooter";
 
@@ -418,7 +419,7 @@ export default function EnglishMomentByMoment() {
   const categoriesData = Array.isArray(categoriesDataRaw) ? categoriesDataRaw : [];
 
   const activeCategories = categoriesData.filter(
-    (cat) => cat.status === "visible"
+    (cat) => isPublicEnCategoryStatus(cat.status)
   );
 
   const { data: breakingData } = useQuery<BreakingNewsResponse>({
@@ -447,7 +448,7 @@ export default function EnglishMomentByMoment() {
         params.set("cursor", pageParam as string);
       }
 
-      const res = await fetch(`/api/en/live/updates?${params}`);
+      const res = await fetch(apiUrl(`/api/en/live/updates?${params}`));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
