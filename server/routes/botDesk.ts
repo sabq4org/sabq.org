@@ -25,6 +25,8 @@
 //   GET   /api/internal/bot-desk/opinion/drafts/:id/slot-check
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/prepare   («جهّز وجدول» — نفس startOpinionPrep)
 //   GET   /api/internal/bot-desk/opinion/drafts/:id/prepare
+//   POST  /api/internal/bot-desk/opinion/drafts/:id/image     (توليد الصورة وحدها لمسودة أو مجدول؛ الحالة والموعد كما هما)
+//   GET   /api/internal/bot-desk/opinion/drafts/:id/image
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/schedule
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/publish
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/return
@@ -46,6 +48,7 @@ import {
   botDeskEditorTweetPreviewSchema,
   botDeskEditorTweetSchema,
   botDeskOpinionEditSchema,
+  botDeskOpinionImageSchema,
   botDeskSocialPublishSchema,
   botDeskSocialRejectSchema,
   botDeskSocialScheduleSchema,
@@ -96,6 +99,7 @@ import {
   scheduleOpinionFromDesk,
 } from "../services/staffOpinionDeskService";
 import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
+import { getOpinionImageJob, startOpinionImage } from "../services/staffOpinionImageService";
 import { editOpinionDraftFromDesk } from "../services/staffOpinionContentService";
 import { resolveStaffCapabilitiesAndRoles } from "../services/staffAppService";
 import {
@@ -1008,6 +1012,67 @@ router.get(
       res.json({ job });
     } catch (error) {
       handleOpinionError(res, error, "تعذر جلب حالة التجهيز");
+    }
+  },
+);
+
+/**
+ * توليد صورة مقال الرأي أو إعادة توليدها، لمسودة بانتظار المكتب أو لمقال مجدول،
+ * بالدالة نفسها التي يستعملها «جهّز وجدول». لا يغيّر الحالة ولا الموعد ولا النشر.
+ *  - 202 { job, created: true }  بدأ التوليد في الخلفية؛ تابع بـ GET /:id/image.
+ *  - 202 { job, created: false } توليد جارٍ أصلاً؛ لا يبدأ توليد ثانٍ.
+ *  - 200 { job, created: false, skipped: "image_exists", imageUrl } للمقال صورة ولم يُرسل force.
+ */
+router.post(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/image`,
+  requireBotDeskAuth,
+  requireOpinionCapability("schedule"),
+  botDeskWriteLimiter,
+  botDeskOpinionActionLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = botDeskOpinionImageSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "أرسل جسماً فارغاً أو { \"force\": true }",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await startOpinionImage({
+        articleId: req.params.id,
+        actorId: req.botPrincipal!.userId,
+        force: parsed.data.force,
+      });
+      if (result.outcome === "image_exists") {
+        return res.json({ job: result.job, created: false, skipped: "image_exists", imageUrl: result.imageUrl });
+      }
+      if (result.outcome === "started") {
+        await auditBotDeskWrite(req, {
+          action: "opinion_image_start",
+          entityType: "article",
+          entityId: req.params.id,
+          extraMetadata: { force: parsed.data.force === true, hadImage: Boolean(result.imageUrl) },
+        });
+      }
+      res.status(202).json({ job: result.job, created: result.outcome === "started" });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر بدء توليد الصورة");
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/image`,
+  requireBotDeskAuth,
+  requireOpinionCapability("view"),
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const job = await getOpinionImageJob(req.params.id);
+      if (!job) return sendError(res, 404, { code: "not_found", message: "لا يوجد توليد صورة لهذا المقال" });
+      res.json({ job });
+    } catch (error) {
+      handleOpinionError(res, error, "تعذر جلب حالة توليد الصورة");
     }
   },
 );

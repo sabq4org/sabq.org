@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   startOpinionPrep: vi.fn(),
   getOpinionPrepJob: vi.fn(),
   editOpinionDraftFromDesk: vi.fn(),
+  startOpinionImage: vi.fn(),
+  getOpinionImageJob: vi.fn(),
   sendEmailNotification: vi.fn(),
   createNotification: vi.fn(),
 }));
@@ -111,6 +113,10 @@ vi.mock("../../server/services/staffOpinionDeskService", async () => {
 vi.mock("../../server/services/staffOpinionPrepareService", () => ({
   startOpinionPrep: (...a: unknown[]) => mocks.startOpinionPrep(...a),
   getOpinionPrepJob: (...a: unknown[]) => mocks.getOpinionPrepJob(...a),
+}));
+vi.mock("../../server/services/staffOpinionImageService", () => ({
+  startOpinionImage: (...a: unknown[]) => mocks.startOpinionImage(...a),
+  getOpinionImageJob: (...a: unknown[]) => mocks.getOpinionImageJob(...a),
 }));
 vi.mock("../../server/services/staffOpinionContentService", () => ({
   editOpinionDraftFromDesk: (...a: unknown[]) => mocks.editOpinionDraftFromDesk(...a),
@@ -237,6 +243,8 @@ describe("bot-desk opinion — auth & permissions", () => {
       ["POST", "/a1/publish", {}],
       ["POST", "/a1/return", { note: "عدّل المقدمة" }],
       ["PATCH", "/a1", { content: "نص جديد كامل للمقال بعد التعديل" }],
+      ["POST", "/a1/image", {}],
+      ["GET", "/a1/image", undefined],
     ] as const) {
       const res = await bot(method, path, body);
       expect(res.status, `${method} ${path}`).toBe(403);
@@ -580,5 +588,90 @@ describe("bot-desk opinion — PATCH edit content/title", () => {
     mocks.editOpinionDraftFromDesk.mockRejectedValueOnce(new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود"));
     expect((await bot("PATCH", "/missing", { title: "عنوان جديد للمقال" })).status).toBe(404);
     expect(mocks.logActivity).not.toHaveBeenCalled();
+  });
+});
+
+describe("bot-desk opinion — POST/GET /:id/image (image only, scheduled allowed)", () => {
+  const imageJob = {
+    articleId: "a1", status: "running", step: "generating", force: false,
+    startedAt: "2026-11-16T06:00:00.000Z", finishedAt: null, imageUrl: null, previousImageUrl: null, message: null,
+  };
+
+  it("401 without a token; 403 for a reviewer-only owner (needs schedule); service untouched", async () => {
+    expect((await bot("POST", "/a1/image", {}, null)).status).toBe(401);
+    granted = ["opinion.review"];
+    const res = await bot("POST", "/a1/image", {});
+    expect(res.status).toBe(403);
+    // القراءة تكفيها view: يصل المسار (404 لعدم وجود عملية) ولا يُرفض بـ 403.
+    mocks.getOpinionImageJob.mockResolvedValueOnce(null);
+    expect((await bot("GET", "/a1/image")).status).toBe(404);
+    expect(mocks.startOpinionImage).not.toHaveBeenCalled();
+  });
+
+  it("starts with the bot owner as actor → 202 created + one audit row", async () => {
+    mocks.startOpinionImage.mockResolvedValueOnce({ job: imageJob, outcome: "started", imageUrl: null });
+    const res = await bot("POST", "/a1/image", {});
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ job: imageJob, created: true });
+    expect(mocks.startOpinionImage).toHaveBeenCalledWith({ articleId: "a1", actorId: BOT_PRINCIPAL.userId, force: undefined });
+    expect(mocks.logActivity).toHaveBeenCalledTimes(1);
+    expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      action: "opinion_image_start",
+      entityId: "a1",
+      metadata: expect.objectContaining({ channel: "bot-desk-api", force: false, hadImage: false }),
+    }));
+    // لا مسار جدولة أو نشر أو تجهيز يُستدعى.
+    expect(mocks.scheduleOpinionFromDesk).not.toHaveBeenCalled();
+    expect(mocks.publishOpinionFromDesk).not.toHaveBeenCalled();
+    expect(mocks.startOpinionPrep).not.toHaveBeenCalled();
+  });
+
+  it("second call while running → 202 with the same job, created=false, no extra audit", async () => {
+    mocks.startOpinionImage.mockResolvedValueOnce({ job: imageJob, outcome: "in_progress", imageUrl: null });
+    const res = await bot("POST", "/a1/image", {});
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ job: imageJob, created: false });
+    expect(mocks.logActivity).not.toHaveBeenCalled();
+  });
+
+  it("image exists without force → 200 skipped; force=true is passed through", async () => {
+    mocks.startOpinionImage.mockResolvedValueOnce({ job: null, outcome: "image_exists", imageUrl: "https://cdn.example/x.webp" });
+    const res = await bot("POST", "/a1/image", {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ job: null, created: false, skipped: "image_exists", imageUrl: "https://cdn.example/x.webp" });
+    expect(mocks.logActivity).not.toHaveBeenCalled();
+
+    mocks.startOpinionImage.mockResolvedValueOnce({ job: { ...imageJob, force: true }, outcome: "started", imageUrl: "https://cdn.example/x.webp" });
+    expect((await bot("POST", "/a1/image", { force: true })).status).toBe(202);
+    expect(mocks.startOpinionImage).toHaveBeenLastCalledWith({ articleId: "a1", actorId: BOT_PRINCIPAL.userId, force: true });
+    expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ force: true, hadImage: true }),
+    }));
+  });
+
+  it("validates the body (strict, boolean force) and passes 404/409 through", async () => {
+    expect((await bot("POST", "/a1/image", { force: "yes" })).status).toBe(400);
+    expect((await bot("POST", "/a1/image", { scheduledAt: "2026-11-19T12:15:00+03:00" })).status).toBe(400);
+    expect(mocks.startOpinionImage).not.toHaveBeenCalled();
+    for (const message of [
+      "المقال منشور؛ غيّر صورته من لوحة التحكم",
+      "توليد الصورة متاح لمسودة رأي بانتظار المكتب أو لمقال مجدول فقط",
+    ]) {
+      mocks.startOpinionImage.mockRejectedValueOnce(new StaffOpinionDeskError(409, "conflict", message));
+      const res = await bot("POST", "/a1/image", {});
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ code: "conflict", message });
+    }
+    mocks.startOpinionImage.mockRejectedValueOnce(new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود"));
+    expect((await bot("POST", "/missing/image", {})).status).toBe(404);
+  });
+
+  it("GET status: job or 404", async () => {
+    mocks.getOpinionImageJob.mockResolvedValueOnce({ ...imageJob, status: "done", imageUrl: "https://cdn.example/y.webp" });
+    const res = await bot("GET", "/a1/image");
+    expect(res.status).toBe(200);
+    expect((await res.json()).job.imageUrl).toBe("https://cdn.example/y.webp");
+    mocks.getOpinionImageJob.mockResolvedValueOnce(null);
+    expect((await bot("GET", "/a1/image")).status).toBe(404);
   });
 });

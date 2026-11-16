@@ -28,7 +28,7 @@ import { logActivity } from "../rbac";
 import { recordArticleSave } from "./articleHistoryService";
 import { articleLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
 import { createEditorialImageJob, getEditorialImageJob, runEditorialImageJob } from "./editorialImagesService";
-import { safeImageError } from "./openaiImagesProvider";
+import { EditorialImageError, safeImageError } from "./openaiImagesProvider";
 import { getNextSlotForWriter } from "./opinionWritersService";
 import {
   applyTextFixesToHtml,
@@ -122,7 +122,7 @@ async function loadWriterName(authorId: string | null | undefined): Promise<stri
   return name || null;
 }
 
-async function lockHeldByOther(articleId: string, actorId: string): Promise<string | null> {
+export async function lockHeldByOther(articleId: string, actorId: string): Promise<string | null> {
   const [lock] = await db
     .select({ userName: articleEditLocks.userName })
     .from(articleEditLocks)
@@ -271,7 +271,19 @@ async function generateEnrichment(
 }
 
 /** صورة بنفس مسار محرر الويب (مفتاح الصور المخصص، سجل ai_image_generations، R2). */
-async function generateImage(prompt: string, actorId: string): Promise<string> {
+export async function generateOpinionImage(
+  prompt: string,
+  actorId: string,
+  options: {
+    /**
+     * مسار الصور يسمح بصورة واحدة قيد التوليد لكل مستخدم (already_processing).
+     * إن مُرّرت مدة، ننتظر انتهاء الصورة الأخرى ونعيد المحاولة بدل الفشل فوراً.
+     */
+    waitForBusyMs?: number;
+    busyPollMs?: number;
+    onWait?: () => Promise<void>;
+  } = {},
+): Promise<string> {
   const input = {
     requestId: randomUUID(),
     prompt,
@@ -279,14 +291,25 @@ async function generateImage(prompt: string, actorId: string): Promise<string> {
     size: "1536x864" as const,
     quality: "medium" as const,
   };
-  await createEditorialImageJob(actorId, input);
+  const deadline = Date.now() + (options.waitForBusyMs ?? 0);
+  for (;;) {
+    try {
+      await createEditorialImageJob(actorId, input);
+      break;
+    } catch (error) {
+      const busy = error instanceof EditorialImageError && error.code === "already_processing";
+      if (!busy || Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, options.busyPollMs ?? 15_000));
+      await options.onWait?.();
+    }
+  }
   await runEditorialImageJob(actorId, input);
   const job = await getEditorialImageJob(actorId, input.requestId);
   if (job?.status === "completed" && job.imageUrl) return job.imageUrl;
   throw new Error(job?.error || "تعذر توليد الصورة");
 }
 
-function imageFailureDetail(error: unknown): string {
+export function imageFailureDetail(error: unknown): string {
   const safe = safeImageError(error);
   return safe.code === "generation_failed" && error instanceof Error && /[\u0600-\u06FF]/.test(error.message)
     ? error.message
@@ -412,7 +435,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
     let imageNote: string | null = null;
     if (!before.imageUrl) {
       try {
-        updates.imageUrl = await generateImage(
+        updates.imageUrl = await generateOpinionImage(
           buildOpinionImagePrompt({ title: newTitle, summary: enrichment.summary }),
           job.actorId,
         );
