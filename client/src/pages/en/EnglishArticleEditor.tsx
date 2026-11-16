@@ -396,7 +396,7 @@ export default function EnglishArticleEditor() {
     mutationFn: async () => {
       return await apiRequest("/api/ai/summarize", {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, language: "en" }),
       });
     },
     onSuccess: (data: { summary: string }) => {
@@ -484,7 +484,7 @@ export default function EnglishArticleEditor() {
       
       const response = await apiRequest(`/api/seo/generate`, {
         method: "POST",
-        body: JSON.stringify({ articleId, language: "en" }),
+        body: JSON.stringify({ mode: "saved", articleId, language: "en" }),
       });
       return response;
     },

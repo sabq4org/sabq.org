@@ -476,7 +476,7 @@ export default function UrduArticleEditor() {
       
       const response = await apiRequest(`/api/seo/generate`, {
         method: "POST",
-        body: JSON.stringify({ articleId, language: "ur" }),
+        body: JSON.stringify({ mode: "saved", articleId, language: "ur" }),
       });
       return response;
     },

@@ -17081,7 +17081,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Use retry logic for rate limit handling
       const { withRetry } = await import("./openai");
       const summary = await withRetry(
-        () => summarizeArticle(content),
+        () => summarizeArticle(content, req.body.language === "en" ? "en" : "ar"),
         3,
         "Summarize"
       );
@@ -21512,23 +21512,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // SEO GENERATION ENDPOINTS
   // ============================================================
 
-  // Zod schema for SEO generation (supports both saved articles and draft data)
-  const seoGenerateSchema = z.discriminatedUnion("mode", [
-    z.object({
-      mode: z.literal("saved"),
-      articleId: z.string(),
-      language: z.enum(["ar", "en", "ur"]).default("ar"),
-    }),
-    z.object({
-      mode: z.literal("draft"),
-      draftData: z.object({
-        title: z.string().min(10, "العنوان يجب أن يكون 10 أحرف على الأقل").max(200, "العنوان يجب أن يكون أقل من 200 حرف"),
-        content: z.string().min(100, "المحتوى يجب أن يكون 100 حرف على الأقل"),
-        excerpt: z.string().optional(),
-      }),
-      language: z.enum(["ar", "en", "ur"]).default("ar"),
-    }),
-  ]);
+  const { seoGenerateSchema } = await import("./services/seoGenerateRequest");
 
   // POST /api/seo/generate - Generate SEO metadata for article using AI (supports draft mode)
   app.post("/api/seo/generate", strictLimiter, requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE), async (req: any, res) => {
@@ -21542,7 +21526,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const { articleId, language } = validated;
 
         // articles.ai_generate is not article-scoped.
-        const access = await authorizeArticleWrite(req.user.id, articleId);
+        const access = await authorizeArticleWrite(req.user.id, articleId, undefined, language);
         if (!access.ok) {
           return res.status(access.httpStatus).json({ message: access.message });
         }
@@ -21583,12 +21567,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           manualOverride: false,
         };
 
-        // Save SEO metadata to article
+        // Save SEO metadata to article (keeps sourceArticleId and other existing keys)
         await storage.saveSeoMetadata(
           articleId,
           language,
           await (await import("./services/enArticleImageTextService")).keepEnHeroImageText(articleId, language, seoContent),
-          seoMetadata
+          await (await import("./services/translatedArticleSeoService")).withExistingSeoMetadata(articleId, language, seoMetadata)
         );
 
         // Create history entry
