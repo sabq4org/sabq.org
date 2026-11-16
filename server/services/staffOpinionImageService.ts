@@ -54,6 +54,22 @@ interface ArticleSnapshot {
   imageUrl: string | null;
 }
 
+/**
+ * صورة فعلية أم لا. عمود image_url في الإنتاج يحمل أحياناً نصاً فارغاً '' بدل NULL
+ * (203 مقالاً في 2026-11-16، منها مقال المنيف bb977479)، فالفارغ = بلا صورة.
+ */
+export function normalizeImageUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? value! : null;
+}
+
+/** شرط الحفظ على الصورة: إن لم تكن هناك صورة عند البدء نقبل NULL أو نصاً فارغاً. */
+export function imageUnchangedSince(snapshotImageUrl: string | null) {
+  return snapshotImageUrl
+    ? eq(articles.imageUrl, snapshotImageUrl)
+    : sql`(${articles.imageUrl} is null or btrim(${articles.imageUrl}) = '')`;
+}
+
 export function opinionImageKey(articleId: string): string {
   return `${IMAGE_KEY_PREFIX}${articleId}`;
 }
@@ -179,8 +195,9 @@ export async function startOpinionImage(input: {
       .limit(1);
     if (!fresh) throw new StaffOpinionDeskError(404, "not_found", "مقال الرأي غير موجود");
     assertOpinionImageAllowed(fresh);
-    if (fresh.imageUrl && !force) {
-      return { job: existing, outcome: "image_exists" as const, imageUrl: fresh.imageUrl, snapshot: null };
+    const currentImage = normalizeImageUrl(fresh.imageUrl);
+    if (currentImage && !force) {
+      return { job: existing, outcome: "image_exists" as const, imageUrl: currentImage, snapshot: null };
     }
     const now = new Date().toISOString();
     const job: StoredJob = {
@@ -191,7 +208,7 @@ export async function startOpinionImage(input: {
       startedAt: now,
       finishedAt: null,
       imageUrl: null,
-      previousImageUrl: fresh.imageUrl ?? null,
+      previousImageUrl: currentImage,
       message: null,
       runId: randomUUID(),
       actorId: input.actorId,
@@ -208,9 +225,9 @@ export async function startOpinionImage(input: {
       status: fresh.status,
       scheduledAt: fresh.scheduledAt ?? null,
       publishedAt: fresh.publishedAt ?? null,
-      imageUrl: fresh.imageUrl ?? null,
+      imageUrl: currentImage,
     };
-    return { job, outcome: "started" as const, imageUrl: fresh.imageUrl ?? null, snapshot };
+    return { job, outcome: "started" as const, imageUrl: currentImage, snapshot };
   });
 
   if (claimed.outcome === "started" && claimed.job && claimed.snapshot) {
@@ -256,7 +273,7 @@ export async function runOpinionImage(initial: StoredJob, snapshot: ArticleSnaps
         eq(articles.status, snapshot.status),
         snapshot.scheduledAt ? eq(articles.scheduledAt, snapshot.scheduledAt) : isNull(articles.scheduledAt),
         snapshot.publishedAt ? eq(articles.publishedAt, snapshot.publishedAt) : isNull(articles.publishedAt),
-        snapshot.imageUrl ? eq(articles.imageUrl, snapshot.imageUrl) : isNull(articles.imageUrl),
+        imageUnchangedSince(snapshot.imageUrl),
         articleLockAllowsWriter(job.actorId),
       ))
       .returning();
