@@ -448,7 +448,7 @@ export default function EnglishMomentByMoment() {
         params.set("cursor", pageParam as string);
       }
 
-      const res = await fetch(apiUrl(`/api/en/live/updates?${params}`));
+      const res = await fetch(apiUrl(`/api/en/live/updates?${params}`), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

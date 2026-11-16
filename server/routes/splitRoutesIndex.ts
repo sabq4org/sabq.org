@@ -18,6 +18,7 @@ import newsMapRouter from "./newsMap";
 import trendingKeywordsRouter from "./trendingKeywords";
 import socialFollowingRouter from "./socialFollowing";
 import liveNewsRouter from "./liveNews";
+import enLiveNewsRouter from "./enLiveNews";
 import setupRouter from "./setup";
 import smartInterestsRouter from "./smartInterests";
 import homepageRouter from "./homepage";
@@ -167,6 +168,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(trendingKeywordsRouter);
   app.use(socialFollowingRouter);
   app.use(liveNewsRouter);
+  app.use(enLiveNewsRouter);
   app.use(setupRouter);
   app.use(smartInterestsRouter);
   app.use(homepageRouter);
