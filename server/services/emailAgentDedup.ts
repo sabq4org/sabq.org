@@ -211,7 +211,7 @@ export async function sweepStuckEmailLogs(now: Date = new Date()): Promise<Stuck
             rejection_reason = 'processing_interrupted',
             processing_error = 'انقطعت المعالجة قبل اكتمالها (إعادة تشغيل الخادم على الأرجح). يمكن للمرسل إعادة الإرسال.',
             processed_at = ${now}
-        WHERE status = 'received' AND received_at < ${cutoff}
+        WHERE status = 'received' AND COALESCE(processed_at, received_at) < ${cutoff}
         RETURNING id, from_email, subject, token_verified`,
   );
   const rows = (result.rows || []).map((row: any) => ({

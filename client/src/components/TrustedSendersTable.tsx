@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import {
   Table,
   TableBody,
@@ -29,6 +27,8 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { MoreVertical, Eye, EyeOff, Copy, Edit, Trash2, Ban, CheckCircle } from "lucide-react";
+import { TokenAgeCell } from "./communications/TokenAgeCell";
+import { describeTokenAge } from "./communications/tokenAge";
 import { Skeleton } from "./ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { TrustedEmailSender } from "@shared/schema";
@@ -39,6 +39,7 @@ interface TrustedSendersTableProps {
   onEdit: (sender: TrustedEmailSender) => void;
   onDelete: (senderId: string) => void;
   onToggleStatus: (senderId: string, newStatus: "active" | "suspended") => void;
+  onRotateToken?: (sender: TrustedEmailSender) => void;
 }
 
 export function TrustedSendersTable({
@@ -47,7 +48,25 @@ export function TrustedSendersTable({
   onEdit,
   onDelete,
   onToggleStatus,
+  onRotateToken,
 }: TrustedSendersTableProps) {
+  // الزر الأزرق الممتلئ للرمز الذي يقترب انتهاؤه أو انتهى؛ البقية بزر هادئ.
+  const rotateButton = (sender: TrustedEmailSender) => {
+    if (!onRotateToken) return null;
+    const tone = describeTokenAge(sender).tone;
+    const urgent = tone === "warning" || tone === "expired";
+    return (
+      <Button
+        variant="ghost"
+        onClick={() => onRotateToken(sender)}
+        className={`h-11 rounded-full px-5 text-sm font-semibold ${urgent ? "bg-[#1E9BE6] text-white hover:bg-[#1787cc] hover:text-white" : "bg-[#E6F4FD] text-[#0B6FA8] hover:bg-[#d6ecfb] hover:text-[#0B6FA8]"}`}
+        data-testid={`button-rotate-token-${sender.id}`}
+      >
+        تدوير الرمز
+      </Button>
+    );
+  };
+
   const { toast } = useToast();
   const [visibleTokens, setVisibleTokens] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -159,7 +178,8 @@ export function TrustedSendersTable({
                 <TableHead className="text-right">اللغة</TableHead>
                 <TableHead className="text-right">نشر تلقائي</TableHead>
                 <TableHead className="text-right">الرمز السري</TableHead>
-                <TableHead className="text-right">تاريخ الإنشاء</TableHead>
+                <TableHead className="text-right">عمر الرمز</TableHead>
+                <TableHead className="text-right">إجراء</TableHead>
                 <TableHead className="text-right w-12"></TableHead>
               </TableRow>
             </TableHeader>
@@ -217,10 +237,9 @@ export function TrustedSendersTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {format(new Date(sender.createdAt), "dd MMM yyyy", {
-                      locale: ar,
-                    })}
+                    <TokenAgeCell sender={sender} />
                   </TableCell>
+                  <TableCell>{rotateButton(sender)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -392,13 +411,9 @@ export function TrustedSendersTable({
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">تاريخ الإنشاء:</span>
-                <span className="text-xs">
-                  {format(new Date(sender.createdAt), "dd MMM yyyy", {
-                    locale: ar,
-                  })}
-                </span>
+              <div className="flex items-end justify-between gap-3 pt-1">
+                <TokenAgeCell sender={sender} />
+                {rotateButton(sender)}
               </div>
             </div>
           </div>

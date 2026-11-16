@@ -9363,6 +9363,11 @@ export const trustedEmailSenders = pgTable("trusted_email_senders", {
   reporterUserId: varchar("reporter_user_id").references(() => users.id),
   
   token: text("token").notNull().unique(), // Secret token for additional verification
+  // تدوير الرمز: عمره، انتهاؤه (null = بلا انتهاء)، والرمز السابق يبقى مقبولًا حتى مهلة قصيرة.
+  tokenCreatedAt: timestamp("token_created_at"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  previousToken: text("previous_token"),
+  previousTokenValidUntil: timestamp("previous_token_valid_until"),
   status: text("status").default("active").notNull(), // active, suspended, revoked
   
   // Auto-publish settings

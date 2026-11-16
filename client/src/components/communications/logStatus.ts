@@ -77,3 +77,22 @@ export function formatDateTimeSafe(value?: string | Date | null): string {
   const date = toValidDate(value);
   return date ? format(date, "dd MMM yyyy HH:mm", { locale: ar }) : "—";
 }
+
+const REPROCESSABLE_REASONS = new Set(["processing_error", "processing_interrupted"]);
+
+/** نفس شرط الخادم (isReprocessableLog): فشلت بعد التحقق من المرسل والرمز ولم تُنشئ خبرًا. */
+export function canReprocessLog(log: {
+  status?: string | null;
+  rejectionReason?: string | null;
+  tokenVerified?: boolean | null;
+  trustedSenderId?: string | null;
+  articleId?: string | null;
+}): boolean {
+  return (
+    log.status === "failed" &&
+    log.tokenVerified === true &&
+    !!log.trustedSenderId &&
+    !log.articleId &&
+    REPROCESSABLE_REASONS.has(log.rejectionReason || "")
+  );
+}

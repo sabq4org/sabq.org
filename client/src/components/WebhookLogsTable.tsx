@@ -23,6 +23,7 @@ import { ChevronLeft, ChevronRight, Trash2, Paperclip, Inbox } from "lucide-reac
 import { Skeleton } from "./ui/skeleton";
 import {
   EMAIL_STATUS_FILTERS,
+  canReprocessLog,
   formatDateTimeSafe,
   getLogStatusMeta,
 } from "./communications/logStatus";
@@ -39,6 +40,8 @@ interface WebhookLogsTableProps {
   onRowClick?: (log: EmailWebhookLog) => void;
   onDelete?: (id: string) => void;
   onBulkDelete?: (ids: string[]) => void;
+  onReprocess?: (id: string) => void;
+  reprocessingId?: string | null;
 }
 
 export function WebhookLogsTable({
@@ -52,7 +55,31 @@ export function WebhookLogsTable({
   onRowClick,
   onDelete,
   onBulkDelete,
+  onReprocess,
+  reprocessingId,
 }: WebhookLogsTableProps) {
+  // «أعد المعالجة» للرسالة التي فشلت بعد التحقق منها فقط. المرفوضة يعيد المرسل إرسالها.
+  const reprocessAction = (log: EmailWebhookLog) => {
+    if (!onReprocess || !canReprocessLog(log)) return null;
+    const busy = reprocessingId === log.id;
+    return (
+      <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+        <p className="text-xs leading-5 text-muted-foreground whitespace-normal">
+          انقطعت المعالجة قبل اكتمالها. النص{log.attachmentsCount > 0 ? " والمرفقات" : ""} محفوظة، ولم يُنشر شيء.
+        </p>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() => onReprocess(log.id)}
+          className="h-11 rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white hover:bg-[#1787cc] hover:text-white"
+          data-testid={`button-reprocess-${log.id}`}
+        >
+          {busy ? "جارٍ البدء…" : "أعد المعالجة"}
+        </Button>
+      </div>
+    );
+  };
+
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -232,7 +259,10 @@ export function WebhookLogsTable({
                       <TableCell className="max-w-[300px] truncate">
                         {log.subject}
                       </TableCell>
-                      <TableCell>{getStatusBadge(log.status)}</TableCell>
+                      <TableCell>
+                        {getStatusBadge(log.status)}
+                        {reprocessAction(log)}
+                      </TableCell>
                       <TableCell>
                         {log.articleId ? (
                           <code className="text-xs px-1.5 py-0.5 bg-muted rounded">
@@ -327,6 +357,7 @@ export function WebhookLogsTable({
                     <p className="text-xs text-muted-foreground">
                       {formatDateTimeSafe(log.receivedAt)}
                     </p>
+                    {reprocessAction(log)}
                   </div>
                   {onDelete && (
                     <Button
