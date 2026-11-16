@@ -2,11 +2,9 @@
 // المسار نفسه في server/routes/emailAgent.ts.
 import crypto from "crypto";
 
-const TOKEN_PATTERNS = [
-  /\[TOKEN:\s*[A-Fa-f0-9]{64}\s*\]/g,
-  /TOKEN:\s*[A-Fa-f0-9]{64}/gi,
-  /\b[A-Fa-f0-9]{64}\b/g,
-];
+// نمط واحد يأكل الأقواس وكلمة TOKEN بأي حالة أحرف، فيبقى الناتج «[TOKEN]» دائمًا
+// وتطابق بصمة العنوان المخزَّن بصمة العنوان الأصلي (emailAgentDedup.normalizeEmailSubject).
+const TOKEN_PATTERNS = [/\[\s*(?:TOKEN:\s*)?(?<![A-Fa-f0-9])[A-Fa-f0-9]{64}(?![A-Fa-f0-9])\s*\]|(?:TOKEN:\s*)?(?<![A-Fa-f0-9])[A-Fa-f0-9]{64}(?![A-Fa-f0-9])/gi];
 
 /** يحذف رمز النشر من نص سيُخزَّن أو يُعرض: الرمز سر، والسجل يقرؤه أكثر من شخص. */
 export function redactEmailTokens(text: string | null | undefined): string {

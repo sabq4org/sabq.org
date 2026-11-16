@@ -125,3 +125,16 @@ describe("dedup fingerprint ignores the token", () => {
     }
   });
 });
+
+describe("redaction keeps the dedup fingerprint stable", () => {
+  const hex = "9f3c71ab04de52c88a16b7e0d4f2a95c6031be7d8c40af1952e6d0b37a84c1f2";
+  it.each([`خبر [token:${hex}]`, `خبر [${hex}]`, `خبر [TOKEN: ${hex} ]`, `خبر TOKEN:${hex}`, `خبر ${hex}`])(
+    "%s",
+    async (subject) => {
+      const { normalizeEmailSubject } = await import("../../server/services/emailAgentDedup");
+      const redacted = redactEmailTokens(subject);
+      expect(redacted).toBe("خبر [TOKEN]");
+      expect(normalizeEmailSubject(redacted)).toBe(normalizeEmailSubject(subject));
+    },
+  );
+});

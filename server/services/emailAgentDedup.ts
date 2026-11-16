@@ -47,7 +47,7 @@ export function normalizeEmailSubject(subject: string): string {
     s = s.replace(prefix, "").trim();
   }
   // رمز النشر ليس جزءًا من الخبر: لا يدخل البصمة ولا يُخزَّن معها.
-  s = s.replace(/\[?\s*(?:TOKEN:\s*)?[A-Fa-f0-9]{64}\s*\]?/gi, " ").replace(/\[TOKEN\]/gi, " ");
+  s = s.replace(/\[\s*(?:TOKEN:\s*)?(?<![A-Fa-f0-9])[A-Fa-f0-9]{64}(?![A-Fa-f0-9])\s*\]|(?:TOKEN:\s*)?(?<![A-Fa-f0-9])[A-Fa-f0-9]{64}(?![A-Fa-f0-9])/gi, " ").replace(/\[TOKEN\]/gi, " ");
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 

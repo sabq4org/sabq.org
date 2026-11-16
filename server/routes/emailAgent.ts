@@ -542,6 +542,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
   let dedupFrom = "";
   let dedupSubject = "";
   let tokenWasVerified = false;
+  // بعد إنشاء المقال لا تُفك بصمة التكرار ولا يُطلب من المرسل إعادة الإرسال: الإعادة تنشر الخبر مرتين.
+  let articleCreated = false;
 
   try {
     console.log("[Email Agent] ============ WEBHOOK START ============");
@@ -1951,6 +1953,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         article = await storage.createArticle(articleData);
       }
 
+      articleCreated = true;
       console.log("[Email Agent] ✅ Article created successfully:", article?.id);
       console.log("[Email Agent]    - Title:", articleData.title);
       console.log("[Email Agent]    - Status:", articleData.status);
@@ -2121,7 +2124,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     await storage.updateEmailAgentStats(today, {
       emailsReceived: 1,
       ...(publishNow ? { emailsPublished: 1 } : { emailsDrafted: 1 }),
-    });
+    }).catch((err: any) => console.error("[Email Agent] تعذر تحديث الإحصاءات (المقال أُنشئ):", err?.message));
 
     // مسودة محجوزة عن النشر المباشر: ينبَّه فريق التحرير لأن المرسل اعتاد النشر الفوري.
     if (heldReason && article) {
@@ -2191,8 +2194,10 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
     
     // الفشل لا يحبس الخبر: تُفك بصمة التكرار ويُبلَّغ المرسل الموثوق ليعيد الإرسال.
-    if (dedupFrom) await releaseEmailContentDedup(dedupFrom, dedupSubject);
-    if (tokenWasVerified) replyToSender({ kind: "failed" });
+    if (!articleCreated) {
+      if (dedupFrom) await releaseEmailContentDedup(dedupFrom, dedupSubject).catch(() => undefined);
+      if (tokenWasVerified) replyToSender({ kind: "failed" });
+    }
 
     const today = new Date();
     await storage.updateEmailAgentStats(today, {
