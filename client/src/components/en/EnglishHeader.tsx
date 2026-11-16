@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper } from "lucide-react";
+import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, Search } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -143,6 +143,11 @@ export function EnglishHeader({ user, onMenuClick }: EnglishHeaderProps) {
 
             {/* Mobile Actions */}
             <div className="md:hidden flex items-center gap-2">
+              <Button asChild variant="ghost" size="icon" className="hover-elevate active-elevate-2">
+                <Link href="/en/search" aria-label="Search" data-testid="link-search-mobile">
+                  <Search className="h-5 w-5" />
+                </Link>
+              </Button>
               <LanguageSwitcher />
               <ThemeToggle />
               
@@ -230,6 +235,11 @@ export function EnglishHeader({ user, onMenuClick }: EnglishHeaderProps) {
 
             {/* Desktop Actions */}
             <div className="hidden md:flex items-center gap-2">
+              <Button asChild variant="ghost" size="icon" className="hover-elevate active-elevate-2">
+                <Link href="/en/search" aria-label="Search" data-testid="link-search-desktop">
+                  <Search className="h-5 w-5" />
+                </Link>
+              </Button>
               <LanguageSwitcher />
               <ThemeToggle />
               

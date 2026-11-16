@@ -387,6 +387,7 @@ const EnglishNewsPage = lazy(() => retryImport(() => import("@/pages/en/EnglishN
 const EnglishCategoriesPage = lazy(() => retryImport(() => import("@/pages/en/EnglishCategoriesPage")));
 const EnglishCategoriesListPage = lazy(() => retryImport(() => import("@/pages/en/EnglishCategoriesListPage")));
 const EnglishCategoryPage = lazy(() => retryImport(() => import("@/pages/en/EnglishCategoryPage")));
+const EnglishSearchPage = lazy(() => retryImport(() => import("@/pages/en/EnglishSearchPage")));
 const EnglishUsersPage = lazy(() => retryImport(() => import("@/pages/en/EnglishUsersPage")));
 const EnglishArticlesPage = lazy(() => retryImport(() => import("@/pages/en/EnglishArticlesPage")));
 const EnglishProfile = lazy(() => retryImport(() => import("@/pages/en/EnglishProfile")));
@@ -667,6 +668,7 @@ function Router() {
         <Route path="/en/moment-by-moment">{() => <LazyRoute component={EnglishMomentByMoment} />}</Route>
         <Route path="/en/categories">{() => <LazyRoute component={EnglishCategoriesListPage} />}</Route>
         <Route path="/en/category/:slug">{() => <LazyRoute component={EnglishCategoryPage} />}</Route>
+        <Route path="/en/search">{() => <LazyRoute component={EnglishSearchPage} />}</Route>
         <Route path="/en/keyword/:keyword">{() => <LazyRoute component={EnglishKeywordPage} />}</Route>
         <Route path="/en/article/:slug/passport">{() => <LazyRoute component={EnglishArticlePassport} />}</Route>
         <Route path="/en/article/:slug">{() => <LazyRoute component={EnglishArticleDetail} />}</Route>
