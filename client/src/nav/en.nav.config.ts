@@ -9,6 +9,7 @@ import {
   UserCircle,
   Blocks,
   LayoutGrid,
+  BarChart3,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -28,6 +29,16 @@ export const englishNavConfig: NavItem[] = [
     roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter"],
     permissions: ["dashboard.view"],
     meta: { exact: true },
+  },
+  {
+    id: "analytics",
+    labelKey: "nav.analytics",
+    labelAr: "الإحصاءات",
+    labelEn: "Analytics",
+    path: "/en/dashboard/analytics",
+    icon: BarChart3,
+    roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter"],
+    permissions: ["dashboard.view"],
   },
 
   // ===== المحتوى / Content =====

@@ -301,7 +301,7 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
           </SidebarFooter>
         </Sidebar>
 
-        <SidebarInset className="flex flex-col flex-1">
+        <SidebarInset className="flex min-w-0 flex-col flex-1">
           <header className="flex h-16 items-center gap-4 border-b px-4 md:px-6">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex-1" />
@@ -311,7 +311,7 @@ export function EnglishDashboardLayout({ children }: DashboardLayoutProps) {
           
           <InternalAnnouncement />
           
-          <main className="flex-1 overflow-auto p-4 md:p-6">
+          <main className="min-w-0 flex-1 overflow-auto p-4 md:p-6">
             <AppBreadcrumbs role={role} flags={flags} />
             {children}
           </main>
