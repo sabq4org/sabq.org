@@ -9,6 +9,12 @@ function alternatesFrom(meta: SeoBundleMeta) {
   return {
     canonical: meta.canonical,
     languages: Object.keys(languages).length ? languages : undefined,
+    // خلاصة RSS الخاصة بكل نسخة: يلتقطها Google News وقارئات الخلاصات.
+    types: meta.locale === "en_US"
+      ? { "application/rss+xml": "https://sabq.org/api/rss/en/articles" }
+      : meta.locale === "ar_SA"
+        ? { "application/rss+xml": "https://sabq.org/api/rss/articles" }
+        : undefined,
   };
 }
 

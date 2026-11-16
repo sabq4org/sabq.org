@@ -185,3 +185,6 @@
 - `/` و`/en` تعلنان hreflang متبادلًا (`ar`، `en`، `x-default` = العربية): في `web-next/app/page.tsx` وفي معالج `/en` داخل `edgeMeta.ts`. تذييل web-next يحمل رابطًا قابلًا للزحف إلى `/en`.
 - كاتب الخبر الإنجليزي في JSON-LD: إن كان اسم الحساب بلا حروف لاتينية (حساب «صحيفة سبق») يُعلن `Organization` باسم "Sabq News".
 - مؤجل: رسم `/en` و`/en/category/*` من الخادم للزواحف (ما زالت قالب SPA مع قائمة روابط دلالية).
+- **مطابقة صفحة الخبر الإنجليزي للعربي (2026-11-16، جولة ثانية):** `seo-bundle?lang=en` يعيد الآن `category` و`categoryHref` (`/en/category/<slug>`) و`categoryLatest` (8 أخبار من القسم نفسه، أو أحدث الإنجليزي إن كان الخبر بلا قسم) و`articleSection` في JSON-LD. قبلها كانت صفحة الزاحف للخبر الإنجليزي بلا أي رابط داخلي. مسار التنقل (BreadcrumbList) يبدأ من `/en`.
+- **خلاصة RSS إنجليزية:** `/api/rss/en/articles` (نظير `/api/rss/articles`)، معلنة في `<link rel="alternate">` لصفحات الخبر الإنجليزي، وتُمسح من الحافة عند النشر.
+

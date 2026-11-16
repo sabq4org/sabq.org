@@ -844,9 +844,15 @@ async function fetchEnArticle(slug: string) {
       seoMetadata: enArticles.seoMetadata,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
+      id: enArticles.id,
+      categoryId: enArticles.categoryId,
+      categoryName: enCategories.name,
+      categorySlug: enCategories.slug,
+      categoryColor: enCategories.color,
     })
     .from(enArticles)
     .leftJoin(users, eq(enArticles.authorId, users.id))
+    .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
     .where(where!)
     .limit(1);
   return row || null;
@@ -928,6 +934,7 @@ async function buildEnArticlePayload(
     status: row.status,
     author,
     authorPerson: authorIsLatin ? undefined : { "@type": "Organization", name: ARTICLE_BRAND.en.name, url: `${SITE_URL}/en` },
+    section: row.categoryName,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
     semanticHtml: buildSemanticHtml({
@@ -3061,6 +3068,42 @@ router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async
       if (r) {
         row = r;
         meta = await buildEnArticlePayload(r, slug);
+        // مطابقة العربي: قسم الخبر وروابط أحدث الأخبار داخل صفحة الزاحف.
+        // بدونها كانت صفحة الخبر الإنجليزي طريقًا مسدودًا بلا أي رابط داخلي.
+        category = r.categoryName || null;
+        categoryHref = r.categorySlug ? `/en/category/${r.categorySlug}` : null;
+        if (r.status === "published") {
+          const latestRows = await db
+            .select({
+              slug: enArticles.slug,
+              englishSlug: enArticles.englishSlug,
+              title: enArticles.title,
+              excerpt: enArticles.excerpt,
+              imageUrl: enArticles.imageUrl,
+              publishedAt: enArticles.publishedAt,
+              newsType: enArticles.newsType,
+            })
+            .from(enArticles)
+            .where(and(
+              r.categoryId ? eq(enArticles.categoryId, r.categoryId) : undefined,
+              eq(enArticles.status, "published"),
+              ne(enArticles.id, r.id),
+            ))
+            .orderBy(desc(enArticles.publishedAt))
+            .limit(8);
+          categoryLatest = latestRows
+            .filter((item) => item.title && (item.englishSlug || item.slug))
+            .map((item) => ({
+              href: `/en/article/${item.englishSlug || item.slug}`,
+              title: item.title || "",
+              excerpt: trunc(item.excerpt || "", 160),
+              imageUrl: item.imageUrl ? abs(item.imageUrl) : null,
+              publishedAt: item.publishedAt,
+              newsType: item.newsType || null,
+              category,
+              categoryColor: r.categoryColor || null,
+            }));
+        }
       }
     } else if (lang === "ur") {
       const r = await fetchUrArticle(slug);

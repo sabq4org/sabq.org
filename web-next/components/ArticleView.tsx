@@ -59,7 +59,7 @@ export function ArticleView({
       "@type": "ListItem",
       position: 1,
       name: lang === "en" ? "Home" : lang === "ur" ? "سرورق" : "الرئيسية",
-      item: siteUrl,
+      item: lang === "en" ? `${siteUrl}/en` : siteUrl,
     },
     ...(bundle.category && bundle.categoryHref
       ? [
@@ -197,9 +197,11 @@ export function ArticleView({
                 id="category-latest-heading"
                 className="text-xl font-bold text-foreground"
               >
-                {bundle.category
-                  ? `آخر أخبار ${bundle.category}`
-                  : "آخر الأخبار ذات الصلة"}
+                {lang === "en"
+                  ? bundle.category ? `Latest in ${bundle.category}` : "Latest news"
+                  : bundle.category
+                    ? `آخر أخبار ${bundle.category}`
+                    : "آخر الأخبار ذات الصلة"}
               </h2>
               <ul className="mt-4 space-y-3">
                 {bundle.categoryLatest.map((item) => (
