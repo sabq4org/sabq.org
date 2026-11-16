@@ -1,7 +1,7 @@
 import express from 'express';
 import { db } from '../db';
 import { eq, desc, and, isNotNull, sql } from 'drizzle-orm';
-import { audioNewsletters, audioNewsletterArticles, articles, categories } from '@shared/schema';
+import { audioNewsletters, audioNewsletterArticles, articles, categories, enArticles, enCategories } from '@shared/schema';
 import { cacheControl, CACHE_DURATIONS } from '../cacheMiddleware';
 import { paginationOrReject } from '../utils/pagination';
 import { articleCanonicalUrl, cdata, escapeXmlAttribute, escapeXmlText } from '../utils/rssXml';
@@ -262,6 +262,73 @@ router.get('/audio-newsletters.opml', cacheControl({ maxAge: 300, staleWhileReva
 });
 
 // ==================== ARTICLE RSS FEEDS ====================
+
+// خلاصة النسخة الإنجليزية: نظير /api/rss/articles. تُعلن في صفحات /en
+// ليكتشف Google News وقارئات الخلاصات الأخبار الإنجليزية فور نشرها.
+router.get('/en/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 }), async (req, res) => {
+  try {
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+    if (!pg) return;
+    const baseUrl = process.env.APP_URL || 'https://sabq.org';
+    const currentDate = new Date().toUTCString();
+
+    const rows = await db
+      .select({
+        title: enArticles.title,
+        slug: enArticles.slug,
+        englishSlug: enArticles.englishSlug,
+        excerpt: enArticles.excerpt,
+        imageUrl: enArticles.imageUrl,
+        publishedAt: enArticles.publishedAt,
+        categoryName: enCategories.name,
+      })
+      .from(enArticles)
+      .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
+      .where(and(eq(enArticles.status, 'published'), isNotNull(enArticles.publishedAt)))
+      .orderBy(desc(enArticles.publishedAt))
+      .limit(pg.limit);
+
+    const rssItems = rows.map((article) => {
+      const url = `${baseUrl}/en/article/${encodeURIComponent(article.englishSlug || article.slug)}`;
+      const pubDate = article.publishedAt ? new Date(article.publishedAt).toUTCString() : currentDate;
+      const imageUrl = article.imageUrl || '';
+      return `
+    <item>
+      <title>${cdata(article.title)}</title>
+      <description>${cdata(article.excerpt || '')}</description>
+      <link>${escapeXmlText(url)}</link>
+      <guid isPermaLink="true">${escapeXmlText(url)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      ${article.categoryName ? `<category>${cdata(article.categoryName)}</category>` : ''}
+      ${imageUrl ? `<media:content url="${escapeXmlAttribute(imageUrl)}" medium="image"/>` : ''}
+    </item>`;
+    }).join('\n');
+
+    const rssFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Sabq News - Latest</title>
+    <link>${escapeXmlText(baseUrl)}/en</link>
+    <atom:link href="${escapeXmlAttribute(baseUrl)}/api/rss/en/articles" rel="self" type="application/rss+xml"/>
+    <description>The latest news from Sabq, Saudi Arabia's leading digital newspaper, in English.</description>
+    <language>en</language>
+    <copyright>© ${new Date().getFullYear()} Sabq</copyright>
+    <lastBuildDate>${currentDate}</lastBuildDate>
+    <ttl>15</ttl>
+    ${rssItems}
+  </channel>
+</rss>`;
+
+    res.set('Content-Type', 'application/rss+xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(rssFeed);
+  } catch (error) {
+    console.error('Error generating English articles RSS feed:', error);
+    res.status(500).send('Error generating RSS feed');
+  }
+});
 
 // Main articles RSS feed
 router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 }), async (req, res) => {
