@@ -14,6 +14,46 @@ import { assertEditedContentComplete, extractLockedSourceNumbers, restoreSourceN
 import { PartialStringFieldTracker } from "./partialJsonString";
 import { EDITORIAL_PRESERVATION_INSTRUCTION, withEditorialCompletenessRepair } from "./editorialCompletenessRetry";
 import { trackedOpenAICompletion } from "./gateway/trackedOpenAI";
+import { getModel } from "./gateway/configStore";
+import { computeCostUsd } from "./gateway/costs";
+import { logUsage } from "./gateway/usageLogger";
+
+/**
+ * تحرير Claude يمر بالـSDK مباشرة (بث + structured outputs) لا عبر البوابة، فكان
+ * خارج سجل التكلفة. نسجله هنا تحت «editorial-edit». فشل التسجيل لا يمس التحرير.
+ */
+function recordClaudeEditUsage(message: Anthropic.Message, latencyMs: number): void {
+  void (async () => {
+    try {
+      const usage = message.usage as any;
+      const cacheReadTokens = usage?.cache_read_input_tokens ?? 0;
+      const cacheWriteTokens = usage?.cache_creation_input_tokens ?? 0;
+      const entry = {
+        inputTokens: (usage?.input_tokens ?? 0) + cacheReadTokens + cacheWriteTokens,
+        outputTokens: usage?.output_tokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens,
+      };
+      const model = await getModel({ provider: "anthropic", modelId: SABQ_PRIMARY_EDITOR_MODEL });
+      logUsage({
+        featureKey: "editorial-edit",
+        provider: "anthropic",
+        modelId: SABQ_PRIMARY_EDITOR_MODEL,
+        operation: "complete",
+        inputTokens: entry.inputTokens,
+        outputTokens: entry.outputTokens,
+        estimatedCostUsd: computeCostUsd(model, entry),
+        latencyMs,
+        status: "success",
+        ...(message.stop_reason === "max_tokens"
+          ? { errorCode: "OUTPUT_TRUNCATED", errorMessage: "Claude output reached the token limit" }
+          : {}),
+      });
+    } catch {
+      console.warn("[Sabq Editor] usage recording failed");
+    }
+  })();
+}
 
 /** تقدم إعادة الصياغة أثناء البث: نص جديد من optimized.content، أو إعادة بدء بعد فشل. */
 export type SabqEditorProgress = { type: "delta"; text: string } | { type: "reset" };
@@ -729,6 +769,7 @@ Professional English news story, ready for immediate publication, presenting Sau
           format: { type: "json_schema", schema: SABQ_EDITORIAL_JSON_SCHEMA },
         },
       } as any;
+      const claudeStartedAt = Date.now();
       let message: Anthropic.Message;
       if (onProgress) {
         // بث: نفك optimized.content من JSON الجزئي ونرسل الجديد منه أولًا بأول
@@ -744,6 +785,8 @@ Professional English news story, ready for immediate publication, presenting Sau
       } else {
         message = await anthropic.messages.create(claudeRequest);
       }
+
+      recordClaudeEditUsage(message, Date.now() - claudeStartedAt);
 
       if (message.stop_reason === "max_tokens") {
         throw new Error("Claude response truncated (stop_reason=max_tokens)");

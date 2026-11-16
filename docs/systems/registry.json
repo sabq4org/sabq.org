@@ -537,6 +537,7 @@
         "image-focal-point",
         "editor-social-post",
         "editor-fact-check",
+        "editorial-edit",
         "editorial-edit-fallback",
         "editorial-email-analysis",
         "editorial-content-improvement",
@@ -546,7 +547,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-11-13"
+      "lastReviewed": "2026-11-16"
     },
     {
       "id": "ifox",

@@ -43,7 +43,7 @@ export type BannedWordDenial = {
   bannedWords: BannedWordMatch[];
 };
 
-export type BannedWordSurface = "dashboard" | "desk" | "bot";
+export type BannedWordSurface = "dashboard" | "desk" | "bot" | "email" | "whatsapp";
 
 async function activeWords(): Promise<BannedWordEntry[]> {
   const cached = memoryCache.get<BannedWordEntry[]>(ACTIVE_WORDS_CACHE_ID);

@@ -23,7 +23,25 @@ import { riyadhDayRange } from "../utils/riyadhDay";
 import {
   claimEmailDedup,
   extractEmailAddress,
+  releaseEmailContentDedup,
+  sweepStuckEmailLogs,
 } from "../services/emailAgentDedup";
+import {
+  buildSenderReply,
+  emailAgentRepliesEnabled,
+  evaluateSenderAuth,
+  pickFallbackCategory,
+  redactEmailTokens,
+  resolveSenderToken,
+  senderAuthEnforced,
+  shouldOcrAttachedImages,
+  wantsNewspaperByline,
+  type SenderReplyOutcome,
+} from "../services/emailAgentGuards";
+import { denyBannedWords } from "../services/publishBannedWordsService";
+import { sendEmailNotification } from "../services/email";
+import { trackedOpenAICompletion } from "../ai/gateway/trackedOpenAI";
+import { z } from "zod";
 import { parsePage, parseLimit } from "../utils/pagination";
 import { emailTokenMatches, requireInboundWebhookSecret } from "../services/emailAgentAuth";
 
@@ -39,6 +57,9 @@ const upload = multer({
     parts: 150,
   },
 });
+
+// قراءة الصور و PDF الممسوح تُسجَّل في مركز الذكاء تحت «وكيل البريد» لتظهر تكلفتها.
+const OCR_FEATURE = "email-agent";
 
 interface SendGridAttachment {
   filename: string;
@@ -208,6 +229,27 @@ async function uploadAttachmentToGCS(
   }
 }
 
+/**
+ * ينسخ صورة المصدر إلى تخزين سبق. المضيف يجب أن يكون من مصادر الأخبار الموثوقة
+ * نفسها (https وقائمة النطاقات في urlContentExtractor) فلا يصل الطلب لعنوان داخلي.
+ * أي فشل يعيد null وتبقى الصورة على رابطها الأصلي كما كانت.
+ */
+async function rehostSourceImage(imageUrl: string): Promise<string | null> {
+  try {
+    if (!isNewsUrl(imageUrl)) return null;
+    const response = await fetch(imageUrl, { redirect: "error", signal: AbortSignal.timeout(10_000) });
+    const contentType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!response.ok || !/^image\/(jpeg|jpg|png|webp|gif)$/.test(contentType)) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length < 5000 || buffer.length > 10 * 1024 * 1024) return null;
+    const url = await uploadAttachmentToGCS(buffer, `source-image-${nanoid(8)}.${contentType.split("/")[1]}`, contentType, true);
+    return /^https:\/\//.test(url) ? url : null;
+  } catch (error) {
+    console.warn("[Email Agent] تعذر نسخ صورة المصدر:", (error as Error).message);
+    return null;
+  }
+}
+
 function parseObjectPath(path: string): { bucketName: string; objectPath: string } {
   const { getBucketConfig } = require('../objectStorage');
   const config = getBucketConfig();
@@ -351,7 +393,7 @@ async function extractTextFromPdfWithOcr(buffer: Buffer): Promise<string> {
         console.log(`[Email Agent] 🔍 Running OCR on page ${pageNum}...`);
         const dataUrl = `data:image/png;base64,${result.base64}`;
         
-        const response = await openai.chat.completions.create({
+        const response = await trackedOpenAICompletion(openai, OCR_FEATURE, {
           model: "gpt-4o",
           messages: [
             {
@@ -421,7 +463,7 @@ async function extractTextFromImage(buffer: Buffer, mimeType: string): Promise<s
     
     console.log("[Email Agent] 🔍 Running OCR on image using GPT-4o Vision...");
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, OCR_FEATURE, {
       model: "gpt-4o",
       messages: [
         {
@@ -496,6 +538,12 @@ function respondWebhook(res: Response, body: Record<string, unknown>, status = 2
 router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: Request, res: Response) => {
   let webhookLog: any = null; // Define outside try block so it's accessible in catch
   let dedupKey = ''; // Will be set after parsing
+  let replyToSender: (outcome: SenderReplyOutcome) => void = () => undefined;
+  let dedupFrom = "";
+  let dedupSubject = "";
+  let tokenWasVerified = false;
+  // بعد إنشاء المقال لا تُفك بصمة التكرار ولا يُطلب من المرسل إعادة الإرسال: الإعادة تنشر الخبر مرتين.
+  let articleCreated = false;
 
   try {
     console.log("[Email Agent] ============ WEBHOOK START ============");
@@ -522,12 +570,6 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         console.warn("[Email Agent] ⚠️ WARNING: Raw email size approaching Multer fieldSize limit!");
         console.warn(`[Email Agent] Size: ${(req.body.email.length / 1024 / 1024).toFixed(2)}MB, Limit: ${(MULTER_FIELD_SIZE_LIMIT / 1024 / 1024).toFixed(2)}MB`);
       }
-      
-      // 🔍 DIAGNOSTIC: Log first 500 bytes of raw MIME for inspection
-      const preview = req.body.email.substring(0, 500);
-      console.log("[Email Agent] 🔍 Raw MIME preview (first 500 bytes):");
-      console.log(preview);
-      console.log("[Email Agent] 🔍 End of preview");
       
       try {
         // Parse the raw email using mailparser
@@ -564,16 +606,10 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         }
         
         console.log("[Email Agent] Parsed email successfully:");
-        console.log("[Email Agent] - From:", from);
-        console.log("[Email Agent] - To:", to);
-        console.log("[Email Agent] - Subject:", subject);
+        // لا يُطبع العنوان ولا النص: فيهما رمز النشر ومحتوى لم يُنشر بعد.
         console.log("[Email Agent] - Text length:", text?.length || 0);
         console.log("[Email Agent] - HTML length:", html?.length || 0);
         console.log("[Email Agent] - Parsed attachments:", parsedAttachments.length);
-        
-        if (text) {
-          console.log("[Email Agent] - Text preview:", text.substring(0, 200));
-        }
       } catch (parseError) {
         console.error("[Email Agent] Error parsing raw email:", parseError);
         // Fallback to direct fields
@@ -620,9 +656,9 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
           try {
             await storage.createEmailWebhookLog({
               fromEmail: senderEmailEarly,
-              subject: subject || "(بدون موضوع)",
-              bodyText: typeof text === "string" ? text.substring(0, 2000) : "",
-              bodyHtml: typeof html === "string" ? html.substring(0, 2000) : "",
+              subject: redactEmailTokens(subject) || "(بدون موضوع)",
+              bodyText: typeof text === "string" ? redactEmailTokens(text.substring(0, 2000)) : "",
+              bodyHtml: typeof html === "string" ? redactEmailTokens(html.substring(0, 2000)) : "",
               status: "rejected",
               rejectionReason: "duplicate_content",
               senderVerified: false,
@@ -728,8 +764,6 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
 
     console.log("[Email Agent] Final extracted values:");
-    console.log("[Email Agent] - From:", from);
-    console.log("[Email Agent] - Subject:", subject);
     console.log("[Email Agent] - Text length:", text?.length || 0);
     console.log("[Email Agent] - HTML length:", html?.length || 0);
     console.log("[Email Agent] - Multer files received:", attachments.length);
@@ -813,6 +847,9 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     const earlySender = attachments.length > 0 ? await storage.getTrustedSenderByEmail(senderEmailEarly) : null;
     const allowPaidExtraction = !!earlySender && earlySender.status === "active" &&
       emailTokenMatches(extractTokenFromText(subject) || extractTokenFromText(text) || extractTokenFromText(html), earlySender.token);
+    // الخبر المكتوب كاملًا صوره صور صحفية: لا تُقرأ. تُقرأ الصورة حين يكون النص قصيرًا فقط.
+    const ocrAttachedImages = allowPaidExtraction &&
+      shouldOcrAttachedImages(text || (html ? html.replace(/<[^>]*>/g, " ") : ""));
 
     if (attachments.length > 0) {
       console.log("[Email Agent] 📎 ============ PROCESSING ALL ATTACHMENTS (EARLY) ============");
@@ -874,7 +911,6 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
               
               if (extractedText && extractedText.length > 0) {
                 console.log(`[Email Agent] ✅ Extracted text from PDF: ${extractedText.length} characters`);
-                console.log(`[Email Agent] 📄 PDF text preview: ${extractedText.substring(0, 300)}...`);
                 extractedTextFromDocs += extractedText + "\n\n";
               } else {
                 console.log(`[Email Agent] ⚠️ No text extracted from PDF document - might be scanned/image-based`);
@@ -928,11 +964,10 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
             // 🔍 Run OCR on image to extract text (if any)
             try {
               console.log(`[Email Agent] 🔍 Starting OCR for image: ${attachment.originalname}`);
-              const ocrText = allowPaidExtraction ? await extractTextFromImage(attachment.buffer, attachment.mimetype) : "";
+              const ocrText = ocrAttachedImages ? await extractTextFromImage(attachment.buffer, attachment.mimetype) : "";
               console.log(`[Email Agent] 🔍 OCR result: ${ocrText ? ocrText.length : 0} chars`);
               if (ocrText && ocrText.length > 20) {
                 console.log(`[Email Agent] 🔍 OCR extracted text from image: ${ocrText.length} characters`);
-                console.log(`[Email Agent] 🔍 OCR text preview: ${ocrText.substring(0, 200)}...`);
                 extractedTextFromDocs += `[نص مستخرج من صورة: ${attachment.originalname}]\n${ocrText}\n\n`;
               } else if (ocrText && ocrText.length > 0) {
                 console.log(`[Email Agent] ⚠️ OCR text too short (${ocrText.length} chars): "${ocrText}"`);
@@ -1062,15 +1097,36 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     const senderEmail = extractEmailAddress(from);
     
     const logId = nanoid();
+    // الرمز لا يُخزَّن في السجل: يقرؤه كل من يفتح صفحة قنوات الاتصال.
     webhookLog = await storage.createEmailWebhookLog({
       fromEmail: senderEmail,
-      subject,
-      bodyText: text,
-      bodyHtml: html,
+      subject: redactEmailTokens(subject),
+      bodyText: redactEmailTokens(text),
+      bodyHtml: redactEmailTokens(html),
       status: "received",
     });
 
     const trustedSender = await storage.getTrustedSenderByEmail(senderEmail);
+
+    // SPF/DKIM من SendGrid: هل الرسالة صادرة فعلًا من نطاق المرسل؟
+    const senderAuth = evaluateSenderAuth({
+      fromEmail: senderEmail,
+      spf: req.body.SPF,
+      dkim: req.body.dkim,
+      envelope: req.body.envelope,
+    });
+    const senderAuthFailed = senderAuth === "fail" && senderAuthEnforced();
+    console.log(`[Email Agent] Sender auth verdict: ${senderAuth}${senderAuthFailed ? " (auto-publish held for this message)" : ""}`);
+
+    // الرفض والفشل يفكان بصمة التكرار ليُعاد الإرسال فورًا، والمرسل الموثوق يصله رد.
+    // لا رد على عنوان لم يثبت أنه المرسل (فشل SPF/DKIM) حتى لا نراسل ضحية انتحال.
+    replyToSender = (outcome: SenderReplyOutcome) => {
+      if (!trustedSender || senderAuth === "fail" || !emailAgentRepliesEnabled()) return;
+      const reply = buildSenderReply(subject, outcome);
+      void sendEmailNotification({ to: senderEmail, ...reply }).catch(() => undefined);
+    };
+    dedupFrom = from;
+    dedupSubject = subject;
     
     if (!trustedSender) {
       console.log("[Email Agent] Sender not trusted:", senderEmail);
@@ -1094,6 +1150,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
       respondWebhook(res, {
         success: false,
         message: "Sender not authorized",
@@ -1124,6 +1181,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
+      replyToSender({ kind: "rejected", reason: "sender_inactive" });
       respondWebhook(res, {
         success: false,
         message: "Sender account is inactive",
@@ -1135,14 +1194,6 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     const tokenInBody = extractTokenFromText(text);
     const tokenInHtml = extractTokenFromText(html);
     const providedToken = tokenInSubject || tokenInBody || tokenInHtml;
-
-    console.log("[Email Agent] Token extraction debug:", {
-      subjectLength: subject?.length || 0,
-      textLength: text?.length || 0,
-      htmlLength: html?.length || 0,
-      subjectPreview: subject?.substring(0, 100),
-      textPreview: text?.substring(0, 100),
-    });
 
     // لا تُسجَّل قيمة الرمز ولا جزء منها: الرمز سر نشر.
     console.log("[Email Agent] Token search results:", {
@@ -1180,6 +1231,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
+      replyToSender({ kind: "rejected", reason: "invalid_token" });
       respondWebhook(res, {
         success: false,
         message: "Invalid token",
@@ -1188,6 +1241,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
 
     console.log("[Email Agent] Sender verified successfully");
+    tokenWasVerified = true;
     
     await storage.updateEmailWebhookLog(webhookLog.id, {
       senderVerified: true,
@@ -1223,7 +1277,6 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     // Add extracted text from Word documents, PDFs, and OCR images
     if (extractedTextFromDocs) {
       console.log("[Email Agent] 📄 Adding extracted text from docs/images:", extractedTextFromDocs.length, "chars");
-      console.log("[Email Agent] 📄 Extracted text preview:", extractedTextFromDocs.substring(0, 300));
       emailContent = extractedTextFromDocs + "\n\n" + emailContent;
       console.log("[Email Agent] 📝 emailContent length after adding extracted text:", emailContent.length, "chars");
     }
@@ -1308,11 +1361,6 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       
       console.log("[Email Agent] 🔗 URLs extracted from HTML (all methods):", htmlUrls.length, htmlUrls);
       
-      // Debug: Log sample of HTML if no URLs found to help diagnose
-      if (htmlUrls.length === 0 && html.length > 0) {
-        console.log("[Email Agent] ⚠️ No URLs found in HTML. HTML sample (first 2000 chars):");
-        console.log(html.substring(0, 2000));
-      }
     }
     
     // Combine URLs from both plain text content AND HTML hrefs
@@ -1471,6 +1519,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
+      replyToSender({ kind: "rejected", reason: "no_content" });
       respondWebhook(res, {
         success: false,
         message: "No content found in email",
@@ -1552,6 +1602,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
+      replyToSender({ kind: "rejected", reason: "quality_too_low" });
       respondWebhook(res, {
         success: false,
         message: "Content quality below threshold (Sabq standards)",
@@ -1594,6 +1646,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
+      replyToSender({ kind: "rejected", reason: "no_news_value" });
       respondWebhook(res, {
         success: false,
         message: "Content has no news value",
@@ -1630,6 +1684,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         emailsRejected: 1,
       });
 
+      await releaseEmailContentDedup(from, subject);
+      replyToSender({ kind: "rejected", reason: "ai_content_empty" });
       respondWebhook(res, {
         success: false,
         message: "AI processing returned empty content - article not published for safety",
@@ -1654,6 +1710,12 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       throw uploadError; // Re-throw to trigger catch block
     }
     
+    // صورة الخبر المسحوب من رابط: تُنسخ إلى تخزين سبق بدل الاعتماد على خادم المصدر.
+    if (extractedFromUrl && uploadedImages.length === 1 && urlExtractionResult?.article?.imageUrl === uploadedImages[0]) {
+      const rehosted = await rehostSourceImage(uploadedImages[0]);
+      if (rehosted) uploadedImages[0] = rehosted;
+    }
+
     // 🎨 Select featured image from newly-uploaded images
     console.log("[Email Agent] 🎨 Selecting featured image from uploadedImages array...");
     console.log("[Email Agent] 🎨 uploadedImages[0]:", uploadedImages[0]);
@@ -1723,8 +1785,9 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
     
     if (!finalCategoryId && activeCategories.length > 0) {
-      console.log("[Email Agent] 🔄 Using first active category:", activeCategories[0].nameAr);
-      finalCategoryId = activeCategories[0].id;
+      const fallbackCategory = pickFallbackCategory(activeCategories)!;
+      console.log("[Email Agent] 🔄 Using fallback category:", fallbackCategory.nameAr);
+      finalCategoryId = fallbackCategory.id;
     }
     
     if (!finalCategoryId && allCategories.length > 0) {
@@ -1744,30 +1807,8 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     console.log("[Email Agent] 📝 Category ID:", finalCategoryId);
     
     
-    // 📰 Check if sender wants to publish anonymously (under newspaper's name)
-    // Improved detection: handles Arabic variations, diacritics, and punctuation
-    const normalizeArabicForSearch = (text: string): string => {
-      return text
-        .replace(/[\u064B-\u0652\u0670]/g, '') // Remove Arabic diacritics (tashkeel)
-        .replace(/\u0640/g, '') // Remove tatweel (Arabic stretching)
-        .replace(/[!"#$%&'()*+,\-./:;<=>?@[\\\]^_\`{|}~]/g, ' ') // Remove punctuation
-        .replace(/ة/g, 'ه') // Normalize taa marbuta
-        .replace(/ى/g, 'ي') // Normalize alef maksura
-        .replace(/[أإآ]/g, 'ا') // Normalize alef variants
-        .toLowerCase()
-        .trim();
-    };
-    
-    // Keywords that trigger anonymous publishing
-    const anonymousKeywords = ['صحيفة', 'صحيفه', 'سبق', 'anonymous', 'مجهول'];
-    const normalizedContent = normalizeArabicForSearch((subject || '') + ' ' + (text || ''));
-    
-    // Check if any keyword is present (detects hashtag versions too)
-    const publishAnonymously = anonymousKeywords.some(keyword => {
-      const normalizedKeyword = normalizeArabicForSearch(keyword);
-      return normalizedContent.includes(normalizedKeyword) || 
-             normalizedContent.includes('#' + normalizedKeyword);
-    });
+    // طلب صريح فقط (وسم أو سطر مستقل) — انظر wantsNewspaperByline.
+    const publishAnonymously = wantsNewspaperByline(subject, text);
     // Newspaper account ID for anonymous publishing ("صحيفة سبق")
     const NEWSPAPER_ACCOUNT_ID = 'RnP7eDOAl5T5rGpib9_8d';
     
@@ -1805,6 +1846,34 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       console.log(`[Email Agent] 🖼️ Embedded ${extraImages.length} additional images into article content`);
     }
 
+    // قرار النشر المباشر: إعداد المرسل، ثم صحة مصدر الرسالة، ثم الكلمات المحظورة.
+    // أي منع يحفظ الخبر مسودة ولا يضيعه.
+    let publishNow = trustedSender.autoPublish === true;
+    let heldReason: string | null = null;
+    if (publishNow && senderAuthFailed) {
+      publishNow = false;
+      heldReason = "تعذّر التحقق من أن الرسالة صادرة من بريد المرسل (SPF/DKIM)، فحُفظت مسودة للمراجعة.";
+    }
+    if (publishNow) {
+      const denial = await denyBannedWords({
+        userId: null, // لا استثناء لحساب آلي: القرار للمحرر
+        nextStatus: "published",
+        content: {
+          title: articleTitle,
+          excerpt: editorialResult.optimized.lead,
+          content: finalContent,
+          keywords: editorialResult.optimized.seoKeywords,
+        },
+        actorLabel: `البريد الذكي — ${trustedSender.name}`,
+        surface: "email",
+      });
+      if (denial) {
+        publishNow = false;
+        heldReason = denial.message;
+      }
+    }
+    if (heldReason) console.log("[Email Agent] ⏸️ Auto-publish held → draft:", heldReason);
+
     const articleData: any = {
       id: nanoid(),
       title: articleTitle,
@@ -1815,14 +1884,14 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       authorId: articleAuthorId, // 👤 Newspaper account if anonymous, else reporter
       submitterId: reporterUser.id, // 📊 Always track original submitter for productivity
       reporterId: articleReporterId, // 📰 Default to صحيفة سبق for email articles
-      status: trustedSender.autoPublish ? "published" : "draft",
+      status: publishNow ? "published" : "draft",
       imageUrl: featuredImage, // 🖼️ Featured image URL (first uploaded image)
       seo: {
         keywords: editorialResult.optimized.seoKeywords,
       },
       categoryId: finalCategoryId, // 🎯 Always has a valid category!
       createdAt: new Date(),
-      publishedAt: trustedSender.autoPublish ? new Date() : null,
+      publishedAt: publishNow ? new Date() : null,
       // 🔥 Essential fields for article visibility
       articleType: isInfographic ? "infographic" : "news", // 🎨 Set to infographic if detected
       newsType: "regular", // Default news type (not breaking/featured)
@@ -1884,6 +1953,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         article = await storage.createArticle(articleData);
       }
 
+      articleCreated = true;
       console.log("[Email Agent] ✅ Article created successfully:", article?.id);
       console.log("[Email Agent]    - Title:", articleData.title);
       console.log("[Email Agent]    - Status:", articleData.status);
@@ -1940,7 +2010,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       }
       
       // 🔄 INVALIDATE HOMEPAGE CACHE - New article should appear immediately
-      if (trustedSender.autoPublish && article) {
+      if (publishNow && article) {
         console.log(`[Email Agent] 🗑️ Invalidating homepage cache for immediate article visibility...`);
         invalidatePublishedContent({
           articleSlug: (article as any)?.slug,
@@ -1969,7 +2039,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
 
     // Broadcast notification to staff users about new published article
-    if (trustedSender.autoPublish && article) {
+    if (publishNow && article) {
       try {
         console.log("[Email Agent] 📢 Broadcasting notification to staff about published article...");
         
@@ -2028,7 +2098,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
 
     // Update webhook log — wrapped in try/catch so a log-update failure
     // doesn't mask the fact that the article was already published.
-    const webhookStatus = trustedSender.autoPublish ? "published" : "processed";
+    const webhookStatus = publishNow ? "published" : "processed";
     try {
       await storage.updateEmailWebhookLog(webhookLog.id, {
         status: webhookStatus,
@@ -2036,6 +2106,14 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
         articleId: article?.id,
         attachmentsCount: allAttachmentsMetadata.length,
         attachmentsData: cleanAttachmentsForLog(),
+        ...(heldReason ? { processingError: heldReason } : {}),
+        aiAnalysis: {
+          contentQuality: editorialResult.qualityScore,
+          languageDetected: editorialResult.language,
+          categoryPredicted: editorialResult.detectedCategory,
+          isNewsWorthy: editorialResult.hasNewsValue,
+          warnings: [`sender_auth:${senderAuth}`],
+        },
       });
       console.log("[Email Agent] 📊 Webhook log updated — attachments:", allAttachmentsMetadata.length);
     } catch (logUpdateError: any) {
@@ -2045,8 +2123,26 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     const today = new Date();
     await storage.updateEmailAgentStats(today, {
       emailsReceived: 1,
-      ...(trustedSender.autoPublish ? { emailsPublished: 1 } : { emailsDrafted: 1 }),
-    });
+      ...(publishNow ? { emailsPublished: 1 } : { emailsDrafted: 1 }),
+    }).catch((err: any) => console.error("[Email Agent] تعذر تحديث الإحصاءات (المقال أُنشئ):", err?.message));
+
+    // مسودة محجوزة عن النشر المباشر: ينبَّه فريق التحرير لأن المرسل اعتاد النشر الفوري.
+    if (heldReason && article) {
+      storage.broadcastNotificationToStaff({
+        type: "article_draft_held",
+        title: "خبر بريد بانتظار المراجعة",
+        body: `${articleData.title} — ${heldReason}`.slice(0, 400),
+        deeplink: `/dashboard/articles/${article.id}/edit`,
+        metadata: { articleId: article.id, channel: "email", senderName: trustedSender.name },
+      }).catch((err) => console.error("[Email Agent] تعذر تنبيه التحرير بالمسودة المحجوزة:", err?.message));
+    }
+
+    const publicPath = editorialResult.language === "en" ? "/en/article/" : editorialResult.language === "ur" ? "/ur/article/" : "/article/";
+    replyToSender(
+      publishNow
+        ? { kind: "published", title: articleData.title, url: `https://sabq.org${publicPath}${articleData.englishSlug}` }
+        : { kind: "draft", title: articleData.title, ...(heldReason ? { note: heldReason } : {}) },
+    );
 
     // Early ACK already returned 200 after dedup claim.
     if (res.headersSent) {
@@ -2055,7 +2151,7 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
     }
     respondWebhook(res, {
       success: true,
-      message: trustedSender.autoPublish 
+      message: publishNow 
         ? "Article published successfully (edited with Sabq style)" 
         : "Article saved as draft (edited with Sabq style)",
       article: {
@@ -2097,11 +2193,17 @@ router.post("/webhook", requireInboundWebhookSecret, upload.any(), async (req: R
       console.log("[Email Agent] ⚠️ Webhook log not created yet - error occurred during email parsing");
     }
     
+    // الفشل لا يحبس الخبر: تُفك بصمة التكرار ويُبلَّغ المرسل الموثوق ليعيد الإرسال.
+    if (!articleCreated) {
+      if (dedupFrom) await releaseEmailContentDedup(dedupFrom, dedupSubject).catch(() => undefined);
+      if (tokenWasVerified) replyToSender({ kind: "failed" });
+    }
+
     const today = new Date();
     await storage.updateEmailAgentStats(today, {
       emailsReceived: 1,
       emailsFailed: 1,
-    });
+    }).catch(() => undefined);
 
     // Early ACK may already have been sent after dedup claim — don't double-send.
     respondWebhook(res, {
@@ -2119,6 +2221,38 @@ const DRAFTED_STATUSES = new Set(["processed", "drafted"]);
 function isDraftedStatus(status?: string | null): boolean {
   return !!status && DRAFTED_STATUSES.has(status);
 }
+
+// الرسائل العالقة تُكشف عند فتح الصفحة (لا مهمة مجدولة): UPDATE واحد رخيص،
+// ومرة كل دقيقتين لكل نسخة خادم على الأكثر.
+let lastStuckSweepAt = 0;
+function sweepStuckEmailsInBackground(): void {
+  if (Date.now() - lastStuckSweepAt < 2 * 60 * 1000) return;
+  lastStuckSweepAt = Date.now();
+  void (async () => {
+    const stuck = await sweepStuckEmailLogs();
+    if (stuck.length === 0) return;
+    console.warn(`[Email Agent] ${stuck.length} stuck message(s) marked failed`);
+    await storage.updateEmailAgentStats(new Date(), { emailsFailed: stuck.length });
+    if (!emailAgentRepliesEnabled()) return;
+    for (const row of stuck) {
+      // الرد للمرسل الذي ثبت رمزه فقط.
+      if (!row.tokenVerified) continue;
+      const reply = buildSenderReply(row.subject, { kind: "failed" });
+      await sendEmailNotification({ to: row.fromEmail, ...reply });
+    }
+  })().catch((error) => console.error("[Email Agent] stuck sweep failed:", error?.message));
+}
+
+// حقول المرسل الموثوق المسموح تعديلها من الواجهة — لا يُمرَّر جسم الطلب كما هو.
+const senderInputSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  name: z.string().trim().min(2).max(120),
+  language: z.enum(["ar", "en", "ur"]),
+  autoPublish: z.boolean(),
+  defaultCategory: z.preprocess((v) => (v === "" || v === "none" ? null : v), z.string().nullable().optional()),
+  reporterUserId: z.preprocess((v) => (v === "" || v === "none" ? null : v), z.string().nullable().optional()),
+  status: z.enum(["active", "suspended", "revoked"]),
+});
 
 // GET /api/email-agent/stats - Get email agent statistics (admin only)
 router.get("/stats", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
@@ -2161,6 +2295,7 @@ router.get("/stats", isAuthenticated, requirePermission('admin.manage_settings')
 // GET /api/email-agent/badge-stats - Get badge notification statistics (admin only)
 router.get("/badge-stats", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
+    sweepStuckEmailsInBackground();
     const { start, end } = riyadhDayRange();
     
     // Get all webhook logs for today using date range query
@@ -2309,7 +2444,15 @@ router.get("/senders/:id", isAuthenticated, requirePermission('admin.manage_sett
 router.post("/senders", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
     const userId = (req.user as any)?.id;
-    const sender = await storage.createTrustedSender(req.body, userId);
+    const parsed = senderInputSchema.partial({ language: true, autoPublish: true, status: true }).safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: "بيانات المرسل غير صالحة", issues: parsed.error.issues });
+    }
+    // رمز الواجهة يُقبل بصيغته الكاملة فقط (64 خانة)، وإلا يولّده الخادم.
+    const sender = await storage.createTrustedSender(
+      { ...parsed.data, token: resolveSenderToken(req.body?.token) } as any,
+      userId,
+    );
     return res.status(201).json(sender);
   } catch (error: any) {
     console.error("[Email Agent] Error creating sender:", error);
@@ -2323,11 +2466,13 @@ router.post("/senders", isAuthenticated, requirePermission('admin.manage_setting
 // PUT /api/email-agent/senders/:id - Update a trusted sender (admin only)
 router.put("/senders/:id", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    console.log("[Email Agent] PUT /senders/:id - Received update request");
-    console.log("[Email Agent] Sender ID:", req.params.id);
-    console.log("[Email Agent] Update data:", JSON.stringify(req.body));
-    const sender = await storage.updateTrustedSender(req.params.id, req.body);
-    console.log("[Email Agent] Updated sender status:", sender.status);
+    const parsed = senderInputSchema.partial().safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: "بيانات المرسل غير صالحة", issues: parsed.error.issues });
+    }
+    // الرمز لا يتغير من هذا المسار.
+    const sender = await storage.updateTrustedSender(req.params.id, parsed.data as any);
+    if (!sender) return res.status(404).json({ message: "Sender not found" });
     return res.json(sender);
   } catch (error: any) {
     console.error("[Email Agent] Error updating sender:", error);

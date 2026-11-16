@@ -191,6 +191,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "image-focal-point", displayName: "تحديد بؤرة الصورة", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
   { featureKey: "editor-social-post", displayName: "منشور المحرر الاجتماعي", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
   { featureKey: "editor-fact-check", displayName: "فحص الحقائق — OpenAI", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editorial-edit", displayName: "التحرير بأسلوب سبق (Claude)", category: "editorial", primary: SONNET, fallbackChain: [], allowFailover: false },
   { featureKey: "editorial-edit-fallback", displayName: "بديل OpenAI للتحرير", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
   { featureKey: "editorial-email-analysis", displayName: "تحليل مادة البريد", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
   { featureKey: "editorial-content-improvement", displayName: "تحسين المحتوى", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
