@@ -14866,7 +14866,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           userAgent: req.get("user-agent"),
         },
       });
-
+      if (newArticle.status === "published") void import("./services/enBotDraftPublishEffects").then((m) => m.queueEnBotDraftSurfaceEffects(newArticle, "publish")).catch(() => {});
       res.status(201).json(newArticle);
     } catch (error: any) {
       console.error("Error creating English article:", error);
@@ -15027,7 +15027,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       memoryCache.invalidatePattern('^article:id:');
       memoryCache.invalidatePattern('^articles:');
       memoryCache.invalidatePattern('^sidebar:');
-      console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
+      if (updatedArticle.status === "published" && existingArticle.status !== "published") void import("./services/enBotDraftPublishEffects").then((m) => m.queueEnBotDraftSurfaceEffects(updatedArticle, "publish")).catch(() => {});
 
       res.json(updatedArticle);
     } catch (error: any) {

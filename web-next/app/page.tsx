@@ -21,6 +21,7 @@ export const metadata: Metadata = {
   description: HOME_DESCRIPTION,
   alternates: {
     canonical: "https://sabq.org",
+    languages: { ar: "https://sabq.org", en: "https://sabq.org/en", "x-default": "https://sabq.org" },
     types: { "application/rss+xml": "https://sabq.org/api/rss/articles" },
   },
   robots:

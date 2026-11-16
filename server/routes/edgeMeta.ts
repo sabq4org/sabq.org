@@ -907,9 +907,11 @@ async function buildEnArticlePayload(
     seoData.metaDescription || row.aiSummary || row.excerpt || title,
     220,
   );
-  const author =
-    [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") ||
-    ARTICLE_BRAND.en.name;
+  // حساب «صحيفة سبق» وأي اسم بلا حروف لاتينية يظهر في الصفحة الإنجليزية
+  // باسم النشرة "Sabq News" كجهة ناشرة، لا كاسم عربي داخل بيانات إنجليزية.
+  const authorName = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ");
+  const authorIsLatin = /[A-Za-z]/.test(authorName);
+  const author = authorIsLatin ? authorName : ARTICLE_BRAND.en.name;
   const enCanonicalSlug = row.englishSlug || slug;
   const siblingArSlug = await resolveArSiblingSlug(row.seoMetadata, enCanonicalSlug);
   return articleMetaPayload({
@@ -925,6 +927,7 @@ async function buildEnArticlePayload(
     updatedAt: row.updatedAt,
     status: row.status,
     author,
+    authorPerson: authorIsLatin ? undefined : { "@type": "Organization", name: ARTICLE_BRAND.en.name, url: `${SITE_URL}/en` },
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
     semanticHtml: buildSemanticHtml({
@@ -1659,6 +1662,12 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         type: "website",
         locale: "en_US",
         siteName: "Sabq News",
+        // الرئيسيتان بديلتان لغويًا: يربط جوجل النسخة الإنجليزية بسلطة العربية.
+        hreflang: [
+          { lang: "ar", href: SITE_URL },
+          { lang: "en", href: `${SITE_URL}/en` },
+          { lang: "x-default", href: SITE_URL },
+        ],
         semanticHtml: [sections, latest].filter(Boolean).join("") || undefined,
       };
     },

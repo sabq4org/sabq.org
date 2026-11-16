@@ -83,6 +83,26 @@ export function generateEnglishSlug(_text?: string): string {
   return shortTopicSlug();
 }
 
+/**
+ * رابط مقروء من عنوان إنجليزي ("Royal Order Promotes 167 Judges" →
+ * "royal-order-promotes-167-judges"). يُقص عند حد كلمة. يعيد "" إن لم يبقَ
+ * في العنوان حرف لاتيني أو رقم، فيختار المستدعي بديلًا.
+ */
+export function readableEnglishSlug(title: string, maxLength = 80): string {
+  const slug = (title || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/['’‘`]/g, "")
+    .replace(/(\d),(?=\d{3})/g, "$1")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (slug.length <= maxLength) return slug;
+  const cut = slug.slice(0, maxLength + 1);
+  const lastDash = cut.lastIndexOf("-");
+  return (lastDash > 20 ? cut.slice(0, lastDash) : slug.slice(0, maxLength)).replace(/-+$/g, "");
+}
+
 /** Normalize a topic slug for storage/validation (lowercase, strip invalid chars). */
 export function normalizeTopicSlug(slug: string): string {
   return slug

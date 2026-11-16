@@ -47,6 +47,8 @@ export async function applyEnBotDraftSurfaceEffects(
     `${siteOrigin()}/api/en/articles/${encodeURIComponent(canonical)}`,
     `${apiOrigin()}/api/edge/seo-meta?path=${encodeURIComponent(path)}`,
   ];
+  // خريطة الأخبار مخزنة على الحافة 3 دقائق: امسحها ليرى Googlebot الخبر فورًا.
+  if (kind === "publish" || kind === "archive") urls.push(`${siteOrigin()}/sitemap-news.xml`, `${apiOrigin()}/sitemap-news.xml`);
   await purgeUrls(urls).catch((error) => {
     console.error("[EnBotDrafts] English URL purge failed:", error);
   });
