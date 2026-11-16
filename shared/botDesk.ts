@@ -135,6 +135,31 @@ export const botDeskOpinionEditSchema = z
 export type BotDeskTicketsQuery = z.infer<typeof botDeskTicketsQuerySchema>;
 export type BotDeskTicketReplyInput = z.infer<typeof botDeskTicketReplySchema>;
 export type BotDeskTicketStatusInput = z.infer<typeof botDeskTicketStatusSchema>;
+/**
+ * POST /api/internal/bot-desk/opinion/drafts/:id/image — توليد صورة مقال الرأي
+ * أو إعادة توليدها (مسودة بانتظار المكتب أو مجدول) دون تغيير الحالة أو الموعد.
+ * force=true يعيد التوليد وإن كانت للمقال صورة.
+ */
+export const botDeskOpinionImageSchema = z
+  .object({ force: z.boolean().optional() })
+  .strict();
+
+export type BotDeskOpinionImageInput = z.infer<typeof botDeskOpinionImageSchema>;
+
+/** حالة آخر توليد صورة لمقال رأي (system_settings: staff_app.opinion_image:<id>). */
+export interface BotDeskOpinionImageJob {
+  articleId: string;
+  status: "running" | "done" | "failed";
+  /** waiting_for_slot: صورة أخرى للحساب نفسه قيد التوليد؛ generating: التوليد جارٍ. */
+  step: "waiting_for_slot" | "generating" | "saving" | null;
+  force: boolean;
+  startedAt: string;
+  finishedAt: string | null;
+  imageUrl: string | null;
+  previousImageUrl: string | null;
+  message: string | null;
+}
+
 export type BotDeskSocialPendingQuery = z.infer<typeof botDeskSocialPendingQuerySchema>;
 export type BotDeskSocialRejectInput = z.infer<typeof botDeskSocialRejectSchema>;
 export type BotDeskSocialScheduleInput = z.infer<typeof botDeskSocialScheduleSchema>;
