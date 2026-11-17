@@ -70,6 +70,13 @@ export function registerKingsCupRoutes(app: Express) {
       return;
     }
     if (!guard(res)) return;
+    if (!resilient && req.query.visibility === "1") {
+      const settings = await getTournamentBlockSettings("kings-cup");
+      res.set("Cache-Control", "public, max-age=0, s-maxage=5");
+      res.set("X-Sabq-Public-Cache", "1");
+      res.json({ blockHidden: isBlockHidden(settings) });
+      return;
+    }
     try {
       const load = async () => {
         const [ov, fixtures] = await Promise.all([getKcOverview(), getKcFixtures()]);

@@ -101,3 +101,41 @@ it("disabled Kings Cup stays explicitly unconfigured without fetching the provid
   expect((await request({})).status).toBe(503);
   expect(mocks.overview).not.toHaveBeenCalled();
 });
+
+it("KC visibility reads only current settings and retains the configuration guard", async () => {
+  const request = await handler("/api/kings-cup/overview");
+  mocks.settings.mockResolvedValue({ hidden: true });
+  const hidden = await request({ visibility: "1" });
+  expect(hidden.body).toEqual({ blockHidden: true });
+  expect(hidden.headers["Cache-Control"]).toBe("public, max-age=0, s-maxage=5");
+  expect(hidden.headers["X-Sabq-Public-Cache"]).toBe("1");
+  mocks.settings.mockResolvedValue({ hidden: false });
+  expect((await request({ visibility: "1" })).body).toEqual({ blockHidden: false });
+  expect(mocks.overview).not.toHaveBeenCalled();
+  expect(mocks.fixtures).not.toHaveBeenCalled();
+  mocks.configured.mockReturnValue(false);
+  expect((await request({ visibility: "1" })).status).toBe(503);
+  expect(mocks.settings).toHaveBeenCalledTimes(2);
+});
+
+it("serves visibility over HTTP without fetching matches", async () => {
+  vi.useRealTimers();
+  const { default: express } = await import("express");
+  const { registerKingsCupRoutes } = await import("../../server/routes/kingsCup");
+  const app = express();
+  registerKingsCupRoutes(app);
+  const server = app.listen(0, "127.0.0.1");
+  try {
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No TCP address");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/kings-cup/overview?visibility=1`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=5");
+    expect(await response.json()).toEqual({ blockHidden: false });
+    expect(mocks.overview).not.toHaveBeenCalled();
+    expect(mocks.fixtures).not.toHaveBeenCalled();
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+  }
+});

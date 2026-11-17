@@ -270,6 +270,11 @@ describe("Pages auxiliary public API surge guard", () => {
       headers: { "accept-language": "ar-SA,ar;q=0.8" },
     }));
     expect(en.url).not.toBe(ar.url);
+    const visibility = new Request("https://sabq.org/api/kings-cup/overview?visibility=1");
+    expect(newPublicApiPolicy(visibility)?.ttl).toBe(5);
+    expect(newPublicApiCacheKey(visibility).url).not.toBe(newPublicApiCacheKey(new Request("https://sabq.org/api/kings-cup/overview")).url);
+    expect(newPublicApiPolicy(new Request(visibility, { headers: { cookie: "connect.sid=example" } }))).toBeNull();
+    expect(newPublicApiPolicy(new Request(visibility, { headers: { authorization: "Bearer example" } }))).toBeNull();
     expect(newPublicApiPolicy(new Request("https://sabq.org/api/kings-cup/overview?resilient=1"))).toBeNull();
     expect(newPublicApiPolicy(new Request("https://sabq.org/api/kings-cup/overview", { method: "HEAD" }))).toBeNull();
   });
