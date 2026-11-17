@@ -255,6 +255,7 @@ curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<ar
 - الظهور في القوائم والأحداث: `meetingVisibilityFilter` (المضيف، `all`، إدارة المالك، أو المدعو). `meetings.manage` يرى الكل.
 - تفاصيل اجتماع: `isUserEligible`، وإلا `403`. المعرّف غير الموجود `404 not_found`.
 - **التفريغ الخام للمضيف أو `meetings.manage` فقط** (سياسة أمين المحضر)، وإلا `403`.
+- **استثناء `meetings.read_minutes` (منذ 2026-11-17):** حامل هذه الصلاحية يقرأ التفريغ الخام ومسودة المحضر في `/transcript` و`/minutes` لاجتماع **متاح له أصلاً** (نفس `isUserEligible`)، دون أن يُعدّ مضيفاً (`viewerIsHost` يبقى `false`). لا توسّع الظهور، ولا تعمل في مسارات اللوحة، وليست ضمن أي دور: تُمنح لحساب بعينه عبر `user_permission_overrides` (`migrations/20261117_meetings_read_minutes_permission.sql`).
 - المحضر: المسودة للمضيف أو المدير، والمعتمد (`approved`) لكل مشارك مؤهل.
 
 **لا يُعاد أبداً:** `invite_token`، `guest_key`، `room_name`، أسرار LiveKit، بريد أو جوال. هوية المتحدث الضيف (`guest:<key>`) تُعاد `speakerKind: "guest"` بلا مفتاح.

@@ -119,6 +119,8 @@ import {
   botDeskMeetingEventsQuerySchema,
   botDeskMeetingTranscriptQuerySchema,
   botDeskMeetingsQuerySchema,
+  canReadMeetingPrivateMinutes,
+  MEETINGS_READ_MINUTES_PERMISSION,
 } from "@shared/botDeskMeetings";
 import {
   getMeetingDetailForBot,
@@ -1283,7 +1285,11 @@ router.post(
 
 // ── اجتماعات سبق (قراءة فقط) ────────────────────────────────────────
 
-type BotDeskMeetingsRequest = BotDeskRequest & { meetingsCanManage?: boolean };
+type BotDeskMeetingsRequest = BotDeskRequest & {
+  meetingsCanManage?: boolean;
+  /** meetings.read_minutes — يقرأ التفريغ ومسودة المحضر لاجتماع متاح له، ولا شيء غير ذلك */
+  meetingsCanReadMinutes?: boolean;
+};
 
 async function requireMeetingsRead(req: BotDeskMeetingsRequest, res: Response, next: NextFunction) {
   try {
@@ -1299,6 +1305,11 @@ async function requireMeetingsRead(req: BotDeskMeetingsRequest, res: Response, n
       });
     }
     req.meetingsCanManage = await userHasPermission(principal.userId, "meetings.manage");
+    // لا تُحسب ضمن meetingsCanManage عمداً: لا توسّع الظهور ولا تجعل صاحبها مضيفاً
+    req.meetingsCanReadMinutes = await userHasPermission(
+      principal.userId,
+      MEETINGS_READ_MINUTES_PERMISSION,
+    );
     return next();
   } catch (error) {
     console.error("[BotDesk meetings] RBAC check failed:", error);
@@ -1415,12 +1426,18 @@ router.get(
     try {
       const access = await loadBotMeeting(req, res);
       if (!access) return;
-      // سياسة أمين المحضر: التفريغ الخام للمضيف أو meetings.manage فقط
-      if (!access.viewerIsHost) {
+      // سياسة المحضر: التفريغ الخام للمضيف أو meetings.manage، أو لحامل
+      // meetings.read_minutes في اجتماع متاح له أصلاً (loadBotMeeting طبّق الأهلية)
+      if (
+        !canReadMeetingPrivateMinutes({
+          viewerIsHost: access.viewerIsHost,
+          hasReadMinutesPermission: Boolean(req.meetingsCanReadMinutes),
+        })
+      ) {
         return sendError(res, 403, {
           code: "forbidden",
           message: "التفريغ الخام للمضيف أو مدير الاجتماعات فقط",
-          details: { required: "host_or_meetings.manage" },
+          details: { required: "host_or_meetings.manage_or_meetings.read_minutes" },
         });
       }
       const { meeting } = access;
@@ -1449,7 +1466,9 @@ router.get(
     try {
       const access = await loadBotMeeting(req, res);
       if (!access) return;
-      res.json(minutesForBot(access.meeting, access.viewerIsHost));
+      res.json(
+        minutesForBot(access.meeting, access.viewerIsHost, Boolean(req.meetingsCanReadMinutes)),
+      );
     } catch (error) {
       console.error("[BotDesk meetings] minutes failed:", error);
       sendError(res, 500, { code: "server_error", message: "تعذر جلب المحضر" });
