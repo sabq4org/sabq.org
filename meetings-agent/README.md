@@ -13,8 +13,17 @@ Dispatch) من خادم سبق عند بدء اجتماع مفعَّل «مُد�
    تُرفع دفعات كل ٥ ثوانٍ إلى:
    `POST {SABQ_API_URL}/api/internal/meetings-agent/:meetingId/transcripts`
    بترويسة `x-agent-secret`.
-4. عند إغلاق الغرفة (إنهاء الاجتماع) يفرغ العامل ما تبقى ويخرج، والخادم
-   الرئيسي يتولى توليد المحضر.
+4. عند إغلاق الغرفة (إنهاء الاجتماع) ينهي العامل بثوث التفريغ بمهلة محددة
+   (لا تنتهي وحدها)، يرفع آخر دفعة، ثم يرسل إشارة الاكتمال:
+   `POST {SABQ_API_URL}/api/internal/meetings-agent/:meetingId/complete`
+   والخادم يولّد المحضر عندها (مع مؤقت احتياطي ٤٥ث وكنس دوري إن لم تصل).
+5. قبل الخروج يطبع لكل مسار صوتي سطراً تشخيصياً ثم سطر `done … diagnosis=`:
+   - `ok` — خرج نص.
+   - `silent-audio` — وصل صمت (الميكروفون أو المتصفح).
+   - `audible-but-no-speech-detected` — وصل صوت ولم يكتشف VAD كلاماً
+     (راجع `TURN_DETECTION` / `NOISE_REDUCTION` في `src/sttConfig.ts`).
+   - `speech-detected-but-no-transcript` — اكتُشف كلام ولم يصل نص نهائي.
+   - `no-audio-frames` / `no-audio-tracks` — لم يصل صوت أصلاً (اشتراك).
 
 ## النشر على Railway (خدمة جديدة)
 

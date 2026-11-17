@@ -17,10 +17,12 @@ import {
 import {
   approveAndDistributeMinutes,
   cleanupOldTranscripts,
+  completeTranscription,
   generateMinutes,
   getTranscript,
   getTranscriptStats,
   ingestTranscriptSegments,
+  parseAgentCompletion,
   updateDraftMinutes,
   verifyAgentSecret,
 } from "../services/meetingMinutesService";
@@ -73,6 +75,25 @@ router.post(
       res.json({ ok: true, inserted });
     } catch (error) {
       console.error("[Minutes] ingest error:", error);
+      res.status(500).json({ message: "server error" });
+    }
+  },
+);
+
+// إشارة اكتمال التفريغ: العامل رفع آخر دفعة → يولَّد المحضر الآن (لا عند حذف الغرفة)
+router.post(
+  "/api/internal/meetings-agent/:id/complete",
+  requireAgentSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const meeting = await getMeeting(req.params.id);
+      if (!meeting || !meeting.minutesEnabled) {
+        return res.status(404).json({ message: "not found" });
+      }
+      await completeTranscription(meeting, parseAgentCompletion(req.body));
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Minutes] complete error:", error);
       res.status(500).json({ message: "server error" });
     }
   },
