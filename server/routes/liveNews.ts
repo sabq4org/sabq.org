@@ -8,6 +8,12 @@ import { paginationOrReject } from "../utils/pagination";
 
 const router: Router = Router();
 
+// PostgreSQL counts code points. Finish the existing UTF-16 cut in JavaScript.
+const summaryPrefix = sql<string | null>`left(regexp_replace(nullif(${articles.content}, ''), '<[^>]*>', '', 'g'), 150)`;
+function formatSummary(prefix: string | null) {
+  return prefix === null ? "" : prefix.substring(0, 150) + "...";
+}
+
 // GET /api/live/updates - Get live news updates (published & updated articles)
 router.get("/api/live/updates", cacheControl({ maxAge: 30, staleWhileRevalidate: 60 }), async (req, res) => {
   try {
@@ -75,7 +81,7 @@ async function fetchLiveUpdates(
         categoryNameAr: categories.nameAr,
         categoryColor: categories.color,
         viewsCount: articles.views,
-        content: articles.content,
+        summaryPrefix,
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
@@ -123,9 +129,7 @@ async function fetchLiveUpdates(
       categoryColor: item.categoryColor || null,
       viewsCount: item.viewsCount || 0,
       commentsCount: commentsCountMap[item.id] || 0,
-      summary: item.content
-        ? item.content.replace(/<[^>]*>/g, "").substring(0, 150) + "..."
-        : "",
+      summary: formatSummary(item.summaryPrefix),
     }));
 
     const nextCursor =
@@ -158,7 +162,7 @@ router.get("/api/live/breaking", async (req, res) => {
         categoryNameAr: categories.nameAr,
         categoryColor: categories.color,
         viewsCount: articles.views,
-        content: articles.content,
+        summaryPrefix,
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
@@ -210,9 +214,7 @@ router.get("/api/live/breaking", async (req, res) => {
       categoryColor: item.categoryColor || null,
       viewsCount: item.viewsCount || 0,
       commentsCount: commentsCountMap[item.id] || 0,
-      summary: item.content
-        ? item.content.replace(/<[^>]*>/g, "").substring(0, 150) + "..."
-        : "",
+      summary: formatSummary(item.summaryPrefix),
     }));
 
     res.json({

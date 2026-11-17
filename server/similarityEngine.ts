@@ -207,6 +207,43 @@ export function scoreContent(
   };
 }
 
+// Older JSON coordinates can contain numeric strings. A malformed coordinate
+// invalidates only its vector, so other candidates can still be recommended.
+function decodedCoordinates(embedding: ReturnType<typeof sql>) {
+  // Decode as numeric first. Corrupt extreme values must never overflow the
+  // float8 dot product or squared norm and fail the entire recommendation list.
+  return sql`(
+    SELECT idx, CASE WHEN abs(n) < 1e-140 THEN 0::float8
+                     WHEN abs(n) <= 1e140 THEN n::float8 END AS x
+    FROM (
+      SELECT idx, CASE jsonb_typeof(value)
+        WHEN 'number' THEN value::numeric
+        WHEN 'null' THEN 0
+        WHEN 'boolean' THEN CASE WHEN value = 'true'::jsonb THEN 1 ELSE 0 END
+        WHEN 'string' THEN CASE WHEN trim(value #>> '{}') = '' THEN 0
+          WHEN pg_input_is_valid(value #>> '{}', 'numeric') THEN (value #>> '{}')::numeric END
+      END AS n
+      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(${embedding}) = 'array' THEN ${embedding} END)
+        WITH ORDINALITY AS coordinate(value, idx)
+      OFFSET 0
+    ) parsed
+    OFFSET 0
+  ) decoded`;
+}
+
+// Jaccard similarity counts each label once and gives two empty sets a score of one.
+function setOverlap(column: 'tags' | 'entities') {
+  const field = sql.identifier(column);
+  return sql`(SELECT coalesce(count(*) FILTER (WHERE in_reference AND in_candidate)::float8
+      / nullif(count(*), 0), 1)
+    FROM (
+      SELECT label, bool_or(source = 1) AS in_reference, bool_or(source = 2) AS in_candidate
+      FROM (SELECT unnest(r.${field}) AS label, 1 AS source
+            UNION ALL SELECT unnest(c.${field}), 2) labels
+      GROUP BY label
+    ) membership)`;
+}
+
 /**
  * Find similar articles to a given article
  * Useful for "Because You Liked" recommendations
@@ -216,88 +253,61 @@ export async function findSimilarArticles(
   limit: number = 10,
   excludeArticleIds: string[] = []
 ): Promise<ScoredArticle[]> {
-  // Get reference article vector
-  const refVector = await db.query.contentVectors.findFirst({
-    where: eq(contentVectors.articleId, referenceArticleId),
-  });
-
-  if (!refVector || !refVector.embedding || !Array.isArray(refVector.embedding)) {
-    return [];
-  }
-
-  // Get all other article vectors (published in last 30 days)
-  const thirtyDaysAgo = new Date();
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // Join with articles table to filter only published articles
-  const candidateVectors = await db
-    .select({
-      articleId: contentVectors.articleId,
-      embedding: contentVectors.embedding,
-      tags: contentVectors.tags,
-      entities: contentVectors.entities,
-      title: contentVectors.title,
-      publishedAt: contentVectors.publishedAt,
-    })
-    .from(contentVectors)
-    .innerJoin(articles, eq(contentVectors.articleId, articles.id))
-    .where(
-      and(
-        eq(articles.status, 'published'), // Only published articles
-        sql`${contentVectors.publishedAt} > ${thirtyDaysAgo}`,
-        sql`${contentVectors.articleId} != ${referenceArticleId}`
-      )
+  // Preserve the original candidate cap before exclusions and the stable order
+  // for equal scores. Keep the large JSON embeddings inside Postgres.
+  const excluded = excludeArticleIds.length
+    ? sql`AND c.article_id NOT IN (${sql.join(excludeArticleIds.map(id => sql`${id}`), sql`, `)})`
+    : sql``;
+  const result = await db.execute<{
+    article_id: string; title: string; cosine: number; tag_overlap: number;
+    entity_overlap: number; freshness: number; score: number;
+  }>(sql`
+    WITH ref AS MATERIALIZED (
+      SELECT v.tags, v.entities,
+        ARRAY(SELECT x FROM ${decodedCoordinates(sql`v.embedding`)}) AS coords
+      FROM content_vectors v
+      WHERE article_id = ${referenceArticleId} AND jsonb_typeof(embedding) = 'array'
+    ), candidates AS (
+      SELECT v.article_id, v.title, v.tags, v.entities, v.published_at, v.embedding
+      FROM content_vectors v JOIN articles a ON a.id = v.article_id
+      WHERE a.status = 'published' AND v.published_at > ${thirtyDaysAgo.toISOString()}::timestamp
+        AND v.article_id <> ${referenceArticleId}
+      LIMIT 200
+    ), reference_norm AS MATERIALIZED (
+      SELECT ref.*, sqrt((SELECT sum(x*x) FROM unnest(coords) x)) AS norm FROM ref
+      WHERE array_position(coords, NULL) IS NULL
+    ), factors AS MATERIALIZED (
+      SELECT c.article_id, c.title, row_number() OVER () AS position,
+        coalesce(products.dot / nullif(r.norm * sqrt(products.norm_sq), 0), 0) AS cosine,
+        ${setOverlap('tags')} AS tag_overlap, ${setOverlap('entities')} AS entity_overlap,
+        1 / (ln(greatest(extract(epoch FROM (${now.toISOString()}::timestamp - c.published_at))::float8 / 3600, 1) + 1) / ln(2::float8)) AS freshness
+      FROM reference_norm r CROSS JOIN candidates c
+      CROSS JOIN LATERAL (
+        SELECT sum(x * r.coords[idx]) AS dot, sum(x*x) AS norm_sq
+        FROM ${decodedCoordinates(sql`c.embedding`)}
+        HAVING count(*) = count(x)
+      ) products
+      WHERE jsonb_typeof(c.embedding) = 'array' ${excluded}
     )
-    .limit(200); // Limit for performance
-
-  // Score each candidate
-  const scored: ScoredArticle[] = [];
-
-  for (const candidate of candidateVectors) {
-    if (excludeArticleIds.includes(candidate.articleId)) {
-      continue;
-    }
-
-    if (!candidate.embedding || !Array.isArray(candidate.embedding)) {
-      continue;
-    }
-
-    // Calculate cosine similarity
-    const cosine = cosineSimilarity(
-      refVector.embedding as number[],
-      candidate.embedding as number[]
-    );
-
-    // Tag overlap
-    const tagOverlap = jaccardSimilarity(refVector.tags, candidate.tags);
-
-    // Entity overlap
-    const entityOverlap = jaccardSimilarity(refVector.entities, candidate.entities);
-
-    // Freshness
-    const ageHours = (Date.now() - new Date(candidate.publishedAt).getTime()) / (1000 * 60 * 60);
-    const freshBoost = 1 / Math.log2(Math.max(ageHours, 1) + 1);
-
-    const score = 0.5 * cosine + 0.2 * tagOverlap + 0.2 * entityOverlap + 0.1 * freshBoost;
-
-    scored.push({
-      articleId: candidate.articleId,
-      title: candidate.title,
-      score,
-      reasons: {
-        cosineSimilarity: cosine,
-        tagOverlap,
-        entityOverlap,
-        freshnessBoost: freshBoost,
-        categoryMatch: false,
-      },
-    });
-  }
-
-  // Sort by score and return top N
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    SELECT *, 0.5*cosine + 0.2*tag_overlap + 0.2*entity_overlap + 0.1*freshness AS score
+    FROM factors ORDER BY score DESC, position LIMIT ${limit}
+  `);
+  return result.rows.map(row => ({
+    articleId: row.article_id,
+    title: row.title,
+    score: row.score,
+    reasons: {
+      cosineSimilarity: row.cosine,
+      tagOverlap: row.tag_overlap,
+      entityOverlap: row.entity_overlap,
+      freshnessBoost: row.freshness,
+      categoryMatch: false,
+    },
+  }));
 }
 
 /**

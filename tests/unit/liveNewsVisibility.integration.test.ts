@@ -13,7 +13,7 @@ vi.mock("../../server/memoryCache", () => ({
 }));
 import router from "../../server/routes/liveNews";
 
-const url = process.env.LIVE_NEWS_TEST_URL;
+const url = process.env.LIVE_NEWS_TEST_URL || process.env.SESSION_REVOCATION_TEST_URL;
 if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) {
   throw new Error("Live news integration tests require local PostgreSQL");
 }
@@ -80,6 +80,15 @@ describe.skipIf(!url)("live news homepage visibility", () => {
     const response = await get(path);
     expect(response.items.map((item: { id: string }) => item.id)).toEqual(["visible-breaking", "older-breaking"]);
   });
+  it.each([null, "", "<b></b>", "<p>عنوان</p>\nنص", "أ".repeat(149) + "🌙" + "ب".repeat(60)])(
+    "keeps the existing summary on both live endpoints (%#)", async content => {
+      await client.query("UPDATE pg_temp.articles SET content=$1 WHERE id='visible-breaking'", [content]);
+      const expected = content ? content.replace(/<[^>]*>/g, "").substring(0, 150) + "..." : "";
+      for (const path of ["/api/live/updates", "/api/live/breaking"]) {
+        expect((await get(path)).items[0].summary).toBe(expected);
+      }
+    },
+  );
   it("does not offer another page when all articles are hidden", async () => {
     await client.query("UPDATE pg_temp.articles SET hide_from_homepage = true");
     expect(await get("/api/live/updates?limit=2")).toEqual({ items: [], nextCursor: null });
