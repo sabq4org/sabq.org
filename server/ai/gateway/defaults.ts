@@ -120,7 +120,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "ifox-strategy", displayName: "iFox — الاستراتيجية", category: "editorial", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
 
   // ── Analysis & classification ──
-  { featureKey: "meeting-minutes", displayName: "أمين المحضر — محضر الاجتماعات", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 4000 },
+  { featureKey: "meeting-minutes", displayName: "مُدوِّن سبق AI — محضر الاجتماعات", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT, maxTokens: 4000 },
   // التصنيف مهمة «اختيار من قائمة» لا تحتاج Sonnet (وسيطه 7.6ث مقابل 2.9ث لـgpt-5.1
   // في ai_usage_logs) — وهو الفرع الأبطأ في «التوليد الشامل» (تشخيص 2026-08-28).
   { featureKey: "article-classification", displayName: "تصنيف المقالات", category: "analysis", primary: HAIKU_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },

@@ -289,7 +289,7 @@ function normalizeAgenda(
     .slice(0, 40);
 }
 
-// استدعاء عامل «أمين المحضر» عند صيرورة الاجتماع مباشراً — استيراد ديناميكي
+// استدعاء عامل «مُدوِّن سبق AI» عند صيرورة الاجتماع مباشراً — استيراد ديناميكي
 // لتفادي دورة استيراد مع meetingMinutesService (الذي يستورد logMeetingEvent)
 function fireMinutesDispatch(meeting: Meeting): void {
   if (!meeting.minutesEnabled) return;
@@ -326,8 +326,6 @@ export async function createMeeting(hostUserId: string, input: CreateMeetingInpu
     })
     .returning();
 
-  if (!isScheduled) fireMinutesDispatch(meeting);
-
   await db.insert(meetingParticipants).values({
     meetingId: meeting.id,
     userId: hostUserId,
@@ -343,6 +341,9 @@ export async function createMeeting(hostUserId: string, input: CreateMeetingInpu
       );
     }
   }
+
+  // الاستدعاء بعد كتابة صفوف المشاركين — قائمة الأسماء (keyterms) تقرؤها
+  if (!isScheduled) fireMinutesDispatch(meeting);
 
   logMeetingEvent(meeting.id, "created", { actorUserId: hostUserId, detail: { accessType: input.accessType } });
   if (!isScheduled) logMeetingEvent(meeting.id, "started", { actorUserId: hostUserId });

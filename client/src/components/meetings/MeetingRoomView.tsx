@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { MINUTES_AGENT_AVATAR_URL, MINUTES_AGENT_DISPLAY_NAME } from "./minutesAgentIdentity";
 import {
   Check, Link2, Loader2, Lock, LockOpen, LogOut, Mic, MicOff,
   MonitorUp, MonitorX, NotebookPen, PhoneOff, Radio, ScreenShare, Users, Volume2, X,
@@ -56,7 +57,7 @@ export interface MeetingRoomViewProps {
   token: string;
   muteOnJoin: boolean;
   isHost: boolean;
-  /** «أمين المحضر» مفعّل — تظهر لافتة تنبيه بأن الاجتماع يُفرَّغ آلياً */
+  /** «مُدوِّن سبق AI» مفعّل — تظهر لافتة تنبيه بأن الاجتماع يُفرَّغ آلياً */
   minutesEnabled?: boolean;
   isLockedInitial?: boolean;
   startedAt?: string | null;
@@ -77,7 +78,7 @@ function initialsOf(name: string): string {
   return name.trim().slice(0, 2) || "؟";
 }
 
-// عامل «أمين المحضر» ينضم عبر Agent Dispatch بهوية تقنية (agent-xxx) بلا
+// عامل «مُدوِّن سبق AI» ينضم عبر Agent Dispatch بهوية تقنية (agent-xxx) بلا
 // metadata — يُعرض باسمه الوظيفي بدل الهوية الخام
 function isAgentParticipant(p: Participant): boolean {
   return p.kind === ParticipantKind.AGENT || p.identity.startsWith("agent-");
@@ -523,7 +524,7 @@ export function MeetingRoomView({
             {participants.map((p) => {
               const meta = parseMeta(p);
               const isAgent = isAgentParticipant(p);
-              const name = isAgent ? "أمين المحضر" : meta.name || p.name || p.identity;
+              const name = isAgent ? MINUTES_AGENT_DISPLAY_NAME : meta.name || p.name || p.identity;
               const speaking = !isAgent && p.isSpeaking;
               const micOn = p.isMicrophoneEnabled;
               const isLocal = room ? p === room.localParticipant : false;
@@ -548,7 +549,16 @@ export function MeetingRoomView({
                     </span>
                   ) : null}
                   <Avatar className={cn("mx-auto h-12 w-12", speaking && "ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-[#1a2530]")}>
-                    {meta.avatarUrl ? <AvatarImage src={meta.avatarUrl} alt="" /> : null}
+                    {isAgent ? (
+                      // الصورة الرمزية للعامل؛ إن تعذر تحميلها يظهر AvatarFallback (أيقونة القلم)
+                      <AvatarImage
+                        src={MINUTES_AGENT_AVATAR_URL}
+                        alt={MINUTES_AGENT_DISPLAY_NAME}
+                        data-testid="img-minutes-agent-avatar"
+                      />
+                    ) : meta.avatarUrl ? (
+                      <AvatarImage src={meta.avatarUrl} alt="" />
+                    ) : null}
                     <AvatarFallback className={cn("text-sm font-bold text-white", isAgent ? "bg-sky-600/80" : "bg-[#3d6fa8]")}>
                       {isAgent ? <NotebookPen className="h-5 w-5" /> : initialsOf(name)}
                     </AvatarFallback>
