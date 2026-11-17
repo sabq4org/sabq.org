@@ -235,7 +235,7 @@ const agendaItemSchema = z.object({
   done: z.boolean().optional(),
 });
 
-const createMeetingSchema = z
+export const createMeetingSchema = z
   .object({
     title: z.string().trim().min(3, "العنوان قصير").max(120),
     description: z.string().trim().max(500).optional(),
@@ -244,7 +244,8 @@ const createMeetingSchema = z
     memberIds: z.array(z.string()).max(200).optional(),
     requireApproval: z.boolean().default(true),
     muteOnJoin: z.boolean().default(true),
-    minutesEnabled: z.boolean().default(false),
+    // مفعّل افتراضياً حين يُغفل الحقل (2026-11-17)؛ false صريحة تُحترم
+    minutesEnabled: z.boolean().default(true),
     scheduledAt: z.coerce.date().nullable().optional(),
     durationMinutes: z.number().int().positive().max(480).nullable().optional(),
     agenda: z.array(agendaItemSchema).max(40).optional(),

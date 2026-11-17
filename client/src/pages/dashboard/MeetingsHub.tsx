@@ -721,7 +721,8 @@ function CreateMeetingDialog({
   const [memberSearch, setMemberSearch] = useState("");
   const [requireApproval, setRequireApproval] = useState(true);
   const [muteOnJoin, setMuteOnJoin] = useState(true);
-  const [minutesEnabled, setMinutesEnabled] = useState(false);
+  // «أمين المحضر» مفعّل افتراضياً (قرار أبو محمد 2026-11-17) — يطفئه المضيف من المفتاح أدناه
+  const [minutesEnabled, setMinutesEnabled] = useState(true);
   const [schedule, setSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("30");
