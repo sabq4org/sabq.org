@@ -25,6 +25,8 @@ export const BOT_PUBLISHER_CAPABILITIES = [
   "regular",
   "hide",
   "show",
+  // اجتماعات سبق — قراءة فقط عبر /api/internal/bot-desk/meetings* (لا تعديل ولا دخول للغرفة)
+  "meetingsRead",
 ] as const;
 
 export type BotPublisherCapability = (typeof BOT_PUBLISHER_CAPABILITIES)[number];
