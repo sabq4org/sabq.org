@@ -142,7 +142,7 @@ function formatTranscriptForLLM(rows: MeetingTranscript[]): string {
 
 export const MINUTES_SYSTEM_PROMPT = `أنت «${MINUTES_AGENT_DISPLAY_NAME}»، مساعد ذكاء اصطناعي يعد محاضر الاجتماعات في صحيفة سبق. تستلم تفريغاً نصياً آلياً لاجتماع عمل بالعربية (غالباً بلهجة سعودية) وتُخرج محضراً منظماً بصيغة JSON فقط:
 {
-  "summary": "ملخص تنفيذي من ٣-٦ جمل بالفصحى الواضحة",
+  "summary": "ملخص بالفصحى الواضحة من فقرتين إلى خمس فقرات قصيرة، بينها سطر فارغ (\\n\\n)",
   "decisions": ["قرار ١", "..."],
   "actionItems": [{"task": "المهمة", "owner": "اسم صاحبها كما ورد أو null", "due": "الموعد إن ذُكر أو null"}],
   "deferred": ["نقطة أُجّل بحثها", "..."]
@@ -151,6 +151,8 @@ export const MINUTES_SYSTEM_PROMPT = `أنت «${MINUTES_AGENT_DISPLAY_NAME}»،
 - لا تختلق ما لم يُقل؛ انسب المهمة لصاحبها فقط إذا كان واضحاً.
 - التفريغ آلي وقد يحوي مقاطع قصيرة بلا معنى أو كلمات مشوهة صوتياً (مثل حروف متلاصقة لا تكوّن كلمة): تجاهلها تماماً ولا تبنِ عليها قراراً أو مهمة.
 - اعتمد على «قائمة الأسماء» المرفقة: إن ورد اسم مشوه يشبه اسماً فيها فاكتبه كما في القائمة، ولا تذكر اسماً من خارج التفريغ والقائمة.
+- الملخص فقرات لا فقرة واحدة: فقرة لكل محور أو لكل مداخلة رئيسية، وابدأ فقرة جديدة عند انتقال الحديث إلى متحدث آخر (مثل رد رئيس الاجتماع). كل فقرة جملتان إلى أربع.
+- سمِّ المتحدثين بأسمائهم كما وردت بعد «:» في أسطر التفريغ، مع صفتهم إن ذُكرت. لا تكتب «أحد المراسلين» أو «أحد الحضور» ما دام اسم المتحدث ظاهراً في التفريغ.
 - تجاهل الدردشة الجانبية والترحيب.
 - لو كان التفريغ قصيراً أو بلا مضمون فأعد ملخصاً صادقاً بذلك ومصفوفات فارغة.`;
 
@@ -473,28 +475,14 @@ export async function updateDraftMinutes(
     .where(and(eq(meetings.id, meetingId), eq(meetings.minutesStatus, "draft")));
 }
 
-function minutesToHtml(meeting: Meeting, minutes: MeetingMinutes): string {
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const list = (items: string[]) =>
-    items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "<p>—</p>";
-  const actions = minutes.actionItems.length
-    ? `<ul>${minutes.actionItems
-        .map(
-          (a) =>
-            `<li>${esc(a.task)}${a.owner ? ` — <b>${esc(a.owner)}</b>` : ""}${a.due ? ` (الموعد: ${esc(a.due)})` : ""}</li>`,
-        )
-        .join("")}</ul>`
-    : "<p>—</p>";
-  return `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">
-    <h2>محضر اجتماع: ${esc(meeting.title)}</h2>
-    <h3>الملخص</h3><p>${esc(minutes.summary)}</p>
-    <h3>القرارات</h3>${list(minutes.decisions)}
-    <h3>المهام</h3>${actions}
-    <h3>نقاط مؤجلة</h3>${list(minutes.deferred)}
-    <p style="color:#888;font-size:12px">أُعد هذا المحضر آلياً بواسطة «${MINUTES_AGENT_DISPLAY_NAME}» واعتمده مضيف الاجتماع.</p>
-  </div>`;
+/** رابط صفحة المحضر في اللوحة — منها يُحمَّل ملف PDF بعد تسجيل الدخول */
+export function minutesPageUrl(meetingId: string): string {
+  const base = (process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || "https://sabq.org").replace(/\/+$/, "");
+  return `${base}/dashboard/meetings/${encodeURIComponent(meetingId)}/minutes`;
 }
+
+/** شعار PNG عام للبريد (برامج البريد لا تعرض SVG) */
+export const MINUTES_EMAIL_LOGO_URL = "https://sabq.org/branding/sabq-logo.png";
 
 /**
  * يعتمد المسودة ويوزعها بالبريد. يعيد عدد الرسائل المرسلة، أو null إن لم تكن
@@ -516,17 +504,35 @@ export async function approveAndDistributeMinutes(meeting: Meeting): Promise<num
       ),
     );
 
+  // كل ما قد يفشل (تحميل الوحدات، استعلامات الحضور) قبل تغيير الحالة: لو فشل
+  // شيء هنا يبقى المحضر مسودة ويعيد المضيف المحاولة، بدل محضر معتمد بلا بريد.
+  // استيراد ديناميكي: خدمة PDF تستورد جداول المنسوبين ولا حاجة لتحميلها مع كل تشغيل.
+  const { buildMinutesDocument } = await import("./meetingMinutesPdfService");
+  const { renderMinutesEmailHtml } = await import("./meetingMinutesDocument");
+  const draftDoc = await buildMinutesDocument(meeting);
+  if (!draftDoc) return null;
+
   // اعتماد ذرّي: draft → approved مرة واحدة، والنص المرسل هو ما اعتُمد فعلاً
   const [approved] = await db
     .update(meetings)
     .set({ minutesStatus: "approved", minutesApprovedAt: new Date() })
     .where(and(eq(meetings.id, meeting.id), eq(meetings.minutesStatus, "draft")))
-    .returning({ minutes: meetings.minutes });
+    .returning({ minutes: meetings.minutes, minutesApprovedAt: meetings.minutesApprovedAt });
   if (!approved?.minutes) return null;
   meeting = { ...meeting, minutes: approved.minutes, minutesStatus: "approved" };
   logMeetingEvent(meeting.id, "minutes_approved", { actorUserId: meeting.hostUserId });
 
-  const html = minutesToHtml(meeting, approved.minutes);
+  // بريد منسّق بالهوية نفسها. النص المرسل هو ما اعتُمد فعلاً (RETURNING)، لا
+  // ما قُرئ قبل الاعتماد — وبناء الوثيقة من هنا نقي لا يلمس القاعدة.
+  const doc = {
+    ...draftDoc,
+    minutes: approved.minutes,
+    approval: { by: draftDoc.chair, at: approved.minutesApprovedAt ?? new Date() },
+  };
+  const html = renderMinutesEmailHtml(doc, {
+    minutesUrl: minutesPageUrl(meeting.id),
+    logoUrl: MINUTES_EMAIL_LOGO_URL,
+  });
   let sent = 0;
   for (const r of recipients) {
     if (!r.email) continue;

@@ -22,9 +22,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiUrl } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Download, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   DECISIONS_FORMS,
   EMPTY_MINUTES,
@@ -70,6 +70,7 @@ type MinutesResponse = {
   minutesApprovedAt: string | null;
   isHost: boolean;
   recipients?: number;
+  canDownloadPdf?: boolean;
   stats?: { segments: number; speakers: number; diagnosis?: string | null };
 };
 
@@ -342,12 +343,35 @@ export default function MeetingMinutesPage() {
                 ].filter(Boolean).join(" · ")}
               </p>
             </div>
-            <span
-              className={cn("rounded-md px-2.5 py-1 text-xs font-bold", TONE_CLASS[statusChip.tone])}
-              data-testid="chip-minutes-status"
-            >
-              {status === "draft" && isHost ? "مسودة: تراها أنت فقط حتى تعتمدها" : statusChip.label}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn("rounded-md px-2.5 py-1 text-xs font-bold", TONE_CLASS[statusChip.tone])}
+                data-testid="chip-minutes-status"
+              >
+                {status === "draft" && isHost ? "مسودة: تراها أنت فقط حتى تعتمدها" : statusChip.label}
+              </span>
+              {data.canDownloadPdf && !editing ? (
+                <Button asChild size="sm" variant={status === "approved" ? "default" : "outline"}>
+                  <a href={apiUrl(`${minutesKey}/pdf`)} download data-testid="link-minutes-pdf">
+                    <Download className="ml-1 h-4 w-4" />
+                    {status === "approved" ? "تحميل PDF" : "معاينة PDF للمسودة"}
+                  </a>
+                </Button>
+              ) : null}
+              {data.canDownloadPdf && isHost && !editing && (data.stats?.segments ?? 0) > 0 ? (
+                <Button asChild size="sm" variant="outline">
+                  <a
+                    href={apiUrl(`${minutesKey}/pdf?transcript=1`)}
+                    download
+                    title="نسخة لك وحدك: المحضر وبعده ملحق التفريغ. لا تُوزَّع."
+                    data-testid="link-minutes-pdf-transcript"
+                  >
+                    <Download className="ml-1 h-4 w-4" />
+                    PDF مع التفريغ (لك فقط)
+                  </a>
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           {!showDocument ? (
