@@ -294,7 +294,7 @@ export default function MeetingDetailPage() {
                   </span>
                   {meeting.minutesEnabled ? (
                     <Badge variant="outline" className="gap-1 text-[11px]">
-                      <FileText className="h-3 w-3" /> أمين المحضر
+                      <FileText className="h-3 w-3" /> مُدوِّن سبق AI
                     </Badge>
                   ) : null}
                 </div>
