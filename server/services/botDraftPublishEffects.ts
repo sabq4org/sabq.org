@@ -349,7 +349,7 @@ async function arabicSitemapBucket(articleId: string): Promise<number | null> {
 async function runArchiveFanout(article: BotDraftReleaseRow, reason: string | null): Promise<void> {
   await safe("sitemap cache", async () => {
     const { invalidateSitemapXmlCache } = await import("./sitemapCacheService");
-    await invalidateSitemapXmlCache(["__sitemapArticlesCanonicalV3", "index_archive_v3"]);
+    await invalidateSitemapXmlCache(["__sitemapArticlesCanonicalV3", "index_archive_v4"]);
   });
 
   await safe("sitemap and feed purge", async () => {

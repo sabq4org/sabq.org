@@ -26201,30 +26201,20 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const baseUrl = "https://sabq.org";
       // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
       // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
-      const indexXml = await getOrBuildSitemapXml('index_archive_v3', 30 * 60 * 1000, async () => {
-        // Most-recent published article → a <lastmod> hint on the
-        // frequently-changing news + article-bucket children so Google
-        // reprioritizes them on recrawl. One cheap aggregate; index is cached 30m.
-        let lastmod = '';
-        try {
-          const r = await db.execute(sql`SELECT MAX(published_at) AS m FROM articles WHERE status = 'published'`);
-          const m = (((r as any).rows || r)[0] || {}).m;
-          if (m) lastmod = `<lastmod>${new Date(m).toISOString()}</lastmod>`;
-        } catch { /* lastmod is best-effort */ }
-
+      const indexXml = await getOrBuildSitemapXml('index_archive_v4', 30 * 60 * 1000, async () => {
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
         xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n  <sitemap><loc>${baseUrl}/sitemap-mawaeed.xml</loc></sitemap>\n`;
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc></sitemap>\n`;
         for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
-          xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc></sitemap>\n`;
         }
         for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
-          xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc></sitemap>\n`;
         }
         for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
-          xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc></sitemap>\n`;
         }
         xml += '</sitemapindex>';
         return xml;
