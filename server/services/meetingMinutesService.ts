@@ -496,16 +496,15 @@ function minutesToHtml(meeting: Meeting, minutes: MeetingMinutes): string {
   </div>`;
 }
 
-export async function approveAndDistributeMinutes(meeting: Meeting): Promise<number> {
-  if (!meeting.minutes || meeting.minutesStatus !== "draft") return 0;
+/**
+ * يعتمد المسودة ويوزعها بالبريد. يعيد عدد الرسائل المرسلة، أو null إن لم تكن
+ * هناك مسودة تُعتمد (اعتُمدت للتو من طلب آخر) — فلا بريد مكرر.
+ */
+export async function approveAndDistributeMinutes(meeting: Meeting): Promise<number | null> {
+  if (!meeting.minutes || meeting.minutesStatus !== "draft") return null;
 
-  await db
-    .update(meetings)
-    .set({ minutesStatus: "approved", minutesApprovedAt: new Date() })
-    .where(eq(meetings.id, meeting.id));
-  logMeetingEvent(meeting.id, "minutes_approved", { actorUserId: meeting.hostUserId });
-
-  // التوزيع بالبريد على المشاركين المقبولين أصحاب الحسابات
+  // المستلمون أولاً: لو فشل هذا الاستعلام لا يُعتمد المحضر بلا بريد
+  // (المشاركون المقبولون أصحاب الحسابات)
   const recipients = await db
     .select({ email: users.email, name: users.firstName })
     .from(meetingParticipants)
@@ -517,7 +516,17 @@ export async function approveAndDistributeMinutes(meeting: Meeting): Promise<num
       ),
     );
 
-  const html = minutesToHtml(meeting, meeting.minutes);
+  // اعتماد ذرّي: draft → approved مرة واحدة، والنص المرسل هو ما اعتُمد فعلاً
+  const [approved] = await db
+    .update(meetings)
+    .set({ minutesStatus: "approved", minutesApprovedAt: new Date() })
+    .where(and(eq(meetings.id, meeting.id), eq(meetings.minutesStatus, "draft")))
+    .returning({ minutes: meetings.minutes });
+  if (!approved?.minutes) return null;
+  meeting = { ...meeting, minutes: approved.minutes, minutesStatus: "approved" };
+  logMeetingEvent(meeting.id, "minutes_approved", { actorUserId: meeting.hostUserId });
+
+  const html = minutesToHtml(meeting, approved.minutes);
   let sent = 0;
   for (const r of recipients) {
     if (!r.email) continue;

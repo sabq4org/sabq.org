@@ -15585,7 +15585,8 @@ export interface MeetingAgendaItem {
 export interface MeetingMinutes {
   summary: string;
   decisions: string[];
-  actionItems: Array<{ task: string; owner: string | null; due: string | null }>;
+  /** done اختياري (غيابه = مفتوحة) — يُحدَّث من صفحة المحضر بعد التوليد */
+  actionItems: Array<{ task: string; owner: string | null; due: string | null; done?: boolean }>;
   deferred: string[];
 }
 

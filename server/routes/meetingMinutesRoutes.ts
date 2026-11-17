@@ -14,6 +14,7 @@ import {
   getMeeting,
   isUserEligible,
 } from "../services/meetingsService";
+import { countMinutesRecipients } from "../services/meetingArchiveService";
 import {
   approveAndDistributeMinutes,
   cleanupOldTranscripts,
@@ -124,8 +125,14 @@ router.get(
         ? await getTranscriptStats(meeting.id)
         : undefined;
       void cleanupOldTranscripts();
+      // لتأكيد الاعتماد: كم شخصاً سيصله البريد — للمضيف وفي المسودة فقط
+      const recipients =
+        isHost && meeting.minutesStatus === "draft"
+          ? await countMinutesRecipients(meeting.id)
+          : undefined;
 
       res.json({
+        recipients,
         minutesEnabled: meeting.minutesEnabled,
         minutesStatus: meeting.minutesStatus,
         minutes: showMinutes ? meeting.minutes : null,
@@ -213,6 +220,7 @@ router.patch(
                 task: String(a?.task || "").slice(0, 1000),
                 owner: a?.owner ? String(a.owner).slice(0, 200) : null,
                 due: a?.due ? String(a.due).slice(0, 200) : null,
+                ...(a?.done === true ? { done: true } : {}),
               }))
               .filter((a: { task: string }) => a.task)
               .slice(0, 100)
@@ -242,6 +250,10 @@ router.post(
         return res.status(409).json({ message: "لا توجد مسودة جاهزة للاعتماد" });
       }
       const sent = await approveAndDistributeMinutes(meeting);
+      // ضغطتان متزامنتان: واحدة فقط تعتمد وترسل، والأخرى تُرفض بلا بريد مكرر
+      if (sent === null) {
+        return res.status(409).json({ message: "المحضر اعتُمد للتو" });
+      }
       res.json({ ok: true, emailsSent: sent });
     } catch (error) {
       console.error("[Minutes] approve error:", error);
