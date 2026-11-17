@@ -1133,6 +1133,8 @@
         "docs/technical-seo-p3-ssr-completion-2026-06-03.md"
       ],
       "pathGlobs": [
+        "server/routes/sitemapIndex.ts",
+        "tests/unit/sitemapIndex.test.ts",
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
         "server/routes/edgeMeta.ts",

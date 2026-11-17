@@ -1,3 +1,4 @@
+import { createSitemapIndexHandler } from "./routes/sitemapIndex";
 import { registerShutdownHook } from "./shutdown";
 import { buildMediaSearch, mediaListSortFields } from "./mediaSearch";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
@@ -26195,39 +26196,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   const SITEMAP_EN_BUCKETS = 10;
   const SITEMAP_UR_BUCKETS = 10;
 
-  // Dynamic XML Sitemap Index
-  app.get("/sitemap.xml", async (_req, res) => {
-    try {
-      const baseUrl = "https://sabq.org";
-      // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
-      // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
-      const indexXml = await getOrBuildSitemapXml('index_archive_v4', 30 * 60 * 1000, async () => {
-        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-        xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n  <sitemap><loc>${baseUrl}/sitemap-mawaeed.xml</loc></sitemap>\n`;
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc></sitemap>\n`;
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc></sitemap>\n`;
-        for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
-          xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc></sitemap>\n`;
-        }
-        for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
-          xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc></sitemap>\n`;
-        }
-        for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
-          xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc></sitemap>\n`;
-        }
-        xml += '</sitemapindex>';
-        return xml;
-      });
-
-      res.header('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-      res.send(indexXml as string);
-    } catch (error) {
-      console.error("Error generating sitemap index:", error);
-      res.status(500).send("Error generating sitemap");
-    }
-  });
+  app.get("/sitemap.xml", createSitemapIndexHandler({
+    ar: SITEMAP_AR_BUCKETS, en: SITEMAP_EN_BUCKETS, ur: SITEMAP_UR_BUCKETS,
+  }));
 
   app.get("/sitemap-static.xml", (_req, res) => {
     const baseUrl = "https://sabq.org";
