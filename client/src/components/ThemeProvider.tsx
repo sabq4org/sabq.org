@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import type { Theme as AppTheme } from "@shared/schema";
+import { useActiveTheme, type ActiveAppearance } from "@/lib/activeTheme";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type Theme = "light" | "dark";
@@ -24,7 +24,7 @@ type ThemeProviderState = {
   setTheme: (theme: ThemePreference) => void;
   variant: Variant;
   setVariant: (variant: Variant) => void;
-  appTheme: AppTheme | null;
+  appTheme: ActiveAppearance;
   isLoadingAppTheme: boolean;
 };
 
@@ -85,18 +85,7 @@ export function ThemeProvider({
     return "site_full";
   })();
 
-  const { data: appTheme, isLoading: isLoadingAppTheme } = useQuery<AppTheme | null>({
-    queryKey: ["/api/themes/active", scope],
-    queryFn: async () => {
-      try {
-        return await apiRequest<AppTheme>(`/api/themes/active?scope=${scope}`, { silent: true });
-      } catch {
-        return null;
-      }
-    },
-    staleTime: 60000,
-    refetchInterval: 60000,
-  });
+  const { data: appTheme, isLoading: isLoadingAppTheme } = useActiveTheme(scope);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
