@@ -12,6 +12,7 @@
 //   PATCH /api/internal/bot-desk/tickets/:id/status
 //   GET   /api/internal/bot-desk/social/pending
 //   GET   /api/internal/bot-desk/social/posts/:id
+//   PATCH /api/internal/bot-desk/social/posts/:id   (تعديل النص وحده لمسودة أو مجدول؛ لا ينشر)
 //   POST  /api/internal/bot-desk/social/posts/:id/reject
 //   POST  /api/internal/bot-desk/social/posts/:id/publish
 //   POST  /api/internal/bot-desk/social/posts/:id/schedule
@@ -49,6 +50,7 @@ import {
   botDeskEditorTweetSchema,
   botDeskOpinionEditSchema,
   botDeskOpinionImageSchema,
+  botDeskSocialEditSchema,
   botDeskSocialPublishSchema,
   botDeskSocialRejectSchema,
   botDeskSocialScheduleSchema,
@@ -79,8 +81,11 @@ import {
   getPostAttempts,
   listPendingSocialProposalsForDesk,
   publishClaimedPost,
+  isDeskTextEditableStatus,
   schedulePost,
+  updateDeskPostText,
 } from "../services/socialPublishing/socialPublishingService";
+import { X_MAX_PREMIUM_WEIGHTED_LENGTH, xLengthReport } from "@shared/socialPostText";
 import { SocialProviderError } from "../services/socialPublishing/types";
 import {
   getEditorTweetForOwner,
@@ -498,6 +503,68 @@ router.get(
       res.json({ post, attempts });
     } catch (error) {
       handleSocialError(res, error, "تعذر جلب المنشور");
+    }
+  },
+);
+
+// تعديل نص المقترح قبل نشره (مسودة أو مجدول). يغيّر النص وحده: الرابط والصورة
+// والوسائط والموعد والحالة كما هي، ولا ينشر ولا يجدول. صلاحية تعديل الويب نفسها.
+router.patch(
+  `${BOT_DESK_BASE_PATH}/social/posts/:id`,
+  requireBotDeskAuth,
+  requireSocialPermission(
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+  ),
+  botDeskWriteLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    const parsed = botDeskSocialEditSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "بيانات التعديل غير صالحة",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const existing = await getPost(req.params.id);
+      if (!existing) {
+        return sendError(res, 404, { code: "not_found", message: "المنشور غير موجود" });
+      }
+      if (!isDeskTextEditableStatus(existing.status)) {
+        return sendError(res, 409, {
+          code: "conflict",
+          message: `لا يمكن تعديل نص منشور حالته «${existing.status}» — التعديل للمسودة أو المجدول فقط`,
+          post: existing,
+        });
+      }
+      const length = xLengthReport(parsed.data.text, existing.linkUrl);
+      if (length.xWeightedLength > X_MAX_PREMIUM_WEIGHTED_LENGTH) {
+        return sendError(res, 400, {
+          code: "validation_error",
+          message: `النص يتجاوز الحد الأقصى لمنصة X (${length.xWeightedLength}/${X_MAX_PREMIUM_WEIGHTED_LENGTH})`,
+          details: length,
+        });
+      }
+      const post = await updateDeskPostText(req.params.id, parsed.data.text);
+      if (!post) {
+        const current = await getPost(req.params.id);
+        return sendError(res, 409, {
+          code: "conflict",
+          message: "تعذر التعديل — المنشور دخل مرحلة النشر أو تغيّرت حالته",
+          post: current ?? undefined,
+        });
+      }
+      await auditBotDeskWrite(req, {
+        action: "social_post_edit_text",
+        entityType: "social_post",
+        entityId: post.id,
+        oldValue: { status: existing.status, text: existing.text },
+        newValue: { status: post.status, text: post.text, xWeightedLength: length.xWeightedLength },
+      });
+      res.json({ post, ...length });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر تعديل المنشور");
     }
   },
 );

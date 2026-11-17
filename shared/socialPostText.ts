@@ -104,3 +104,22 @@ export function validateXPostText(text: string, linkUrl?: string | null): XTextV
     empty: composed.trim().length === 0,
   };
 }
+
+export interface XLengthReport {
+  /** الطول الموزون للنص النهائي كما يركّبه الناشر: النص + "\n" + الرابط (23) */
+  xWeightedLength: number;
+  /** العتبة القياسية 280 */
+  xLimit: typeof X_MAX_WEIGHTED_LENGTH;
+  /** تجاوز 280 (يُنشر مطوياً على حساب Premium) */
+  overLimit: boolean;
+}
+
+/** تقرير الطول الذي يعيده Bot Desk بعد تعديل النص — يطابق composeXPostText وقت النشر */
+export function xLengthReport(text: string, linkUrl?: string | null): XLengthReport {
+  const { weightedLength } = validateXPostText(text, linkUrl);
+  return {
+    xWeightedLength: weightedLength,
+    xLimit: X_MAX_WEIGHTED_LENGTH,
+    overLimit: weightedLength > X_MAX_WEIGHTED_LENGTH,
+  };
+}

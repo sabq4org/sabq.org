@@ -436,6 +436,34 @@ export async function updateEditablePost(postId: string, input: UpdatePostInput)
   return updated;
 }
 
+/** حالات يقبل فيها «مكتب سبق» تعديل نص المقترح قبل نشره (PATCH bot-desk/social/posts/:id) */
+export const DESK_TEXT_EDITABLE_POST_STATUSES = ["draft", "scheduled"] as const;
+
+export function isDeskTextEditableStatus(status: string): boolean {
+  return (DESK_TEXT_EDITABLE_POST_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * يعدّل عمود النص وحده (+ updatedAt) لمسودة أو مجدول. لا يمس الرابط ولا الصورة ولا
+ * الوسائط ولا الموعد ولا الحالة، ولا يطلق أي إشعار أو جدولة أو نشر. العامل يقرأ
+ * claimed.text من الصف لحظة النشر، فالنص المعدّل هو الذي يخرج.
+ * شرط الحالة داخل WHERE يمنع سباق «تعديل أثناء التقاط العامل» — null يعني أن
+ * الحالة تغيّرت بين القراءة والكتابة.
+ */
+export async function updateDeskPostText(postId: string, text: string): Promise<SocialPost | null> {
+  const [updated] = await db
+    .update(socialPosts)
+    .set({ text: text.trim(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(socialPosts.id, postId),
+        inArray(socialPosts.status, [...DESK_TEXT_EDITABLE_POST_STATUSES]),
+      ),
+    )
+    .returning();
+  return updated ?? null;
+}
+
 export function assertValidScheduleTime(scheduledAt: Date): void {
   const now = Date.now();
   if (Number.isNaN(scheduledAt.getTime())) {

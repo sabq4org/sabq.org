@@ -32,7 +32,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)
     - `GET /social/pending` و`GET /social/posts/:id`: `social_publish.view_log`
     - `POST /social/posts/:id/publish`: `social_publish.publish_now`
     - `POST /social/posts/:id/schedule`: `social_publish.schedule`
-    - `POST /social/posts/:id/reject`: `social_publish.manage_scheduled` **أو** `social_publish.create`
+    - `POST /social/posts/:id/reject` و`PATCH /social/posts/:id`: `social_publish.manage_scheduled` **أو** `social_publish.create`
     - `POST /social/tweets`: أي توكن ناشر صالح؛ `social_publish.publish_now` تحدد النتيجة (نشر مباشر أو مقترح للمكتب)
 - **الإعفاء من CSRF:** جميع المسارات تقع تحت `/api/internal/*` المعفاة من فحص CSRF المتصفحي، وترسل دائماً `Cache-Control: private, no-store`.
 - **سجل التدقيق (`activity_logs`):** كل عملية كتابة تُسجَّل في `activity_logs` تحت القناة `channel: "bot-desk-api"` مع `tokenId` و`tokenPrefix` و`tokenLabel`؛ **لا يُحفظ التوكن الخام في السجلات أبداً**.
@@ -106,6 +106,7 @@ curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/tickets/<ticketId>
 |---------|--------|----------|-------|
 | `GET` | `/api/internal/bot-desk/social/pending` | `social_publish.view_log` | قائمة المسودات (`status=draft`) المقدمة من كتّاب الرأي أو الوكالات. الفلاتر: `kind` (`author\|agency\|all`، افتراضي `all`) و`limit` (`1..100`، افتراضي `50`). تعيد `id`, `text`, `authorName`, `agencyName`, `article` (`title`, `url`), `created_at`. |
 | `GET` | `/api/internal/bot-desk/social/posts/:id` | `social_publish.view_log` | تفاصيل منشور اجتماعي وسجل محاولات النشر (`attempts`). |
+| `PATCH` | `/api/internal/bot-desk/social/posts/:id` | `social_publish.manage_scheduled` أو `social_publish.create` | (منذ 2026-11-17) تعديل **نص** المقترح قبل نشره: `{ "text": "..." }` (يُقصّ، غير فارغ، حقول أخرى `400`). يقبل `draft` و`scheduled` فقط، وغيرهما `409 conflict` مع `post`؛ غير موجود `404`. يغيّر عمود `text` و`updatedAt` وحدهما: الرابط والصورة والوسائط والموعد والحالة كما هي، ولا ينشر ولا يجدول ولا يرسل إشعاراً. العامل يقرأ النص من الصف لحظة النشر فيخرج المعدّل. يعيد `{ post, xWeightedLength, xLimit: 280, overLimit }`؛ الطول محسوب على النص النهائي كما يركّبه الناشر (`النص + "\n" + الرابط`، والرابط 23). فوق 25000 `400`. يُسجّل في `activity_logs` بـ`action = "social_post_edit_text"` مع النص القديم والجديد. |
 | `POST` | `/api/internal/bot-desk/social/posts/:id/reject` | `social_publish.manage_scheduled` أو `social_publish.create` | رفض المقترح `{ "reason"?: "..." }` عبر `cancelPost` (`status = "canceled"`) مع إشعار الكاتب أو الوكالة. |
 | `POST` | `/api/internal/bot-desk/social/posts/:id/publish` | `social_publish.publish_now` | مطالبة ذرية ونشر فوري لجسم فارغ `{}` (`claimPostForImmediatePublish` + `publishClaimedPost`). محدد بـ 20 عملية / 5 دقائق؛ ويعيد `409 conflict` إذا كان المنشور قيد النشر أو منشوراً مسبقاً. |
 | `POST` | `/api/internal/bot-desk/social/posts/:id/schedule` | `social_publish.schedule` | جدولة المنشور `{ "scheduledAt": "2026-10-25T19:30:00+03:00" }` (ISO-8601 مع المنطقة الزمنية) عبر `schedulePost`. |
@@ -137,7 +138,15 @@ curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postI
   -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
   -d '{"scheduledAt":"2026-10-25T20:00:00+03:00"}'
 
-# 4) رفض مقترح مع ملاحظة للكاتب/الوكالة
+# 4) تعديل نص مقترح (مسودة أو مجدول) قبل نشره — لا ينشر
+curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/social/posts/<postId>" \
+  -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
+  -d '{"text":"النص المصحح للتغريدة"}'
+# ← { "post": {...}, "xWeightedLength": 285, "xLimit": 280, "overLimit": true }
+
+# 5) رفض مقترح مع ملاحظة للكاتب/الوكالة
 curl -sS -X POST "https://api.sabq.org/api/internal/bot-desk/social/posts/<postId>/reject" \
   -H "Authorization: Bearer $SABQ_BOT_DESK_TOKEN" \
   -H "Content-Type: application/json" \

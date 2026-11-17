@@ -99,6 +99,16 @@ export const botDeskSocialScheduleSchema = z
   .strict();
 
 /**
+ * PATCH /api/internal/bot-desk/social/posts/:id — تعديل نص مقترح النشر الاجتماعي
+ * (مسودة أو مجدول) قبل نشره. النص وحده؛ الرابط والصورة والموعد والحالة كما هي.
+ */
+export const botDeskSocialEditSchema = z
+  .object({
+    text: z.string().trim().min(1, "نص المنشور مطلوب").max(25_000, "النص طويل جداً"),
+  })
+  .strict();
+
+/**
  * PATCH /api/internal/bot-desk/opinion/drafts/:id — تعديل نص مقال الرأي و/أو عنوانه
  * (مسودة بانتظار المكتب أو مجدول). لا يغيّر الحالة ولا الموعد. حقل واحد على الأقل.
  * العنوان بقواعد تعديل العنوان في تطبيق الديسك؛ النص بحدود Bot Drafts نفسها.
@@ -163,6 +173,7 @@ export interface BotDeskOpinionImageJob {
 export type BotDeskSocialPendingQuery = z.infer<typeof botDeskSocialPendingQuerySchema>;
 export type BotDeskSocialRejectInput = z.infer<typeof botDeskSocialRejectSchema>;
 export type BotDeskSocialScheduleInput = z.infer<typeof botDeskSocialScheduleSchema>;
+export type BotDeskSocialEditInput = z.infer<typeof botDeskSocialEditSchema>;
 export type BotDeskOpinionEditInput = z.infer<typeof botDeskOpinionEditSchema>;
 
 export type BotDeskErrorCode =

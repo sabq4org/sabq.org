@@ -3,6 +3,7 @@ import {
   composeXPostText,
   stripMarkdownEmphasis,
   validateXPostText,
+  xLengthReport,
   xWeightedLength,
   X_MAX_PREMIUM_WEIGHTED_LENGTH,
   X_MAX_WEIGHTED_LENGTH,
@@ -95,5 +96,37 @@ describe("stripMarkdownEmphasis — X لا يعرض Markdown", () => {
       expect(stripMarkdownEmphasis(text)).toBe(text);
     }
     expect(stripMarkdownEmphasis("خبر __عاجل__ الآن")).toBe("خبر عاجل الآن");
+  });
+});
+
+describe("xLengthReport — تقرير Bot Desk بعد تعديل النص", () => {
+  it("يحسب النص + سطر جديد + الرابط (23) كما يركّبه الناشر", () => {
+    expect(xLengthReport("نص", "https://sabq.org/article/h218asr")).toEqual({
+      xWeightedLength: 2 + 1 + X_URL_WEIGHT,
+      xLimit: X_MAX_WEIGHTED_LENGTH,
+      overLimit: false,
+    });
+    expect(xLengthReport("نص", null).xWeightedLength).toBe(2);
+  });
+
+  it("CJK بوزن 2، والعربي 1، و overLimit بعد 280", () => {
+    expect(xLengthReport("中文").xWeightedLength).toBe(4);
+    expect(xLengthReport("ا".repeat(280)).overLimit).toBe(false);
+    expect(xLengthReport("ا".repeat(281)).overLimit).toBe(true);
+    expect(xLengthReport("ا".repeat(256), "https://sabq.org/a").xWeightedLength).toBe(280);
+    expect(xLengthReport("ا".repeat(257), "https://sabq.org/a").overLimit).toBe(true);
+  });
+
+  it("منشور حقيقي (2e19d7c4، بعد تعديل أبو محمد): 261 حرفاً + سطر + رابط = 285", () => {
+    const text =
+      "يتساءل الكاتب إبراهيم الروساء في مقالته عمّا إذا كانت الحوارات على منصات التواصل تحمل نقاشاً موضوعياً يعكس قيمنا أم ضجيجاً تصنعه الخوارزميات.\n" +
+      "يستشهد الكاتب في مقالته بالتغريدة المكسيكية التي تحولت إلى كشاف ثقافي وجسراً إنسانياً وقوة ناعمة عابرة للقارات.\n" +
+      "@alrwsa";
+    expect([...text].length).toBe(261);
+    expect(xLengthReport(text, "https://sabq.org/article/h218asr")).toEqual({
+      xWeightedLength: 285,
+      xLimit: 280,
+      overLimit: true,
+    });
   });
 });
