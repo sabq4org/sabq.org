@@ -21,6 +21,7 @@ import {
   didUserAttend,
   generateMinutesPdf,
   MinutesPdfBusyError,
+  MinutesPdfTimeoutError,
 } from "../services/meetingMinutesPdfService";
 import {
   approveAndDistributeMinutes,
@@ -200,7 +201,7 @@ router.get(
       res.setHeader("Cache-Control", "private, no-store");
       res.end(pdf);
     } catch (error) {
-      if (error instanceof MinutesPdfBusyError) {
+      if (error instanceof MinutesPdfBusyError || error instanceof MinutesPdfTimeoutError) {
         res.setHeader("Retry-After", "15");
         return res.status(503).json({ message: "يُجهَّز عدد من المحاضر الآن — أعد المحاولة بعد لحظات" });
       }

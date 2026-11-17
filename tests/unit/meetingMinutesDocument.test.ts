@@ -22,7 +22,12 @@ import {
   type MinutesDocument,
   type MinutesPdfAssets,
 } from "../../server/services/meetingMinutesDocument";
-import { canDownloadMinutesPdf, minutesPdfCacheKey } from "../../server/services/meetingMinutesPdfService";
+import {
+  canDownloadMinutesPdf,
+  closeBrowserWithin,
+  minutesPdfCacheKey,
+  withDeadline,
+} from "../../server/services/meetingMinutesPdfService";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const NO_ASSETS: MinutesPdfAssets = {
@@ -328,5 +333,25 @@ describe("قاعدة تحميل الملف", () => {
     expect(handler).toContain('const withTranscript = isHost && req.query.transcript === "1";');
     expect(handler).toContain("generateMinutesPdf(meeting, { includeTranscript: withTranscript })");
     expect(handler).toContain('"private, no-store"');
+  });
+});
+
+describe("مهلة توليد PDF — متصفح عالق لا يحجز الطابور", () => {
+  it("withDeadline يرفض عند المهلة ولا ينتظر وعداً لا ينتهي", async () => {
+    const never = new Promise<number>(() => undefined);
+    await expect(withDeadline(never, 10, () => new Error("T"))).rejects.toThrow("T");
+    await expect(withDeadline(Promise.resolve(7), 1000, () => new Error("T"))).resolves.toBe(7);
+    await expect(withDeadline(Promise.reject(new Error("X")), 1000, () => new Error("T"))).rejects.toThrow("X");
+  });
+
+  it("إغلاق عالق يقتل عملية المتصفح، والإغلاق السليم لا يقتلها", async () => {
+    const kill = vi.fn(() => true);
+    await closeBrowserWithin({ close: () => new Promise(() => undefined), process: () => ({ kill }) }, 10);
+    expect(kill).toHaveBeenCalledWith("SIGKILL");
+    const kill2 = vi.fn(() => true);
+    await closeBrowserWithin({ close: async () => undefined, process: () => ({ kill: kill2 }) }, 1000);
+    expect(kill2).not.toHaveBeenCalled();
+    // close يرمي + لا عملية: لا يرمي للمستدعي
+    await closeBrowserWithin({ close: async () => { throw new Error("x"); }, process: () => null }, 1000);
   });
 });

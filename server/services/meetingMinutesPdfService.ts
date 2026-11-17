@@ -262,11 +262,55 @@ function resolveChromeExecutable(): string {
   throw new Error("CHROME_NOT_FOUND: لا يوجد Chromium لتوليد PDF");
 }
 
+/** سقف التوليد كله، وسقف إغلاق المتصفح — بعدهما تُقتل العملية ولا يُنتظر شيء */
+const RENDER_TIMEOUT_MS = 60_000;
+const BROWSER_CLOSE_TIMEOUT_MS = 5_000;
+
+export class MinutesPdfTimeoutError extends Error {
+  constructor() {
+    super("MINUTES_PDF_TIMEOUT");
+  }
+}
+
+/**
+ * ينتظر الوعد حتى مهلة؛ بعدها يرفض بـonTimeout() ولا يبقى منتظراً. الوعد
+ * الأصلي لا يُلغى (على المستدعي إنهاء مصدره)، ورفضه المتأخر لا يصير unhandled.
+ */
+export function withDeadline<T>(work: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  work.catch(() => undefined);
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(onTimeout()), ms);
+    work.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+type ClosableBrowser = {
+  close(): Promise<unknown>;
+  process(): { kill(signal?: NodeJS.Signals | number): boolean } | null;
+};
+
+/** إغلاق بمهلة؛ إن علق Chromium تُقتل عمليته — لا يعلّق الطابور أبداً */
+export async function closeBrowserWithin(browser: ClosableBrowser, ms: number): Promise<void> {
+  try {
+    await withDeadline(Promise.resolve().then(() => browser.close()), ms, () => new Error("BROWSER_CLOSE_TIMEOUT"));
+  } catch {
+    try {
+      browser.process()?.kill("SIGKILL");
+    } catch {
+      /* العملية انتهت أصلاً */
+    }
+  }
+}
+
 async function renderHtmlToPdf(html: string): Promise<Buffer> {
   const puppeteer = await import("puppeteer");
   const browser = await puppeteer.default.launch({
     headless: true,
     executablePath: resolveChromeExecutable(),
+    timeout: 30_000,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -276,19 +320,24 @@ async function renderHtmlToPdf(html: string): Promise<Buffer> {
     ],
   });
   try {
-    const page = await browser.newPage();
-    // كل الأصول مضمّنة كـdata URL — لا طلبات شبكة من القالب
-    await page.setJavaScriptEnabled(false);
-    await page.setContent(html, { waitUntil: "load", timeout: 45_000 });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" },
-    });
-    return Buffer.from(pdf);
+    const work = (async () => {
+      const page = await browser.newPage();
+      // كل الأصول مضمّنة كـdata URL — لا طلبات شبكة من القالب
+      await page.setJavaScriptEnabled(false);
+      await page.setContent(html, { waitUntil: "load", timeout: 45_000 });
+      const pdf = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: "0", bottom: "0", left: "0", right: "0" },
+        timeout: 45_000,
+      });
+      return Buffer.from(pdf);
+    })();
+    // مهلة شاملة: توليد عالق لا يحجز renderChain ولا عدّاد الطابور
+    return await withDeadline(work, RENDER_TIMEOUT_MS, () => new MinutesPdfTimeoutError());
   } finally {
-    await browser.close().catch(() => undefined);
+    await closeBrowserWithin(browser, BROWSER_CLOSE_TIMEOUT_MS);
   }
 }
 
