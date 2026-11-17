@@ -518,9 +518,10 @@ export default function MeetingDetailPage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => setLocation("/dashboard/meetings")}
+                  onClick={() => setLocation(`/dashboard/meetings/${meeting.id}/minutes`)}
+                  data-testid="button-detail-open-minutes"
                 >
-                  <FileText className="ml-1 h-4 w-4" /> فتح المحضر من القائمة
+                  <FileText className="ml-1 h-4 w-4" /> فتح المحضر
                 </Button>
               ) : null}
             </aside>

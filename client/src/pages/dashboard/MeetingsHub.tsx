@@ -34,6 +34,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { MinutesArchivePanel } from "@/components/meetings/MinutesArchivePanel";
+import { OpenTasksPanel } from "@/components/meetings/OpenTasksPanel";
 import {
   Building2, CalendarClock, Check, FileText, Headphones, Link2, ListChecks, Loader2,
   Lock, Mic, Plus, Radio, Search, Trash2, UsersRound, X,
@@ -106,9 +108,7 @@ export default function MeetingsHub() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [minutesMeeting, setMinutesMeeting] = useState<MeetingListItem | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<MeetingListItem | null>(null);
-  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
   const { data: dataRaw, isLoading } = useQuery({
     queryKey: ["/api/meetings"],
@@ -118,7 +118,8 @@ export default function MeetingsHub() {
   const live = Array.isArray(data?.live) ? data.live : [];
   const upcoming = Array.isArray(data?.upcoming) ? data.upcoming : [];
   const recent = Array.isArray(data?.recent) ? data.recent : [];
-  const totalCount = live.length + upcoming.length + recent.length;
+  // المنتهية ذات المحضر انتقلت إلى «أرشيف المحاضر»؛ تبقى هنا المنتهية بلا محضر فقط
+  const recentWithoutMinutes = recent.filter((m) => !m.minutesEnabled);
 
   const canCreate =
     user?.permissions?.includes("*") ||
@@ -140,23 +141,13 @@ export default function MeetingsHub() {
     mutationFn: (id: string) => apiRequest(`/api/meetings/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings-archive"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings-archive/open-tasks"] });
       setDeleteTarget(null);
       toast({ title: "تم حذف الاجتماع" });
     },
     onError: (e: Error) =>
       toast({ title: "تعذر الحذف", description: e.message, variant: "destructive" }),
-  });
-
-  const purgeMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ deleted: number }>("/api/meetings", { method: "DELETE" }),
-    onSuccess: (r) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
-      setPurgeOpen(false);
-      toast({ title: "تم مسح الاجتماعات", description: `حُذف ${r?.deleted ?? 0} اجتماعاً` });
-    },
-    onError: (e: Error) =>
-      toast({ title: "تعذر المسح", description: e.message, variant: "destructive" }),
   });
 
   return (
@@ -169,26 +160,11 @@ export default function MeetingsHub() {
             description="اجتماعات صوتية مع مشاركة شاشة — بهوية دليل المنسوبين وتحكم كامل بالدخول"
             titleTestId="text-meetings-title"
             actions={
-              canCreate || (canManage && totalCount > 0) ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {canManage && totalCount > 0 ? (
-                    <Button
-                      variant="outline"
-                      className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                      onClick={() => setPurgeOpen(true)}
-                      data-testid="button-purge-meetings"
-                    >
-                      <Trash2 className="ml-1 h-4 w-4" />
-                      مسح الكل
-                    </Button>
-                  ) : null}
-                  {canCreate ? (
-                    <Button onClick={() => setCreateOpen(true)} data-testid="button-new-meeting">
-                      <Plus className="ml-1 h-4 w-4" />
-                      اجتماع جديد
-                    </Button>
-                  ) : null}
-                </div>
+              canCreate ? (
+                <Button onClick={() => setCreateOpen(true)} data-testid="button-new-meeting">
+                  <Plus className="ml-1 h-4 w-4" />
+                  اجتماع جديد
+                </Button>
               ) : undefined
             }
           />
@@ -341,30 +317,22 @@ export default function MeetingsHub() {
                 )}
               />
 
-              {/* المنتهية حديثاً */}
-              {recent.length ? (
+              {/* أرشيف دائم للمحاضر + المهام المفتوحة (بدل «انتهت خلال الأسبوع») */}
+              <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+                <MinutesArchivePanel onDelete={(m) => setDeleteTarget({ id: m.id, title: m.title })} />
+                <OpenTasksPanel />
+              </div>
+
+              {/* المنتهية بلا محضر — تبقى أسبوعاً للرجوع إلى تفاصيلها */}
+              {recentWithoutMinutes.length ? (
                 <MeetingRows
-                  title="انتهت خلال الأسبوع"
+                  title="انتهت خلال الأسبوع بلا محضر"
                   empty=""
-                  items={recent}
+                  items={recentWithoutMinutes}
                   muted
                   right={(m) => (
-                    <span className="flex items-center gap-2">
-                      {m.minutesEnabled ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => setMinutesMeeting(m)}
-                          data-testid={`button-minutes-${m.id}`}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          المحضر
-                        </Button>
-                      ) : null}
-                      <span className="min-w-[70px] text-xs tabular-nums text-muted-foreground">
-                        {formatTime(m.endedAt)}
-                      </span>
+                    <span className="min-w-[70px] text-xs tabular-nums text-muted-foreground">
+                      {formatTime(m.endedAt)}
                     </span>
                   )}
                   action={(m) => (
@@ -423,36 +391,6 @@ export default function MeetingsHub() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <AlertDialog open={purgeOpen} onOpenChange={setPurgeOpen}>
-        <AlertDialogContent dir="rtl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>مسح كل الاجتماعات؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              سيُحذف جميع الاجتماعات ({totalCount}) من النظام نهائياً — مناسب لتنظيف البيانات التجريبية.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:flex-row-reverse sm:justify-start">
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={purgeMutation.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-                purgeMutation.mutate();
-              }}
-              data-testid="button-confirm-purge-meetings"
-            >
-              {purgeMutation.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
-              مسح الكل
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {minutesMeeting ? (
-        <MinutesDialog meeting={minutesMeeting} onClose={() => setMinutesMeeting(null)} />
-      ) : null}
 
       {createOpen ? (
         <CreateMeetingDialog
@@ -1048,235 +986,3 @@ function ToggleRow({
   );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// حوار المحضر — المضيف يراجع المسودة ويحررها ويعتمدها؛ المشارك يرى
-// المحضر المعتمد فقط (سياسة معتمدة: التفريغ الخام للمضيف حصراً)
-// ────────────────────────────────────────────────────────────────────
-
-type MinutesData = {
-  summary: string;
-  decisions: string[];
-  actionItems: Array<{ task: string; owner: string | null; due: string | null }>;
-  deferred: string[];
-};
-
-type MinutesResponse = {
-  minutesEnabled: boolean;
-  minutesStatus: string;
-  minutes: MinutesData | null;
-  isHost: boolean;
-  stats?: { segments: number; speakers: number };
-};
-
-function MinutesDialog({ meeting, onClose }: { meeting: MeetingListItem; onClose: () => void }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<MinutesData | null>(null);
-
-  const { data: dataRaw, isLoading } = useQuery({
-    queryKey: [`/api/meetings/${meeting.id}/minutes`],
-  });
-  const data = (dataRaw ?? null) as MinutesResponse | null;
-  const minutes = draft ?? data?.minutes ?? null;
-  const status = data?.minutesStatus ?? "none";
-  const isHost = Boolean(data?.isHost);
-  const editable = isHost && status === "draft";
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: [`/api/meetings/${meeting.id}/minutes`] });
-    queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
-  };
-
-  const regenerate = useMutation({
-    mutationFn: () => apiRequest(`/api/meetings/${meeting.id}/minutes/regenerate`, { method: "POST" }),
-    onSuccess: () => {
-      setDraft(null);
-      invalidate();
-      toast({ title: "تم توليد المحضر" });
-    },
-    onError: (e: Error) =>
-      toast({ title: "تعذر التوليد", description: e.message, variant: "destructive" }),
-  });
-
-  const approve = useMutation({
-    mutationFn: async () => {
-      if (draft) {
-        await apiRequest(`/api/meetings/${meeting.id}/minutes`, {
-          method: "PATCH",
-          body: JSON.stringify(draft),
-        });
-      }
-      return apiRequest<{ emailsSent: number }>(`/api/meetings/${meeting.id}/minutes/approve`, {
-        method: "POST",
-      });
-    },
-    onSuccess: (r) => {
-      invalidate();
-      toast({ title: "اعتُمد المحضر", description: `أُرسل بالبريد إلى ${r?.emailsSent ?? 0} مشارك` });
-    },
-    onError: (e: Error) =>
-      toast({ title: "تعذر الاعتماد", description: e.message, variant: "destructive" }),
-  });
-
-  // بلا تفريغ لا شيء يولَّد منه المحضر — «إعادة التوليد» كانت ترجع 422 دائماً
-  const noTranscript = isHost && data?.stats?.segments === 0;
-
-  const statusLine = (() => {
-    if (!data?.minutesEnabled) return "لم يُفعَّل مُدوِّن سبق AI لهذا الاجتماع";
-    switch (status) {
-      case "recording":
-        return "جارٍ التفريغ…";
-      case "generating":
-        return "جارٍ توليد المحضر…";
-      case "failed":
-        return noTranscript
-          ? "لم يُلتقط كلام في هذا الاجتماع، فلا محضر له"
-          : "تعذر توليد المحضر — جرّب إعادة التوليد";
-      case "none":
-        return "لم يبدأ التفريغ بعد";
-      case "draft":
-        return isHost ? "مسودة بانتظار مراجعتك واعتمادك" : "المحضر قيد المراجعة لدى المضيف";
-      case "approved":
-        return "محضر معتمد";
-      default:
-        return status;
-    }
-  })();
-
-  const editList = (key: "decisions" | "deferred", value: string) => {
-    if (!minutes) return;
-    setDraft({ ...minutes, [key]: value.split("\n").map((s) => s.trim()).filter(Boolean) });
-  };
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-[640px]" dir="rtl">
-        <DialogHeader className="text-right">
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            محضر: {meeting.title}
-          </DialogTitle>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge variant={status === "approved" ? "default" : "secondary"}>{statusLine}</Badge>
-              {isHost && data?.stats ? (
-                <span className="text-xs text-muted-foreground">
-                  {data.stats.segments} مقطع تفريغ · {data.stats.speakers} متحدث
-                </span>
-              ) : null}
-            </div>
-
-            {minutes && (isHost || status === "approved") ? (
-              <>
-                <div className="space-y-1.5">
-                  <div className="text-sm font-semibold">الملخص</div>
-                  {editable ? (
-                    <Textarea
-                      value={minutes.summary}
-                      onChange={(e) => setDraft({ ...minutes, summary: e.target.value })}
-                      rows={4}
-                    />
-                  ) : (
-                    <p className="text-sm leading-7 text-muted-foreground">{minutes.summary || "—"}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="text-sm font-semibold">القرارات {editable ? "(سطر لكل قرار)" : ""}</div>
-                  {editable ? (
-                    <Textarea
-                      value={minutes.decisions.join("\n")}
-                      onChange={(e) => editList("decisions", e.target.value)}
-                      rows={Math.max(3, minutes.decisions.length + 1)}
-                    />
-                  ) : minutes.decisions.length ? (
-                    <ul className="list-disc space-y-1 pr-5 text-sm text-muted-foreground">
-                      {minutes.decisions.map((d, i) => (
-                        <li key={i}>{d}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">—</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="text-sm font-semibold">المهام</div>
-                  {minutes.actionItems.length ? (
-                    <ul className="space-y-1.5 text-sm">
-                      {minutes.actionItems.map((a, i) => (
-                        <li key={i} className="rounded-md border border-border bg-muted/30 px-3 py-2">
-                          {a.task}
-                          {a.owner ? <span className="font-semibold"> — {a.owner}</span> : null}
-                          {a.due ? (
-                            <span className="text-xs text-muted-foreground"> (الموعد: {a.due})</span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">—</p>
-                  )}
-                </div>
-
-                {minutes.deferred.length || editable ? (
-                  <div className="space-y-1.5">
-                    <div className="text-sm font-semibold">نقاط مؤجلة {editable ? "(سطر لكل نقطة)" : ""}</div>
-                    {editable ? (
-                      <Textarea
-                        value={minutes.deferred.join("\n")}
-                        onChange={(e) => editList("deferred", e.target.value)}
-                        rows={Math.max(2, minutes.deferred.length + 1)}
-                      />
-                    ) : (
-                      <ul className="list-disc space-y-1 pr-5 text-sm text-muted-foreground">
-                        {minutes.deferred.map((d, i) => (
-                          <li key={i}>{d}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            {isHost && data?.minutesEnabled && !(status === "failed" && noTranscript) ? (
-              <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-3">
-                {(status === "failed" || status === "draft") && !noTranscript ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={regenerate.isPending}
-                    onClick={() => regenerate.mutate()}
-                    data-testid="button-minutes-regenerate"
-                  >
-                    {regenerate.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
-                    إعادة التوليد
-                  </Button>
-                ) : null}
-                {status === "draft" ? (
-                  <Button
-                    size="sm"
-                    disabled={approve.isPending}
-                    onClick={() => approve.mutate()}
-                    data-testid="button-minutes-approve"
-                  >
-                    {approve.isPending ? <Loader2 className="ml-1 h-4 w-4 animate-spin" /> : null}
-                    اعتماد وتوزيع بالبريد
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}

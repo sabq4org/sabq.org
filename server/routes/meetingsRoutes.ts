@@ -31,7 +31,6 @@ import {
   markParticipantLeft,
   meetingsDisabledMessage,
   muteParticipantMic,
-  purgeAllMeetings,
   removeParticipantFromRoom,
   requestGuestJoin,
   requestJoin,
@@ -195,25 +194,6 @@ router.get(
   },
 );
 
-// مسح كل الاجتماعات — قبل /:id حتى لا يُلتقط المسار كمعرّف؛ meetings.manage فقط
-router.delete(
-  "/api/meetings",
-  isAuthenticated,
-  async (req: Request, res: Response) => {
-    try {
-      if (!(await hasPerm(req, "meetings.manage"))) {
-        return res.status(403).json({ message: "مسح الكل يحتاج صلاحية إدارة الاجتماعات" });
-      }
-      const userId = (req.user as { id: string }).id;
-      const result = await purgeAllMeetings(userId);
-      res.json({ ok: true, ...result });
-    } catch (error) {
-      console.error("[Meetings] purge error:", error);
-      res.status(500).json({ message: "تعذر مسح الاجتماعات" });
-    }
-  },
-);
-
 router.get(
   "/api/meetings/form-options",
   isAuthenticated,
@@ -313,6 +293,8 @@ router.get(
         ...meeting,
         agenda: Array.isArray(meeting.agenda) ? meeting.agenda : [],
         inviteToken: isHost ? meeting.inviteToken : null,
+        // المسودة للمضيف وحده — القاعدة نفسها في GET /api/meetings/:id/minutes
+        minutes: isHost || meeting.minutesStatus === "approved" ? meeting.minutes : null,
         isHost,
         host,
         attendance: {

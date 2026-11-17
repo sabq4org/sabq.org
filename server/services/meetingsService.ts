@@ -1223,30 +1223,6 @@ export async function deleteMeeting(meeting: Meeting, actorUserId: string): Prom
   console.info(`[Meetings] deleted meeting ${meeting.id} by ${actorUserId}`);
 }
 
-/** مسح كل الاجتماعات (تنظيف تجريبي) — للمخوّلين بـ meetings.manage فقط عبر المسار */
-export async function purgeAllMeetings(actorUserId: string): Promise<{ deleted: number }> {
-  const rows = await db.select({ id: meetings.id, roomName: meetings.roomName, status: meetings.status }).from(meetings);
-  if (isMeetingsConfigured()) {
-    await Promise.all(
-      rows
-        .filter((r) => r.status === "live")
-        .map(async (r) => {
-          try {
-            await roomService().deleteRoom(r.roomName);
-          } catch {
-            /* تجاهل */
-          }
-        }),
-    );
-  }
-  for (const r of rows) {
-    publishMeetingEvent({ type: "meeting_ended", meetingId: r.id, payload: { deleted: true } });
-  }
-  await db.delete(meetings);
-  console.info(`[Meetings] purged ${rows.length} meetings by ${actorUserId}`);
-  return { deleted: rows.length };
-}
-
 // ────────────────────────────────────────────────────────────────────
 // المصالحة التلقائية — الاجتماع «المباشر» الذي فرغت غرفته على LiveKit
 // (غادر الجميع أو انقطعوا) يُقفل تلقائياً بدل بقائه «مباشراً» للأبد.

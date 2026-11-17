@@ -297,6 +297,7 @@ const StaffProfilesDirectory = lazy(() => retryImport(() => import("@/pages/dash
 const StaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilePage")));
 const MeetingsHub = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingsHub")));
 const MeetingDetailPage = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingDetail")));
+const MeetingMinutesPage = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingMinutes")));
 const MeetingRoomPage = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingRoom")));
 const MeetingInvite = lazy(() => retryImport(() => import("@/pages/MeetingInvite")));
 const AccessibilityInsights = lazy(() => retryImport(() => import("@/pages/admin/AccessibilityInsights")));
@@ -1029,6 +1030,7 @@ function Router() {
         <Route path="/dashboard/staff-profiles/:userId">{() => <LazyRoute component={StaffProfilePage} />}</Route>
         <Route path="/dashboard/meetings">{() => <LazyRoute component={MeetingsHub} />}</Route>
         <Route path="/dashboard/meetings/room/:id">{() => <LazyRoute component={MeetingRoomPage} />}</Route>
+        <Route path="/dashboard/meetings/:id/minutes">{() => <LazyRoute component={MeetingMinutesPage} />}</Route>
         <Route path="/dashboard/meetings/:id">{() => <LazyRoute component={MeetingDetailPage} />}</Route>
         <Route path="/dashboard/roles">{() => <LazyRoute component={RolesAdminPage} />}</Route>
         <Route path="/dashboard/roles-legacy">{() => <LazyRoute component={RolesManagement} />}</Route>

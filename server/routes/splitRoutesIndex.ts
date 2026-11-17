@@ -46,6 +46,7 @@ import nationalDayBlockRouter from "./nationalDayBlock";
 import staffProfilesRouter from "./staffProfiles";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
+import meetingArchiveRouter from "./meetingArchiveRoutes";
 import botDraftsRouter from "./botDrafts";
 import enBotDraftsRouter from "./enBotDrafts";
 import enSearchRouter from "./enSearch";
@@ -197,6 +198,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(staffProfilesRouter);
   app.use(meetingsRouter);
   app.use(meetingMinutesRouter);
+  app.use(meetingArchiveRouter);
   // النسخة الإنجليزية أولاً حتى لا يلتقط راوتر العربية المسار /en كمعرّف مادة.
   app.use(enBotDraftsRouter);
   // بحث القارئ في النسخة الإنجليزية — GET /api/en/search (en_articles المنشورة فقط)
