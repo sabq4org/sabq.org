@@ -96,7 +96,9 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
 
   // إظهار رابط كأس الملك في الهيدر فقط عند تفعيل البلوك من لوحة التحكم
   const { data: kingsCupOverview } = useQuery<{ blockHidden?: boolean }>({
-    queryKey: ["/api/kings-cup/overview"],
+    queryKey: [/^\/kings-cup\/?$/.test(location)
+      ? "/api/kings-cup/overview"
+      : "/api/kings-cup/overview?visibility=1"],
     staleTime: 5 * 60_000,
   });
   const showKingsCupLink = Boolean(kingsCupOverview) && kingsCupOverview?.blockHidden !== true;

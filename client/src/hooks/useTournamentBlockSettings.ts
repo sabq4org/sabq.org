@@ -46,6 +46,9 @@ export function useTournamentBlockSettings(slug: TournamentBlockSlug) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [settingsKey] });
       queryClient.invalidateQueries({ queryKey: [OVERVIEW_KEY[slug]] });
+      if (slug === "kings-cup") {
+        queryClient.invalidateQueries({ queryKey: ["/api/kings-cup/overview?visibility=1"] });
+      }
     },
   });
 
