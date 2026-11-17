@@ -24,7 +24,7 @@ export function OpenTasksPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: raw, isLoading } = useQuery({ queryKey: [KEY], staleTime: 30_000 });
+  const { data: raw, isLoading } = useQuery({ queryKey: [KEY], staleTime: 30_000, refetchInterval: 60_000 });
   const tasksRaw = (raw as { tasks?: OpenTask[] } | null | undefined)?.tasks;
   const tasks = Array.isArray(tasksRaw) ? tasksRaw : [];
 

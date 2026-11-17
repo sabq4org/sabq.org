@@ -12,6 +12,8 @@ vi.mock("../../server/services/meetingsService", () => ({
 import {
   actualDurationMinutes,
   countMinutes,
+  decodeArchiveCursor,
+  encodeArchiveCursor,
   escapeLike,
   normalizeArchiveQuery,
   withTaskDone,
@@ -41,6 +43,28 @@ describe("البحث في الأرشيف", () => {
   it("يهرّب محارف LIKE فيُبحث عن النص حرفياً", () => {
     expect(escapeLike("100%_تم\\")).toBe("100\\%\\_تم\\\\");
     expect(escapeLike("ملف الإسكان")).toBe("ملف الإسكان");
+  });
+});
+
+describe("مؤشر الترقيم", () => {
+  it("يحمل الوقت بدقة Postgres والمعرّف ويعود كما هو", () => {
+    const c = { ts: "2026-11-16 06:34:10.123456", id: "0b9f2c1e-1111-4a4a-9b9b-222233334444" };
+    expect(decodeArchiveCursor(encodeArchiveCursor(c))).toEqual(c);
+    expect(decodeArchiveCursor("2026-11-16 06:34:10|abc")).toEqual({ ts: "2026-11-16 06:34:10", id: "abc" });
+  });
+
+  it("يرفض ما ليس مؤشراً: حقن، شكل ISO القديم، طول زائد", () => {
+    for (const bad of [
+      "2026-11-16T06:34:10.000Z",
+      "2026-11-16 06:34:10|x'; drop table meetings;--",
+      "now()|abc",
+      "2026-11-16 06:34:10|",
+      "x".repeat(300),
+      42,
+      null,
+    ]) {
+      expect(decodeArchiveCursor(bad)).toBeNull();
+    }
   });
 });
 
@@ -184,6 +208,8 @@ describe("قواعد الاطلاع في الكود", () => {
   it("جسم تحديث المهمة صارم ويحمل نص المهمة، والحد عبر أداة الترقيم الموحدة", () => {
     expect(routes).toContain("z.object({ done: z.boolean(), task: z.string().min(1).max(1000) }).strict()");
     expect(routes).toContain("parseLimit(req.query.limit, ARCHIVE_PAGE_SIZE, 50)");
+    // الترقيم بمقارنة مركّبة تطابق الترتيب (ended_at ثم id)
+    expect(service).toContain("(${meetings.endedAt}, ${meetings.id}) < (${opts.before.ts}::timestamp, ${opts.before.id})");
     expect(service).toContain("boundedLimit(");
   });
 

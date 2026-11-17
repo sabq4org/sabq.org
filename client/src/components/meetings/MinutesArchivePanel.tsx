@@ -85,6 +85,8 @@ export function MinutesArchivePanel({
       },
       getNextPageParam: (last) => last?.nextBefore || undefined,
       staleTime: 30_000,
+      // مثل قائمة المركز: اجتماع ينتهي والصفحة مفتوحة يظهر محضره هنا بلا إعادة تحميل
+      refetchInterval: 30_000,
     });
 
   const pages = Array.isArray(data?.pages) ? data.pages : [];

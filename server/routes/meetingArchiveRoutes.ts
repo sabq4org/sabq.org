@@ -13,6 +13,7 @@ import { getMeeting } from "../services/meetingsService";
 import { parseLimit } from "../utils/pagination";
 import {
   ARCHIVE_PAGE_SIZE,
+  decodeArchiveCursor,
   listMinutesArchive,
   listOpenTasksForHost,
   setMinutesTaskDone,
@@ -36,7 +37,7 @@ async function requireMeetingsView(req: Request, res: Response): Promise<boolean
 
 const archiveQuerySchema = z.object({
   q: z.string().max(200).optional(),
-  before: z.string().datetime().optional(),
+  before: z.string().max(120).optional(),
 });
 
 // أرشيف المحاضر — دائم، بالبحث في العنوان ونص المحضر
@@ -45,11 +46,15 @@ router.get("/api/meetings-archive", isAuthenticated, async (req: Request, res: R
     if (!(await requireMeetingsView(req, res))) return;
     const parsed = archiveQuerySchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ message: "استعلام غير صالح" });
+    const before = parsed.data.before ? decodeArchiveCursor(parsed.data.before) : null;
+    if (parsed.data.before && !before) {
+      return res.status(400).json({ message: "مؤشر الترقيم غير صالح" });
+    }
     const userId = userIdOf(req);
     const canManage = await userHasPermission(userId, "meetings.manage");
     const result = await listMinutesArchive(userId, canManage, {
       q: parsed.data.q,
-      before: parsed.data.before ? new Date(parsed.data.before) : null,
+      before,
       limit: parseLimit(req.query.limit, ARCHIVE_PAGE_SIZE, 50),
     });
     // محتوى خاص بالمستخدم — لا يُخزَّن في أي كاش وسيط

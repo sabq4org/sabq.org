@@ -10,7 +10,7 @@
 // done اختياري؛ غيابه = مهمة مفتوحة.
 // ----------------------------------------------------------------------------
 
-import { and, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   meetings,
@@ -53,6 +53,22 @@ export function normalizeArchiveQuery(raw: unknown): string {
 /** تهريب محارف LIKE حتى يُبحث عن النص حرفياً (٪ و_ ليست بدائل) */
 export function escapeLike(q: string): string {
   return q.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * مؤشر الترقيم: وقت الانتهاء بدقة Postgres كاملة + معرّف الاجتماع، مطابقاً لترتيب
+ * القائمة (ended_at ثم id). بالوقت وحده يُفقد اجتماع يشارك آخر صف في الصفحة وقته.
+ */
+export type ArchiveCursor = { ts: string; id: string };
+
+export function encodeArchiveCursor(c: ArchiveCursor): string {
+  return `${c.ts}|${c.id}`;
+}
+
+export function decodeArchiveCursor(raw: unknown): ArchiveCursor | null {
+  if (typeof raw !== "string" || raw.length > 120) return null;
+  const m = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)\|([A-Za-z0-9_-]{1,64})$/.exec(raw);
+  return m ? { ts: m[1], id: m[2] } : null;
 }
 
 export function actualDurationMinutes(
@@ -100,7 +116,7 @@ export function withTaskDone(
 export async function listMinutesArchive(
   viewerId: string,
   canManage: boolean,
-  opts: { q?: string; before?: Date | null; limit?: number } = {},
+  opts: { q?: string; before?: ArchiveCursor | null; limit?: number } = {},
 ): Promise<{ items: ArchiveItem[]; nextBefore: string | null }> {
   const limit = Math.min(boundedLimit(opts.limit ?? ARCHIVE_PAGE_SIZE, ARCHIVE_PAGE_SIZE), 50);
   const q = normalizeArchiveQuery(opts.q);
@@ -116,6 +132,7 @@ export async function listMinutesArchive(
       endedAt: meetings.endedAt,
       minutesStatus: meetings.minutesStatus,
       minutes: meetings.minutes,
+      endedAtText: sql<string>`${meetings.endedAt}::text`.as("ended_at_cursor"),
     })
     .from(meetings)
     .where(
@@ -128,7 +145,9 @@ export async function listMinutesArchive(
         canManage
           ? undefined
           : or(eq(meetings.hostUserId, viewerId), eq(meetings.minutesStatus, "approved")),
-        opts.before ? lt(meetings.endedAt, opts.before) : undefined,
+        opts.before
+          ? sql`(${meetings.endedAt}, ${meetings.id}) < (${opts.before.ts}::timestamp, ${opts.before.id})`
+          : undefined,
         q
           ? or(
               sql`${meetings.title} ILIKE ${pattern} ESCAPE '\\'`,
@@ -154,7 +173,10 @@ export async function listMinutesArchive(
       isHost: canManage || r.hostUserId === viewerId,
       ...countMinutes(r.minutes),
     })),
-    nextBefore: rows.length > limit && last?.endedAt ? last.endedAt.toISOString() : null,
+    nextBefore:
+      rows.length > limit && last?.endedAtText
+        ? encodeArchiveCursor({ ts: last.endedAtText, id: last.id })
+        : null,
   };
 }
 
