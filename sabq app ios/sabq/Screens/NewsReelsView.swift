@@ -29,6 +29,7 @@ struct NewsReelsView: View {
                                         nextArticle: index + 1 < articles.count ? articles[index + 1] : nil,
                                         bottomInset: max(container.safeAreaInsets.bottom, 12),
                                         topInset: container.safeAreaInsets.top + 66,
+                                        isActive: index == currentIndex && selectedArticle == nil,
                                         canRestart: articles.count > 1,
                                         read: {
                                         readerPath = NavigationPath()

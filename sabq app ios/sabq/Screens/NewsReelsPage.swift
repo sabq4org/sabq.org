@@ -5,6 +5,7 @@ struct NewsReelsPage: View {
     let nextArticle: Article?
     let bottomInset: CGFloat
     let topInset: CGFloat
+    let isActive: Bool
     let canRestart: Bool
     let read: () -> Void
     let next: () -> Void
@@ -12,6 +13,7 @@ struct NewsReelsPage: View {
     @Environment(BookmarksStore.self) private var bookmarks
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsImage = false
+    @State private var captionBlockHeight: CGFloat = 0
 
     private var imageURL: URL? {
         (article.imageURL ?? article.videoThumbnailURL).flatMap(URL.init(string:))
@@ -28,21 +30,21 @@ struct NewsReelsPage: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                FocalCachedAsyncImage(url: imageURL, focalPoint: article.imageFocalPoint) {
-                    ZStack {
-                        Color(red: 0.1, green: 0.14, blue: 0.18)
-                        Image("SabqLogo").renderingMode(.template).resizable().scaledToFit()
-                            .frame(width: 90).foregroundStyle(.white.opacity(0.16))
-                    }
-                }
+                ReelLiveShot(
+                    url: imageURL,
+                    focalPoint: article.imageFocalPoint,
+                    imageRoom: geometry.size.height - captionBlockHeight - bottomInset - 8,
+                    isActive: isActive
+                )
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .accessibilityHidden(true)
+                // تعتيم خفيف فقط: أعلى الشاشة لأزرار الرأس وأسفلها للنص؛ لون الخلفية
+                // المشتق من الصورة هو الذي يحمل العنوان لا السواد.
                 LinearGradient(stops: [
-                    .init(color: .black.opacity(0.23), location: 0),
-                    .init(color: .clear, location: 0.28),
-                    .init(color: .black.opacity(0.18), location: 0.46),
-                    .init(color: .black.opacity(0.87), location: 0.72),
-                    .init(color: .black.opacity(0.97), location: 1)
+                    .init(color: .black.opacity(0.42), location: 0),
+                    .init(color: .clear, location: 0.2),
+                    .init(color: .clear, location: 0.42),
+                    .init(color: .black.opacity(0.5), location: 1)
                 ], startPoint: .top, endPoint: .bottom)
                 .allowsHitTesting(false)
                 VStack(spacing: 18) {
@@ -58,6 +60,7 @@ struct NewsReelsPage: View {
                     .environment(\.layoutDirection, .leftToRight)
                     nextPreview
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { captionBlockHeight = $0 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, bottomInset + 8)
                 if article.isAiGeneratedImage {
