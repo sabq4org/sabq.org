@@ -38,6 +38,7 @@ const NEW_PUBLIC_API_MAX_INFLIGHT = 32;
 export const NEW_PUBLIC_API_MAX_BODY_BYTES = 4 * 1024 * 1024;
 const NEW_PUBLIC_API_BODY_TIMEOUT_MS = 10_000;
 const NEW_PUBLIC_API_CACHE_LEASE_MS = 1_000;
+const NEW_PUBLIC_API_FLIGHT_MS = 10_000;
 // Sports reads answered in the language from ?lang or Accept-Language
 // (server/services/sportsLang.ts), so the key carries the effective language.
 const SPORTS_LANG_PATHS = new Set(["/api/kings-cup/overview", "/api/sports/today"]);
@@ -258,6 +259,8 @@ async function fetchNewPublicApiResult(request, policy, fetchOrigin, runtime) {
     statusText: res.statusText,
     headers,
   };
+  // A slow owner can finish after a replacement has fetched fresher data.
+  if (runtime.canStore && !runtime.canStore()) return result;
   let cachePut;
   try {
     cachePut = Promise.resolve(runtime.cache.put(
@@ -333,25 +336,66 @@ export function createPublicApiBurstCache() {
       runtime.waitUntil(cache.delete(policy.key).catch(() => {}));
     }
 
-    let promise = inflight.get(policy.key.url);
-    let leader = false;
-    if (!promise && inflight.size < NEW_PUBLIC_API_MAX_INFLIGHT) {
-      leader = true;
-      promise = safeFetchNewPublicApiResult(request, policy, fetchOrigin, runtime);
-      inflight.set(policy.key.url, promise);
-      promise.then(
-        async (result) => {
-          if (result.cacheLease) await result.cacheLease;
-          if (inflight.get(policy.key.url) === promise) inflight.delete(policy.key.url);
-        },
-        () => { if (inflight.get(policy.key.url) === promise) inflight.delete(policy.key.url); },
-      );
+    const key = policy.key.url;
+    // A cancelled invocation may never run its promise continuations. Share
+    // only completed data; every waiter owns its timer and can elect a new
+    // leader when the old generation expires.
+    let flight = inflight.get(key);
+    if (flight?.done && flight.expiresAt <= Date.now()) {
+      inflight.delete(key);
+      flight = undefined;
+    }
+    if (flight && !flight.done) {
+      // Allow one recovery generation without waiting forever if it also dies.
+      const deadline = Date.now() + 2 * NEW_PUBLIC_API_FLIGHT_MS;
+      flight.waitersUntil = Math.max(flight.waitersUntil, deadline);
+      let delay = 10;
+      while (!flight.done) {
+        const remaining = Math.min(deadline, flight.expiresAt) - Date.now();
+        if (remaining <= 0) break;
+        await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remaining)));
+        delay = Math.min(delay * 2, 100);
+      }
     }
 
-    if (promise) {
-      const result = await promise;
-      if (result.shareable) return newPublicApiResultResponse(result);
-      if (leader) return result.response;
+    const now = Date.now();
+    if (flight?.done && flight.result && flight.expiresAt > now) {
+      return newPublicApiResultResponse(flight.result);
+    }
+    // Reuse the same slot on takeover. Existing waiters see its new deadline
+    // and eventual answer even if cache.put completes before they wake up.
+    if (!flight && inflight.size >= NEW_PUBLIC_API_MAX_INFLIGHT) {
+      for (const [otherKey, other] of inflight) {
+        // A waiter may be about to take this slot over on its next timer.
+        // Its claim expires even if that invocation is cancelled.
+        if (other.expiresAt <= now && other.waitersUntil <= now) inflight.delete(otherKey);
+      }
+    }
+    const canLead = flight
+      ? !flight.done && flight.expiresAt <= now && inflight.get(key) === flight
+      : inflight.size < NEW_PUBLIC_API_MAX_INFLIGHT;
+    if (canLead) {
+      flight ??= { done: false, result: null, waitersUntil: 0 };
+      const generation = Symbol();
+      flight.generation = generation;
+      flight.expiresAt = now + NEW_PUBLIC_API_FLIGHT_MS;
+      inflight.set(key, flight);
+      const isCurrent = () => inflight.get(key) === flight && flight.generation === generation;
+      const result = await safeFetchNewPublicApiResult(request, policy, fetchOrigin, {
+        ...runtime, canStore: isCurrent,
+      });
+      if (isCurrent()) {
+        const { cacheLease, ...answer } = result;
+        flight.result = answer.shareable ? answer : null;
+        flight.done = true;
+        if (cacheLease) {
+          flight.expiresAt = Date.now() + NEW_PUBLIC_API_CACHE_LEASE_MS;
+          runtime.waitUntil(cacheLease.then(() => { if (isCurrent()) inflight.delete(key); }));
+        } else {
+          inflight.delete(key);
+        }
+      }
+      return newPublicApiResultResponse(result);
     }
 
     const result = await safeFetchNewPublicApiResult(request, policy, fetchOrigin, runtime);

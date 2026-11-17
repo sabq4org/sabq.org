@@ -57,6 +57,67 @@ describe("burst cache layers (Pages over the api.sabq.org Worker)", () => {
     expect(origin).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["/api/sports/competitions", "/api/kings-cup/overview"])(
+    "recovers one generation for every waiting reader after the owner stalls on %s",
+    async (path) => {
+      vi.useFakeTimers();
+      const cache = memoryCache();
+      const handle = createPublicApiBurstCache();
+      let finishOriginal!: (response: Response) => void;
+      const stalled = new Promise<Response>(resolve => { finishOriginal = resolve; });
+      const fetchOrigin = vi.fn(async () => originAnswer())
+        .mockImplementationOnce(() => stalled);
+      const read = () => handle(new Request("https://sabq.org" + path), { cache, fetchOrigin, waitUntil });
+
+      const original = read();
+      const followers = Array.from({ length: 100 }, read);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fetchOrigin).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(10_100);
+      const results = await Promise.all(followers);
+      expect(fetchOrigin).toHaveBeenCalledTimes(2);
+      expect(await Promise.all(results.map(response => response!.json())))
+        .toEqual(Array.from({ length: 100 }, () => ({ items: [] })));
+
+      const old = originAnswer();
+      old.headers.set("x-test-generation", "old");
+      finishOriginal(old);
+      await original;
+      expect(cache.put).toHaveBeenCalledTimes(1);
+      const warm = await read();
+      expect(warm?.headers.get("x-edge-cache")).toBe("HIT");
+      expect(warm?.headers.has("x-test-generation")).toBe(false);
+    },
+  );
+
+  it("retains waiting readers when a different key arrives at capacity", async () => {
+    vi.useFakeTimers();
+    const cache = memoryCache();
+    const handle = createPublicApiBurstCache();
+    let finish!: (response: Response) => void;
+    const stalled = new Promise<Response>(resolve => { finish = resolve; });
+    let recovering = false;
+    const fetchOrigin = vi.fn(async () => recovering ? originAnswer() : (await stalled).clone());
+    const read = (key: number) => handle(
+      new Request("https://sabq.org/api/sports/competitions?key=" + key),
+      { cache, fetchOrigin, waitUntil },
+    );
+
+    const originals = Array.from({ length: 32 }, (_, key) => read(key));
+    const followers = Array.from({ length: 100 }, () => read(0));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(fetchOrigin).toHaveBeenCalledTimes(32);
+    recovering = true;
+    vi.setSystemTime(Date.now() + 11_000);
+    await read(32);
+    await vi.advanceTimersByTimeAsync(200);
+    await Promise.all(followers);
+    expect(fetchOrigin).toHaveBeenCalledTimes(34);
+    finish(originAnswer());
+    await Promise.all(originals);
+  });
+
   it("counts the Cache API's Age header and refetches once the window is spent", async () => {
     const cache = memoryCache();
     const aged = originAnswer();
