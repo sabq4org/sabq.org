@@ -39,6 +39,7 @@ import { EnglishDashboardLayout } from "@/components/en/EnglishDashboardLayout";
 import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useEnglishArticleEditLock } from "@/hooks/useEnglishArticleEditLock";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Category, ArticleWithDetails, EnCategory } from "@shared/schema";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -131,6 +132,9 @@ export default function EnglishArticleEditor() {
 
   // Check authentication and redirect if needed
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
+
+  const editLock = useEnglishArticleEditLock(id, !isNewArticle && !!user && !isUserLoading);
+  const lockBlocked = !isNewArticle && !editLock.owned;
 
   // Fetch categories - using English endpoint
   const { data: allCategoriesRaw } = useQuery<EnCategory[]>({
@@ -703,6 +707,7 @@ export default function EnglishArticleEditor() {
   };
 
   const handleSave = async (publishNow = false) => {
+    if (lockBlocked) return;
     // Check required fields
     const missingFields = [];
     
@@ -837,8 +842,9 @@ export default function EnglishArticleEditor() {
   return (
     <EnglishDashboardLayout>
       <div className="container mx-auto px-4 py-6" dir="ltr">
+        {lockBlocked && <div role="alert" className="mb-4 rounded border border-amber-500 p-3">{editLock.message}</div>}
         {/* Page Header with Actions */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"
@@ -862,7 +868,7 @@ export default function EnglishArticleEditor() {
             <Button
               variant="outline"
               onClick={() => handleSave(false)}
-              disabled={isSaving}
+              disabled={isSaving || lockBlocked}
               className="gap-2"
               data-testid="button-save-draft-en"
             >
@@ -871,7 +877,7 @@ export default function EnglishArticleEditor() {
             </Button>
             <Button
               onClick={() => handleSave(true)}
-              disabled={isSaving}
+              disabled={isSaving || lockBlocked}
               className="gap-2"
               data-testid="button-publish-en"
             >

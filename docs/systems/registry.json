@@ -517,7 +517,23 @@
         "client/src/pages/en/EnglishDashboard.tsx",
         "client/src/pages/en/EnglishDashboardAnalytics.tsx",
         "tests/unit/enDeskOverview.test.ts",
-        "tests/unit/enDashboardAccess.test.ts"
+        "tests/unit/enDashboardAccess.test.ts",
+        "server/services/botEditorReads.ts",
+        "server/services/botEditorWrites.ts",
+        "server/services/botEditorAudit.ts",
+        "server/services/botEditorOperationsAudit.ts",
+        "server/services/botEditorMedia.ts",
+        "shared/botEditorWrites.ts",
+        "migrations/20261118_bot_editor_english_history.sql",
+        "tests/unit/botEditor*.test.ts",
+        "server/routes/botNewsEditor.ts",
+        "server/services/botEditorHistory.ts",
+        "migrations/20261118_en_article_edit_locks.sql",
+        "server/services/botEditor*.ts",
+        "server/services/enArticleEditLocksSchema.ts",
+        "client/src/hooks/useEnglishArticleEditLock.ts",
+        "tests/unit/botNewsEditor.test.ts",
+        "migrations/20261118_bot_editor_search_indexes.sql"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -570,7 +586,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-11-16"
+      "lastReviewed": "2026-11-18"
     },
     {
       "id": "ifox",
@@ -984,14 +1000,16 @@
         "server/utils/httpPressure.ts",
         "tests/unit/httpPressure.test.ts",
         "sabq app ios/sabq/Services/PushNotifications.swift",
-        "tests/unit/apnsBroadcastBatch.test.ts"
+        "tests/unit/apnsBroadcastBatch.test.ts",
+        "server/services/botEditorPush.ts",
+        "migrations/2026-11-18-bot-editor-push-deliveries.sql"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-31"
+      "lastReviewed": "2026-11-18"
     },
     {
       "id": "ads",

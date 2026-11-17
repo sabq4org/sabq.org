@@ -8,7 +8,7 @@ import express from "express";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { articles, categories, enArticlePublishOperations, enArticles, enCategories, users } from "@shared/schema";
+import { articles, categories, enArticlePublishOperations, enArticleEvents, enArticleRevisions, enArticles, enCategories, users } from "@shared/schema";
 import { EN_AUTO_SETTLE_MS } from "@shared/enAutoTranslate";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 
@@ -75,6 +75,7 @@ if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) {
 
 const dialect = new PgDialect();
 const TOKEN = "en-bot-proof-token-0123456789abcdef-XYZ";
+const NASHR_TOKEN = "nashr-proof-token-0123456789abcdef-XYZ";
 
 function ddlFor(table: PgTable): string {
   const config = getTableConfig(table);
@@ -105,14 +106,14 @@ describe.skipIf(!url)("English bot drafts against PostgreSQL", () => {
     } finally {
       await admin.end();
     }
-    pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: 4 });
-    for (const table of [users, categories, articles, enCategories, enArticles, enArticlePublishOperations]) {
+    pool = new Pool({ connectionString: url, options: `-c search_path=${schema} -c timezone=UTC`, max: 4 });
+    for (const table of [users, categories, articles, enCategories, enArticles, enArticlePublishOperations, enArticleEvents, enArticleRevisions]) {
       await pool.query(ddlFor(table));
     }
     await pool.query(`CREATE UNIQUE INDEX uq_en_article_publish_operations_actor_article_operation
       ON en_article_publish_operations (actor_key, article_id, operation_id)`);
     state.db = drizzle(pool);
-    process.env.BOT_DRAFTS_API_TOKENS = `nashr-sabq:${TOKEN}`;
+    process.env.BOT_DRAFTS_API_TOKENS = `legacy-bot:${TOKEN},nashr-sabq:${NASHR_TOKEN}`;
     process.env.BOT_DRAFTS_AUTHOR_USER_ID = SABQ_NEWSPAPER_ACCOUNT_ID;
     process.env.BOT_DRAFTS_WRITE_RATE_LIMIT = "1000";
     process.env.BOT_DRAFTS_EXTRAS_RATE_LIMIT = "1000";
@@ -150,11 +151,11 @@ describe.skipIf(!url)("English bot drafts against PostgreSQL", () => {
     if (pool) await pool.end();
   });
 
-  function call(method: string, path: string, body?: unknown) {
+  function call(method: string, path: string, body?: unknown, token = TOKEN) {
     return fetch(`${base}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${TOKEN}`,
+        Authorization: `Bearer ${token}`,
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -321,4 +322,26 @@ describe.skipIf(!url)("English bot drafts against PostgreSQL", () => {
     expect(ids).toContain("ar-open");
     expect(EN_AUTO_SETTLE_MS).toBeGreaterThan(0);
   });
+  it("replays a nashr publish receipt without duplicating its audit", async () => {
+    await pool.query(`INSERT INTO en_articles (id, title, slug, content, status, author_id, category_id, seo_metadata)
+      VALUES ('nashr-receipt', 'Nashr receipt test', 'nashr-receipt', $1, 'draft', $2, 'cat-saudi', '{"source":"bot"}'::jsonb)`, [body, SABQ_NEWSPAPER_ACCOUNT_ID]);
+    const operationId = "33333333-3333-4333-8333-333333333333";
+    const path = "/api/internal/bot-drafts/en/nashr-receipt/publish";
+    const first = await call("POST", path, { operationId }, NASHR_TOKEN);
+    expect(first.status).toBe(200);
+    const receipt = await first.json();
+    expect(receipt).toMatchObject({ status: "succeeded", operationId });
+    const replay = await call("POST", path, { operationId }, NASHR_TOKEN);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(receipt);
+    const events = await pool.query(`SELECT event_type, metadata FROM en_article_events WHERE article_id = $1`, ["nashr-receipt"]);
+    const revisions = await pool.query(`SELECT changed_fields, original_source FROM en_article_revisions WHERE article_id = $1`, ["nashr-receipt"]);
+    expect(events.rows).toHaveLength(1);
+    expect(events.rows[0]).toMatchObject({ event_type: "published", metadata: { operation: "published", actorName: "نشر سبق" } });
+    expect(revisions.rows).toHaveLength(1);
+    expect(revisions.rows[0]).toMatchObject({ original_source: "bot", changed_fields: expect.arrayContaining(["status"]) });
+    const stored = await pool.query(`SELECT count(*)::int AS count FROM en_article_publish_operations WHERE article_id = $1 AND operation_id = $2`, ["nashr-receipt", operationId]);
+    expect(stored.rows[0].count).toBe(1);
+  });
+
 });

@@ -64,7 +64,7 @@ import { BOT_DRAFTS_IMAGE_FIELD, BOT_DRAFTS_IMAGE_PURPOSE } from "../../shared/b
 import { isCsrfExemptRequest } from "../../server/csrf";
 
 const NASHR = "nashr-secret-token-0123456789abcdef-XYZ";
-const TOKENS = `nashr-sabq:${NASHR}`;
+const TOKENS = `legacy-bot:${NASHR}`;
 const app = express();
 app.use(express.json());
 app.use(router);
@@ -228,7 +228,7 @@ describe("English bot drafts HTTP contract", () => {
     expect(state.uploadImage).toHaveBeenCalledWith(expect.objectContaining({
       forceR2: true,
       purpose: BOT_DRAFTS_IMAGE_PURPOSE,
-      metadata: { source: "bot-drafts-en", bot: "nashr-sabq" },
+      metadata: { source: "bot-drafts-en", bot: "legacy-bot" },
     }));
   });
 });

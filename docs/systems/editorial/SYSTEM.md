@@ -445,3 +445,10 @@
 ## حضور المحررين المباشر (`editor-presence`) — 2026-11-13
 - **الواجهة (`client/src/hooks/useEditorPresence.ts` + `client/src/lib/editorPresencePolicy.ts`):** يتوقف إرسال نبضات `POST /api/editor-presence/heartbeat` ويُرسل `/api/editor-presence/leave` تلقائيًا عند خمول المستخدم لمدة 3 دقائق (`EDITOR_IDLE_TIMEOUT_MS`) أو بقاء التبويب مخفيًا لأكثر من دقيقة (`EDITOR_HIDDEN_TIMEOUT_MS`)، وتُستأنف النبضات فور عودة التفاعل أو ظهور التبويب. يضيف العميل `idleAware: true` في جسم النبضة.
 - **حارس الخادم للجلسات القديمة (`server/services/editorPresenceGuard.ts` + `server/routes/editorPresence.ts`):** النبضات التي لا تحمل `idleAware: true` ويستمر فيها نفس `(articleId, articleTitle, articleSummary)` دون تغيير ولا انقطاع لأكثر من 30 دقيقة (`LEGACY_UNCHANGED_MAX_MS`) تُسقط من قائمة الحضور وتُحذف من Redis لمنع تبويب منسيّ من الظهور أيامًا كـ«يكتب الآن». الاختبار: `tests/unit/editorPresence.test.ts`.
+
+## محرر «نشر سبق» — 2026-11-18
+- يمتد عقد Bot Drafts التحريري العربي والإنجليزي لهوية التوكن القديم المسمّاة `nashr-sabq` فقط؛ تبقى التوكنات الأخرى والشخصية على نطاقها القائم. القائمة للأخبار، وتفاصيل الخبر تشمل إنفوجرافيك البوت القديم، مع ترقيم بالمؤشر ومرشحات، والمصدر محفوظ عند التعديل؛ يمكن تعيين المؤلف والمراسل لحساب تحريري نشط. التفاصيل والقيود والأمثلة في `BOT_DRAFTS_API.md` و`bot-drafts.openapi.yaml`.
+- الخدمات `botEditorReads`, `botEditorWrites`, `botEditorMedia`, `botEditorAudit` وسجل عمليات التوليد؛ هجرتا `20261118_bot_editor_english_history.sql` و`20261118_en_article_edit_locks.sql` مطلوبتان قبل مسارات الإنجليزية التي تعتمد عليهما. العمليات التحريرية تسجل تغيرات وسببها؛ لا يُكتب الاعتماد أو برومبت التوليد في سجل العمليات.
+- دفع العاجل مسار منفصل وموثق في نظام الإشعارات؛ إشعار الإنجليزية بلا رابط للخبر لعدم دعم التطبيق فتحه من الإشعار. قبول الإرسال لا يثبت التسليم.
+
+- بحث العنوان والمتن يستفيد من `migrations/20261118_bot_editor_search_indexes.sql` (فهارس trigram متزامنة خارج transaction، مع اشتراط وجود `pg_trgm`). لم تُنفّذ الهجرة بمجرد إضافة الملف.

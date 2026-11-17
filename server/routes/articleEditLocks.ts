@@ -23,9 +23,10 @@
 
 import { Router } from "express";
 import { db } from "../db";
-import { articleEditLocks, users } from "@shared/schema";
+import { articleEditLocks, articles, enArticles, users } from "@shared/schema";
 import { and, eq, lte, or, sql } from "drizzle-orm";
 import { authorizeArticleWrite } from "../services/articleAccessService";
+import { enArticleEditLocks } from "../services/enArticleEditLocksSchema";
 import { getEffectiveUserPermissions } from "../rbac";
 
 const router = Router();
@@ -71,12 +72,13 @@ function shape(lock: LockRow | undefined, currentUserId: string) {
   };
 }
 
-router.get("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) => {
+router.get(["/api/admin/articles/:id/lock", "/api/en/dashboard/articles/:id/lock"], requireAuth, async (req: any, res) => {
   try {
+    const lockTable = req.path.startsWith("/api/en/") ? enArticleEditLocks : articleEditLocks;
     const [row] = await db
       .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, req.params.id))
+      .from(lockTable)
+      .where(eq(lockTable.articleId, req.params.id))
       .limit(1);
     res.json(shape(row as LockRow | undefined, req.user.id));
   } catch (err) {
@@ -85,17 +87,19 @@ router.get("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =>
   }
 });
 
-router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) => {
+router.post(["/api/admin/articles/:id/lock", "/api/en/dashboard/articles/:id/lock"], requireAuth, async (req: any, res) => {
   try {
     const articleId = req.params.id;
     const userId = req.user.id;
+    const isEnglish = req.path.startsWith("/api/en/");
+    const lockTable = isEnglish ? enArticleEditLocks : articleEditLocks;
 
     // القفل تصريحُ تحرير: لا يُمنح إلا لمن يستطيع فعلًا تعديل هذه المادة
     // (edit_any، أو opinion.edit_any لمواد الرأي، أو مالكها). كان requireAuth
     // وحده يكفي فيستولي أي حساب مسجّل على قفل أي مقال ويرى «حق التحرير
     // الحصري» على مواد غيره (حادثة 2026-08-08).
     const permissions = await getEffectiveUserPermissions(userId);
-    const access = await authorizeArticleWrite(userId, articleId, permissions);
+    const access = await authorizeArticleWrite(userId, articleId, permissions, isEnglish ? "en" : "ar");
     if (!access.ok) {
       return res.status(access.httpStatus).json({ message: access.message });
     }
@@ -104,13 +108,16 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
       return res.status(403).json({ message: "تجاوز القفل متاح للمدير ورئيس التحرير فقط" });
     }
 
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
-
     const userName = await resolveUserName(userId, req.user);
 
-    const [upserted] = await db
-      .insert(articleEditLocks)
+    const [upserted] = await db.transaction(async (tx) => {
+      const parent = isEnglish ? enArticles : articles;
+      const [article] = await tx.select({ id: parent.id }).from(parent).where(eq(parent.id, articleId)).limit(1).for("update");
+      if (!article) return [];
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
+      return tx
+      .insert(lockTable)
       .values({
         articleId,
         userId,
@@ -120,18 +127,19 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
         lastHeartbeat: now,
       })
       .onConflictDoUpdate({
-        target: articleEditLocks.articleId,
+        target: lockTable.articleId,
         set: { userId, userName, acquiredAt: now, expiresAt, lastHeartbeat: now },
         // التجاوز ينقل القفل دون شرط؛ نبضة المالك السابق تفشل بعدها فيُبلَّغ
         setWhere: force
           ? undefined
-          : or(eq(articleEditLocks.userId, userId), lte(articleEditLocks.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`)),
+          : or(eq(lockTable.userId, userId), lte(lockTable.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`)),
       })
       .returning();
+    });
 
     if (!upserted) {
-      const [owner] = await db.select().from(articleEditLocks)
-        .where(eq(articleEditLocks.articleId, articleId)).limit(1);
+      const [owner] = await db.select().from(lockTable)
+        .where(eq(lockTable.articleId, articleId)).limit(1);
       return res.status(409).json({ message: "المقالة مقفلة من مستخدم آخر", ...shape(owner, userId) });
     }
     if (force) console.info(`[edit-lock] takeover article=${articleId} by=${userId}`);
@@ -146,14 +154,15 @@ const heartbeatHandler = async (req: any, res: any) => {
   try {
     const articleId = req.params.id;
     const userId = req.user.id;
+    const lockTable = req.path.startsWith("/api/en/") ? enArticleEditLocks : articleEditLocks;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
 
     const [updated] = await db
-      .update(articleEditLocks)
+      .update(lockTable)
       .set({ lastHeartbeat: now, expiresAt })
-      .where(and(eq(articleEditLocks.articleId, articleId), eq(articleEditLocks.userId, userId),
-        sql`${articleEditLocks.expiresAt} > (clock_timestamp() at time zone 'UTC')`))
+      .where(and(eq(lockTable.articleId, articleId), eq(lockTable.userId, userId),
+        sql`${lockTable.expiresAt} > (clock_timestamp() at time zone 'UTC')`))
       .returning();
 
     if (!updated) return res.status(409).json({ message: "Lock no longer owned" });
@@ -164,20 +173,21 @@ const heartbeatHandler = async (req: any, res: any) => {
   }
 };
 
-router.post("/api/admin/articles/:id/lock/heartbeat", requireAuth, heartbeatHandler);
+router.post(["/api/admin/articles/:id/lock/heartbeat", "/api/en/dashboard/articles/:id/lock/heartbeat"], requireAuth, heartbeatHandler);
 // alias PATCH: الحزم المكيّشة القديمة كانت ترسل PATCH فتسقط في 404 HTML —
 // يبقى القبول بالطريقتين حتى لا ينكسر القفل أثناء نافذة انتشار النشر
-router.patch("/api/admin/articles/:id/lock/heartbeat", requireAuth, heartbeatHandler);
+router.patch(["/api/admin/articles/:id/lock/heartbeat", "/api/en/dashboard/articles/:id/lock/heartbeat"], requireAuth, heartbeatHandler);
 
-router.delete("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) => {
+router.delete(["/api/admin/articles/:id/lock", "/api/en/dashboard/articles/:id/lock"], requireAuth, async (req: any, res) => {
   try {
     const articleId = req.params.id;
     const userId = req.user.id;
+    const lockTable = req.path.startsWith("/api/en/") ? enArticleEditLocks : articleEditLocks;
 
     // Only the lock owner can release. Silently no-op for anyone else so
     // navigating away doesn't surface a confusing error.
-    await db.delete(articleEditLocks).where(and(
-      eq(articleEditLocks.articleId, articleId), eq(articleEditLocks.userId, userId),
+    await db.delete(lockTable).where(and(
+      eq(lockTable.articleId, articleId), eq(lockTable.userId, userId),
     ));
 
     res.json({ released: true });

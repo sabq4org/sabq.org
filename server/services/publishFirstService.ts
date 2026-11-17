@@ -146,17 +146,31 @@ export async function editorDisplayName(userId: string): Promise<string> {
   return name || user?.email || userId;
 }
 
+import { recordBotEditorAudit } from "./botEditorAudit";
+
 export async function recordReviewerVerdict(input: {
   articleId: string;
   verdict: string;
   reviewerName: string;
   note?: string | null;
-}) {
+}, auditNashr = false) {
   if (!isPublishFirstVerdict(input.verdict)) {
     return { ok: false as const, message: "الحكم يجب أن يكون ok أو minor أو major" };
   }
   const reviewerName = input.reviewerName.trim();
   if (!reviewerName) return { ok: false as const, message: "اسم المراجع مطلوب" };
+  if (auditNashr) return db.transaction(async tx => {
+    const [article] = await tx.select().from(articles).where(eq(articles.id, input.articleId)).limit(1).for("update");
+    if (!article) return { ok: false as const, notFound: true, message: "المادة غير موجودة" };
+    const [previousVerdict] = await tx.select().from(articleReviewerVerdicts)
+      .where(eq(articleReviewerVerdicts.articleId, article.id)).orderBy(desc(articleReviewerVerdicts.verdictAt)).limit(1);
+    const [row] = await tx.insert(articleReviewerVerdicts).values({ articleId: input.articleId,
+      verdict: input.verdict, reviewerName, note: input.note?.trim() || null, verdictAt: new Date() }).returning();
+    await recordBotEditorAudit(tx, { language: "ar", articleId: article.id, actorId: null, operation: "verdict",
+      originalSource: article.source, before: { ...article, reviewerVerdict: previousVerdict ? { verdict: previousVerdict.verdict, reviewerName: previousVerdict.reviewerName, note: previousVerdict.note, verdictAt: previousVerdict.verdictAt } : null },
+      after: { ...article, reviewerVerdict: { verdict: row.verdict, reviewerName: row.reviewerName, note: row.note, verdictAt: row.verdictAt } } });
+    return { ok: true as const, verdict: row };
+  });
   const [article] = await db
     .select({ id: articles.id })
     .from(articles)

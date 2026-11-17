@@ -118,7 +118,7 @@ import sharp from "sharp";
 
 const NASHR = "nashr-secret-token-0123456789abcdef-XYZ";
 const GROK = "grok-secret-token-0123456789abcdef-QWERTY";
-const TOKENS = `nashr-sabq:${NASHR}, grok-bot:${GROK}`;
+const TOKENS = `legacy-bot:${NASHR}, grok-bot:${GROK}`;
 
 const app = express();
 app.use(express.json());
@@ -197,11 +197,11 @@ afterEach(() => {
 
 describe("bot token parsing and authentication", () => {
   it("parses name:token entries, ignoring malformed, short and duplicate ones", () => {
-    const bots = parseBotDraftTokens(`nashr-sabq:${NASHR},broken-entry,Bad Name:${GROK},short:abc,nashr-sabq:${GROK},grok-bot:${GROK}`);
-    expect(bots.map((b) => b.name)).toEqual(["nashr-sabq", "grok-bot"]);
+    const bots = parseBotDraftTokens(`legacy-bot:${NASHR},broken-entry,Bad Name:${GROK},short:abc,legacy-bot:${GROK},grok-bot:${GROK}`);
+    expect(bots.map((b) => b.name)).toEqual(["legacy-bot", "grok-bot"]);
   });
   it("identifies each bot by its own token and rejects everything else", () => {
-    expect(authenticateBotToken(`Bearer ${NASHR}`)).toEqual({ name: "nashr-sabq" });
+    expect(authenticateBotToken(`Bearer ${NASHR}`)).toEqual({ name: "legacy-bot" });
     expect(authenticateBotToken(`bearer ${GROK}`)).toEqual({ name: "grok-bot" });
     expect(authenticateBotToken(`Bearer ${NASHR}x`)).toBeNull();
     expect(authenticateBotToken(NASHR)).toBeNull();
@@ -247,7 +247,7 @@ describe("POST /api/internal/bot-drafts", () => {
     expect(response.status).toBe(201);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(await response.json()).toMatchObject({ id: "art-1", status: "draft", updatable: true });
-    expect(state.create).toHaveBeenCalledWith({ name: "nashr-sabq" }, payload, expect.objectContaining({ ip: expect.any(String) }));
+    expect(state.create).toHaveBeenCalledWith({ name: "legacy-bot" }, payload, expect.objectContaining({ ip: expect.any(String) }));
   });
   it.each(BOT_DRAFT_FORBIDDEN_FIELDS)("rejects forbidden field %s with 422 before validation", async (field) => {
     const response = await call("POST", "/api/internal/bot-drafts", { title: "عنوان تجريبي", content: "x".repeat(30), [field]: "published" });
@@ -287,7 +287,7 @@ describe("POST /api/internal/bot-drafts", () => {
     });
     expect(response.status).toBe(201);
     expect(state.create).toHaveBeenCalledWith(
-      { name: "nashr-sabq" },
+      { name: "legacy-bot" },
       expect.objectContaining({ imageUrls }),
       expect.anything(),
     );
@@ -371,7 +371,7 @@ describe("POST /api/internal/bot-drafts/images", () => {
         mimeType: "image/jpeg",
         purpose: BOT_DRAFTS_IMAGE_PURPOSE,
         forceR2: true,
-        metadata: { source: "bot-drafts", bot: "nashr-sabq" },
+        metadata: { source: "bot-drafts", bot: "legacy-bot" },
       }),
     );
     const uploaded = state.uploadImage.mock.calls[0][0] as { buffer: Buffer };
@@ -446,7 +446,7 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
       content: '<p>النص كما خُزّن</p><img src="https://media.sabq.org/news/a.webp">',
       contentFormat: "html",
     });
-    expect(state.get).toHaveBeenLastCalledWith("art-1", { name: "nashr-sabq" }, { includeContent: true });
+    expect(state.get).toHaveBeenLastCalledWith("art-1", { name: "legacy-bot" }, { includeContent: true });
   });
   it.each(["0", "true", "", "1&includeContent=1"]) ("rejects invalid includeContent query %s", async (value) => {
     const response = await call("GET", `/api/internal/bot-drafts/art-1?includeContent=${value}`);
@@ -458,7 +458,7 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     state.update.mockResolvedValueOnce(draft({ title: "عنوان محدث" }));
     const ok = await call("PATCH", "/api/internal/bot-drafts/art-1", { title: "عنوان محدث" });
     expect(ok.status).toBe(200);
-    expect(state.update).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", { title: "عنوان محدث" }, expect.anything());
+    expect(state.update).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", { title: "عنوان محدث" }, expect.anything());
     state.update.mockRejectedValueOnce(new BotDraftError(409, "not_a_draft", "لم تعد مسودة", { status: "published" }));
     const conflict = await call("PATCH", "/api/internal/bot-drafts/art-1", { excerpt: "مقدمة" });
     expect(conflict.status).toBe(409);
@@ -470,7 +470,7 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     const response = await call("PATCH", "/api/internal/bot-drafts/art-1", { imageUrls });
     expect(response.status).toBe(200);
     expect(state.update).toHaveBeenCalledWith(
-      { name: "nashr-sabq" },
+      { name: "legacy-bot" },
       "art-1",
       { imageUrls },
       expect.anything(),
@@ -485,7 +485,7 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
   it("throttles writes per bot with its own limiter (the global write limiter skips /api/internal)", async () => {
     vi.stubEnv("BOT_DRAFTS_WRITE_RATE_LIMIT", "1");
     state.update.mockResolvedValue(draft());
-    // مفتاح المحدد هو اسم البوت؛ نستخدم grok-bot حتى لا يتأثر بعدّاد nashr-sabq من الاختبارات السابقة
+    // مفتاح المحدد هو اسم البوت؛ نستخدم grok-bot حتى لا يتأثر بعدّاد legacy-bot من الاختبارات السابقة
     expect((await call("PATCH", "/api/internal/bot-drafts/art-1", { title: "عنوان أول" }, GROK)).status).toBe(200);
     const limited = await call("PATCH", "/api/internal/bot-drafts/art-1", { title: "عنوان ثانٍ" }, GROK);
     expect(limited.status).toBe(429);
@@ -498,11 +498,11 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     const all = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", {});
     expect(all.status).toBe(200);
     expect(await all.json()).toEqual(result);
-    expect(state.regenerate).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", {}, expect.anything());
+    expect(state.regenerate).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", {}, expect.anything());
 
     const some = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", { fields: ["seo"] });
     expect(some.status).toBe(200);
-    expect(state.regenerate).toHaveBeenLastCalledWith({ name: "nashr-sabq" }, "art-1", { fields: ["seo"] }, expect.anything());
+    expect(state.regenerate).toHaveBeenLastCalledWith({ name: "legacy-bot" }, "art-1", { fields: ["seo"] }, expect.anything());
   });
   it("validates regenerate-extras bodies and surfaces service errors", async () => {
     const bad = await call("POST", "/api/internal/bot-drafts/art-1/regenerate-extras", { fields: ["title"] });
@@ -560,7 +560,7 @@ describe("GET /api/internal/bot-drafts/by-public-id/:publicId", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(await response.json()).toEqual(lookup);
-    expect(state.byPublicId).toHaveBeenCalledWith("abc12xy", { name: "nashr-sabq" });
+    expect(state.byPublicId).toHaveBeenCalledWith("abc12xy", { name: "legacy-bot" });
     expect(state.get).not.toHaveBeenCalled();
   });
 
@@ -568,7 +568,7 @@ describe("GET /api/internal/bot-drafts/by-public-id/:publicId", () => {
     state.byPublicId.mockResolvedValueOnce(lookup);
     const response = await call("GET", `/api/internal/bot-drafts/by-public-id/${encodeURIComponent(" خبر-منشور ")}`);
     expect(response.status).toBe(200);
-    expect(state.byPublicId).toHaveBeenCalledWith("خبر-منشور", { name: "nashr-sabq" });
+    expect(state.byPublicId).toHaveBeenCalledWith("خبر-منشور", { name: "legacy-bot" });
   });
 
   it("returns 404 when no published article matches", async () => {
@@ -624,7 +624,7 @@ describe("PATCH /api/internal/bot-drafts/:id/ready", () => {
     const response = await call("PATCH", "/api/internal/bot-drafts/art-1/ready", {});
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: BOT_DRAFT_READY_STATUS, updatable: false });
-    expect(state.ready).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.ready).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", expect.anything());
     expect(state.update).not.toHaveBeenCalled();
   });
   it("rejects missing auth, content fields, and a status smuggled in the body", async () => {
@@ -669,7 +669,7 @@ describe("POST /api/internal/bot-drafts/:id/publish", () => {
       editUrl: "https://sabq.org/dashboard/articles/art-1/edit",
       publicUrl: "https://sabq.org/article/abc12xy",
     });
-    expect(state.publish).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything(), {});
+    expect(state.publish).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", expect.anything(), {});
     expect(state.update).not.toHaveBeenCalled();
     expect(state.ready).not.toHaveBeenCalled();
   });
@@ -696,7 +696,7 @@ describe("POST /api/internal/bot-drafts/:id/publish", () => {
     const pending = await call("POST", "/api/internal/bot-drafts/art-1/publish", { operationId });
     expect(pending.status).toBe(202);
     expect(await pending.json()).toMatchObject({ operationId, articleId: "art-1", action: "publish", status: "processing" });
-    expect(state.publish).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything(), { operationId });
+    expect(state.publish).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", expect.anything(), { operationId });
 
     state.getOperation.mockResolvedValueOnce({ operationId, articleId: "art-1", action: "publish", status: "failed", error: { code: "locked_by_editor", message: "محرر يعمل" }, executionOutcome: "not_applied" });
     const receipt = await call("GET", `/api/internal/bot-drafts/art-1/operations/${operationId}`);
@@ -776,7 +776,7 @@ describe("POST /api/internal/bot-drafts/:id/schedule", () => {
       editUrl: "https://sabq.org/dashboard/articles/art-1/edit",
     });
     expect(state.schedule).toHaveBeenCalledWith(
-      { name: "nashr-sabq" },
+      { name: "legacy-bot" },
       "art-1",
       new Date(future),
       expect.anything(),
@@ -834,7 +834,7 @@ describe("post-publish bot draft controls", () => {
     const response = await call("POST", "/api/internal/bot-drafts/art-1/archive", { reason: "خبر مكرر" });
     expect(response.status).toBe(200);
     expect(state.archive).toHaveBeenCalledWith(
-      { name: "nashr-sabq" },
+      { name: "legacy-bot" },
       "art-1",
       { reason: "خبر مكرر" },
       expect.anything(),
@@ -869,7 +869,7 @@ describe("post-publish bot draft controls", () => {
     const response = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: future });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: "scheduled", scheduledAt: "2026-12-01T15:30:00.000Z" });
-    expect(state.reschedule).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", new Date(future), expect.anything());
+    expect(state.reschedule).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", new Date(future), expect.anything());
     expect(state.schedule).not.toHaveBeenCalled();
 
     const past = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: "2020-01-01T00:00:00Z" });
@@ -900,7 +900,7 @@ describe("post-publish bot draft controls", () => {
     const response = await call("DELETE", "/api/internal/bot-drafts/art-1/schedule", {});
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: "draft", updatable: true, scheduledAt: null });
-    expect(state.unschedule).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.unschedule).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", expect.anything());
     expect(state.archive).not.toHaveBeenCalled();
   });
 
@@ -921,7 +921,7 @@ describe("post-publish bot draft controls", () => {
     const response = await call("POST", "/api/internal/bot-drafts/art-1/restore", {});
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: "draft", updatable: true });
-    expect(state.restore).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.restore).toHaveBeenCalledWith({ name: "legacy-bot" }, "art-1", expect.anything());
     expect(state.publish).not.toHaveBeenCalled();
   });
 
@@ -952,7 +952,7 @@ describe("post-publish bot draft controls", () => {
     });
     expect(response.status).toBe(200);
     expect(state.visibility).toHaveBeenCalledWith(
-      { name: "nashr-sabq" },
+      { name: "legacy-bot" },
       "art-1",
       { isFeatured: true, newsType: "breaking", hideFromHomepage: true },
       expect.anything(),
@@ -1011,7 +1011,7 @@ describe("pure helpers", () => {
   });
   it("exempts only personal bot news with the server-owned newspaper byline", () => {
     const personal = { name: "publisher-u", personal: { userId: "u", capabilities: [] } } as any;
-    const legacy = { name: "nashr-sabq" };
+    const legacy = { name: "legacy-bot" };
     const newspaper = "RnP7eDOAl5T5rGpib9_8d";
     expect(isPersonalBotNewspaperNews(personal, { articleType: "news", authorId: newspaper, reporterId: newspaper })).toBe(true);
     expect(isPersonalBotNewspaperNews(legacy, { articleType: "news", authorId: newspaper, reporterId: newspaper })).toBe(false);

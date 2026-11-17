@@ -24,6 +24,7 @@
 // ----------------------------------------------------------------------------
 
 import { Router, type NextFunction, type Request, type Response } from "express";
+import { botNewsEditor } from "./botNewsEditor";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import {
@@ -362,6 +363,8 @@ router.get(`${BOT_DRAFTS_BASE_PATH}/by-public-id/:publicId`, requireBotToken, as
   }
 });
 
+router.use(BOT_DRAFTS_BASE_PATH, botNewsEditor("ar", requireBotToken, botWriteLimiter));
+
 router.get(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, async (req: BotRequest, res: Response) => {
   const includeContent = req.query.includeContent === undefined
     ? false
@@ -505,7 +508,9 @@ router.post(
       });
     }
     try {
-      const verdict = await recordBotReviewerVerdict(req.params.id, parsed.data);
+      const verdict = req.bot?.name === "nashr-sabq" && !req.bot.personal
+        ? await recordBotReviewerVerdict(req.params.id, parsed.data, req.bot)
+        : await recordBotReviewerVerdict(req.params.id, parsed.data);
       res.status(201).json(verdict);
     } catch (error) {
       handleError(res, error, "verdict");
