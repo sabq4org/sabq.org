@@ -2,7 +2,7 @@
   "name": "sabq-meetings-agent",
   "version": "1.0.0",
   "private": true,
-  "description": "أمين المحضر — عامل تفريغ اجتماعات سبق (LiveKit Agents)",
+  "description": "مُدوِّن سبق AI — عامل تفريغ اجتماعات سبق (LiveKit Agents)",
   "type": "module",
   "scripts": {
     "build": "tsc",

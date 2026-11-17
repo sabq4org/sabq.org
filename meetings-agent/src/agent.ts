@@ -1,11 +1,14 @@
 // ----------------------------------------------------------------------------
-// «أمين المحضر» — عامل تفريغ اجتماعات سبق
+// «مُدوِّن سبق AI» — عامل تفريغ اجتماعات سبق (الهوية التقنية: sabq-minutes-agent)
 //
 // خدمة مستقلة (Railway) تسجَّل لدى LiveKit Cloud باسم sabq-minutes-agent
 // وتُستدعى حصراً عبر Agent Dispatch من خادم سبق عند بدء اجتماع مفعَّل
 // المحضر (metadata تحمل meetingId). تشترك في مسار صوت كل متحدث على حدة
 // — فهوية المتحدث معروفة من المسار بلا نماذج فصل — وتبث المقاطع النهائية
 // دفعات إلى مسار الاستقبال الداخلي في خادم سبق.
+//
+// metadata الاستدعاء: { meetingId, keyterms? } — keyterms أسماء الأقسام
+// والمنسوبين المعروضة (غير حساسة) تُبنى في الخادم وتُمرَّر للـprompt ولا تُطبع.
 //
 // المتغيرات المطلوبة:
 //   LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
@@ -30,6 +33,7 @@ import {
   TrackKind,
 } from "@livekit/rtc-node";
 import { fileURLToPath } from "node:url";
+import { SegmentClock, buildSttOptions, parseJobMetadata } from "./sttConfig.js";
 
 const AGENT_NAME = "sabq-minutes-agent";
 const FLUSH_INTERVAL_MS = 5_000;
@@ -109,18 +113,18 @@ class TranscriptUploader {
 
 export default defineAgent({
   entry: async (ctx: JobContext) => {
-    const meta = (() => {
-      try {
-        return JSON.parse(ctx.job.metadata || "{}") as { meetingId?: string };
-      } catch {
-        return {};
-      }
-    })();
+    const meta = parseJobMetadata(ctx.job.metadata);
     const meetingId = meta.meetingId;
     if (!meetingId) {
       console.error("[Agent] job without meetingId metadata — aborting");
       return;
     }
+    // الأسماء لا تُطبع — العدد فقط
+    const sttOptions = buildSttOptions(meta.keyterms);
+    console.log(
+      `[Agent] stt config: ${sttOptions.model} vad=${sttOptions.turnDetection.silence_duration_ms}ms ` +
+        `noise=${sttOptions.noiseReductionType} keyterms=${meta.keyterms.length} prompt=${sttOptions.prompt.length}ch`,
+    );
 
     await ctx.connect();
     console.log(`[Agent] joined room ${ctx.room.name} for meeting ${meetingId}`);
@@ -150,9 +154,10 @@ export default defineAgent({
       })();
 
       const run = (async () => {
-        const sttImpl = new openai.STT({ model: "gpt-4o-transcribe", language: "ar" });
+        const sttImpl = new openai.STT(sttOptions);
         const sttStream = sttImpl.stream();
         const audio = new AudioStream(track, { sampleRate: 16000, numChannels: 1 });
+        const clock = new SegmentClock();
 
         const feed = (async () => {
           for await (const frame of audio) sttStream.pushFrame(frame);
@@ -160,16 +165,29 @@ export default defineAgent({
         })();
 
         for await (const event of sttStream) {
-          if (event.type === stt.SpeechEventType.FINAL_TRANSCRIPT) {
-            const text = event.alternatives?.[0]?.text?.trim();
-            if (text) {
-              uploader.push({
-                speakerIdentity: participant.identity,
-                speakerName,
-                text,
-                startMs: Date.now() - startedAt,
-              });
+          switch (event.type) {
+            case stt.SpeechEventType.START_OF_SPEECH:
+              clock.onStartOfSpeech();
+              break;
+            case stt.SpeechEventType.INTERIM_TRANSCRIPT:
+              clock.onInterim();
+              break;
+            case stt.SpeechEventType.FINAL_TRANSCRIPT: {
+              const startedSpeakingAt = clock.onFinal();
+              const text = event.alternatives?.[0]?.text?.trim();
+              if (text) {
+                uploader.push({
+                  speakerIdentity: participant.identity,
+                  speakerName,
+                  text,
+                  startMs: Math.max(0, startedSpeakingAt - startedAt),
+                });
+              }
+              break;
             }
+            case stt.SpeechEventType.RECOGNITION_USAGE:
+              clock.onSegmentDone();
+              break;
           }
         }
         await feed;
