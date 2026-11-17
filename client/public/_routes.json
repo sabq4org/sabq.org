@@ -1,5 +1,11 @@
 {
   "version": 1,
-  "include": ["/*"],
-  "exclude": []
+  "include": [
+    "/*"
+  ],
+  "exclude": [
+    "/build-info.json",
+    "/favicon.ico",
+    "/manifest.webmanifest"
+  ]
 }

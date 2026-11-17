@@ -1141,6 +1141,8 @@
         "server/utils/noindexPaths.ts",
         "web-next/**",
         "functions/_middleware.js",
+        "client/public/_routes.json",
+        "scripts/verify-pages-static-assets.mjs",
         "web-next/lib/articleMetadata.ts",
         "server/services/archiveSeo.ts",
         "server/utils/apiListingRobots.ts",
