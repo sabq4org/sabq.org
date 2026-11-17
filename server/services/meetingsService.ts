@@ -374,7 +374,8 @@ export interface MeetingListItem {
   myRsvp: string | null;
 }
 
-async function meetingVisibilityFilter(userId: string, canManage: boolean) {
+// مُصدَّرة لواجهة بوت الديسك (botDeskMeetingsService) لتطبيق قاعدة الظهور نفسها
+export async function meetingVisibilityFilter(userId: string, canManage: boolean) {
   if (canManage) return undefined;
   const deptId = await getUserDepartmentId(userId);
   // المرفوض والمُخرَج لا يبقى الاجتماع ظاهراً له في المركز

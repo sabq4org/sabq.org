@@ -159,6 +159,23 @@ describe("bot publisher token service", () => {
     expect(principal?.capabilities).toEqual(["edit", "ready"]);
   });
 
+  it("grants read-only meetingsRead from meetings.view or meetings.manage, never from article permissions", async () => {
+    state.permissions.mockResolvedValue(["meetings.view"]);
+    state.selects.push([{ token: tokenRow, user }]);
+    let principal = await authenticatePublisherToken("botpub_test-secret-value-123456789");
+    expect(principal?.capabilities).toEqual(["meetingsRead"]);
+
+    state.permissions.mockResolvedValue(["meetings.manage"]);
+    state.selects.push([{ token: tokenRow, user }]);
+    principal = await authenticatePublisherToken("botpub_test-secret-value-123456789");
+    expect(principal?.capabilities).toEqual(["meetingsRead"]);
+
+    state.permissions.mockResolvedValue(["articles.edit_any", "articles.view"]);
+    state.selects.push([{ token: tokenRow, user }]);
+    principal = await authenticatePublisherToken("botpub_test-secret-value-123456789");
+    expect(principal?.capabilities).not.toContain("meetingsRead");
+  });
+
   it("rejects an agency token when the existing publishing gate is closed", async () => {
     state.gate.mockResolvedValue({ allowed: false, code: "WINDOW_CLOSED", publisher: { id: "publisher-1", userId: "owner-1" } });
     state.selects.push([{ token: tokenRow, user }]);

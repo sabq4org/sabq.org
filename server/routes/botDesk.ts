@@ -31,6 +31,15 @@
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/schedule
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/publish
 //   POST  /api/internal/bot-desk/opinion/drafts/:id/return
+//   GET   /api/internal/bot-desk/meetings                    (اجتماعات سبق: الجارية والقادمة — قراءة فقط)
+//   GET   /api/internal/bot-desk/meetings/events             (أحداث بدء/انتهاء/المحضر للاستطلاع بمؤشر)
+//   GET   /api/internal/bot-desk/meetings/:id                (التفاصيل والحضور)
+//   GET   /api/internal/bot-desk/meetings/:id/transcript     (تفريغ أمين المحضر بمؤشر — للمضيف/المدير)
+//   GET   /api/internal/bot-desk/meetings/:id/minutes        (المحضر وحالة اعتماده)
+//
+// مسارات الاجتماعات تشترط قدرة meetingsRead (meetings.view أو meetings.manage)
+// وتطبق قواعد الظهور نفسها في meetingsService؛ لا كتابة ولا سجل activity_logs
+// (كبقية مسارات القراءة هنا).
 //
 // مسارات الرأي لا تحمل منطقاً خاصاً: تستدعي الدوال نفسها التي يستدعيها تطبيق
 // الديسك (/api/v1/staff/opinion/*) من staffOpinionDeskService و
@@ -106,6 +115,20 @@ import {
 import { getOpinionPrepJob, startOpinionPrep } from "../services/staffOpinionPrepareService";
 import { getOpinionImageJob, startOpinionImage } from "../services/staffOpinionImageService";
 import { editOpinionDraftFromDesk } from "../services/staffOpinionContentService";
+import {
+  botDeskMeetingEventsQuerySchema,
+  botDeskMeetingTranscriptQuerySchema,
+  botDeskMeetingsQuerySchema,
+} from "@shared/botDeskMeetings";
+import {
+  getMeetingDetailForBot,
+  getTranscriptPageForBot,
+  listMeetingEventsForBot,
+  listMeetingsForBot,
+  loadMeetingForBot,
+  minutesForBot,
+} from "../services/botDeskMeetingsService";
+import { reconcileLiveMeetings } from "../services/meetingsService";
 import { resolveStaffCapabilitiesAndRoles } from "../services/staffAppService";
 import {
   staffOpinionBoardQuerySchema,
@@ -1254,6 +1277,182 @@ router.post(
       res.json({ article: result.article });
     } catch (error) {
       handleOpinionError(res, error, "تعذرت إعادة المقال إلى الكاتب");
+    }
+  },
+);
+
+// ── اجتماعات سبق (قراءة فقط) ────────────────────────────────────────
+
+type BotDeskMeetingsRequest = BotDeskRequest & { meetingsCanManage?: boolean };
+
+async function requireMeetingsRead(req: BotDeskMeetingsRequest, res: Response, next: NextFunction) {
+  try {
+    const principal = req.botPrincipal;
+    if (!principal) {
+      return sendError(res, 401, { code: "unauthorized", message: "Unauthorized" });
+    }
+    if (!principal.capabilities.includes("meetingsRead")) {
+      return sendError(res, 403, {
+        code: "forbidden",
+        message: "لا تملك صلاحية الاطلاع على الاجتماعات",
+        details: { required: "meetingsRead" },
+      });
+    }
+    req.meetingsCanManage = await userHasPermission(principal.userId, "meetings.manage");
+    return next();
+  } catch (error) {
+    console.error("[BotDesk meetings] RBAC check failed:", error);
+    return sendError(res, 500, { code: "server_error", message: "خطأ داخلي" });
+  }
+}
+
+function sendMeetingQueryError(res: Response, error: { flatten: () => unknown }) {
+  return sendError(res, 400, {
+    code: "validation_error",
+    message: "معاملات الاستعلام غير صالحة",
+    details: error.flatten(),
+  });
+}
+
+/** نفس مصالحة مركز الاجتماعات: يُقفل «المباشر» الذي فرغت غرفته (خانق ٣٠ ثانية) */
+async function reconcileBeforeRead(): Promise<void> {
+  await reconcileLiveMeetings().catch((e) =>
+    console.error("[BotDesk meetings] reconcile failed:", (e as Error).message),
+  );
+}
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/meetings`,
+  requireBotDeskAuth,
+  requireMeetingsRead,
+  async (req: BotDeskMeetingsRequest, res: Response) => {
+    const parsed = botDeskMeetingsQuerySchema.safeParse(req.query);
+    if (!parsed.success) return sendMeetingQueryError(res, parsed.error);
+    try {
+      await reconcileBeforeRead();
+      const meetings = await listMeetingsForBot(
+        req.botPrincipal!.userId,
+        Boolean(req.meetingsCanManage),
+        parsed.data,
+      );
+      res.json({ meetings });
+    } catch (error) {
+      console.error("[BotDesk meetings] list failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب الاجتماعات" });
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/meetings/events`,
+  requireBotDeskAuth,
+  requireMeetingsRead,
+  async (req: BotDeskMeetingsRequest, res: Response) => {
+    const parsed = botDeskMeetingEventsQuerySchema.safeParse(req.query);
+    if (!parsed.success) return sendMeetingQueryError(res, parsed.error);
+    try {
+      await reconcileBeforeRead();
+      const page = await listMeetingEventsForBot(
+        req.botPrincipal!.userId,
+        Boolean(req.meetingsCanManage),
+        parsed.data,
+      );
+      res.json(page);
+    } catch (error) {
+      console.error("[BotDesk meetings] events failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب أحداث الاجتماعات" });
+    }
+  },
+);
+
+async function loadBotMeeting(req: BotDeskMeetingsRequest, res: Response) {
+  const access = await loadMeetingForBot(
+    req.params.id,
+    req.botPrincipal!.userId,
+    Boolean(req.meetingsCanManage),
+  );
+  if (!access.ok) {
+    sendError(
+      res,
+      access.status,
+      access.status === 404
+        ? { code: "not_found", message: "الاجتماع غير موجود" }
+        : { code: "forbidden", message: "هذا الاجتماع غير متاح لمالك التوكن" },
+    );
+    return null;
+  }
+  return access;
+}
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/meetings/:id`,
+  requireBotDeskAuth,
+  requireMeetingsRead,
+  async (req: BotDeskMeetingsRequest, res: Response) => {
+    try {
+      const access = await loadBotMeeting(req, res);
+      if (!access) return;
+      const meeting = await getMeetingDetailForBot(
+        access.meeting,
+        req.botPrincipal!.userId,
+        access.viewerIsHost,
+      );
+      res.json({ meeting });
+    } catch (error) {
+      console.error("[BotDesk meetings] detail failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب الاجتماع" });
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/meetings/:id/transcript`,
+  requireBotDeskAuth,
+  requireMeetingsRead,
+  async (req: BotDeskMeetingsRequest, res: Response) => {
+    const parsed = botDeskMeetingTranscriptQuerySchema.safeParse(req.query);
+    if (!parsed.success) return sendMeetingQueryError(res, parsed.error);
+    try {
+      const access = await loadBotMeeting(req, res);
+      if (!access) return;
+      // سياسة أمين المحضر: التفريغ الخام للمضيف أو meetings.manage فقط
+      if (!access.viewerIsHost) {
+        return sendError(res, 403, {
+          code: "forbidden",
+          message: "التفريغ الخام للمضيف أو مدير الاجتماعات فقط",
+          details: { required: "host_or_meetings.manage" },
+        });
+      }
+      const { meeting } = access;
+      const page = meeting.minutesEnabled
+        ? await getTranscriptPageForBot(meeting.id, parsed.data)
+        : { segments: [], nextCursor: parsed.data.since ?? null, hasMore: false };
+      res.json({
+        meetingId: meeting.id,
+        status: meeting.status,
+        minutesEnabled: meeting.minutesEnabled,
+        minutesStatus: meeting.minutesStatus,
+        ...page,
+      });
+    } catch (error) {
+      console.error("[BotDesk meetings] transcript failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب التفريغ" });
+    }
+  },
+);
+
+router.get(
+  `${BOT_DESK_BASE_PATH}/meetings/:id/minutes`,
+  requireBotDeskAuth,
+  requireMeetingsRead,
+  async (req: BotDeskMeetingsRequest, res: Response) => {
+    try {
+      const access = await loadBotMeeting(req, res);
+      if (!access) return;
+      res.json(minutesForBot(access.meeting, access.viewerIsHost));
+    } catch (error) {
+      console.error("[BotDesk meetings] minutes failed:", error);
+      sendError(res, 500, { code: "server_error", message: "تعذر جلب المحضر" });
     }
   },
 );
