@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Split of roles:** [`AGENTS.md`](AGENTS.md) holds the general rules in Arabic (fixed rules, merge/DB safety, workflows, platform philosophy, editorial policy) and is mandatory. This file holds technical details only. Rules stated there are not repeated here.
 
+**Review and verification:** when reviewing a change (including `/code-review` and the `reviewer` agent), read [`REVIEW.md`](REVIEW.md) first and run the reliability-checklist items whose trigger matches the diff. Before committing, run the change for real with the `verify` skill ([`.claude/skills/verify/SKILL.md`](.claude/skills/verify/SKILL.md)).
+
 ## Commands
 
 ```bash
