@@ -21,6 +21,13 @@ struct LoyaltyBannerState: Equatable {
 }
 
 struct HomeFeedView: View {
+    /// Keep the edition stable while the home feed refreshes behind the reader.
+    private struct ReelsEdition: Identifiable {
+        let id = UUID()
+        let articles: [Article]
+    }
+
+    @State private var reelsEdition: ReelsEdition?
     private static let scrollTopID = "home-feed-top"
     /// مرساة قسم "آخر الأخبار" — شريط "أخبار جديدة" يقفز إليها كي يرى
     /// المستخدم الأخبار الطازجة فوراً بدل القفز لأعلى الصفحة (الهيدر).
@@ -125,6 +132,9 @@ struct HomeFeedView: View {
         // ScrollView فيتعطّل سحب التحديث (.refreshable) بالكامل على iOS.
         // منع السحب الأفقي يتم بتقييد عرض الأبناء داخل القائمة نفسها.
         .frame(maxWidth: .infinity)
+        .fullScreenCover(item: $reelsEdition) { edition in
+            NewsReelsView(articles: edition.articles)
+        }
         .task { await economyStore.loadSnapshotIfNeeded(maxAge: 300) }
     }
 
@@ -1014,7 +1024,24 @@ struct HomeFeedView: View {
                 title: articlesStore.selectedCategory?.title ?? "آخر الأخبار",
                 lazy: true
             ) {
-                EmptyView()
+                if UIDevice.current.userInterfaceIdiom == .phone,
+                   articlesStore.selectedCategory == nil, !articles.isEmpty {
+                    Button {
+                        reelsEdition = ReelsEdition(articles: articles)
+                    } label: {
+                        Label("Reels", systemImage: "play.rectangle.on.rectangle")
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .padding(.vertical, SabqLayout.space4)
+                            .background(SabqTheme.primary.opacity(0.1), in: Capsule())
+                            .frame(minHeight: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Reels، تصفّح آخر الأخبار بالصور")
+                    .accessibilityIdentifier("home.newsReels")
+                }
             } content: {
                 ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
                     if index > 0 {
