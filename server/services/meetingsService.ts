@@ -254,7 +254,7 @@ export interface CreateMeetingInput {
   durationMinutes?: number | null;
   /** بنود أجندة (عناوين)؛ تُحوَّل إلى MeetingAgendaItem مع معرّفات */
   agenda?: Array<{ title: string; durationMinutes?: number | null }>;
-  /** «أمين المحضر»: تفريغ آلي + محضر بعد الاجتماع */
+  /** «أمين المحضر»: تفريغ آلي + محضر بعد الاجتماع — الغياب = مفعّل (2026-11-17)، false صريحة تطفئه */
   minutesEnabled?: boolean;
 }
 
@@ -313,7 +313,9 @@ export async function createMeeting(hostUserId: string, input: CreateMeetingInpu
       muteOnJoin: input.muteOnJoin,
       status: isScheduled ? "scheduled" : "live",
       roomName: `sbq-${crypto.randomBytes(8).toString("hex")}`,
-      minutesEnabled: Boolean(input.minutesEnabled),
+      // افتراض على مستوى التطبيق لا عمود القاعدة: عمود minutes_enabled يبقى default false
+      // (بلا ترحيل)، وكل إدراج يمر من هنا بقيمة صريحة؛ الاجتماعات القائمة لا تتغير
+      minutesEnabled: input.minutesEnabled !== false,
       durationMinutes:
         typeof input.durationMinutes === "number" && input.durationMinutes > 0
           ? Math.min(Math.round(input.durationMinutes), 480)
@@ -374,7 +376,8 @@ export interface MeetingListItem {
   myRsvp: string | null;
 }
 
-async function meetingVisibilityFilter(userId: string, canManage: boolean) {
+// مُصدَّرة لواجهة بوت الديسك (botDeskMeetingsService) لتطبيق قاعدة الظهور نفسها
+export async function meetingVisibilityFilter(userId: string, canManage: boolean) {
   if (canManage) return undefined;
   const deptId = await getUserDepartmentId(userId);
   // المرفوض والمُخرَج لا يبقى الاجتماع ظاهراً له في المركز

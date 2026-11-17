@@ -1,6 +1,6 @@
 # Bot Desk API — واجهة بوت الديسك لاستفسارات المساهمين ومقترحات النشر الاجتماعي ومقالات الرأي
 
-> آخر مراجعة: 2026-10-24 | المالك: editorial + social-publishing + auth-rbac | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
+> آخر مراجعة: 2026-11-17 | المالك: editorial + social-publishing + auth-rbac | الحالة: نشط، بلا ترحيل قاعدة بيانات (No Migration).
 
 ## الملخص
 
@@ -8,7 +8,8 @@
 1. **استفسارات المساهمين (التذاكر):** استعراض التذاكر، قراءة سلسلة المحادثة الكاملة، الرد باسم مالك التوكن (مع تحويل الحالة من `open` إلى `answered`)، وتحديث حالة التذكرة (`open | answered | closed`).
 2. **مقترحات النشر الاجتماعي على X:** استعراض المقترحات المعلقة من كتّاب الرأي والوكالات، قراءة تفاصيل المنشور وسجل محاولاته، والرفض (`reject` → `canceled` مع إشعار صاحب المقترح) أو النشر الفوري (`publish`) أو الجدولة (`schedule`) على منشورات أنشأها مستخدمون آخرون.
 3. **مقالات الرأي (منذ 2026-10-28):** لوحة الرأي، قراءة المسودة كاملة، و«جهّز وجدول» نفسه في تطبيق الديسك (`startOpinionPrep`)، ثم الجدولة أو النشر أو الإعادة للكاتب — بالدوال نفسها التي يستدعيها التطبيق (§3-ج).
-4. **تنبيهات البريد الإلكتروني القابلة للتحليل آلياً:** إشعار البوت بريدياً فور وصول تذكرة/رسالة جديدة من مساهم أو مقترح تغريدة من كاتب رأي أو وكالة، مع سطر ثابت قابل للتحليل الآلي (`[sabq-desk] type=ticket id=<id>` أو `[sabq-desk] type=social_proposal id=<id>` أو `[sabq-desk] type=opinion_draft id=<articleId>` لمقال رأي جديد بانتظار المراجعة منذ 2026-10-28) ليجلب البوت السجل الكامل بالمعرّف.
+4. **اجتماعات سبق (منذ 2026-11-17، قراءة فقط):** الاجتماعات الجارية والقادمة، الحضور، تفريغ «أمين المحضر» الحي بمؤشر، أحداث البدء والانتهاء، والمحضر وحالة اعتماده (§3-د).
+5. **تنبيهات البريد الإلكتروني القابلة للتحليل آلياً:** إشعار البوت بريدياً فور وصول تذكرة/رسالة جديدة من مساهم أو مقترح تغريدة من كاتب رأي أو وكالة، مع سطر ثابت قابل للتحليل الآلي (`[sabq-desk] type=ticket id=<id>` أو `[sabq-desk] type=social_proposal id=<id>` أو `[sabq-desk] type=opinion_draft id=<articleId>` لمقال رأي جديد بانتظار المراجعة منذ 2026-10-28) ليجلب البوت السجل الكامل بالمعرّف.
 
 ---
 
@@ -34,6 +35,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)
     - `POST /social/posts/:id/schedule`: `social_publish.schedule`
     - `POST /social/posts/:id/reject` و`PATCH /social/posts/:id`: `social_publish.manage_scheduled` **أو** `social_publish.create`
     - `POST /social/tweets`: أي توكن ناشر صالح؛ `social_publish.publish_now` تحدد النتيجة (نشر مباشر أو مقترح للمكتب)
+  - **مسارات الاجتماعات (`/meetings*`، قراءة فقط):** قدرة `meetingsRead` (= `meetings.view` أو `meetings.manage`)، ثم قواعد الظهور نفسها في مركز الاجتماعات؛ التفريغ الخام للمضيف أو `meetings.manage` فقط (§3-د).
 - **الإعفاء من CSRF:** جميع المسارات تقع تحت `/api/internal/*` المعفاة من فحص CSRF المتصفحي، وترسل دائماً `Cache-Control: private, no-store`.
 - **سجل التدقيق (`activity_logs`):** كل عملية كتابة تُسجَّل في `activity_logs` تحت القناة `channel: "bot-desk-api"` مع `tokenId` و`tokenPrefix` و`tokenLabel`؛ **لا يُحفظ التوكن الخام في السجلات أبداً**.
 
@@ -243,6 +245,65 @@ curl -sS -X PATCH "https://api.sabq.org/api/internal/bot-desk/opinion/drafts/<ar
   -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)" \
   -d '{"title":"العنوان الجديد للمقال"}'
 ```
+
+
+### د) اجتماعات سبق (Meetings) — قراءة فقط، منذ 2026-11-17
+
+تتيح لبوت مساعد (مثل «صُحبة») أن «يحضر» اجتماعات `sabq.org/meet` قراءةً: يعرف الجاري والقادم، ويستطلع تفريغ «أمين المحضر» الحي بمؤشر، ويلتقط بدء الاجتماع وانتهاءه، ثم يقرأ المحضر وحالة اعتماده. **لا كتابة ولا دخول لغرفة LiveKit ولا دردشة.**
+
+**الصلاحية:** قدرة التوكن `meetingsRead`، تُمنح تلقائياً حين يملك مالك التوكن `meetings.view` أو `meetings.manage` (`capabilitiesForUser`). بدونها `403 forbidden` مع `details.required = "meetingsRead"`. ثم يرى البوت **ما يراه مالك التوكن في مركز الاجتماعات** بالقواعد نفسها في `meetingsService`:
+- الظهور في القوائم والأحداث: `meetingVisibilityFilter` (المضيف، `all`، إدارة المالك، أو المدعو). `meetings.manage` يرى الكل.
+- تفاصيل اجتماع: `isUserEligible`، وإلا `403`. المعرّف غير الموجود `404 not_found`.
+- **التفريغ الخام للمضيف أو `meetings.manage` فقط** (سياسة أمين المحضر)، وإلا `403`.
+- المحضر: المسودة للمضيف أو المدير، والمعتمد (`approved`) لكل مشارك مؤهل.
+
+**لا يُعاد أبداً:** `invite_token`، `guest_key`، `room_name`، أسرار LiveKit، بريد أو جوال. هوية المتحدث الضيف (`guest:<key>`) تُعاد `speakerKind: "guest"` بلا مفتاح.
+
+| الطريقة | المسار | الوصف |
+|---|---|---|
+| `GET` | `/api/internal/bot-desk/meetings?status=live,scheduled&from&to&limit` | الافتراضي `live,scheduled` (الجاري والقادم)؛ `status` قائمة من `live,scheduled,ended,cancelled`؛ `from`/`to` بصيغة ISO على `coalesce(started_at, scheduled_at, created_at)`؛ `limit` حتى 200 (افتراضي 50). يعيد `{ meetings: [{ id, title, status, accessType, scheduledAt, startedAt, endedAt, durationMinutes, minutesEnabled, minutesStatus, host: { userId, name }, viewerIsHost }] }`. |
+| `GET` | `/api/internal/bot-desk/meetings/events?since=<cursor>&meetingId&limit` | أحداث دورة الحياة فقط: `created`، `updated`، `started`، `ended`، `cancelled`، `minutes_generated`، `minutes_approved` (من `meeting_events`). بلا `since` تُعاد آخر 24 ساعة. يعيد `{ events: [{ id, meetingId, meetingTitle, type, createdAt }], nextCursor, hasMore }`. `nextCursor` يُعاد **دائماً** حتى بلا أحداث؛ خزّنه وأرسله في الاستطلاع التالي. |
+| `GET` | `/api/internal/bot-desk/meetings/:id` | `{ meeting: { …الملخص, description, agenda[], attendance: { inRoom, invited, rsvpYes, rsvpNo }, attendees: [{ name, role, status, isGuest, rsvp, joinedAt, leftAt, inRoom }] } }`. قائمة الحضور كاملة للمضيف أو المدير؛ لغيرهما مثل `GET /api/meetings/:id` (من رد على الدعوة، والمضيف، وصفّ المالك). |
+| `GET` | `/api/internal/bot-desk/meetings/:id/transcript?since=<cursor>&limit` | مقاطع التفريغ بترتيب الكتابة `(created_at, start_ms, id)`؛ `limit` حتى 500 (افتراضي 200). يعيد `{ meetingId, status, minutesEnabled, minutesStatus, segments: [{ id, speakerName, speakerKind: "staff"\|"guest"\|"unknown", speakerUserId, text, startMs, createdAt }], nextCursor, hasMore }`. بلا مقاطع جديدة يعود `nextCursor` كما أُرسل. إن كان `minutesEnabled: false` فلن يصل تفريغ لهذا الاجتماع أبداً. |
+| `GET` | `/api/internal/bot-desk/meetings/:id/minutes` | `{ meetingId, minutesEnabled, minutesStatus: none\|recording\|generating\|draft\|approved\|failed, approved, minutes: { summary, decisions[], actionItems[{task, owner, due}], deferred[] } \| null, generatedAt, approvedAt, viewerIsHost }`. |
+
+**المؤشر:** سلسلة base64url غير شفافة؛ لا تبنها يدوياً. المؤشر التالف `400 validation_error`. التفريغ يتقدم بوقت الكتابة لا بـ `startMs` وحده، لأن العامل يعيد إرسال الدفعات الفاشلة فتصل مقاطع أقدم توقيتاً متأخرة؛ لذا لا يفوت البوت مقطعاً ولا يكرره. العامل يرفع كل ~5 ثوانٍ، فاستطلاع كل 5–10 ثوانٍ أثناء `live` كافٍ.
+
+**المصالحة:** القائمة والأحداث تستدعيان `reconcileLiveMeetings()` نفسها التي يستدعيها فتح مركز الاجتماعات (خانق 30 ثانية): الاجتماع «المباشر» الذي فرغت غرفته على LiveKit بعد 3 دقائق سماح يُقفل `ended`، فيظهر حدث `ended` للبوت حتى لو لم يضغط المضيف «إنهاء».
+
+**شرط «السماع»:** التفريغ لا يوجد إلا إذا كان `minutes_enabled = true` للاجتماع. **منذ 2026-11-17 «أمين المحضر» مفعّل افتراضياً للاجتماعات الجديدة** (قرار أبو محمد): مفتاحه في نموذج الإنشاء يبدأ مفعّلاً، و`POST /api/meetings` بلا `minutesEnabled` يعني `true`، و`false` الصريحة تُحترم. يطفئه المضيف من النموذج أو بتعديل الاجتماع وهو `scheduled`. الافتراض على مستوى التطبيق (`createMeetingSchema` + `createMeeting`)؛ عمود القاعدة يبقى `default false` بلا ترحيل، والاجتماعات القائمة لا تتغير. يُستدعى العامل عند صيرورة الاجتماع `live` (`dispatchMinutesAgent`)، ويتطلب على الخادم `MEETINGS_AGENT_SECRET` و`OPENAI_API_KEY` وتشغيل خدمة `meetings-agent`. بعد الإنهاء يُولَّد المحضر (`draft`) ويعتمده المضيف (`approved`).
+
+**التدقيق:** مسارات قراءة، فلا تُكتب في `activity_logs` (كبقية مسارات القراءة في Bot Desk). تحديث `last_used_at` للتوكن كالمعتاد.
+
+**حلقة البوت المقترحة:**
+1. `GET /meetings/events` كل 15–30 ثانية بآخر `nextCursor`.
+2. عند `started` (أو اجتماع `live` في `GET /meetings`): استطلع `/meetings/:id/transcript?since=…` كل 5–10 ثوانٍ حتى يصل `ended`.
+3. عند `ended`: اسحب بقية التفريغ ثم انتظر `minutes_generated` واقرأ `/meetings/:id/minutes`، أو اكتب محضرك من التفريغ.
+
+**أمثلة** (التوكن في متغير بيئة على جهة البوت، لا يُطبع):
+```bash
+# الاجتماعات الجارية والقادمة
+curl -sS "https://api.sabq.org/api/internal/bot-desk/meetings" \
+  -H "Authorization: Bearer $SABQ_MEET_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+
+# أحداث البدء والانتهاء منذ آخر مؤشر
+curl -sS "https://api.sabq.org/api/internal/bot-desk/meetings/events?since=$CURSOR" \
+  -H "Authorization: Bearer $SABQ_MEET_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+
+# التفريغ الحي تدريجياً
+curl -sS "https://api.sabq.org/api/internal/bot-desk/meetings/<meetingId>/transcript?since=$CURSOR&limit=200" \
+  -H "Authorization: Bearer $SABQ_MEET_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+
+# المحضر وحالة اعتماده
+curl -sS "https://api.sabq.org/api/internal/bot-desk/meetings/<meetingId>/minutes" \
+  -H "Authorization: Bearer $SABQ_MEET_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+```
+
+الملفات: `server/routes/botDesk.ts` (المسارات و`requireMeetingsRead`)، `server/services/botDeskMeetingsService.ts` (الاستعلامات)، `shared/botDeskMeetings.ts` (المخططات والمؤشر)، والاختبار `tests/unit/botDeskMeetings.test.ts`.
 
 ---
 

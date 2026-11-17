@@ -138,6 +138,9 @@ async function capabilitiesForUser(userId: string, knownGate?: Awaited<ReturnTyp
   if (has("articles.feature")) capabilities.push("featured", "unfeatured");
   if (has("articles.news_type")) capabilities.push("breaking", "regular");
   if (has("articles.hide_homepage")) capabilities.push("hide", "show");
+  // اجتماعات سبق: نفس بوابة مركز الاجتماعات (meetings.view أو meetings.manage).
+  // الظهور والتفريغ والمحضر تُحسم لكل اجتماع لاحقاً بقواعد meetingsService.
+  if (has("meetings.view") || has("meetings.manage")) capabilities.push("meetingsRead");
 
   return capabilities;
 }
