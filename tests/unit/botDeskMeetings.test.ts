@@ -2,7 +2,11 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import {
+  MEETINGS_READ_MINUTES_PERMISSION,
+  canReadMeetingPrivateMinutes,
   botDeskMeetingEventsQuerySchema,
   botDeskMeetingTranscriptQuerySchema,
   botDeskMeetingsQuerySchema,
@@ -131,7 +135,10 @@ beforeEach(() => {
         ? principal(["read", "publish"])
         : null,
   );
-  mocks.userHasPermission.mockResolvedValue(true);
+  // الافتراضي كما كان (meetings.manage = نعم)؛ meetings.read_minutes لا تُمنح إلا صراحةً
+  mocks.userHasPermission.mockImplementation(
+    async (_userId: string, code: string) => code !== "meetings.read_minutes",
+  );
   mocks.reconcileLiveMeetings.mockResolvedValue(undefined);
 });
 
@@ -281,5 +288,132 @@ describe("GET /meetings/:id, /transcript, /minutes", () => {
     body = await (await get("/meetings/m-1/minutes")).json();
     expect(body).toMatchObject({ approved: true, approvedAt: "2026-11-17T09:00:00.000Z" });
     expect(body.minutes.decisions).toEqual(["قرار"]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// meetings.read_minutes — تقرأ التفريغ ومسودة المحضر عبر bot-desk، ولا تفتح غيرهما
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("meetings.read_minutes — صلاحية قراءة محدودة", () => {
+  const grant = (...codes: string[]) =>
+    mocks.userHasPermission.mockImplementation(async (_userId: string, code: string) =>
+      codes.includes(code),
+    );
+  const notHost = { ok: true as const, meeting: { ...meetingRow, hostUserId: "someone-else" }, viewerIsHost: false };
+
+  it("الاسم ثابت، والدالة النقية: مضيف أو حامل الصلاحية فقط", () => {
+    expect(MEETINGS_READ_MINUTES_PERMISSION).toBe("meetings.read_minutes");
+    expect(canReadMeetingPrivateMinutes({ viewerIsHost: false, hasReadMinutesPermission: false })).toBe(false);
+    expect(canReadMeetingPrivateMinutes({ viewerIsHost: true, hasReadMinutesPermission: false })).toBe(true);
+    expect(canReadMeetingPrivateMinutes({ viewerIsHost: false, hasReadMinutesPermission: true })).toBe(true);
+  });
+
+  it("تقرأ التفريغ الخام لاجتماع متاح لمالك التوكن وليس هو مضيفه", async () => {
+    grant("meetings.read_minutes");
+    mocks.loadMeetingForBot.mockResolvedValue(notHost);
+    mocks.getTranscriptPageForBot.mockResolvedValue({ segments: [{ id: "seg-1" }], nextCursor: "n", hasMore: false });
+    const res = await get("/meetings/m-1/transcript");
+    expect(res.status).toBe(200);
+    expect((await res.json()).segments).toEqual([{ id: "seg-1" }]);
+    expect(mocks.userHasPermission).toHaveBeenCalledWith("owner-1", "meetings.read_minutes");
+  });
+
+  it("تقرأ مسودة المحضر، ولا تجعل صاحبها مضيفاً", async () => {
+    grant("meetings.read_minutes");
+    mocks.loadMeetingForBot.mockResolvedValue(notHost);
+    const body = await (await get("/meetings/m-1/minutes")).json();
+    expect(body).toMatchObject({ minutesStatus: "draft", approved: false, viewerIsHost: false });
+    expect(body.minutes.summary).toBe("ملخص");
+  });
+
+  it("بدونها: التفريغ 403 والمسودة null — كما كان", async () => {
+    grant(); // لا manage ولا read_minutes
+    mocks.loadMeetingForBot.mockResolvedValue(notHost);
+    const transcript = await get("/meetings/m-1/transcript");
+    expect(transcript.status).toBe(403);
+    expect((await transcript.json()).details).toEqual({
+      required: "host_or_meetings.manage_or_meetings.read_minutes",
+    });
+    expect(mocks.getTranscriptPageForBot).not.toHaveBeenCalled();
+    expect((await (await get("/meetings/m-1/minutes")).json()).minutes).toBeNull();
+  });
+
+  it("لا توسّع الظهور: الأهلية والقوائم والأحداث تُحسب بلا meetings.manage", async () => {
+    grant("meetings.read_minutes");
+    mocks.loadMeetingForBot.mockResolvedValue(notHost);
+    mocks.getTranscriptPageForBot.mockResolvedValue({ segments: [], nextCursor: null, hasMore: false });
+    mocks.listMeetingsForBot.mockResolvedValue([]);
+    mocks.listMeetingEventsForBot.mockResolvedValue({ events: [], nextCursor: "c", hasMore: false });
+    mocks.getMeetingDetailForBot.mockResolvedValue({ id: "m-1" });
+
+    await get("/meetings/m-1/transcript");
+    await get("/meetings/m-1/minutes");
+    await get("/meetings/m-1");
+    await get("/meetings");
+    await get("/meetings/events");
+
+    // canManage = false في كل نداء: لا يرى إلا ما يراه الحساب أصلاً
+    for (const call of mocks.loadMeetingForBot.mock.calls) expect(call).toEqual(["m-1", "owner-1", false]);
+    expect(mocks.loadMeetingForBot).toHaveBeenCalledTimes(3);
+    expect(mocks.listMeetingsForBot).toHaveBeenCalledWith("owner-1", false, { limit: 50 });
+    expect(mocks.listMeetingEventsForBot).toHaveBeenCalledWith("owner-1", false, { limit: 100 });
+    // التفاصيل تُبنى بصفة غير المضيف (الحضور التفصيلي للمضيف فقط)
+    expect(mocks.getMeetingDetailForBot).toHaveBeenCalledWith(notHost.meeting, "owner-1", false);
+  });
+
+  it("اجتماع غير متاح لمالك التوكن يبقى 403 حتى مع الصلاحية", async () => {
+    grant("meetings.read_minutes");
+    mocks.loadMeetingForBot.mockResolvedValue({ ok: false, status: 403 });
+    expect((await get("/meetings/private/transcript")).status).toBe(403);
+    expect((await get("/meetings/private/minutes")).status).toBe(403);
+    expect(mocks.getTranscriptPageForBot).not.toHaveBeenCalled();
+  });
+
+  it("الصلاحية وحدها لا تمنح دخول واجهة الاجتماعات: يلزم meetingsRead في التوكن", async () => {
+    grant("meetings.read_minutes");
+    for (const p of ["/meetings/m-1/transcript", "/meetings/m-1/minutes"]) {
+      const res = await get(p, WITHOUT_MEETINGS);
+      expect(res.status, p).toBe(403);
+      expect((await res.json()).details).toEqual({ required: "meetingsRead" });
+    }
+    expect(mocks.loadMeetingForBot).not.toHaveBeenCalled();
+  });
+
+  it("قراءة فقط: لا مسار كتابة للاجتماعات في واجهة البوت", () => {
+    const src = readFileSync(path.resolve(import.meta.dirname, "../../server/routes/botDesk.ts"), "utf8");
+    expect(src.match(/router\.(post|put|patch|delete)\(\s*`\$\{BOT_DESK_BASE_PATH\}\/meetings/g)).toBeNull();
+  });
+
+  it("لا يعرفها أي مسار خارج bot-desk، وليست في أي دور", () => {
+    const root = path.resolve(import.meta.dirname, "../..");
+    const walk = (dir: string): string[] =>
+      readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith(".ts") ? [path.join(dir, e.name)] : [],
+      );
+    const users = [...walk("server/routes"), ...walk("server/services")].filter((f) => {
+      const src = readFileSync(path.join(root, f), "utf8");
+      return src.includes("read_minutes") || src.includes("MEETINGS_READ_MINUTES_PERMISSION");
+    });
+    expect(users.sort()).toEqual(["server/routes/botDesk.ts", "server/services/botDeskMeetingsService.ts"]);
+    // مسارات اللوحة للمحضر والتفريغ تبقى للمضيف/المدير فقط
+    for (const f of ["server/routes/meetingMinutesRoutes.ts", "server/routes/meetingsRoutes.ts"]) {
+      expect(readFileSync(path.join(root, f), "utf8")).not.toContain("read_minutes");
+    }
+    expect(readFileSync(path.join(root, "shared/rbac-constants.ts"), "utf8")).not.toContain("read_minutes");
+  });
+
+  it("ملف الترحيل: صف صلاحية + منح لحساب واحد، بلا ربط بأي دور", () => {
+    const sql = readFileSync(
+      path.resolve(import.meta.dirname, "../../migrations/20261117_meetings_read_minutes_permission.sql"),
+      "utf8",
+    );
+    const statements = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    expect(statements).toContain("INSERT INTO permissions");
+    expect(statements).toContain("INSERT INTO user_permission_overrides");
+    expect(statements).toContain("lower(email) = 'aalhazmi@sabq.org'");
+    expect(statements).not.toMatch(/INSERT INTO role_permissions/i);
+    expect(statements).not.toMatch(/meetings\.manage/);
+    expect(statements).not.toMatch(/\b(DROP|DELETE|TRUNCATE|ALTER)\b/i);
   });
 });

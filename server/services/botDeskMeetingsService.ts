@@ -20,6 +20,7 @@ import {
 } from "@shared/schema";
 import {
   BOT_DESK_MEETING_LIFECYCLE_EVENTS,
+  canReadMeetingPrivateMinutes,
   decodeBotDeskCursor,
   encodeBotDeskCursor,
   type BotDeskMeetingAttendee,
@@ -320,16 +321,22 @@ export async function listMeetingEventsForBot(
   };
 }
 
-export function minutesForBot(meeting: Meeting, viewerIsHost: boolean) {
+export function minutesForBot(
+  meeting: Meeting,
+  viewerIsHost: boolean,
+  /** meetings.read_minutes — يرى المسودة دون أن يُعدّ مضيفاً */
+  hasReadMinutesPermission = false,
+) {
   const approved = meeting.minutesStatus === "approved";
+  const draftVisible = canReadMeetingPrivateMinutes({ viewerIsHost, hasReadMinutesPermission });
   return {
     meetingId: meeting.id,
     minutesEnabled: meeting.minutesEnabled,
     // none | recording | generating | draft | approved | failed
     minutesStatus: meeting.minutesStatus,
     approved,
-    // المسودة للمضيف/المدير فقط؛ غيرهم يرى المعتمد وحده (نفس GET /api/meetings/:id/minutes)
-    minutes: viewerIsHost || approved ? meeting.minutes ?? null : null,
+    // المسودة للمضيف/المدير أو حامل meetings.read_minutes؛ غيرهم يرى المعتمد وحده
+    minutes: draftVisible || approved ? meeting.minutes ?? null : null,
     generatedAt: iso(meeting.minutesGeneratedAt),
     approvedAt: iso(meeting.minutesApprovedAt),
     viewerIsHost,

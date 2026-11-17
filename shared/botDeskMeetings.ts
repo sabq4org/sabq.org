@@ -159,3 +159,23 @@ export interface BotDeskMeetingEvent {
   type: string;
   createdAt: string;
 }
+
+// ─── صلاحية قراءة التفريغ ومسودة المحضر عبر واجهة البوت ─────────────────────
+//
+// التفريغ الخام ومسودة المحضر للمضيف (أو meetings.manage) فقط. هذه الصلاحية
+// استثناء ضيق لحساب يملك توكن بوت يكتب المحاضر وليس هو منشئ الاجتماع:
+//   • تعمل في مساري bot-desk الاثنين فقط (/transcript و/minutes)؛ مسارات
+//     اللوحة (/api/meetings/:id/minutes و/transcript) لا تعرفها.
+//   • لا توسّع الظهور: الاجتماع يجب أن يكون متاحاً لمالك التوكن أصلاً
+//     (isUserEligible) — لا تفتح اجتماعات لم يُدعَ إليها.
+//   • قراءة فقط، ولا تجعله مضيفاً: لا إدارة، لا تعديل، لا اعتماد.
+// ليست في أي دور؛ تُمنح لحساب بعينه عبر user_permission_overrides.
+export const MEETINGS_READ_MINUTES_PERMISSION = "meetings.read_minutes";
+
+/** هل يُعاد التفريغ الخام ومسودة المحضر لصاحب هذا الطلب؟ */
+export function canReadMeetingPrivateMinutes(input: {
+  viewerIsHost: boolean;
+  hasReadMinutesPermission: boolean;
+}): boolean {
+  return input.viewerIsHost || input.hasReadMinutesPermission;
+}
