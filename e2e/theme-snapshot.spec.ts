@@ -32,3 +32,27 @@ test("reuses a public theme across reloads until the original poll deadline", as
   await expect.poll(renderedColor).toBe("blue");
   expect(requests).toBe(2);
 });
+
+test("restores the default logo on a failed poll and applies the next successful theme", async ({ page }) => {
+  await page.clock.install();
+  let status = 200;
+  let customLogo = "/favicon.ico?test=first";
+  await page.route("**/api/themes/active?scope=site_full", (route) =>
+    route.fulfill({
+      status,
+      json: { assets: { logoLight: customLogo, logoDark: customLogo }, tokens: null },
+    }),
+  );
+  await page.goto("/terms", { waitUntil: "domcontentloaded" });
+  const logo = page.locator(".sabq-header-logo-desktop");
+  await expect(logo).toHaveAttribute("src", customLogo);
+
+  status = 503;
+  await page.clock.fastForward(60_000);
+  await expect(logo).toHaveAttribute("src", /sabq-logo[^/]*\.png/);
+
+  status = 200;
+  customLogo = "/favicon.ico?test=recovered";
+  await page.clock.fastForward(60_000);
+  await expect(logo).toHaveAttribute("src", customLogo);
+});

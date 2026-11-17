@@ -85,7 +85,8 @@ export function ThemeProvider({
     return "site_full";
   })();
 
-  const { data: appTheme, isLoading: isLoadingAppTheme } = useActiveTheme(scope);
+  const { data, isError, isLoading: isLoadingAppTheme } = useActiveTheme(scope);
+  const appTheme = isError ? null : data;
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
