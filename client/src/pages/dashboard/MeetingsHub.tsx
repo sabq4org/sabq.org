@@ -959,7 +959,7 @@ function CreateMeetingDialog({
               testId="switch-mute-on-join"
             />
             <ToggleRow
-              title="أمين المحضر (تفريغ آلي)"
+              title="مُدوِّن سبق AI (تفريغ آلي)"
               subtitle="يُفرَّغ الحديث آلياً ويصلك محضر منظم للمراجعة بعد الاجتماع — يظهر تنبيه للمشاركين"
               checked={minutesEnabled}
               onChange={setMinutesEnabled}
@@ -1118,7 +1118,7 @@ function MinutesDialog({ meeting, onClose }: { meeting: MeetingListItem; onClose
   });
 
   const statusLine = (() => {
-    if (!data?.minutesEnabled) return "لم يُفعَّل أمين المحضر لهذا الاجتماع";
+    if (!data?.minutesEnabled) return "لم يُفعَّل مُدوِّن سبق AI لهذا الاجتماع";
     switch (status) {
       case "recording":
         return "جارٍ التفريغ…";
