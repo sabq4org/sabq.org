@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------------
-// «أمين المحضر» — خدمة التفريغ والمحضر الآلي لاجتماعات سبق (ADR-001)
+// «مُدوِّن سبق AI» — خدمة التفريغ والمحضر الآلي لاجتماعات سبق (ADR-001)
 //
 // عامل التفريغ (meetings-agent، خدمة مستقلة على Railway) ينضم للغرفة عبر
 // Agent Dispatch ويكتب مقاطع التفريغ هنا عبر مسارات داخلية موقّعة بسر
@@ -26,6 +26,10 @@ import {
 import { aiGateway } from "../ai/gateway";
 import { sendEmailNotification } from "./email";
 import { logMeetingEvent } from "./meetingsService";
+import { loadMeetingVocabulary } from "./meetingVocabulary";
+
+/** الاسم الظاهر للمستخدمين — الهوية التقنية تبقى AGENT_NAME */
+export const MINUTES_AGENT_DISPLAY_NAME = "مُدوِّن سبق AI";
 
 const AGENT_NAME = "sabq-minutes-agent";
 const TRANSCRIPT_RETENTION_DAYS = 30;
@@ -53,6 +57,11 @@ function livekitHttpUrl(): string {
     .replace(/^ws:/, "http:");
 }
 
+/** metadata الاستدعاء — يقرؤها meetings-agent/src/sttConfig.ts (parseJobMetadata) */
+export function buildDispatchMetadata(meetingId: string, keyterms: readonly string[]): string {
+  return JSON.stringify({ meetingId, keyterms: [...keyterms] });
+}
+
 export async function dispatchMinutesAgent(meeting: Meeting): Promise<void> {
   if (!meeting.minutesEnabled || !isMinutesAgentConfigured()) return;
   try {
@@ -61,14 +70,18 @@ export async function dispatchMinutesAgent(meeting: Meeting): Promise<void> {
       process.env.LIVEKIT_API_KEY!,
       process.env.LIVEKIT_API_SECRET!,
     );
+    // أسماء المشاركين والأقسام → prompt التفريغ (الأسماء لا تُطبع، العدد فقط)
+    const vocab = await loadMeetingVocabulary(meeting);
     await client.createDispatch(meeting.roomName, AGENT_NAME, {
-      metadata: JSON.stringify({ meetingId: meeting.id }),
+      metadata: buildDispatchMetadata(meeting.id, vocab.keyterms),
     });
     await db
       .update(meetings)
       .set({ minutesStatus: "recording" })
       .where(eq(meetings.id, meeting.id));
-    console.log(`[Minutes] Agent dispatched for meeting ${meeting.id}`);
+    console.log(
+      `[Minutes] Agent dispatched for meeting ${meeting.id} (keyterms: ${vocab.keyterms.length})`,
+    );
   } catch (e) {
     // فشل الاستدعاء لا يعطل الاجتماع — يبقى بلا محضر فقط
     console.error(`[Minutes] dispatch failed for ${meeting.id}:`, (e as Error).message);
@@ -126,14 +139,30 @@ function formatTranscriptForLLM(rows: MeetingTranscript[]): string {
     .join("\n");
 }
 
-const MINUTES_SYSTEM_PROMPT = `أنت «أمين المحضر» في صحيفة سبق. تستلم تفريغاً نصياً لاجتماع عمل بالعربية (قد يتضمن لهجات سعودية) وتُخرج محضراً منظماً بصيغة JSON فقط:
+export const MINUTES_SYSTEM_PROMPT = `أنت «${MINUTES_AGENT_DISPLAY_NAME}»، مساعد ذكاء اصطناعي يعد محاضر الاجتماعات في صحيفة سبق. تستلم تفريغاً نصياً آلياً لاجتماع عمل بالعربية (غالباً بلهجة سعودية) وتُخرج محضراً منظماً بصيغة JSON فقط:
 {
   "summary": "ملخص تنفيذي من ٣-٦ جمل بالفصحى الواضحة",
   "decisions": ["قرار ١", "..."],
   "actionItems": [{"task": "المهمة", "owner": "اسم صاحبها كما ورد أو null", "due": "الموعد إن ذُكر أو null"}],
   "deferred": ["نقطة أُجّل بحثها", "..."]
 }
-قواعد: لا تختلق ما لم يُقل؛ انسب المهمة لصاحبها فقط إذا كان واضحاً؛ تجاهل الدردشة الجانبية والترحيب؛ لو كان التفريغ قصيراً أو بلا مضمون فأعد ملخصاً صادقاً بذلك ومصفوفات فارغة.`;
+قواعد:
+- لا تختلق ما لم يُقل؛ انسب المهمة لصاحبها فقط إذا كان واضحاً.
+- التفريغ آلي وقد يحوي مقاطع قصيرة بلا معنى أو كلمات مشوهة صوتياً (مثل حروف متلاصقة لا تكوّن كلمة): تجاهلها تماماً ولا تبنِ عليها قراراً أو مهمة.
+- اعتمد على «قائمة الأسماء» المرفقة: إن ورد اسم مشوه يشبه اسماً فيها فاكتبه كما في القائمة، ولا تذكر اسماً من خارج التفريغ والقائمة.
+- تجاهل الدردشة الجانبية والترحيب.
+- لو كان التفريغ قصيراً أو بلا مضمون فأعد ملخصاً صادقاً بذلك ومصفوفات فارغة.`;
+
+/** رسالة المستخدم لتوليد المحضر: العنوان + قائمة الأسماء والأقسام + التفريغ */
+export function buildMinutesUserMessage(
+  title: string,
+  vocab: { names: readonly string[]; departments: readonly string[] },
+  transcriptText: string,
+): string {
+  const names = vocab.names.slice(0, 120).join("، ") || "—";
+  const departments = vocab.departments.slice(0, 40).join("، ") || "—";
+  return `عنوان الاجتماع: ${title}\n\nقائمة الأسماء (المشاركون ومنسوبو الجهة): ${names}\nالأقسام: ${departments}\n\nالتفريغ:\n${transcriptText}`;
+}
 
 export async function generateMinutes(meetingId: string): Promise<MeetingMinutes | null> {
   const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
@@ -156,13 +185,14 @@ export async function generateMinutes(meetingId: string): Promise<MeetingMinutes
   try {
     // تفريغ طويل جداً يُقص من بدايته — الأهم عادة في نهاية الاجتماع (القرارات)
     const transcriptText = formatTranscriptForLLM(rows).slice(-180_000);
+    const vocab = await loadMeetingVocabulary(meeting);
     const completion = await aiGateway.complete({
       feature: "meeting-minutes",
       messages: [
         { role: "system", content: MINUTES_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `عنوان الاجتماع: ${meeting.title}\n\nالتفريغ:\n${transcriptText}`,
+          content: buildMinutesUserMessage(meeting.title, vocab, transcriptText),
         },
       ],
       options: { jsonMode: true, maxTokens: 4000 },
@@ -234,7 +264,7 @@ function minutesToHtml(meeting: Meeting, minutes: MeetingMinutes): string {
     <h3>القرارات</h3>${list(minutes.decisions)}
     <h3>المهام</h3>${actions}
     <h3>نقاط مؤجلة</h3>${list(minutes.deferred)}
-    <p style="color:#888;font-size:12px">أُعد هذا المحضر آلياً بواسطة «أمين المحضر» واعتمده مضيف الاجتماع.</p>
+    <p style="color:#888;font-size:12px">أُعد هذا المحضر آلياً بواسطة «${MINUTES_AGENT_DISPLAY_NAME}» واعتمده مضيف الاجتماع.</p>
   </div>`;
 }
 
