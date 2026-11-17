@@ -13,7 +13,7 @@
 import crypto from "crypto";
 import { EventEmitter } from "events";
 import Redis from "ioredis";
-import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { db } from "../db";
 import {
@@ -1166,10 +1166,14 @@ export async function endMeeting(
   actorUserId: string,
   opts: { auto?: boolean } = {},
 ): Promise<void> {
-  await db
+  // حارس حالة ذرّي: الإنهاء مرة واحدة فقط. بدونه كان نداء ثانٍ (ضغطة مكررة أو
+  // نسخة خادم أخرى في reconcile) يعيد كتابة endedAt ويعيد توليد المحضر
+  const ended = await db
     .update(meetings)
     .set({ status: "ended", endedAt: new Date() })
-    .where(eq(meetings.id, meeting.id));
+    .where(and(eq(meetings.id, meeting.id), inArray(meetings.status, ["live", "scheduled"])))
+    .returning({ id: meetings.id });
+  if (!ended.length) return;
   await db
     .update(meetingParticipants)
     .set({ leftAt: new Date() })
@@ -1191,14 +1195,13 @@ export async function endMeeting(
   });
   publishMeetingEvent({ type: "meeting_ended", meetingId: meeting.id });
 
-  // توليد المحضر بالخلفية بعد الإنهاء (استيراد ديناميكي — انظر fireMinutesDispatch)
+  // المحضر لا يُولَّد فوراً: العامل يرفع دفعته الأخيرة بعد حذف الغرفة ثم يرسل
+  // إشارة الاكتمال (completeTranscription)؛ هنا مؤقت احتياطي فقط إن تعطل العامل.
+  // (استيراد ديناميكي — انظر fireMinutesDispatch)
   if (meeting.minutesEnabled) {
     import("./meetingMinutesService")
-      .then(async (m) => {
-        await m.generateMinutes(meeting.id);
-        await m.cleanupOldTranscripts();
-      })
-      .catch((e) => console.error("[Meetings] minutes generation failed:", (e as Error).message));
+      .then((m) => m.scheduleMinutesFallback(meeting.id))
+      .catch((e) => console.error("[Meetings] minutes scheduling failed:", (e as Error).message));
   }
 }
 
@@ -1260,6 +1263,10 @@ export async function reconcileLiveMeetings(): Promise<void> {
   if (Date.now() - lastReconcileAt < 30_000) return;
   lastReconcileAt = Date.now();
 
+  // شبكة أمان لا تعتمد على ذاكرة العملية: مؤقت المحضر الاحتياطي يضيع إن أُعيد
+  // تشغيل الخادم بعد الإنهاء (نشر)، فيبقى المحضر «جارٍ التفريغ» بلا مخرج
+  void sweepPendingMinutes();
+
   const liveMeetings = await db.select().from(meetings).where(eq(meetings.status, "live"));
   const candidates = liveMeetings.filter(
     (m) => m.startedAt && Date.now() - m.startedAt.getTime() > RECONCILE_GRACE_MS,
@@ -1284,6 +1291,39 @@ export async function reconcileLiveMeetings(): Promise<void> {
     } catch (e) {
       console.error("[Meetings] auto-end failed:", (e as Error).message);
     }
+  }
+}
+
+/** نافذة الكنس: اجتماعات انتهت بين ٩٠ث و٢٤ساعة مضت وما زال محضرها لم يبدأ */
+export const MINUTES_SWEEP_MIN_AGE_MS = 90_000;
+export const MINUTES_SWEEP_MAX_AGE_MS = 24 * 60 * 60_000;
+
+async function sweepPendingMinutes(): Promise<void> {
+  try {
+    const now = Date.now();
+    const stuck = await db
+      .select({ id: meetings.id })
+      .from(meetings)
+      .where(
+        and(
+          eq(meetings.status, "ended"),
+          eq(meetings.minutesEnabled, true),
+          inArray(meetings.minutesStatus, ["none", "recording"]),
+          lt(meetings.endedAt, new Date(now - MINUTES_SWEEP_MIN_AGE_MS)),
+          gt(meetings.endedAt, new Date(now - MINUTES_SWEEP_MAX_AGE_MS)),
+        ),
+      )
+      .limit(5);
+    const m = await import("./meetingMinutesService");
+    // توليد سقطت عمليته أثناءه يبقى «generating» بلا مخرج — يُعاد failed ليظهر زر الإعادة
+    await m.releaseStaleGenerations();
+    for (const row of stuck) {
+      console.log(`[Meetings] minutes sweep: generating for ${row.id}`);
+      // الحجز الذرّي داخل generateMinutes يمنع التوليد المزدوج بين النسخ
+      await m.generateMinutes(row.id, "auto");
+    }
+  } catch (e) {
+    console.error("[Meetings] minutes sweep failed:", (e as Error).message);
   }
 }
 

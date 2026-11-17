@@ -1118,6 +1118,9 @@ function MinutesDialog({ meeting, onClose }: { meeting: MeetingListItem; onClose
       toast({ title: "تعذر الاعتماد", description: e.message, variant: "destructive" }),
   });
 
+  // بلا تفريغ لا شيء يولَّد منه المحضر — «إعادة التوليد» كانت ترجع 422 دائماً
+  const noTranscript = isHost && data?.stats?.segments === 0;
+
   const statusLine = (() => {
     if (!data?.minutesEnabled) return "لم يُفعَّل مُدوِّن سبق AI لهذا الاجتماع";
     switch (status) {
@@ -1126,7 +1129,9 @@ function MinutesDialog({ meeting, onClose }: { meeting: MeetingListItem; onClose
       case "generating":
         return "جارٍ توليد المحضر…";
       case "failed":
-        return "تعذر توليد المحضر — جرّب إعادة التوليد";
+        return noTranscript
+          ? "لم يُلتقط كلام في هذا الاجتماع، فلا محضر له"
+          : "تعذر توليد المحضر — جرّب إعادة التوليد";
       case "none":
         return "لم يبدأ التفريغ بعد";
       case "draft":
@@ -1242,9 +1247,9 @@ function MinutesDialog({ meeting, onClose }: { meeting: MeetingListItem; onClose
               </>
             ) : null}
 
-            {isHost && data?.minutesEnabled ? (
+            {isHost && data?.minutesEnabled && !(status === "failed" && noTranscript) ? (
               <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-3">
-                {(status === "failed" || status === "draft") ? (
+                {(status === "failed" || status === "draft") && !noTranscript ? (
                   <Button
                     variant="outline"
                     size="sm"

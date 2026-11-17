@@ -11,11 +11,12 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "crypto";
-import { and, asc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { AgentDispatchClient } from "livekit-server-sdk";
 import { db } from "../db";
 import {
   meetings,
+  meetingEvents,
   meetingParticipants,
   meetingTranscripts,
   users,
@@ -164,23 +165,180 @@ export function buildMinutesUserMessage(
   return `عنوان الاجتماع: ${title}\n\nقائمة الأسماء (المشاركون ومنسوبو الجهة): ${names}\nالأقسام: ${departments}\n\nالتفريغ:\n${transcriptText}`;
 }
 
-export async function generateMinutes(meetingId: string): Promise<MeetingMinutes | null> {
+/**
+ * متى يُسمح ببدء التوليد؟ (نقية — tests/unit/meetingsMinutesTiming.test.ts)
+ *   • auto  — بعد انتهاء الاجتماع (إشارة العامل أو المؤقت الاحتياطي): مرة واحدة
+ *     فقط، من «لم يبدأ/يسجَّل». لا يلمس مسودة أو معتمداً أو توليداً جارياً.
+ *   • manual — «إعادة التوليد» من المضيف: من أي حالة عدا المعتمد والجاري.
+ */
+export const MINUTES_AUTO_FROM = ["none", "recording"] as const;
+export const MINUTES_MANUAL_FROM = ["none", "recording", "failed", "draft"] as const;
+
+export function canStartMinutesGeneration(
+  status: string | null | undefined,
+  trigger: "auto" | "manual",
+): boolean {
+  const allowed: readonly string[] = trigger === "auto" ? MINUTES_AUTO_FROM : MINUTES_MANUAL_FROM;
+  return allowed.includes(status || "none");
+}
+
+/**
+ * توليد محجوز منذ أكثر من ٥ دقائق = عالق (مهلة النموذج ١٢٠ث) — سقطت العملية
+ * أثناءه (نشر). يُقاس من لحظة الحجز (حدث minutes_generation_started)، لا من
+ * انتهاء الاجتماع؛ وإلا عُدّت إعادة توليد جارية لاجتماع قديم عالقة.
+ */
+export const STALE_GENERATION_MS = 5 * 60_000;
+const GENERATION_STARTED_EVENT = "minutes_generation_started";
+
+export function isStaleGeneration(
+  claimedAt: Date | null | undefined,
+  endedAt: Date | null | undefined,
+  nowMs: number,
+): boolean {
+  const ref = claimedAt ?? endedAt;
+  return Boolean(ref) && nowMs - ref!.getTime() > STALE_GENERATION_MS;
+}
+
+/**
+ * كل قرار على حالة التوليد (حجز، تحرير عالق، كتابة نتيجة) يجري داخل معاملة تقفل
+ * صف الاجتماع أولاً (SELECT … FOR UPDATE). في READ COMMITTED كل جملة بعد القفل
+ * ترى ما التُزم قبله، فلا يحرر كنسٌ حجزاً بدأ للتو، ولا يكتب مولّد قديم نتيجته
+ * فوق حجز غيره. هوية الحجز = معرّف حدث minutes_generation_started.
+ */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function lockMinutesState(
+  tx: Tx,
+  meetingId: string,
+): Promise<{ status: string; endedAt: Date | null } | null> {
+  const [row] = await tx
+    .select({ status: meetings.minutesStatus, endedAt: meetings.endedAt })
+    .from(meetings)
+    .where(eq(meetings.id, meetingId))
+    .for("update");
+  return row ?? null;
+}
+
+async function latestClaim(tx: Tx, meetingId: string): Promise<{ id: string; createdAt: Date } | null> {
+  const [row] = await tx
+    .select({ id: meetingEvents.id, createdAt: meetingEvents.createdAt })
+    .from(meetingEvents)
+    .where(
+      and(
+        eq(meetingEvents.meetingId, meetingId),
+        eq(meetingEvents.eventType, GENERATION_STARTED_EVENT),
+      ),
+    )
+    .orderBy(desc(meetingEvents.createdAt), desc(meetingEvents.id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** يعيد التوليد العالق إلى «failed» — الفحص والتحرير تحت قفل الصف نفسه. true إن حُرِّر */
+async function releaseIfStale(meetingId: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const state = await lockMinutesState(tx, meetingId);
+    if (!state || state.status !== "generating") return false;
+    const claim = await latestClaim(tx, meetingId);
+    if (!isStaleGeneration(claim?.createdAt, state.endedAt, Date.now())) return false;
+    await tx.update(meetings).set({ minutesStatus: "failed" }).where(eq(meetings.id, meetingId));
+    return true;
+  });
+}
+
+/**
+ * كنس التوليد العالق — يُستدعى من reconcile. بدونه يبقى المحضر «جارٍ التوليد»
+ * بلا مخرج: زر «إعادة التوليد» يظهر في failed/draft فقط.
+ */
+export async function releaseStaleGenerations(): Promise<number> {
+  const stuck = await db
+    .select({ id: meetings.id, endedAt: meetings.endedAt })
+    .from(meetings)
+    .where(
+      and(
+        eq(meetings.status, "ended"),
+        eq(meetings.minutesStatus, "generating"),
+        gt(meetings.endedAt, new Date(Date.now() - 7 * 24 * 60 * 60_000)),
+      ),
+    )
+    .limit(10);
+  let released = 0;
+  for (const m of stuck) {
+    if (await releaseIfStale(m.id)) {
+      released += 1;
+      console.log(`[Minutes] released stale generation for ${m.id}`);
+    }
+  }
+  return released;
+}
+
+/**
+ * مهلة المؤقت الاحتياطي بعد انتهاء الاجتماع. العامل يرسل إشارة الاكتمال بعد
+ * رفع آخر دفعة (عادةً خلال ~١٠ث: مهلة المقاطع النهائية + الرفع)، فالمؤقت لا
+ * يعمل إلا إن تعطل العامل أو لم يُستدعَ أصلاً.
+ */
+export const MINUTES_FALLBACK_DELAY_MS = 45_000;
+
+/**
+ * حجز التوليد ذرّياً تحت قفل الصف: مولِّد واحد حتى لو تزامنت إشارة العامل مع
+ * المؤقت أو مع نسخة خادم أخرى. يعيد معرّف الحجز أو null إن رُفض.
+ * اليدوي فقط يستولي على حجز عالق (سقطت عمليته) — في المعاملة نفسها.
+ */
+export async function claimMinutesGeneration(
+  meetingId: string,
+  trigger: "auto" | "manual",
+): Promise<string | null> {
+  return db.transaction(async (tx) => {
+    const state = await lockMinutesState(tx, meetingId);
+    if (!state) return null;
+    let status = state.status;
+    if (status === "generating" && trigger === "manual") {
+      const claim = await latestClaim(tx, meetingId);
+      if (isStaleGeneration(claim?.createdAt, state.endedAt, Date.now())) status = "failed";
+    }
+    if (!canStartMinutesGeneration(status, trigger)) return null;
+    await tx.update(meetings).set({ minutesStatus: "generating" }).where(eq(meetings.id, meetingId));
+    const [event] = await tx
+      .insert(meetingEvents)
+      .values({ meetingId, eventType: GENERATION_STARTED_EVENT, detail: { trigger } })
+      .returning({ id: meetingEvents.id });
+    return event.id;
+  });
+}
+
+/**
+ * كتابة نتيجة التوليد بشرط أننا ما زلنا أصحاب الحجز: الحالة generating وآخر
+ * حدث حجز هو حجزنا. غير ذلك (حُرِّر كعالق، أو حجز غيرنا، أو اعتُمد) → لا كتابة.
+ */
+export async function finishGeneration(
+  meetingId: string,
+  claimId: string,
+  set: Partial<typeof meetings.$inferInsert>,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const state = await lockMinutesState(tx, meetingId);
+    if (!state || state.status !== "generating") return false;
+    const claim = await latestClaim(tx, meetingId);
+    if (claim?.id !== claimId) return false;
+    await tx.update(meetings).set(set).where(eq(meetings.id, meetingId));
+    return true;
+  });
+}
+
+export async function generateMinutes(
+  meetingId: string,
+  trigger: "auto" | "manual" = "manual",
+): Promise<MeetingMinutes | null> {
   const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
   if (!meeting || !meeting.minutesEnabled) return null;
+  const claimId = await claimMinutesGeneration(meetingId, trigger);
+  if (!claimId) return null;
 
   const rows = await getTranscript(meetingId);
   if (!rows.length) {
-    await db
-      .update(meetings)
-      .set({ minutesStatus: "failed" })
-      .where(eq(meetings.id, meetingId));
+    await finishGeneration(meetingId, claimId, { minutesStatus: "failed" });
     return null;
   }
-
-  await db
-    .update(meetings)
-    .set({ minutesStatus: "generating" })
-    .where(eq(meetings.id, meetingId));
 
   try {
     // تفريغ طويل جداً يُقص من بدايته — الأهم عادة في نهاية الاجتماع (القرارات)
@@ -213,22 +371,92 @@ export async function generateMinutes(meetingId: string): Promise<MeetingMinutes
       deferred: Array.isArray(raw.deferred) ? raw.deferred.map(String) : [],
     };
 
-    await db
-      .update(meetings)
-      .set({ minutesStatus: "draft", minutes, minutesGeneratedAt: new Date() })
-      .where(eq(meetings.id, meetingId));
+    const written = await finishGeneration(meetingId, claimId, {
+      minutesStatus: "draft",
+      minutes,
+      minutesGeneratedAt: new Date(),
+    });
+    // فقدنا الحجز (حُرِّر كعالق ثم سبقنا مولّد آخر/اعتماد) — لا نكتب فوق نتيجته
+    if (!written) return null;
     logMeetingEvent(meetingId, "minutes_generated", {
       detail: { decisions: minutes.decisions.length, actionItems: minutes.actionItems.length },
     });
     return minutes;
   } catch (e) {
     console.error(`[Minutes] generation failed for ${meetingId}:`, (e as Error).message);
-    await db
-      .update(meetings)
-      .set({ minutesStatus: "failed" })
-      .where(eq(meetings.id, meetingId));
+    await finishGeneration(meetingId, claimId, { minutesStatus: "failed" });
     return null;
   }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// توقيت التوليد بعد انتهاء الاجتماع
+//
+// حادثة 2026-11-17: كان التوليد يبدأ لحظة حذف الغرفة (بفارق ~٠٫١ث)، قبل أن
+// يرفع العامل دفعته الأخيرة — فتضيع نهاية الاجتماع، وإن لم يكن رُفع شيء بعد
+// خرج «0 مقطع». الآن: العامل يرسل إشارة اكتمال بعد الرفع الأخير فنولّد عندها،
+// ومؤقت احتياطي يغطي تعطل العامل. الحجز الذرّي يمنع التوليد المزدوج.
+// ────────────────────────────────────────────────────────────────────
+
+async function runAutoGeneration(meetingId: string, source: "agent" | "fallback"): Promise<void> {
+  try {
+    const minutes = await generateMinutes(meetingId, "auto");
+    if (minutes) console.log(`[Minutes] generated for ${meetingId} (trigger: ${source})`);
+    await cleanupOldTranscripts();
+  } catch (e) {
+    console.error(`[Minutes] ${source} generation failed for ${meetingId}:`, (e as Error).message);
+  }
+}
+
+/** يُستدعى من endMeeting: لا توليد فوري — ننتظر إشارة العامل أو المهلة */
+export function scheduleMinutesFallback(meetingId: string): void {
+  const timer = setTimeout(() => void runAutoGeneration(meetingId, "fallback"), MINUTES_FALLBACK_DELAY_MS);
+  // لا يُبقي العملية حية عند الإيقاف
+  timer.unref?.();
+}
+
+/** ملخص ما سمعه العامل — أرقام وتشخيص فقط، بلا أسماء ولا نصوص */
+export interface AgentCompletionSummary {
+  tracks: number;
+  audioSeconds: number;
+  speechStarts: number;
+  finals: number;
+  uploaded: number;
+  pending: number;
+  diagnosis: string;
+}
+
+export function parseAgentCompletion(body: unknown): AgentCompletionSummary {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const num = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.min(Math.round(n * 10) / 10, 1_000_000) : 0;
+  };
+  return {
+    tracks: num(b.tracks),
+    audioSeconds: num(b.audioSeconds),
+    speechStarts: num(b.speechStarts),
+    finals: num(b.finals),
+    uploaded: num(b.uploaded),
+    pending: num(b.pending),
+    diagnosis: typeof b.diagnosis === "string" ? b.diagnosis.slice(0, 60) : "unknown",
+  };
+}
+
+/** إشارة العامل: اكتمل التفريغ ورُفعت آخر دفعة → سجّل ما سمعه وولّد المحضر */
+export async function completeTranscription(
+  meeting: Meeting,
+  summary: AgentCompletionSummary,
+): Promise<void> {
+  console.log(
+    `[Minutes] agent complete for ${meeting.id}: tracks=${summary.tracks} audio=${summary.audioSeconds}s ` +
+      `speech=${summary.speechStarts} finals=${summary.finals} uploaded=${summary.uploaded} ` +
+      `pending=${summary.pending} diagnosis=${summary.diagnosis}`,
+  );
+  logMeetingEvent(meeting.id, "transcription_completed", { detail: { ...summary } });
+  // الاجتماع ما زال مباشراً (انقطع العامل وحده)؟ لا نولّد — ينتظر الإنهاء
+  if (meeting.status !== "ended") return;
+  void runAutoGeneration(meeting.id, "agent");
 }
 
 // ────────────────────────────────────────────────────────────────────
