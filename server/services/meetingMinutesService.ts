@@ -11,7 +11,7 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "crypto";
-import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { AgentDispatchClient } from "livekit-server-sdk";
 import { db } from "../db";
 import {
@@ -199,9 +199,29 @@ export function isStaleGeneration(
   return Boolean(ref) && nowMs - ref!.getTime() > STALE_GENERATION_MS;
 }
 
-async function getGenerationClaimedAt(meetingId: string): Promise<Date | null> {
-  const [row] = await db
-    .select({ createdAt: meetingEvents.createdAt })
+/**
+ * كل قرار على حالة التوليد (حجز، تحرير عالق، كتابة نتيجة) يجري داخل معاملة تقفل
+ * صف الاجتماع أولاً (SELECT … FOR UPDATE). في READ COMMITTED كل جملة بعد القفل
+ * ترى ما التُزم قبله، فلا يحرر كنسٌ حجزاً بدأ للتو، ولا يكتب مولّد قديم نتيجته
+ * فوق حجز غيره. هوية الحجز = معرّف حدث minutes_generation_started.
+ */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function lockMinutesState(
+  tx: Tx,
+  meetingId: string,
+): Promise<{ status: string; endedAt: Date | null } | null> {
+  const [row] = await tx
+    .select({ status: meetings.minutesStatus, endedAt: meetings.endedAt })
+    .from(meetings)
+    .where(eq(meetings.id, meetingId))
+    .for("update");
+  return row ?? null;
+}
+
+async function latestClaim(tx: Tx, meetingId: string): Promise<{ id: string; createdAt: Date } | null> {
+  const [row] = await tx
+    .select({ id: meetingEvents.id, createdAt: meetingEvents.createdAt })
     .from(meetingEvents)
     .where(
       and(
@@ -209,21 +229,21 @@ async function getGenerationClaimedAt(meetingId: string): Promise<Date | null> {
         eq(meetingEvents.eventType, GENERATION_STARTED_EVENT),
       ),
     )
-    .orderBy(desc(meetingEvents.createdAt))
+    .orderBy(desc(meetingEvents.createdAt), desc(meetingEvents.id))
     .limit(1);
-  return row?.createdAt ?? null;
+  return row ?? null;
 }
 
-/** يعيد التوليد العالق إلى «failed» (بشرط أنه ما زال generating). true إن حُرِّر */
-async function releaseIfStale(meetingId: string, endedAt: Date | null): Promise<boolean> {
-  const claimedAt = await getGenerationClaimedAt(meetingId);
-  if (!isStaleGeneration(claimedAt, endedAt, Date.now())) return false;
-  const released = await db
-    .update(meetings)
-    .set({ minutesStatus: "failed" })
-    .where(and(eq(meetings.id, meetingId), eq(meetings.minutesStatus, "generating")))
-    .returning({ id: meetings.id });
-  return released.length > 0;
+/** يعيد التوليد العالق إلى «failed» — الفحص والتحرير تحت قفل الصف نفسه. true إن حُرِّر */
+async function releaseIfStale(meetingId: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const state = await lockMinutesState(tx, meetingId);
+    if (!state || state.status !== "generating") return false;
+    const claim = await latestClaim(tx, meetingId);
+    if (!isStaleGeneration(claim?.createdAt, state.endedAt, Date.now())) return false;
+    await tx.update(meetings).set({ minutesStatus: "failed" }).where(eq(meetings.id, meetingId));
+    return true;
+  });
 }
 
 /**
@@ -244,7 +264,7 @@ export async function releaseStaleGenerations(): Promise<number> {
     .limit(10);
   let released = 0;
   for (const m of stuck) {
-    if (await releaseIfStale(m.id, m.endedAt)) {
+    if (await releaseIfStale(m.id)) {
       released += 1;
       console.log(`[Minutes] released stale generation for ${m.id}`);
     }
@@ -260,31 +280,50 @@ export async function releaseStaleGenerations(): Promise<number> {
 export const MINUTES_FALLBACK_DELAY_MS = 45_000;
 
 /**
- * حجز التوليد ذرّياً: UPDATE مشروط بالحالة يضمن مولِّداً واحداً حتى لو تزامنت
- * إشارة العامل مع المؤقت أو مع نسخة خادم أخرى (multi-replica).
+ * حجز التوليد ذرّياً تحت قفل الصف: مولِّد واحد حتى لو تزامنت إشارة العامل مع
+ * المؤقت أو مع نسخة خادم أخرى. يعيد معرّف الحجز أو null إن رُفض.
+ * اليدوي فقط يستولي على حجز عالق (سقطت عمليته) — في المعاملة نفسها.
  */
-async function claimMinutesGeneration(
+export async function claimMinutesGeneration(
   meetingId: string,
   trigger: "auto" | "manual",
-): Promise<boolean> {
-  const allowed = trigger === "auto" ? MINUTES_AUTO_FROM : MINUTES_MANUAL_FROM;
-  const claimed = await db
-    .update(meetings)
-    .set({ minutesStatus: "generating" })
-    .where(and(eq(meetings.id, meetingId), inArray(meetings.minutesStatus, [...allowed])))
-    .returning({ id: meetings.id });
-  if (!claimed.length) return false;
-  // لحظة الحجز — مرجع كشف التوليد العالق (منتظَرة: يعتمد عليها releaseIfStale)
-  await db
-    .insert(meetingEvents)
-    .values({ meetingId, eventType: GENERATION_STARTED_EVENT, detail: { trigger } })
-    .catch((e) => console.error("[Minutes] claim event failed:", (e as Error).message));
-  return true;
+): Promise<string | null> {
+  return db.transaction(async (tx) => {
+    const state = await lockMinutesState(tx, meetingId);
+    if (!state) return null;
+    let status = state.status;
+    if (status === "generating" && trigger === "manual") {
+      const claim = await latestClaim(tx, meetingId);
+      if (isStaleGeneration(claim?.createdAt, state.endedAt, Date.now())) status = "failed";
+    }
+    if (!canStartMinutesGeneration(status, trigger)) return null;
+    await tx.update(meetings).set({ minutesStatus: "generating" }).where(eq(meetings.id, meetingId));
+    const [event] = await tx
+      .insert(meetingEvents)
+      .values({ meetingId, eventType: GENERATION_STARTED_EVENT, detail: { trigger } })
+      .returning({ id: meetingEvents.id });
+    return event.id;
+  });
 }
 
-/** كتابة نتيجة التوليد بشرط أننا ما زلنا أصحاب الحجز — لا تُكتب فوق مسودة/معتمد لاحق */
-const stillGenerating = (meetingId: string) =>
-  and(eq(meetings.id, meetingId), eq(meetings.minutesStatus, "generating"));
+/**
+ * كتابة نتيجة التوليد بشرط أننا ما زلنا أصحاب الحجز: الحالة generating وآخر
+ * حدث حجز هو حجزنا. غير ذلك (حُرِّر كعالق، أو حجز غيرنا، أو اعتُمد) → لا كتابة.
+ */
+export async function finishGeneration(
+  meetingId: string,
+  claimId: string,
+  set: Partial<typeof meetings.$inferInsert>,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const state = await lockMinutesState(tx, meetingId);
+    if (!state || state.status !== "generating") return false;
+    const claim = await latestClaim(tx, meetingId);
+    if (claim?.id !== claimId) return false;
+    await tx.update(meetings).set(set).where(eq(meetings.id, meetingId));
+    return true;
+  });
+}
 
 export async function generateMinutes(
   meetingId: string,
@@ -292,21 +331,12 @@ export async function generateMinutes(
 ): Promise<MeetingMinutes | null> {
   const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
   if (!meeting || !meeting.minutesEnabled) return null;
-  // توليد علق على «generating» (سقطت العملية أثناءه) يبقى محجوزاً للأبد — بعد
-  // مهلة كافية من انتهاء الاجتماع نعيده «failed» ليتمكن المضيف من إعادة التوليد
-  if (
-    trigger === "manual" &&
-    meeting.minutesStatus === "generating" &&
-    (await releaseIfStale(meetingId, meeting.endedAt))
-  ) {
-    meeting.minutesStatus = "failed";
-  }
-  if (!canStartMinutesGeneration(meeting.minutesStatus, trigger)) return null;
-  if (!(await claimMinutesGeneration(meetingId, trigger))) return null;
+  const claimId = await claimMinutesGeneration(meetingId, trigger);
+  if (!claimId) return null;
 
   const rows = await getTranscript(meetingId);
   if (!rows.length) {
-    await db.update(meetings).set({ minutesStatus: "failed" }).where(stillGenerating(meetingId));
+    await finishGeneration(meetingId, claimId, { minutesStatus: "failed" });
     return null;
   }
 
@@ -341,20 +371,20 @@ export async function generateMinutes(
       deferred: Array.isArray(raw.deferred) ? raw.deferred.map(String) : [],
     };
 
-    const written = await db
-      .update(meetings)
-      .set({ minutesStatus: "draft", minutes, minutesGeneratedAt: new Date() })
-      .where(stillGenerating(meetingId))
-      .returning({ id: meetings.id });
+    const written = await finishGeneration(meetingId, claimId, {
+      minutesStatus: "draft",
+      minutes,
+      minutesGeneratedAt: new Date(),
+    });
     // فقدنا الحجز (حُرِّر كعالق ثم سبقنا مولّد آخر/اعتماد) — لا نكتب فوق نتيجته
-    if (!written.length) return null;
+    if (!written) return null;
     logMeetingEvent(meetingId, "minutes_generated", {
       detail: { decisions: minutes.decisions.length, actionItems: minutes.actionItems.length },
     });
     return minutes;
   } catch (e) {
     console.error(`[Minutes] generation failed for ${meetingId}:`, (e as Error).message);
-    await db.update(meetings).set({ minutesStatus: "failed" }).where(stillGenerating(meetingId));
+    await finishGeneration(meetingId, claimId, { minutesStatus: "failed" });
     return null;
   }
 }

@@ -117,8 +117,8 @@ describe("الربط في الكود", () => {
   it("كتابات نتيجة التوليد كلها مشروطة ببقاء الحجز — لا كتابة فوق معتمد", () => {
     const body = minutes.slice(minutes.indexOf("export async function generateMinutes"));
     const fn = body.slice(0, body.indexOf("\n}\n"));
-    expect(fn.match(/\.where\(stillGenerating\(meetingId\)\)/g)?.length).toBe(3);
-    expect(fn).not.toContain(".where(eq(meetings.id, meetingId));");
+    expect(fn.match(/finishGeneration\(meetingId, claimId,/g)?.length).toBe(3);
+    expect(fn).not.toContain("db.update(meetings)");
   });
 
   it("الكنس يحرر التوليد العالق", () => {
@@ -130,7 +130,10 @@ describe("الربط في الكود", () => {
   });
 
   it("الحجز ذرّي بشرط الحالة، ومسار الاكتمال محمي بسر العامل", () => {
-    expect(minutes).toContain("inArray(meetings.minutesStatus, [...allowed])");
+    // الحجز والتحرير وكتابة النتيجة كلها تحت قفل صف الاجتماع، ومربوطة بمعرّف الحجز
+    expect(minutes.match(/await lockMinutesState\(tx, meetingId\)/g)?.length).toBe(3);
+    expect(minutes).toContain('.for("update")');
+    expect(minutes).toContain("if (claim?.id !== claimId) return false;");
     expect(routes).toMatch(
       /"\/api\/internal\/meetings-agent\/:id\/complete",\s*requireAgentSecret/,
     );
