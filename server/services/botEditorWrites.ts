@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articleMediaAssets, articleTags, articles, categories, enArticles, enCategories, tags, users } from "@shared/schema";
-import { botEditorArchiveSchema, botEditorEditSchema, botEditorEmptySchema, botEditorVisibilitySchema } from "@shared/botEditorWrites";
+import { botEditorArchiveSchema, botEditorDeleteSchema, botEditorEditSchema, botEditorEmptySchema, botEditorVisibilitySchema } from "@shared/botEditorWrites";
 import { mergeBotEditorBodyImages } from "./botEditorBodyImages";
 import { resolveContentBylineUserId } from "@shared/mediaLicense";
 import { assertMediaLicenseAllowsSubmission } from "./mediaLicenseService";
@@ -9,6 +9,7 @@ import { hasMeaningfulEditorialChange } from "../utils/editorialDates";
 import { assertBotEditorUnlocked } from "./botEditorLocks";
 import { BotDraftError, appendBotDraftBodyImages, normalizeDraftContent } from "./botDraftsService";
 import { recordBotEditorAudit } from "./botEditorAudit";
+import { assertNotProtected } from "./botEditorCapabilityGuard";
 import { invalidateClearedBreakingArticles } from "./breakingNewsService";
 import { botEditorAssignableStaff } from "./botEditorWritesRoster";
 import { demoteOtherBreaking } from "./botEditorWritesBreaking";
@@ -53,6 +54,7 @@ function parse<T>(schema: { safeParse: (input: unknown) => { success: true; data
 
 // Runtime selection retains the real Drizzle table's columns in each language.
 async function mutate(language: BotEditorLanguage, id: string, operation: string, input: Record<string, any>, guard?: Guard) {
+  assertNotProtected(id);
   const table: any = language === "ar" ? articles : enArticles;
   const categoryTable: any = language === "ar" ? categories : enCategories;
   let cleared: any[] = [];
@@ -186,7 +188,7 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
     } else if (operation === "archive") {
       if (!["draft", "ready_to_publish", "scheduled", "published"].includes(before.status)) throw new BotDraftError(409, "not_published", "لا يمكن أرشفة هذه الحالة");
       const note = (input.updateReason ?? input.reason ?? "").trim();
-      if (before.status !== "published") {
+      if (before.status !== "published" || input.__strictDelete === true) {
         if (!note) throw new BotDraftError(422, "validation_error", "updateReason مطلوب لأرشفة المسودة");
         assertEditorFresh(before, input.expectedUpdatedAt);
       }
@@ -256,6 +258,17 @@ export async function editBotArticle(language: BotEditorLanguage, id: string, bo
 }
 export async function transitionBotArticle(language: BotEditorLanguage, id: string, action: "archive" | "restore" | "unpublish", body: unknown) {
   return mutate(language, id, action, action === "archive" ? parse(botEditorArchiveSchema, body) : parse(botEditorEmptySchema, body));
+}
+/**
+ * «حذف» نشر سبق = أرشفة ناعمة كما في اللوحة (DELETE /api/admin/articles/:id)، لا حذف نهائي.
+ * السبب وإصدار المادة (expectedUpdatedAt) إلزاميان لكل الحالات، والتدقيق في سجل الأحداث.
+ */
+export async function deleteBotArticle(language: BotEditorLanguage, id: string, body: unknown) {
+  const input = parse(botEditorDeleteSchema, body);
+  const result = await mutate(language, id, "archive", { reason: input.updateReason, updateReason: input.updateReason, expectedUpdatedAt: input.expectedUpdatedAt, __strictDelete: true });
+  const { recordBotEditorOperation } = await import("./botEditorOperationsAudit");
+  await recordBotEditorOperation({ actorId: null, operation: "delete_article", outcome: "succeeded", metadata: { language, articleId: id, softDelete: true } }).catch(() => undefined);
+  return result;
 }
 export async function changeBotVisibility(language: BotEditorLanguage, id: string, body: unknown) {
   return mutate(language, id, "visibility", parse(botEditorVisibilitySchema, body));
