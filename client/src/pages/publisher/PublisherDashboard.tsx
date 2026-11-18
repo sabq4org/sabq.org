@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { formatCompactNumber, formatDateShort, formatNumber } from "@/lib/format";
 import { PublisherRenewalCard, daysLabel } from "@/components/publisher/PublisherRenewalCard";
 import { UsualComparison, type VsUsual } from "@/components/publisher/ArticleInsights";
+import { PortalActionItems } from "@/components/publisher/PortalActionItems";
 
 interface PortalOverview {
   publisher: {
@@ -253,7 +254,9 @@ export default function PublisherDashboard() {
     );
   }
 
-  const { publisher, stats, activeCredit, attention } = data;
+  const { publisher, stats, activeCredit } = data;
+  // «تحتاج تعديلات» يظهر الآن في «ينتظر إجراءك» بسبب الإعادة وزر الفتح، فلا نكرره هنا
+  const attention = (data.attention ?? []).filter((item) => item.type !== "needs_changes");
   const recentArticles = Array.isArray(data.recentArticles) ? data.recentArticles : [];
   const topArticles = Array.isArray(data.topArticles) ? data.topArticles : [];
   const monthlyPublishing = Array.isArray(data.monthlyPublishing) ? data.monthlyPublishing : [];
@@ -375,6 +378,8 @@ export default function PublisherDashboard() {
         </div>
 
         <PublisherRenewalCard onlyWithRequest />
+
+        <PortalActionItems />
 
         {/* طلب مفتوح لدى الإدارة (غير التجديد — التجديد له بطاقته) */}
         {openRequest && openRequest.type !== "renewal" && (

@@ -15,6 +15,7 @@ import {
   Package,
   FileBarChart,
   Share2,
+  FolderKanban,
 } from "lucide-react";
 import {
   Sidebar,
@@ -89,6 +90,13 @@ const navItems: NavItem[] = [
     label: "أخباري",
     icon: FileText,
     testId: "nav-publisher-articles",
+  },
+  {
+    id: "publisher-campaigns",
+    href: "/dashboard/publisher/campaigns",
+    label: "الحملات",
+    icon: FolderKanban,
+    testId: "nav-publisher-campaigns",
   },
   {
     id: "publisher-social",

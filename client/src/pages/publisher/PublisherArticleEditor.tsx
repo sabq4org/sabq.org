@@ -91,6 +91,9 @@ export default function PublisherArticleEditor() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const isEditMode = !!id;
+  // خبر جديد من داخل ملف حملة: نربطه بها بعد الإنشاء ونعود إليها
+  const campaignId = !isEditMode ? new URLSearchParams(window.location.search).get("campaign") : null;
+  const doneHref = campaignId ? `/dashboard/publisher/campaigns/${campaignId}` : "/dashboard/publisher/articles";
 
   // نعرف إن كان الناشر موثوقاً (نشر فوري) لضبط نص زر الإرسال
   const { data: overview } = useQuery<{ publisher: { autoPublish: boolean } }>({
@@ -214,7 +217,7 @@ export default function PublisherArticleEditor() {
             toast({ title: "تم الحفظ", description: "حُفظت المادة كمسودة" });
           }
         } else {
-          const created = await apiRequest<{ submit: { ok: boolean; published: boolean; message: string } | null }>(
+          const created = await apiRequest<{ id: string; submit: { ok: boolean; published: boolean; message: string } | null }>(
             "/api/publisher/articles",
             {
               method: "POST",
@@ -222,6 +225,19 @@ export default function PublisherArticleEditor() {
               body: JSON.stringify({ ...payload, submitForReview }),
             },
           );
+          if (campaignId && created.id) {
+            try {
+              await apiRequest(`/api/publisher/portal/campaigns/${campaignId}/articles`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ articleIds: [created.id] }),
+              });
+              queryClient.invalidateQueries({ queryKey: [`/api/publisher/portal/campaigns/${campaignId}`] });
+              queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/campaigns"] });
+            } catch {
+              toast({ variant: "destructive", title: "حُفظ الخبر لكن تعذر ربطه بالحملة", description: "أضفه من صفحة الحملة." });
+            }
+          }
           if (submitForReview && created.submit) {
             toast({
               title: created.submit.published ? "نُشرت المادة 🎉" : created.submit.ok ? "أُرسلت للمراجعة" : "حُفظت كمسودة",
@@ -234,7 +250,7 @@ export default function PublisherArticleEditor() {
         }
 
         invalidatePortalQueries();
-        setLocation("/dashboard/publisher/articles");
+        setLocation(doneHref);
       } catch (error: any) {
         toast({
           variant: "destructive",
@@ -314,7 +330,7 @@ export default function PublisherArticleEditor() {
               <p className="text-muted-foreground mt-2">يمكن تعديل المسودات فقط</p>
               <Button
                 className="mt-4"
-                onClick={() => setLocation("/dashboard/publisher/articles")}
+                onClick={() => setLocation(doneHref)}
                 data-testid="button-back"
               >
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -632,7 +648,7 @@ export default function PublisherArticleEditor() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setLocation("/dashboard/publisher/articles")}
+                  onClick={() => setLocation(doneHref)}
                   data-testid="button-cancel"
                 >
                   إلغاء

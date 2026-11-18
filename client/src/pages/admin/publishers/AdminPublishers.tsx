@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { AdminPublisherNav } from "@/components/admin/publishers/AdminPublisherNav";
 import { PublisherRequestsPanel } from "@/components/admin/publishers/PublisherRequestsPanel";
+import { AdminActionQueue, AdminRunningCampaigns } from "@/components/admin/publishers/AdminActionQueue";
 import {
   HEALTH_FILTERS,
   getHealthMeta,
@@ -189,6 +190,8 @@ export default function AdminPublishers() {
 
         <AdminPublisherNav />
 
+        <AdminActionQueue />
+
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <SummaryTile
             label="إجمالي الوكالات"
@@ -245,7 +248,11 @@ export default function AdminPublishers() {
           </div>
         )}
 
-        <PublisherRequestsPanel openCount={summary?.openRequests ?? 0} />
+        <AdminRunningCampaigns />
+
+        <div id="requests" className="scroll-mt-24">
+          <PublisherRequestsPanel openCount={summary?.openRequests ?? 0} />
+        </div>
 
         <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">

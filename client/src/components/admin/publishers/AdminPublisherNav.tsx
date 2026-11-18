@@ -17,13 +17,13 @@ const navItems: NavItem[] = [
     testId: "nav-publishers",
   },
   {
-    href: "/dashboard/admin/publishers/articles",
+    href: "/dashboard/admin/publisher-articles",
     label: "مراجعة المقالات",
     icon: FileCheck,
     testId: "nav-review-articles",
   },
   {
-    href: "/dashboard/admin/publishers/analytics",
+    href: "/dashboard/admin/publisher-analytics",
     label: "التحليلات",
     icon: BarChart3,
     testId: "nav-analytics",
