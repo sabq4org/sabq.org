@@ -1133,6 +1133,10 @@ function Router() {
         {/* Admin Publisher Management Routes */}
         <Route path="/dashboard/admin/publisher-applications">{() => <LazyRoute component={AdminPublisherApplications} />}</Route>
         <Route path="/dashboard/admin/publishers">{() => <LazyRoute component={AdminPublishers} />}</Route>
+        {/* روابط قديمة في شريط الناشرين كانت تفتح صفحة وكالة باسم articles/analytics */}
+        <Route path="/dashboard/admin/publishers/articles">{() => <Redirect to="/dashboard/admin/publisher-articles" />}</Route>
+        <Route path="/dashboard/admin/publishers/analytics">{() => <Redirect to="/dashboard/admin/publisher-analytics" />}</Route>
+        <Route path="/dashboard/admin/publishers/guide">{() => <Redirect to="/dashboard/admin/publisher-guide" />}</Route>
         <Route path="/dashboard/admin/publishers/:id">{() => <LazyRoute component={AdminPublisherDetails} />}</Route>
         <Route path="/dashboard/admin/publisher-articles">{() => <LazyRoute component={AdminPublisherArticles} />}</Route>
         <Route path="/dashboard/admin/publisher-analytics">{() => <LazyRoute component={AdminPublisherAnalytics} />}</Route>
