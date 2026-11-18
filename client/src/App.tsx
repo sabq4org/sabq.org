@@ -464,6 +464,8 @@ const AdminPublisherAnalytics = lazy(() => retryImport(() => import("@/pages/adm
 // === LAZY IMPORTS (Correspondent & Opinion Author) ===
 const CorrespondentRegister = lazy(() => retryImport(() => import("@/pages/correspondent/CorrespondentRegister")));
 const OpinionAuthorRegister = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorRegister")));
+const PublisherRegister = lazy(() => retryImport(() => import("@/pages/publisher-register/PublisherRegister")));
+const AdminPublisherApplications = lazy(() => retryImport(() => import("@/pages/admin/publishers/AdminPublisherApplications")));
 const OpinionAuthorDashboard = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorDashboard")));
 const WriterGuidePage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterGuidePage")));
 const ReporterMyArticlesPage = lazy(() => retryImport(() => import("@/pages/reporter/ReporterMyArticlesPage")));
@@ -1129,6 +1131,7 @@ function Router() {
         <Route path="/dashboard/publisher/guide">{() => <LazyRoute component={PublisherGuide} />}</Route>
         
         {/* Admin Publisher Management Routes */}
+        <Route path="/dashboard/admin/publisher-applications">{() => <LazyRoute component={AdminPublisherApplications} />}</Route>
         <Route path="/dashboard/admin/publishers">{() => <LazyRoute component={AdminPublishers} />}</Route>
         <Route path="/dashboard/admin/publishers/:id">{() => <LazyRoute component={AdminPublisherDetails} />}</Route>
         <Route path="/dashboard/admin/publisher-articles">{() => <LazyRoute component={AdminPublisherArticles} />}</Route>
@@ -1138,6 +1141,7 @@ function Router() {
         
         {/* Correspondent Registration Routes */}
         <Route path="/correspondent/register">{() => <LazyRoute component={CorrespondentRegister} />}</Route>
+        <Route path="/publisher/register">{() => <LazyRoute component={PublisherRegister} />}</Route>
         <Route path="/dashboard/correspondents">{() => <LazyRoute component={CorrespondentApplications} />}</Route>
         
         {/* Opinion Author Routes */}

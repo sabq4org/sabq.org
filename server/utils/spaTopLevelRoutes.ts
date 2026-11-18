@@ -17,7 +17,7 @@ export const SPA_TOP_LEVEL_SEGMENTS: ReadonlySet<string> = new Set([
   "moment-by-moment", "muqtarab", "my-follows", "my-keywords", "mylife",
   "nd96-preview", "news", "newsletter", "notification-settings",
   "notifications", "omq", "onboarding", "opinion", "opinion-author", "payment",
-  "plus-preview", "politics", "predictions", "preferences", "privacy",
+  "plus-preview", "politics", "predictions", "preferences", "privacy", "publisher",
   "privacy-terms-of-service",
   "profile", "prompt-studio", "recommendation-settings", "register",
   "reporter", "reset-password", "roshn", "rsl", "rss", "sabq-ai", "saudi",

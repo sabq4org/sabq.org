@@ -240,7 +240,10 @@ export async function setupAuth(app: Express) {
             id: user.id, 
             email: user.email,
             twoFactorEnabled: user.twoFactorEnabled,
-            twoFactorMethod: user.twoFactorMethod
+            twoFactorMethod: user.twoFactorMethod,
+            // يقرؤه POST /api/login ليحوّل صاحب كلمة المرور المؤقتة إلى /set-password
+            // (حسابات المراسلين والناشرين المقبولين). بدونه كان يعود دائمًا false.
+            mustChangePassword: user.mustChangePassword ?? false,
           });
         } catch (error) {
           console.error("❌ LocalStrategy error:", error);

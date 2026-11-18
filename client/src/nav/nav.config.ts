@@ -968,6 +968,15 @@ export const navConfig: NavItem[] = [
         permissions: ["publishers.view", "publishers.manage"],
       },
       {
+        id: "publishers_applications",
+        labelKey: "nav.publishers_applications",
+        labelAr: "طلبات التسجيل",
+        path: "/dashboard/admin/publisher-applications",
+        icon: Inbox,
+        roles: ["admin"],
+        permissions: ["publishers.view", "publishers.manage"],
+      },
+      {
         id: "publishers_articles",
         labelKey: "nav.publishers_articles",
         labelAr: "مراجعة المقالات",
