@@ -1,6 +1,7 @@
-import { Switch, Route, useLocation, Redirect } from "wouter";
+import { Switch, Route, useLocation, useParams, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import type { ArticleWithDetails } from "@shared/schema";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -617,6 +618,25 @@ function LazyRoute({ component: Component }: { component: React.LazyExoticCompon
   );
 }
 
+// Keep the query observer mounted while the lazy article module loads, so the
+// existing request and the code download run in parallel without a second fetch.
+function ArticleRoute() {
+  const { slug } = useParams<{ slug: string }>();
+  const { data: article, isLoading } = useQuery<ArticleWithDetails>({
+    queryKey: ["/api/articles", slug],
+    // Corrections must appear immediately when readers return to the tab.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <ArticleDetail article={article} isLoading={isLoading} />
+      <AnalyticsRouteCommit />
+    </Suspense>
+  );
+}
+
 function ScrollRestoration() {
   const [location] = useLocation();
 
@@ -711,7 +731,7 @@ function Router() {
         <Route path="/category/:slug">{() => <LazyRoute component={CategoryPage} />}</Route>
         <Route path="/sponsored">{() => <LazyRoute component={SponsoredArticle} />}</Route>
         <Route path="/article/:slug/passport">{() => <LazyRoute component={ArticlePassport} />}</Route>
-        <Route path="/article/:slug">{() => <LazyRoute component={ArticleDetail} />}</Route>
+        <Route path="/article/:slug">{() => <ErrorBoundary><ArticleRoute /></ErrorBoundary>}</Route>
         <Route path="/services/:id">{() => <LazyRoute component={ServiceDatePage} />}</Route>
         <Route path="/mawaeed">{() => <LazyRoute component={MawaeedPage} />}</Route>
         <Route path="/infath">{() => <LazyRoute component={InfathPage} />}</Route>
