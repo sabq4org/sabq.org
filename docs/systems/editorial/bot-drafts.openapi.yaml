@@ -2752,6 +2752,117 @@ paths:
       summary: مقارنة عناوين من ثلاثة نماذج (تكلفة أعلى). articleId أو content (واحد فقط) وcurrentTitle اختياري (nashr-sabq فقط)
       responses:
         "200": { description: "{ suggestions: [{provider, model, title, error?}] }" }
+  /api/internal/bot-drafts/opinion/drafts:
+    get:
+      operationId: opinionBoardEditorNews
+      summary: لوحة مقالات الرأي المسطّحة (nashr-sabq فقط؛ opinion.read)
+      parameters:
+        - { name: weekStart, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        "200": { description: "board + items" }
+        "403": { description: "غير مخوّل أو capability_disabled" }
+  /api/internal/bot-drafts/opinion/drafts/{id}:
+    get:
+      operationId: opinionDetailEditorNews
+      summary: تفاصيل مقال رأي (item, nextSlot, draft, warnings, prep) (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: التفاصيل }
+        "404": { description: غير موجود }
+    patch:
+      operationId: opinionEditEditorNews
+      summary: تعديل عنوان/متن مسودة رأي بانتظار المكتب أو مجدول (opinion.edit). 423 للمواد المحمية
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, properties: { title: { type: string }, content: { type: string, minLength: 20 }, contentFormat: { type: string, enum: [ html, text ] } } }
+      responses:
+        "200": { description: "التفاصيل + changed + changedFields" }
+        "409": { description: تعارض الحالة أو القفل }
+        "423": { description: مادة محمية }
+  /api/internal/bot-drafts/opinion/drafts/{id}/prepare:
+    post:
+      operationId: opinionPrepareEditorNews
+      summary: «جهّز وجدول» لمقال رأي (opinion.lifecycle). 202 ثم GET للمتابعة
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "202": { description: "{ job, created }" }
+        "423": { description: مادة محمية }
+    get:
+      operationId: opinionPrepareStatusEditorNews
+      summary: حالة التجهيز
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ job }" }
+        "404": { description: لا يوجد تجهيز }
+  /api/internal/bot-drafts/opinion/drafts/{id}/image:
+    post:
+      operationId: opinionImageEditorNews
+      summary: توليد صورة مقال الرأي (opinion.image). 202 بدأ، 200 إن وُجدت صورة ولم يُرسل force
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "skipped: image_exists" }
+        "202": { description: "{ job, created }" }
+        "423": { description: مادة محمية }
+    get:
+      operationId: opinionImageStatusEditorNews
+      summary: حالة توليد صورة الرأي
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ job }" }
+        "404": { description: لا يوجد توليد }
+  /api/internal/bot-drafts/opinion/drafts/{id}/slot-check:
+    get:
+      operationId: opinionSlotCheckEditorNews
+      summary: فحص تعارض موعد الجدولة (scheduledAt ISO مع المنطقة)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: scheduledAt, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: "{ scheduledAt, warnings }" }
+  /api/internal/bot-drafts/opinion/drafts/{id}/schedule:
+    post:
+      operationId: opinionScheduleEditorNews
+      summary: جدولة مقال رأي. جسم فارغ = موعد الكاتب الثابت أو scheduledAt (opinion.lifecycle)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ article, scheduledAt, warnings }" }
+        "423": { description: مادة محمية }
+  /api/internal/bot-drafts/opinion/drafts/{id}/publish:
+    post:
+      operationId: opinionPublishEditorNews
+      summary: نشر فوري لمقال رأي (جسم فارغ) (opinion.lifecycle)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ article }" }
+        "409": { description: منشور أصلاً أو لم يعد بانتظار المكتب }
+        "423": { description: مادة محمية }
+  /api/internal/bot-drafts/opinion/drafts/{id}/return:
+    post:
+      operationId: opinionReturnEditorNews
+      summary: إرجاع مقال رأي للكاتب بملاحظة 3–2000 حرف (opinion.lifecycle)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ note ], properties: { note: { type: string, minLength: 3, maxLength: 2000 } } }
+      responses:
+        "200": { description: "{ article }" }
+        "423": { description: مادة محمية }
 components:
   securitySchemes:
     botToken:
