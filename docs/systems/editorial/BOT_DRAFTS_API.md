@@ -970,3 +970,22 @@ Content-Type: application/json
 البحث `q` (3 أحرف على الأقل) يشمل العنوان والمقدمة في العربية، والعنوان والمتن في الإنجليزية. القوائم والأخبار المرتبطة للأخبار فقط؛ قراءة الخبر تشمل أيضًا إنفوجرافيك البوت القديم.
 
 فهارس البحث موثقة في `migrations/20261118_bot_editor_search_indexes.sql`، ويجب بناء الفهارس خارج transaction بعد التحقق من `pg_trgm`. لم تُنفَّذ بمجرد إضافة الملف.
+
+## قدرات محرر نشر سبق الموسّعة — 2026-11-18
+
+كلها حصرية للاعتماد `nashr-sabq` (غير الشخصي) على القاعدتين العربية والإنجليزية؛ بقية التوكنات تبقى كما هي (`403 forbidden_action` على المسارات الحصرية).
+
+| المسار | الوصف |
+| --- | --- |
+| `DELETE {base}/:id` | «حذف» = أرشفة ناعمة فقط (لا حذف نهائي). `updateReason` (3–500) و`expectedUpdatedAt` (ISO مع منطقة) إلزاميان لكل الحالات بما فيها المنشور، ويُكتب الحدث والمراجعة وسجل `delete_article`. يقبل الجسم أو query. |
+| `POST {base}/images/generate` | أضيف `intent` (`realistic` \| `illustration` \| `explanatory`) و`model` (قائمة بيضاء: `gemini-nano-banana-2.1`، `gemini-3-pro-image-preview`، `recraft-v3`، `flux-1.1-pro`، `ideogram-2`) و`styleSlug` (نمط من لوحة الأنماط). |
+| `POST {base}/images/generate-gpt` + `GET .../:jobId` | صورة GPT مدفوعة. `202` ثم استعلام. سقف يومي `BOT_EDITOR_GPT_DAILY_CAP` (الافتراضي 20؛ `0` يوقفها) ويرد `429 daily_cap_reached`. بلا `OPENAI_IMAGES_API_KEY` يرد `503 not_configured`. التكلفة (tokens والثواني) في `bot_editor_operations` بلا نص البرومبت. |
+| `POST {base}/images/edit` | تعديل صورة موجودة على media.sabq.org أو Cloudflare Images فقط (حماية SSRF) وحفظ النتيجة في المكتبة. |
+| `DELETE {base}/media/:mediaId` | حذف من المكتبة لما رفعه/ولّده البوت وغير المستخدم في أي مادة. الصف يُحذف والملف الفعلي في التخزين يبقى، ولقطة الصف في سجل التدقيق. |
+| `POST {base}/ai/titles` · `/ai/proofread` · `/ai/compare-headlines` | عناوين مقترحة، تدقيق لغوي، ومقارنة ثلاثة نماذج. بلا حفظ. المدخل `articleId` أو `content`. |
+
+**بوابة رصيد الناشر:** نشر خبر له `publisherId` عبر نشر سبق يخصم رصيداً عبر `chargePublishInTx` (مرة واحدة لكل مادة) ويرد `403 forbidden_action` مع `details.reason = no_credits` عند انعدامه مع تراجع كامل. الجدولة تفحص الرصيد فقط والخصم عند النشر.
+
+**المواد المحمية:** `d05bc8d5…`، `690f5287…`، `8dab8d72…`، `4cfda185…`، `7696f378…` (بالمعرّف الكامل في `shared/botEditorCapabilities.ts`) أي كتابة عليها من أي توكن ترد `423 protected_article` وتُسجَّل في `bot_editor_operations`؛ القراءة مسموحة. إضافة معرّفات: `BOT_EDITOR_PROTECTED_ARTICLE_IDS` (قائمة مفصولة بفواصل).
+
+**مفتاح الإيقاف:** `BOT_EDITOR_DISABLED_CAPS` قائمة قدرات مفصولة بفواصل (أو `*`) ترد عليها المسارات `403 capability_disabled` فوراً بلا إعادة نشر. أسماء القدرات في `shared/botEditorCapabilities.ts`.

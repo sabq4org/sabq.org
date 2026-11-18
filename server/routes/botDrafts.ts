@@ -78,7 +78,8 @@ import {
   type BotIdentity,
 } from "../services/botDraftsService";
 import { isLegacyNashr } from "../services/botEditorLegacyAudit";
-import { isLegacyLifecycleBody, nashrArticleScope, runNashrAction } from "../services/botEditorLifecycle";
+import { NASHR_ACTION_CAPABILITY, isLegacyLifecycleBody, nashrArticleScope, runNashrAction } from "../services/botEditorLifecycle";
+import { assertEditorCapability, blockProtectedWrite } from "../services/botEditorCapabilityGuard";
 
 import { authenticatePublisherToken } from "../services/botPublisherTokenService";
 
@@ -103,14 +104,14 @@ async function requireBotToken(req: BotRequest, res: Response, next: NextFunctio
       const personal = await authenticatePublisherToken(raw);
       if (personal) {
         req.bot = { name: `publisher-${personal.userId}`, personal };
-        return next();
+        return blockProtectedWrite(req, res, next);
       }
     } else {
       if (!isBotDraftsConfigured()) {
         return sendError(res, 503, { code: "not_configured", message: "واجهة مسودات البوتات غير مفعّلة على هذا الخادم" });
       }
       const legacy = authenticateBotToken(req.headers.authorization);
-      if (legacy) { req.bot = legacy; return next(); }
+      if (legacy) { req.bot = legacy; return blockProtectedWrite(req, res, next); }
     }
     res.setHeader("WWW-Authenticate", 'Bearer realm="sabq-bot-drafts"');
     return sendError(res, 401, { code: "unauthorized", message: "توكن غير صالح أو منتهي أو ملغى" });
@@ -187,6 +188,7 @@ function requestContext(req: Request) {
 
 async function forNashr(req: BotRequest, res: Response, action: Parameters<typeof runNashrAction>[1], label: string): Promise<boolean> {
   if (!req.bot || !isLegacyNashr(req.bot)) return false;
+  try { assertEditorCapability(NASHR_ACTION_CAPABILITY[action]); } catch (error) { handleError(res, error, label); return true; }
   if (isLegacyLifecycleBody(action, req.body ?? {})) {
     if (await nashrArticleScope("ar", req.params.id) !== "other") return false;
     sendError(res, 422, { code: "validation_error", message: "updateReason و expectedUpdatedAt مطلوبان للمواد التي لم ينشئها البوت" });
@@ -698,7 +700,7 @@ router.all(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, (_req: Request, res: 
   res.setHeader("Allow", "GET, PATCH");
   sendError(res, 405, {
     code: "forbidden_action",
-    message: "المسموح: GET و PATCH. أرشفة المادة المنشورة عبر POST /archive ولا يوجد حذف نهائي",
+    message: "المسموح: GET و PATCH. أرشفة المادة المنشورة عبر POST /archive ولا يوجد حذف نهائي (DELETE /:id مخصص لنشر سبق كأرشفة ناعمة بسبب إلزامي)",
   });
 });
 
