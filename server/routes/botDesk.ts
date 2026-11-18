@@ -19,7 +19,9 @@
 //   GET   /api/internal/bot-desk/social/tweets/capability   (هل القناة مفعّلة وهل ينشر مباشرة)
 //   POST  /api/internal/bot-desk/social/tweets/preview   (معاينة بلا كتابة)
 //   GET   /api/internal/bot-desk/social/tweets/:id   (قرار المكتب في تغريدة المحرر، لصاحبها فقط)
-//   POST  /api/internal/bot-desk/social/tweets   (تغريدة المحرر: نشر مباشر أو مقترح للمكتب حسب الصلاحية)
+//   POST  /api/internal/bot-desk/social/tweets   (تغريدة المحرر: نشر مباشر أو مجدول أو مقترح للمكتب حسب الصلاحية)
+//   POST  /api/internal/bot-desk/social/tweets/:id/cancel   (صاحب التغريدة يلغي المجدولة أو المقترح)
+//   POST  /api/internal/bot-desk/social/tweets/video-upload-url   (رابط رفع موقّع لفيديو التغريدة)
 //   GET   /api/internal/bot-desk/opinion/drafts
 //   GET   /api/internal/bot-desk/opinion/drafts/:id
 //   PATCH /api/internal/bot-desk/opinion/drafts/:id   (تعديل content/title لمسودة أو مجدول؛ الموعد كما هو)
@@ -97,8 +99,11 @@ import {
 import { X_MAX_PREMIUM_WEIGHTED_LENGTH, xLengthReport } from "@shared/socialPostText";
 import { SocialProviderError } from "../services/socialPublishing/types";
 import {
+  EDITOR_TWEET_MAX_VIDEO_BYTES,
+  cancelEditorTweetForOwner,
   getEditorTweetForOwner,
   isEditorTweetChannelEnabled,
+  isEditorTweetVideoAvailable,
   previewEditorTweet,
   submitEditorTweet,
 } from "../services/socialPublishing/editorTweetService";
@@ -750,15 +755,26 @@ router.post(
     }
     try {
       const actorUserId = req.botPrincipal!.userId;
-      const canPublishNow = await userHasPermission(
+      const [canPublishNow, canSchedule] = await Promise.all([
+        userHasPermission(actorUserId, PERMISSION_CODES.SOCIAL_PUBLISH_NOW),
+        parsed.data.scheduledAt
+          ? userHasPermission(actorUserId, PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE)
+          : Promise.resolve(false),
+      ]);
+      const result = await submitEditorTweet({
+        ...parsed.data,
         actorUserId,
-        PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
-      );
-      const result = await submitEditorTweet({ ...parsed.data, actorUserId, canPublishNow });
+        canPublishNow,
+        canSchedule,
+      });
       if (!result.duplicate) {
         await auditBotDeskWrite(req, {
           action:
-            result.mode === "pending_approval" ? "social_tweet_propose" : "social_tweet_publish",
+            result.mode === "pending_approval"
+              ? "social_tweet_propose"
+              : result.mode === "scheduled"
+                ? "social_tweet_schedule"
+                : "social_tweet_publish",
           entityType: "social_post",
           entityId: result.post.id,
           newValue: {
@@ -766,6 +782,9 @@ router.post(
             status: result.post.status,
             articleId: result.post.articleId,
             updated: result.updated,
+            scheduledAt: result.post.scheduledAt ?? null,
+            requestedAt: result.post.requestedAt ?? null,
+            mediaKind: result.post.mediaKind,
             externalPostUrl: result.post.externalPostUrl ?? null,
           },
         });
@@ -793,10 +812,21 @@ router.get(
   async (req: BotDeskRequest, res: Response) => {
     try {
       const enabled = isEditorTweetChannelEnabled();
-      const canPublishNow = enabled
-        ? await userHasPermission(req.botPrincipal!.userId, PERMISSION_CODES.SOCIAL_PUBLISH_NOW)
-        : false;
-      res.json({ enabled, canPublishNow, mode: canPublishNow ? "direct" : "approval" });
+      const [canPublishNow, canSchedule] = enabled
+        ? await Promise.all([
+            userHasPermission(req.botPrincipal!.userId, PERMISSION_CODES.SOCIAL_PUBLISH_NOW),
+            userHasPermission(req.botPrincipal!.userId, PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE),
+          ])
+        : [false, false];
+      res.json({
+        enabled,
+        canPublishNow,
+        mode: canPublishNow ? "direct" : "approval",
+        // scheduleMode: direct = تُجدول مباشرة؛ approval = الموعد يذهب مع المقترح للمكتب.
+        canSchedule,
+        scheduleMode: canSchedule ? "direct" : "approval",
+        video: enabled && isEditorTweetVideoAvailable(),
+      });
     } catch (error) {
       handleSocialError(res, error, "تعذر قراءة صلاحية التغريد");
     }
@@ -830,6 +860,64 @@ router.post(
       res.json({ preview: await previewEditorTweet({ ...parsed.data, canPublishNow }) });
     } catch (error) {
       handleSocialError(res, error, "تعذرت معاينة التغريدة");
+    }
+  },
+);
+
+// رابط رفع موقّع لفيديو التغريدة: التطبيق يرفع الملف مباشرة (PUT) ثم يمرر الرابط
+// العام في videoUrl. نفس مسار التخزين الذي يستخدمه زر «فيديو» في نموذج الويب.
+router.post(
+  `${BOT_DESK_BASE_PATH}/social/tweets/video-upload-url`,
+  requireBotDeskAuth,
+  botDeskWriteLimiter,
+  async (_req: BotDeskRequest, res: Response) => {
+    if (!isEditorTweetChannelEnabled()) {
+      return sendError(res, 403, {
+        code: "social_disabled",
+        message: "قناة تغريدات «نشر سبق» غير مفعّلة",
+      });
+    }
+    if (!isEditorTweetVideoAvailable()) {
+      return sendError(res, 409, {
+        code: "video_unavailable",
+        message: "نشر الفيديو غير متاح حاليًا",
+      });
+    }
+    try {
+      const { ObjectStorageService } = await import("../objectStorage");
+      const uploadURL = await new ObjectStorageService().getObjectEntityUploadURL();
+      // الرابط العام = رابط الرفع بلا توقيع (كما يفعل نموذج الويب).
+      res.json({
+        uploadURL,
+        videoUrl: uploadURL.split("?")[0],
+        maxBytes: EDITOR_TWEET_MAX_VIDEO_BYTES,
+      });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر إنشاء رابط رفع الفيديو");
+    }
+  },
+);
+
+// صاحب التغريدة يلغي تغريدته المجدولة أو مقترحه المعلّق (404 لغيره).
+router.post(
+  `${BOT_DESK_BASE_PATH}/social/tweets/:id/cancel`,
+  requireBotDeskAuth,
+  botDeskWriteLimiter,
+  async (req: BotDeskRequest, res: Response) => {
+    try {
+      const tweet = await cancelEditorTweetForOwner(req.params.id, req.botPrincipal!.userId);
+      if (!tweet) {
+        return sendError(res, 404, { code: "not_found", message: "التغريدة غير موجودة" });
+      }
+      await auditBotDeskWrite(req, {
+        action: "social_tweet_cancel",
+        entityType: "social_post",
+        entityId: tweet.id,
+        newValue: { status: tweet.status },
+      });
+      res.json({ tweet });
+    } catch (error) {
+      handleSocialError(res, error, "تعذر إلغاء التغريدة");
     }
   },
 );
