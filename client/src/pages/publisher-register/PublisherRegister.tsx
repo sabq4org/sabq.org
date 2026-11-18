@@ -2,6 +2,7 @@
 // https://claude.ai/artifact/JS7f3BUNPNyyz8eNxR8ShB
 // الطلب يذهب لمراجعة فريق سبق؛ عند القبول تصل بيانات الدخول إلى بريد الدخول.
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import sabqLogo from "@assets/sabq-logo.png";
 import { apiUrl } from "@/lib/queryClient";
 import {
   PUBLISHER_LOGO_ACCEPT,
@@ -200,7 +201,7 @@ export default function PublisherRegister() {
   const header = (
     <header className="flex h-14 items-center justify-between border-b border-[#EEF2F6] bg-white px-5 sm:h-[68px] sm:px-16">
       <a href="/" className="flex items-center gap-2.5 no-underline">
-        <span className="text-[26px] font-bold text-[#4CBCFD] sm:text-[30px]">سبق</span>
+        <img src={sabqLogo} alt="سبق" className="h-8 w-auto sm:h-10" />
         <span className="hidden text-[13px] text-[#55667A] sm:inline">بوابة الناشرين</span>
       </a>
       <a href="/login" className="text-[13px] text-[#0B6FA8] no-underline hover:underline sm:text-sm">
