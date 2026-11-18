@@ -675,3 +675,39 @@ describe("bot-desk opinion — POST/GET /:id/image (image only, scheduled allowe
     expect((await bot("GET", "/a1/image")).status).toBe(404);
   });
 });
+
+describe("bot-desk opinion — protected articles (423, reads allowed)", () => {
+  const PROTECTED = ["8dab8d72", "4cfda185"];
+  const FULL = "8dab8d72-0000-0000-0000-000000000000";
+  it("blocks every write on the five protected ids, after auth, and never reaches the desk services", async () => {
+    const { PROTECTED_ARTICLE_IDS } = await import("../../shared/botEditorCapabilities");
+    expect(PROTECTED_ARTICLE_IDS.filter((id) => PROTECTED.includes(id.slice(0, 8)))).toHaveLength(2);
+    for (const id of PROTECTED_ARTICLE_IDS) {
+      for (const [method, path, body] of [
+        ["PATCH", `/${id}`, { content: "نص جديد كامل للمقال بعد التعديل" }],
+        ["POST", `/${id}/prepare`, {}],
+        ["POST", `/${id}/image`, {}],
+        ["POST", `/${id}/schedule`, {}],
+        ["POST", `/${id}/publish`, {}],
+        ["POST", `/${id}/return`, { note: "عدّل المقدمة" }],
+      ] as const) {
+        const res = await bot(method, path, body);
+        expect(res.status, `${method} ${path.slice(0, 9)}`).toBe(423);
+        expect((await res.json()).code).toBe("protected_article");
+      }
+    }
+    // بلا مصادقة 401 أولاً
+    expect((await bot("POST", `/${PROTECTED_ARTICLE_IDS[0]}/publish`, {}, null)).status).toBe(401);
+    for (const name of ["editOpinionDraftFromDesk", "startOpinionPrep", "startOpinionImage", "scheduleOpinionFromDesk", "publishOpinionFromDesk", "returnOpinionToWriterFromDesk"]) {
+      expect(mocks[name as keyof typeof mocks], name).not.toHaveBeenCalled();
+    }
+  });
+  it("still reads a protected article, and a look-alike id is not blocked", async () => {
+    mocks.getStaffOpinionItem.mockResolvedValue({ item: item(FULL, "scheduled", null), nextSlot: null });
+    mocks.getOpinionDraftContent.mockResolvedValue({ title: "t", content: "c" });
+    mocks.getOpinionPrepJob.mockResolvedValue(null);
+    expect((await bot("GET", `/8dab8d72-dc9e-40d1-a07d-27dbe3ebd33a`)).status).not.toBe(423);
+    mocks.publishOpinionFromDesk.mockResolvedValue({ article: { id: FULL, status: "published", publishedAt: null }, previous: { status: "scheduled", reviewStatus: null } });
+    expect((await bot("POST", `/${FULL}/publish`, {})).status).toBe(200);
+  });
+});
