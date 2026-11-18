@@ -159,6 +159,7 @@ router.post("/api/publisher-applications", submitLimiter, parseLogo, async (req:
       loginEmail: application.loginEmail,
     });
   } catch (error) {
+    if (error instanceof PublisherApplicationError) return res.status(error.status).json({ message: error.message });
     console.error("[Publisher Applications] submit failed:", error);
     res.status(500).json({ message: "تعذر إرسال الطلب. حاول مرة أخرى." });
   }

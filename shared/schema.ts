@@ -10179,6 +10179,13 @@ export const publisherApplications = pgTable("publisher_applications", {
 }, (table) => [
   index("publisher_applications_status_idx").on(table.status, table.createdAt),
   index("publisher_applications_login_email_idx").on(table.loginEmail),
+  // طلب معلق واحد فقط لكل بريد وبريد دخول، حتى مع طلبين متزامنين.
+  uniqueIndex("publisher_applications_pending_login_email_uidx")
+    .on(sql`lower(${table.loginEmail})`)
+    .where(sql`status = 'pending'`),
+  uniqueIndex("publisher_applications_pending_email_uidx")
+    .on(sql`lower(${table.email})`)
+    .where(sql`status = 'pending'`),
 ]);
 
 export type PublisherApplication = typeof publisherApplications.$inferSelect;

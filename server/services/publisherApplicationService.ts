@@ -45,11 +45,21 @@ export async function hasPendingPublisherApplication(loginEmail: string, email: 
 export async function createPublisherApplication(
   data: InsertPublisherApplication,
 ): Promise<PublisherApplication> {
-  const [row] = await db
-    .insert(publisherApplications)
-    .values({ ...data, email: data.email.toLowerCase(), loginEmail: data.loginEmail.toLowerCase() })
-    .returning();
-  return row;
+  try {
+    const [row] = await db
+      .insert(publisherApplications)
+      .values({ ...data, email: data.email.toLowerCase(), loginEmail: data.loginEmail.toLowerCase() })
+      .returning();
+    return row;
+  } catch (error) {
+    // الفهرسان الفريدان الجزئيان يرفضان طلبًا معلقًا ثانيًا وصل مع الأول في اللحظة نفسها.
+    const code = (error as { code?: string; cause?: { code?: string } })?.code
+      ?? (error as { cause?: { code?: string } })?.cause?.code;
+    if (code === "23505") {
+      throw new PublisherApplicationError(409, "لديكم طلب قيد المراجعة بنفس البريد. سنرد عليكم قريبًا.");
+    }
+    throw error;
+  }
 }
 
 export type PublisherApplicationRow = PublisherApplication & {
@@ -65,16 +75,21 @@ export async function listPublisherApplications(status?: string): Promise<{
   counts: { pending: number; approved: number; rejected: number };
 }> {
   const where = status && status !== "all" ? eq(publisherApplications.status, status) : undefined;
-  const applications = await db
-    .select({
-      application: publisherApplications,
-      loginEmailInUse,
-      reviewerName,
-    })
-    .from(publisherApplications)
-    .where(where)
-    .orderBy(desc(publisherApplications.createdAt))
-    .limit(200);
+  const select = () =>
+    db.select({ application: publisherApplications, loginEmailInUse, reviewerName }).from(publisherApplications);
+  // كل الطلبات المعلقة دائمًا (لا يختفي طلب ينتظر المراجعة)، وأحدث 200 من المراجَعة.
+  const applications =
+    where
+      ? await select().where(where).orderBy(desc(publisherApplications.createdAt)).limit(500)
+      : [
+          ...(await select()
+            .where(eq(publisherApplications.status, "pending"))
+            .orderBy(desc(publisherApplications.createdAt))),
+          ...(await select()
+            .where(sql`${publisherApplications.status} <> 'pending'`)
+            .orderBy(desc(publisherApplications.createdAt))
+            .limit(200)),
+        ];
 
   const statusRows = await db
     .select({ status: publisherApplications.status, n: count() })

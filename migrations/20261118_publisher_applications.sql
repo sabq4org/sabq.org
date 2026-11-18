@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS publisher_applications (
 );
 CREATE INDEX IF NOT EXISTS publisher_applications_status_idx ON publisher_applications (status, created_at);
 CREATE INDEX IF NOT EXISTS publisher_applications_login_email_idx ON publisher_applications (login_email);
+-- طلب معلق واحد فقط لكل بريد وبريد دخول (يمنع تكرار الطلبات المتزامنة).
+CREATE UNIQUE INDEX IF NOT EXISTS publisher_applications_pending_login_email_uidx ON publisher_applications (lower(login_email)) WHERE status = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS publisher_applications_pending_email_uidx ON publisher_applications (lower(email)) WHERE status = 'pending';
 
 -- حساب التطبيق: قراءة وإضافة وتحديث، بلا حذف.
 DO $$
