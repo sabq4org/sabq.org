@@ -81,6 +81,7 @@ const EXEMPT_PATHS = [
   "/api/email-agent/webhook",  // SendGrid inbound parse webhook
   "/api/correspondent-applications",  // Public reporter registration form
   "/api/opinion-author-applications",  // Public opinion author registration form
+  "/api/publisher-applications",  // Public publisher (agency) registration form
   "/api/accessibility/track",  // Accessibility tracking for anonymous users
   // NOTE: Do NOT add a broad "/api/articles/" prefix here. EXEMPT_PATHS uses
   // startsWith matching, so a prefix would silently disable CSRF on every

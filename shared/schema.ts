@@ -10149,6 +10149,48 @@ export type PublisherRenewalOffer = {
 
 export type PublisherRequest = typeof publisherRequests.$inferSelect;
 
+// طلبات تسجيل الناشرين من الرابط العام /publisher/register (2026-11-18).
+// المتقدم لا يضع كلمة مرور: عند القبول تُنشأ كلمة مؤقتة وتُرسل لبريد الدخول.
+// حقول الإدارة (publishingEndsAt/autoPublish/isActive/notes) تُضبط عند القبول.
+export const publisherApplications = pgTable("publisher_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agencyName: text("agency_name").notNull(),
+  agencyNameEn: text("agency_name_en"),
+  contactPerson: text("contact_person").notNull(),
+  contactPersonEn: text("contact_person_en"),
+  email: text("email").notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  logoUrl: text("logo_url").notNull(),
+  commercialRegistration: text("commercial_registration"),
+  taxNumber: text("tax_number"),
+  address: text("address"),
+  loginFirstName: text("login_first_name").notNull(),
+  loginLastName: text("login_last_name").notNull(),
+  loginEmail: text("login_email").notNull(),
+  consentAt: timestamp("consent_at").notNull(),
+  // pending | approved | rejected
+  status: text("status").default("pending").notNull(),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  createdPublisherId: varchar("created_publisher_id").references(() => publishers.id, { onDelete: "set null" }),
+  createdUserId: varchar("created_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("publisher_applications_status_idx").on(table.status, table.createdAt),
+  index("publisher_applications_login_email_idx").on(table.loginEmail),
+  // طلب معلق واحد فقط لكل بريد وبريد دخول، حتى مع طلبين متزامنين.
+  uniqueIndex("publisher_applications_pending_login_email_uidx")
+    .on(sql`lower(${table.loginEmail})`)
+    .where(sql`status = 'pending'`),
+  uniqueIndex("publisher_applications_pending_email_uidx")
+    .on(sql`lower(${table.email})`)
+    .where(sql`status = 'pending'`),
+]);
+
+export type PublisherApplication = typeof publisherApplications.$inferSelect;
+export type InsertPublisherApplication = typeof publisherApplications.$inferInsert;
+
 // Relations
 export const publishersRelations = relations(publishers, ({ one, many }) => ({
   user: one(users, {
