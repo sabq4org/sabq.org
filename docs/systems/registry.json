@@ -520,6 +520,7 @@
         "tests/unit/enDashboardAccess.test.ts",
         "server/services/botEditorReads.ts",
         "server/services/botEditorWrites.ts",
+        "server/services/enHomepageOrder.ts",
         "server/services/botEditorAudit.ts",
         "server/services/botEditorOperationsAudit.ts",
         "server/services/botEditorMedia.ts",

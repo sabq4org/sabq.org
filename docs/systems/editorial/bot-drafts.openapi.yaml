@@ -2663,7 +2663,7 @@ components:
         publishAt:
           {
             type: string,
-            description: ISO-8601 مع إزاحة، مثال 2026-12-01T18:30:00+03:00
+            description: "ISO-8601 مع إزاحة، مثال 2026-12-01T18:30:00+03:00"
           }
     ArchiveBody:
       type: object
@@ -2789,8 +2789,7 @@ components:
           {
             type: string,
             format: uri,
-            description: رابط R2 العام https://media.sabq.org/news/… لتمريره كـ imageUrl
-              (غلاف) أو داخل imageUrls (متن)
+            description: "رابط R2 العام https://media.sabq.org/news/… لتمريره كـ imageUrl (غلاف) أو داخل imageUrls (متن)"
           }
         imageId: { type: string, nullable: true }
         filename: { type: string }

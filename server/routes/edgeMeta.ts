@@ -1,3 +1,4 @@
+import { enHomepageOrder } from "../services/enHomepageOrder";
 /**
  * Edge metadata endpoints for the Cloudflare Worker that fronts the
  * Vercel-hosted frontend. The worker calls these to:
@@ -1635,8 +1636,8 @@ const ROUTE_HANDLERS: RouteHandler[] = [
             title: enArticles.title,
           })
           .from(enArticles)
-          .where(eq(enArticles.status, "published"))
-          .orderBy(desc(enArticles.publishedAt))
+          .where(and(eq(enArticles.status, "published"), eq(enArticles.hideFromHomepage, false)))
+          .orderBy(enHomepageOrder(), desc(enArticles.publishedAt), desc(enArticles.id))
           .limit(60),
         db
           .select({ name: enCategories.name, slug: enCategories.slug })
