@@ -8,6 +8,7 @@ import { isFcmConfigured, sendToFcmTargets } from "./fcmService";
 import { createPushBroadcastPacer } from "./pushBroadcastPacer";
 import { recordBotEditorOperation } from "./botEditorOperationsAudit";
 import { recordBotEditorAudit } from "./botEditorAudit";
+import { assertNotProtected } from "./botEditorCapabilityGuard";
 import { SABQ_READER_BUNDLE_ID } from "./deviceRegistrationPolicy";
 import { SABQ_ANDROID_BUNDLE_IDS } from "./fcmRouting";
 
@@ -31,6 +32,7 @@ export function isEligibleBotPushDevice(device: { platform: string; bundleId: st
 /** At most one attempt per article and language. A crash or uncertain transport never retries automatically. */
 export async function pushBotArticle(language: string, articleId: string, body: unknown, actorId: string | null) {
   validateBotPushRequest(language, articleId, body);
+  assertNotProtected(articleId);
   let lease;
   try { lease = acquirePushBroadcast("news"); } catch (error) {
     if (error instanceof PushBroadcastCapacityError) throw new BotEditorPushError(429, "push_broadcast_capacity", "يوجد بث قيد التنفيذ، حاول لاحقًا");

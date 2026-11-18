@@ -1602,7 +1602,10 @@ paths:
                   {
                     prompt: { type: string, minLength: 3, maxLength: 2000 },
                     style: { type: string, maxLength: 200 },
-                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] },
+                    intent: { type: string, enum: [ realistic, illustration, explanatory ], description: "realistic=صورة واقعية، illustration=رسم/كاريكاتير، explanatory=إنفوجرافيك توضيحي" },
+                    model: { type: string, enum: [ gemini-nano-banana-2.1, gemini-3-pro-image-preview, recraft-v3, flux-1.1-pro, ideogram-2 ] },
+                    styleSlug: { type: string, maxLength: 50, pattern: "^[a-z0-9-]+$", description: "نمط من لوحة الأنماط (image_styles)" }
                   }
               }
       responses:
@@ -1761,7 +1764,10 @@ paths:
                 properties:
                   {
                     style: { type: string, maxLength: 200 },
-                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] },
+                    intent: { type: string, enum: [ realistic, illustration, explanatory ], description: "realistic=صورة واقعية، illustration=رسم/كاريكاتير، explanatory=إنفوجرافيك توضيحي" },
+                    model: { type: string, enum: [ gemini-nano-banana-2.1, gemini-3-pro-image-preview, recraft-v3, flux-1.1-pro, ideogram-2 ] },
+                    styleSlug: { type: string, maxLength: 50, pattern: "^[a-z0-9-]+$", description: "نمط من لوحة الأنماط (image_styles)" }
                   }
               }
       responses:
@@ -2114,7 +2120,10 @@ paths:
                   {
                     prompt: { type: string, minLength: 3, maxLength: 2000 },
                     style: { type: string, maxLength: 200 },
-                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] },
+                    intent: { type: string, enum: [ realistic, illustration, explanatory ], description: "realistic=صورة واقعية، illustration=رسم/كاريكاتير، explanatory=إنفوجرافيك توضيحي" },
+                    model: { type: string, enum: [ gemini-nano-banana-2.1, gemini-3-pro-image-preview, recraft-v3, flux-1.1-pro, ideogram-2 ] },
+                    styleSlug: { type: string, maxLength: 50, pattern: "^[a-z0-9-]+$", description: "نمط من لوحة الأنماط (image_styles)" }
                   }
               }
       responses:
@@ -2273,7 +2282,10 @@ paths:
                 properties:
                   {
                     style: { type: string, maxLength: 200 },
-                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] },
+                    intent: { type: string, enum: [ realistic, illustration, explanatory ], description: "realistic=صورة واقعية، illustration=رسم/كاريكاتير، explanatory=إنفوجرافيك توضيحي" },
+                    model: { type: string, enum: [ gemini-nano-banana-2.1, gemini-3-pro-image-preview, recraft-v3, flux-1.1-pro, ideogram-2 ] },
+                    styleSlug: { type: string, maxLength: 50, pattern: "^[a-z0-9-]+$", description: "نمط من لوحة الأنماط (image_styles)" }
                   }
               }
       responses:
@@ -2590,6 +2602,156 @@ paths:
         "200": { description: أصبحت archived والمصدر لم يتغير }
         "405": { description: للتوكنات الأخرى على العربي، DELETE على المعرّف يبقى ممنوعاً }
         "409": { description: locked_by_editor أو draft_changed }
+  /api/internal/bot-drafts/images/generate-gpt:
+    post:
+      operationId: generateGptImageAr
+      summary: توليد صورة GPT مدفوعة (nashr-sabq فقط). 202 فوراً ثم استعلام بالمعرّف. سقف يومي BOT_EDITOR_GPT_DAILY_CAP (الافتراضي 20)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ prompt, model ], properties: { prompt: { type: string, minLength: 10, maxLength: 4000 }, model: { type: string, enum: [ gpt-image-2.5-flare, gpt-image-2.5-sunburst ] }, size: { type: string, enum: [ "1536x864", "1024x1024", "1024x1536" ] }, quality: { type: string, enum: [ low, medium, high ] }, requestId: { type: string, format: uuid } } }
+      responses:
+        "202": { description: بدأت العملية. jobId وstatus وusedToday وdailyCap }
+        "400": { description: طلب غير صالح }
+        "403": { description: "الهوية غير مخوّلة أو capability_disabled" }
+        "429": { description: "daily_cap_reached أو rate_limited" }
+        "503": { description: "not_configured: OPENAI_IMAGES_API_KEY غير مضبوط" }
+  /api/internal/bot-drafts/images/generate-gpt/{jobId}:
+    get:
+      operationId: getGptImageAr
+      summary: حالة توليد صورة GPT (processing/completed/failed) ورابط الصورة عند الاكتمال
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: الحالة }
+        "404": { description: عملية غير موجودة }
+  /api/internal/bot-drafts/images/edit:
+    post:
+      operationId: editImageAr
+      summary: تعديل صورة موجودة على سبق بتعليمات نصية وحفظ النتيجة في المكتبة (nashr-sabq فقط)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ sourceImageUrl, prompt ], properties: { sourceImageUrl: { type: string, format: uri, description: "رابط https على media.sabq.org أو Cloudflare Images فقط" }, prompt: { type: string, minLength: 3, maxLength: 2000 }, aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] } } }
+      responses:
+        "201": { description: "deliveryUrl وmedia وisAiGenerated وmodel" }
+        "422": { description: مصدر غير مسموح أو صورة غير صالحة }
+        "502": { description: فشل التوليد }
+  /api/internal/bot-drafts/media/{mediaId}:
+    delete:
+      operationId: deleteMediaAr
+      summary: حذف ملف من المكتبة (nashr-sabq فقط). لما رفعه/ولّده البوت وغير المستخدم؛ الملف الفعلي يبقى في التخزين ولقطة الصف في bot_editor_operations
+      parameters:
+        - { name: mediaId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ updateReason ], properties: { updateReason: { type: string, minLength: 3, maxLength: 500 } } }
+      responses:
+        "200": { description: "deleted: true" }
+        "403": { description: ملف ليس للبوت }
+        "404": { description: غير موجود }
+        "409": { description: الملف مستخدم في مادة }
+  /api/internal/bot-drafts/ai/titles:
+    post:
+      operationId: aiTitlesAr
+      summary: عناوين مقترحة (لا تُحفظ). articleId أو content (واحد فقط) وlanguage اختياري (nashr-sabq فقط)
+      responses:
+        "200": { description: "{ titles: string[] }" }
+        "422": { description: المتن قصير }
+  /api/internal/bot-drafts/ai/proofread:
+    post:
+      operationId: aiProofreadAr
+      summary: تدقيق لغوي لمتن أو عنوان بلا تعديل أي مادة. واحد من articleId أو content أو title (nashr-sabq فقط)
+      responses:
+        "200": { description: نتيجة التدقيق }
+  /api/internal/bot-drafts/ai/compare-headlines:
+    post:
+      operationId: aiCompareHeadlinesAr
+      summary: مقارنة عناوين من ثلاثة نماذج (تكلفة أعلى). articleId أو content (واحد فقط) وcurrentTitle اختياري (nashr-sabq فقط)
+      responses:
+        "200": { description: "{ suggestions: [{provider, model, title, error?}] }" }
+  /api/internal/bot-drafts/en/images/generate-gpt:
+    post:
+      operationId: generateGptImageEn
+      summary: توليد صورة GPT مدفوعة (nashr-sabq فقط). 202 فوراً ثم استعلام بالمعرّف. سقف يومي BOT_EDITOR_GPT_DAILY_CAP (الافتراضي 20)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ prompt, model ], properties: { prompt: { type: string, minLength: 10, maxLength: 4000 }, model: { type: string, enum: [ gpt-image-2.5-flare, gpt-image-2.5-sunburst ] }, size: { type: string, enum: [ "1536x864", "1024x1024", "1024x1536" ] }, quality: { type: string, enum: [ low, medium, high ] }, requestId: { type: string, format: uuid } } }
+      responses:
+        "202": { description: بدأت العملية. jobId وstatus وusedToday وdailyCap }
+        "400": { description: طلب غير صالح }
+        "403": { description: "الهوية غير مخوّلة أو capability_disabled" }
+        "429": { description: "daily_cap_reached أو rate_limited" }
+        "503": { description: "not_configured: OPENAI_IMAGES_API_KEY غير مضبوط" }
+  /api/internal/bot-drafts/en/images/generate-gpt/{jobId}:
+    get:
+      operationId: getGptImageEn
+      summary: حالة توليد صورة GPT (processing/completed/failed) ورابط الصورة عند الاكتمال
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: الحالة }
+        "404": { description: عملية غير موجودة }
+  /api/internal/bot-drafts/en/images/edit:
+    post:
+      operationId: editImageEn
+      summary: تعديل صورة موجودة على سبق بتعليمات نصية وحفظ النتيجة في المكتبة (nashr-sabq فقط)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ sourceImageUrl, prompt ], properties: { sourceImageUrl: { type: string, format: uri, description: "رابط https على media.sabq.org أو Cloudflare Images فقط" }, prompt: { type: string, minLength: 3, maxLength: 2000 }, aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] } } }
+      responses:
+        "201": { description: "deliveryUrl وmedia وisAiGenerated وmodel" }
+        "422": { description: مصدر غير مسموح أو صورة غير صالحة }
+        "502": { description: فشل التوليد }
+  /api/internal/bot-drafts/en/media/{mediaId}:
+    delete:
+      operationId: deleteMediaEn
+      summary: حذف ملف من المكتبة (nashr-sabq فقط). لما رفعه/ولّده البوت وغير المستخدم؛ الملف الفعلي يبقى في التخزين ولقطة الصف في bot_editor_operations
+      parameters:
+        - { name: mediaId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { type: object, additionalProperties: false, required: [ updateReason ], properties: { updateReason: { type: string, minLength: 3, maxLength: 500 } } }
+      responses:
+        "200": { description: "deleted: true" }
+        "403": { description: ملف ليس للبوت }
+        "404": { description: غير موجود }
+        "409": { description: الملف مستخدم في مادة }
+  /api/internal/bot-drafts/en/ai/titles:
+    post:
+      operationId: aiTitlesEn
+      summary: عناوين مقترحة (لا تُحفظ). articleId أو content (واحد فقط) وlanguage اختياري (nashr-sabq فقط)
+      responses:
+        "200": { description: "{ titles: string[] }" }
+        "422": { description: المتن قصير }
+  /api/internal/bot-drafts/en/ai/proofread:
+    post:
+      operationId: aiProofreadEn
+      summary: تدقيق لغوي لمتن أو عنوان بلا تعديل أي مادة. واحد من articleId أو content أو title (nashr-sabq فقط)
+      responses:
+        "200": { description: نتيجة التدقيق }
+  /api/internal/bot-drafts/en/ai/compare-headlines:
+    post:
+      operationId: aiCompareHeadlinesEn
+      summary: مقارنة عناوين من ثلاثة نماذج (تكلفة أعلى). articleId أو content (واحد فقط) وcurrentTitle اختياري (nashr-sabq فقط)
+      responses:
+        "200": { description: "{ suggestions: [{provider, model, title, error?}] }" }
 components:
   securitySchemes:
     botToken:

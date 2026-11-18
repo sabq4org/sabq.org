@@ -8,6 +8,9 @@ import { memoryCache } from "../memoryCache";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { assertBotEditorUnlocked } from "./botEditorLocks";
 import { recordBotEditorAudit } from "./botEditorAudit";
+import { assertEditorCapability, assertNotProtected } from "./botEditorCapabilityGuard";
+import { chargePublishInTx, publisherHasUsableCredit, PUBLISHER_NO_CREDITS_MESSAGE } from "./publisherCreditService";
+import type { NashrEditorCapability } from "@shared/botEditorCapabilities";
 import { demoteOtherBreaking } from "./botEditorWritesBreaking";
 import {
   BotDraftError,
@@ -49,6 +52,22 @@ export async function nashrArticleScope(language: Language, id: string): Promise
   return row.source === "bot" ? "bot" : "other";
 }
 const EDITABLE = new Set(["draft", "ready_to_publish", "scheduled", "published"]);
+
+export const NASHR_ACTION_CAPABILITY: Record<Action, NashrEditorCapability> = {
+  publish: "article.publish",
+  schedule: "article.schedule",
+  reschedule: "article.schedule",
+  unschedule: "article.schedule",
+  ready: "article.ready",
+  "revert-to-draft": "article.revision",
+  resurface: "article.revision",
+  "request-revision": "article.revision",
+  translate: "article.translate",
+};
+
+function noCreditsError() {
+  return new BotDraftError(403, "forbidden_action", PUBLISHER_NO_CREDITS_MESSAGE, { reason: "no_credits" });
+}
 
 function parseBody(action: Action, body: unknown) {
   const schema = action === "schedule" || action === "reschedule" ? nashrScheduleSchema : action === "publish" ? nashrPublishSchema : nashrConcurrencySchema;
@@ -161,6 +180,8 @@ async function translate(id: string, body: unknown) {
 
 /** Editorial lifecycle for the non-personal nashr-sabq identity. Any news source, valid statuses only. */
 export async function runNashrAction(language: Language, action: Action, id: string, body: unknown) {
+  assertEditorCapability(NASHR_ACTION_CAPABILITY[action]);
+  assertNotProtected(id);
   if (action === "translate") {
     if (language !== "ar") throw new BotDraftError(422, "forbidden_action", "الترجمة من العربي إلى الإنجليزي فقط");
     return translate(id, body);
@@ -180,6 +201,10 @@ export async function runNashrAction(language: Language, action: Action, id: str
     await assertBotEditorUnlocked(tx, language, id, before);
     const publishAt = "publishAt" in input && typeof input.publishAt === "string" ? input.publishAt : undefined;
     const patch: any = statusPatch(action, before, { publishAt }, now);
+    // خبر ناشر/وكالة: نفس بوابة الرصيد في اللوحة وفي مسار البوت. الجدولة تفحص فقط، والخصم عند النشر.
+    if (language === "ar" && (action === "schedule" || action === "reschedule") && (before as any).publisherId) {
+      if (!await publisherHasUsableCredit((before as any).publisherId, tx)) throw noCreditsError();
+    }
     if (action === "request-revision") patch.reviewNotes = input.updateReason;
     if (action === "resurface" && language === "en") patch.displayOrder = Math.floor(now.getTime() / 1000);
     if (language === "en" && !before.englishSlug && (action === "publish" || action === "schedule")) patch.englishSlug = generateEnglishSlug(before.title);
@@ -191,6 +216,10 @@ export async function runNashrAction(language: Language, action: Action, id: str
     const [saved] = await tx.update(table).set(patch).where(eq(table.id, id)).returning();
     if (!saved || saved.source !== undefined && language === "ar" && saved.source !== before.source) {
       throw new BotDraftError(409, "draft_changed", "تغيّرت المادة — أعد القراءة ثم أعد المحاولة");
+    }
+    if (language === "ar" && action === "publish" && (saved as any).publisherId) {
+      const charge = await chargePublishInTx(tx, { publisherId: (saved as any).publisherId, articleId: id, performedBy: null, note: String((saved as any).title ?? "") });
+      if (charge === "no_credits") throw noCreditsError();
     }
     if (action === "publish" && before.newsType === "breaking") {
       const demoted = await demoteOtherBreaking(tx, language, id, input.updateReason, ACTOR);

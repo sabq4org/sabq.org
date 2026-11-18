@@ -3,6 +3,7 @@
 
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { botNewsEditor } from "./botNewsEditor";
+import { assertEditorCapability, blockProtectedWrite } from "../services/botEditorCapabilityGuard";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import {
@@ -56,7 +57,7 @@ import {
   updateEnBotDraftVisibility,
 } from "../services/enBotDraftsService";
 import { isLegacyNashr } from "../services/botEditorLegacyAudit";
-import { isLegacyLifecycleBody, nashrArticleScope, runNashrAction } from "../services/botEditorLifecycle";
+import { NASHR_ACTION_CAPABILITY, isLegacyLifecycleBody, nashrArticleScope, runNashrAction } from "../services/botEditorLifecycle";
 
 const router = Router();
 const BASE = BOT_DRAFTS_EN_BASE_PATH;
@@ -84,7 +85,7 @@ async function requireBotToken(req: BotRequest, res: Response, next: NextFunctio
       const personal = await authenticatePublisherToken(raw);
       if (personal) {
         req.bot = { name: `publisher-${personal.userId}`, personal };
-        return next();
+        return blockProtectedWrite(req, res, next);
       }
     } else {
       if (!isBotDraftsConfigured()) {
@@ -93,7 +94,7 @@ async function requireBotToken(req: BotRequest, res: Response, next: NextFunctio
       const legacy = authenticateBotToken(req.headers.authorization);
       if (legacy) {
         req.bot = legacy;
-        return next();
+        return blockProtectedWrite(req, res, next);
       }
     }
     res.setHeader("WWW-Authenticate", 'Bearer realm="sabq-bot-drafts"');
@@ -168,6 +169,7 @@ function requestContext(req: Request) {
 
 async function forNashr(req: BotRequest, res: Response, action: Parameters<typeof runNashrAction>[1], label: string): Promise<boolean> {
   if (!req.bot || !isLegacyNashr(req.bot)) return false;
+  try { assertEditorCapability(NASHR_ACTION_CAPABILITY[action]); } catch (error) { handleError(res, error, label); return true; }
   if (isLegacyLifecycleBody(action, req.body ?? {})) {
     if (await nashrArticleScope("en", req.params.id) !== "other") return false;
     sendError(res, 422, { code: "validation_error", message: "updateReason و expectedUpdatedAt مطلوبان للمواد التي لم ينشئها البوت" });

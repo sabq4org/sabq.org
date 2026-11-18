@@ -605,6 +605,9 @@ export const BOT_DRAFT_ERROR_CODES = [
   "generation_failed",
   "source_article_not_found",
   "source_article_already_linked",
+  "protected_article",
+  "capability_disabled",
+  "daily_cap_reached",
 ] as const;
 
 export type BotDraftErrorCode = (typeof BOT_DRAFT_ERROR_CODES)[number];

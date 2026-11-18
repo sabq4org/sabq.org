@@ -68,3 +68,9 @@ export const botEditorArchiveSchema = z.object({
 export const botEditorEmptySchema = z.object({}).strict();
 export type BotEditorEditInput = z.infer<typeof botEditorEditSchema>;
 export type BotEditorVisibilityInput = z.infer<typeof botEditorVisibilitySchema>;
+
+/** DELETE = أرشفة ناعمة بسبب إلزامي وإصدار مادة إلزامي. */
+export const botEditorDeleteSchema = z.object({
+  updateReason: text(500).min(3, "updateReason مطلوب"),
+  expectedUpdatedAt: z.string().trim().min(1, "expectedUpdatedAt مطلوب"),
+}).strict();
