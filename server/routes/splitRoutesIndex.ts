@@ -122,6 +122,7 @@ import surveysRouter from "./surveys";
 import correspondentApplicationsRouter from "./correspondentApplications";
 import promoteCorrespondentRouter from "./promoteCorrespondent";
 import publisherPortalRouter from "./publisherPortal";
+import publisherApplicationsRouter from "./publisherApplications";
 import smartBlocksRouter from "./smartBlocks";
 import sahraaTvBlockRouter from "./sahraaTvBlock";
 import wcNumbersReportRouter from "./wcNumbersReport";
@@ -222,6 +223,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);
   app.use(promoteCorrespondentRouter);
+  app.use(publisherApplicationsRouter);
   app.use(publisherPortalRouter);
   app.use(deployWebhooksRouter);
   app.use(mailersendWebhookRouter);
