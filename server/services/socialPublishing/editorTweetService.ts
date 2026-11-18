@@ -161,7 +161,8 @@ export interface EditorTweetDeps {
   resolveArticleUrl(articleUrl: string): Promise<string>;
   /** statuses: الحالات التي تُعد تكرارًا (processing/published للفوري، scheduled للمجدول). */
   findRecentSameTweet(input: {
-    articleId: string;
+    /** null = تغريدة حرة بلا خبر. */
+    articleId: string | null;
     actorUserId: string;
     text: string;
     since: Date;
@@ -239,7 +240,7 @@ const defaultDeps: EditorTweetDeps = {
       .from(socialPosts)
       .where(
         and(
-          eq(socialPosts.articleId, articleId),
+          articleId ? eq(socialPosts.articleId, articleId) : isNull(socialPosts.articleId),
           eq(socialPosts.createdByUserId, actorUserId),
           eq(socialPosts.text, text),
           isNull(socialPosts.publisherId),
@@ -299,10 +300,12 @@ const defaultDeps: EditorTweetDeps = {
   now: () => new Date(),
 };
 
+/** null = تغريدة حرة: لا معرّف ولا رابط خبر (نص المحرر وحده، وروابطه داخله). */
 async function loadTweetableArticle(
   target: { articleId?: string; articleUrl?: string },
   deps: EditorTweetDeps,
-): Promise<EditorTweetArticle> {
+): Promise<EditorTweetArticle | null> {
+  if (!target.articleId?.trim() && !target.articleUrl?.trim()) return null;
   const resolvedId = target.articleUrl ? await deps.resolveArticleUrl(target.articleUrl) : null;
   if (resolvedId && target.articleId && resolvedId !== target.articleId) {
     throw new SocialPublishValidationError("معرّف الخبر ورابطه لا يشيران إلى الخبر نفسه");
@@ -324,7 +327,8 @@ async function loadTweetableArticle(
 export interface EditorTweetPreview {
   /** direct = تُنشر مباشرة؛ approval = تذهب مقترحًا لمكتب سبق. */
   mode: "direct" | "approval";
-  article: { id: string; title: string; url: string; imageUrl: string | null };
+  /** null = تغريدة حرة بلا خبر. */
+  article: { id: string; title: string; url: string; imageUrl: string | null } | null;
   text: string;
   linkUrl: string | null;
   /** أول صورة (توافقًا مع العملاء الأقدم). القائمة الكاملة في imageUrls. */
@@ -358,11 +362,14 @@ export async function previewEditorTweet(
 ): Promise<EditorTweetPreview> {
   const deps: EditorTweetDeps = { ...defaultDeps, ...overrides };
   const article = await loadTweetableArticle(input, deps);
-  const useTitle = input.textSource === "title" || !input.text?.trim();
-  const text = useTitle ? article.title : input.text!.trim();
-  const linkUrl = input.includeLink ? article.url : null;
+  if (!article && !input.text?.trim()) {
+    throw new SocialPublishValidationError("اكتب نص التغريدة أو أرسل رابط خبر من سبق");
+  }
+  const useTitle = Boolean(article) && (input.textSource === "title" || !input.text?.trim());
+  const text = useTitle ? article!.title : input.text!.trim();
+  const linkUrl = article && input.includeLink ? article.url : null;
   const validation = validateXPostText(text, linkUrl);
-  const media = resolveEditorTweetMedia(input, article.imageUrl);
+  const media = resolveEditorTweetMedia(input, article?.imageUrl ?? null);
   const isVideo = media.mediaKind === "video";
   const imageUrls = isVideo
     ? []
@@ -373,14 +380,16 @@ export async function previewEditorTweet(
         : [];
   return {
     mode: input.canPublishNow ? "direct" : "approval",
-    article: { id: article.id, title: article.title, url: article.url, imageUrl: article.imageUrl },
+    article: article
+      ? { id: article.id, title: article.title, url: article.url, imageUrl: article.imageUrl }
+      : null,
     text,
     linkUrl,
     imageUrl: imageUrls[0] ?? null,
     imageUrls,
     imageSource: !isVideo && media.mediaUrls.length > 0 ? "upload" : media.imageUrl ? "article" : "none",
     videoUrl: isVideo ? media.mediaUrls[0] : null,
-    textSource: useTitle ? "title" : input.textSource ?? "custom",
+    textSource: useTitle ? "title" : article ? input.textSource ?? "custom" : "custom",
     composedText: composeXPostText(text, linkUrl),
     weightedLength: validation.weightedLength,
     valid: validation.valid && !validation.empty,
@@ -396,10 +405,13 @@ export async function submitEditorTweet(
   const text = input.text.trim();
 
   const article = await loadTweetableArticle(input, deps);
-  const lockKey = `editor-tweet:${input.actorUserId}:${article.id}`;
+  const articleId = article?.id ?? null;
+  const lockKey = `editor-tweet:${input.actorUserId}:${articleId ?? "free"}`;
+  // التغريدة الحرة: النص كما كتبه (روابطه داخله)، ولا رابط خبر ولا صورة خبر.
+  const includeLink = article ? input.includeLink : false;
 
-  const image = resolveEditorTweetMedia(input, article.imageUrl);
-  const textSource: EditorTweetTextSource = input.textSource ?? "custom";
+  const image = resolveEditorTweetMedia(input, article?.imageUrl ?? null);
+  const textSource: EditorTweetTextSource = article ? input.textSource ?? "custom" : "custom";
   const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
   if (scheduledAt) {
     try {
@@ -415,7 +427,7 @@ export async function submitEditorTweet(
     const locked = await deps.withSubmitLock(lockKey, async () => {
       const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
       const same = await deps.findRecentSameTweet({
-        articleId: article.id,
+        articleId,
         actorUserId: input.actorUserId,
         text,
         since,
@@ -423,10 +435,10 @@ export async function submitEditorTweet(
       });
       if (same) return { same, scheduled: null };
       const draft = await deps.createDraftPost({
-        articleId: article.id,
+        articleId,
         text,
         textSource,
-        includeLink: input.includeLink,
+        includeLink,
         ...image,
         createdByUserId: input.actorUserId,
       });
@@ -453,17 +465,17 @@ export async function submitEditorTweet(
     const locked = await deps.withSubmitLock(lockKey, async () => {
         const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
         const same = await deps.findRecentSameTweet({
-          articleId: article.id,
+          articleId,
           actorUserId: input.actorUserId,
           text,
           since,
         });
         if (same) return { same, claimed: null };
         const draft = await deps.createDraftPost({
-          articleId: article.id,
+          articleId,
           text,
           textSource,
-          includeLink: input.includeLink,
+          includeLink,
           ...image,
           createdByUserId: input.actorUserId,
         });
@@ -489,7 +501,7 @@ export async function submitEditorTweet(
     };
   }
 
-  const linkUrl = input.includeLink ? article.url : null;
+  const linkUrl = article && includeLink ? article.url : null;
   const validation = validateXPostText(text, linkUrl);
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
@@ -499,10 +511,10 @@ export async function submitEditorTweet(
   }
   // القفل نفسه: طلبان متزامنان من المحرر نفسه للخبر نفسه لا ينشئان مقترحين.
   const { post, updated } = await deps.withSubmitLock(lockKey, async () => {
-    const pending = await deps.findPendingProposal({
-      articleId: article.id,
-      actorUserId: input.actorUserId,
-    });
+    // التغريدة الحرة لا تُدمج في مقترح سابق: كل نص حر تغريدة مستقلة.
+    const pending = article
+      ? await deps.findPendingProposal({ articleId: article.id, actorUserId: input.actorUserId })
+      : null;
     // null = المكتب قرّر في المقترح السابق للتو؛ الطلب الحالي يصبح مقترحًا جديدًا
     // ولا يمس ما اعتُمد أو جُدول.
     const updatedPost = pending
@@ -518,10 +530,10 @@ export async function submitEditorTweet(
       : null;
     if (updatedPost) return { post: updatedPost, updated: true };
     const created = await deps.createDraftPost({
-      articleId: article.id,
+      articleId,
       text,
       textSource,
-      includeLink: input.includeLink,
+      includeLink,
       ...image,
       createdByUserId: input.actorUserId,
       // علامة المقترح؛ وحين يطلب المحرر موعدًا فهي الموعد نفسه (يملأ حقل الجدولة في اللوحة).
@@ -534,8 +546,8 @@ export async function submitEditorTweet(
   void deps
     .notifyDesk({
       post,
-      articleTitle: article.title,
-      articleUrl: article.url,
+      articleTitle: article?.title ?? "",
+      articleUrl: article?.url ?? "",
       authorUserId: input.actorUserId,
       isUpdate: updated,
       proposer: "editor",

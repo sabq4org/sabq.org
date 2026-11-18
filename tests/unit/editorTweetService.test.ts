@@ -282,14 +282,14 @@ describe("تغريدة المحرر من «نشر سبق» — حسب الصلا
     expect(deps.createDraftPost).not.toHaveBeenCalled();
   });
 
-  it("يرفض معرّفًا ورابطًا لا يشيران إلى الخبر نفسه، وغياب الاثنين", async () => {
+  it("يرفض معرّفًا ورابطًا لا يشيران إلى الخبر نفسه (غيابهما مع نص = تغريدة حرة)", async () => {
     const deps = makeDeps({ resolveArticleUrl: vi.fn(async () => "other") });
     await expect(
       submitEditorTweet({ ...input(true), articleUrl: article.url }, deps),
     ).rejects.toMatchObject({ status: 400 });
     expect(
       botDeskEditorTweetSchema.safeParse({ text: "نص" }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       botDeskEditorTweetSchema.safeParse({ articleUrl: article.url, text: "نص" }).success,
     ).toBe(true);
@@ -432,5 +432,62 @@ describe("فيديو تغريدة المحرر", () => {
     expect(() =>
       resolveEditorTweetMedia({ includeImage: true, videoUrl: "https://evil.example.test/v.mp4" }, null, true),
     ).toThrow(/مرفوض/);
+  });
+});
+
+describe("تغريدة حرة بلا خبر", () => {
+  const STATUS = "https://x.com/someone/status/2122692885657116789";
+  const free = (canPublishNow: boolean) => ({
+    text: `  نص حر\n${STATUS}  `,
+    includeLink: true,
+    includeImage: true,
+    actorUserId: "u1",
+    canPublishNow,
+  });
+
+  it("المخطط يقبل نصًا بلا خبر ويرفض الفراغ التام", () => {
+    expect(botDeskEditorTweetSchema.safeParse({ text: "نص حر" }).success).toBe(true);
+    expect(botDeskEditorTweetSchema.safeParse({ text: " " }).success).toBe(false);
+  });
+
+  it("صاحب صلاحية النشر: تُنشر بلا خبر ولا رابط خبر ولا صورة خبر", async () => {
+    const deps = makeDeps();
+    const result = await submitEditorTweet(free(true), deps);
+    expect(result.mode).toBe("published");
+    expect(deps.loadArticle).not.toHaveBeenCalled();
+    expect((deps.findRecentSameTweet as any).mock.calls[0][0].articleId).toBeNull();
+    expect((deps.createDraftPost as any).mock.calls[0][0]).toMatchObject({
+      articleId: null,
+      text: `نص حر\n${STATUS}`,
+      textSource: "custom",
+      includeLink: false,
+      imageSource: "none",
+      imageUrl: null,
+    });
+  });
+
+  it("بلا صلاحية النشر: مقترح جديد دائمًا (لا يُدمج في مقترح سابق) وتنبيه بلا عنوان خبر", async () => {
+    const deps = makeDeps({ findPendingProposal: vi.fn(async () => post({ id: "p9" })) });
+    const result = await submitEditorTweet(free(false), deps);
+    expect(result).toMatchObject({ mode: "pending_approval", updated: false });
+    expect(deps.findPendingProposal).not.toHaveBeenCalled();
+    expect((deps.createDraftPost as any).mock.calls[0][0]).toMatchObject({ articleId: null, requestedAt: NOW });
+    expect(deps.notifyDesk).toHaveBeenCalledWith(expect.objectContaining({ articleTitle: "", articleUrl: "" }));
+  });
+
+  it("تُجدول بلا خبر، والمعاينة تعيد article=null بالنص كما كُتب", async () => {
+    const deps = makeDeps();
+    const at = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const result = await submitEditorTweet({ ...free(false), canSchedule: true, scheduledAt: at }, deps);
+    expect(result.mode).toBe("scheduled");
+    expect((deps.createDraftPost as any).mock.calls[0][0].articleId).toBeNull();
+    const preview = await previewEditorTweet(
+      { text: "نص حر", textSource: "title", includeLink: true, includeImage: true, canPublishNow: false },
+      deps,
+    );
+    expect(preview).toMatchObject({ article: null, text: "نص حر", linkUrl: null, textSource: "custom", imageUrls: [] });
+    await expect(
+      previewEditorTweet({ includeLink: true, includeImage: true, canPublishNow: false }, deps),
+    ).rejects.toBeInstanceOf(SocialPublishValidationError);
   });
 });
