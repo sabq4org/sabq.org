@@ -10149,6 +10149,37 @@ export type PublisherRenewalOffer = {
 
 export type PublisherRequest = typeof publisherRequests.$inferSelect;
 
+// ملف الحملة: تجمع الوكالة فيه أخبار عميل أو مناسبة، وتستخرج منه تقرير العميل.
+// الأرشفة بدل الحذف. migrations/20261118_publisher_campaigns.sql
+export const publisherCampaigns = pgTable("publisher_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  publisherId: varchar("publisher_id").references(() => publishers.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  clientName: text("client_name"),
+  startsOn: date("starts_on", { mode: "string" }),
+  endsOn: date("ends_on", { mode: "string" }),
+  note: text("note"),
+  status: text("status").default("active").notNull(), // active | archived
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("publisher_campaigns_publisher_idx").on(table.publisherId),
+  index("publisher_campaigns_status_idx").on(table.status),
+]);
+
+export const publisherCampaignArticles = pgTable("publisher_campaign_articles", {
+  campaignId: varchar("campaign_id").references(() => publisherCampaigns.id, { onDelete: "cascade" }).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  addedBy: varchar("added_by").references(() => users.id, { onDelete: "set null" }),
+  addedAt: timestamp("added_at").defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.campaignId, table.articleId] }),
+  index("publisher_campaign_articles_article_idx").on(table.articleId),
+]);
+
+export type PublisherCampaign = typeof publisherCampaigns.$inferSelect;
+
 // طلبات تسجيل الناشرين من الرابط العام /publisher/register (2026-11-18).
 // المتقدم لا يضع كلمة مرور: عند القبول تُنشأ كلمة مؤقتة وتُرسل لبريد الدخول.
 // حقول الإدارة (publishingEndsAt/autoPublish/isActive/notes) تُضبط عند القبول.

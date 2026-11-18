@@ -73,7 +73,11 @@ export default function AdminPublisherArticles() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published" | "archived">("all");
+  // ?status=draft من قائمة «بانتظار إجراء» تفتح الصفحة على المسودات مباشرة
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published" | "archived">(() => {
+    const fromUrl = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("status");
+    return fromUrl === "draft" || fromUrl === "published" || fromUrl === "archived" ? fromUrl : "all";
+  });
   const [publisherFilter, setPublisherFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   

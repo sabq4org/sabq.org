@@ -39,7 +39,7 @@ export interface PrintReportData {
  * الألوان صريحة لأن الطباعة لا تعرف الوضع الليلي، و print-color-adjust
  * يُبقي خلفيات الأعمدة والبطاقات بدل أن يحذفها المتصفح.
  */
-const PRINT_CSS = `
+export const PRINT_CSS = `
 #publisher-print-root { display: none; }
 @media print {
   @page {
@@ -102,7 +102,7 @@ const PRINT_CSS = `
 #publisher-print-root th { border-bottom-color: #cfd9e2 !important; }
 `;
 
-function usualText(value: VsUsual | null) {
+export function usualText(value: VsUsual | null) {
   if (!value) return "مبكر للحكم";
   if (value.ratio >= 2) return `×${value.ratio.toLocaleString("en-US", { maximumFractionDigits: 1 })} المعتاد`;
   if (value.ratio >= 1.1) return "فوق المعتاد";
