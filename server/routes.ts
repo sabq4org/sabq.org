@@ -17128,32 +17128,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "Content is required" });
       }
 
-      // Dynamic import to avoid circular dependencies
-      const { aiManager, AI_MODELS } = await import("./ai-manager");
-
-      // Build prompt
-      const prompt = `أنت محرر خبير في كتابة العناوين الصحفية الجذابة باللغة العربية.
-
-المحتوى:
-${content.substring(0, 500)}...
-
-${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
-المطلوب: اقترح عنوانًا واحدًا جذابًا وواضحًا يلخص المحتوى (لا تكتب أي شيء آخر، فقط العنوان).`;
-
-      // Generate titles from 3 different AI models in parallel
-      const results = await aiManager.generateMultiple(prompt, [
-        { ...AI_MODELS.GPT5, maxTokens: 512, feature: "content-tools" },
-        { ...AI_MODELS.CLAUDE_SONNET, maxTokens: 512, temperature: 0.8, feature: "content-tools" },
-        { ...AI_MODELS.GEMINI_FLASH, maxTokens: 512, temperature: 0.8, feature: "content-tools" },
-      ]);
-
-      // Clean up titles (remove quotes, extra whitespace)
-      const suggestions = results.map((result) => ({
-        provider: result.provider,
-        model: result.model,
-        title: result.content.replace(/^["']|["']$/g, '').trim(),
-        error: result.error,
-      }));
+      const { compareHeadlines } = await import("./services/headlineCompareService");
+      const suggestions = await compareHeadlines(content, currentTitle);
 
       res.json({ suggestions });
     } catch (error) {

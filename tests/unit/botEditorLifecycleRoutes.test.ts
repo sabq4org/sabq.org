@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ nashr: vi.fn(), missing: vi.fn() }));
+const state = vi.hoisted(() => ({ nashr: vi.fn(), missing: vi.fn(), del: vi.fn() }));
 vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/rbac", () => ({ logActivity: vi.fn() }));
 vi.mock("../../server/memoryCache", () => ({ memoryCache: { invalidatePattern: vi.fn(), delete: vi.fn() }, CACHE_TTL: {} }));
@@ -38,6 +38,7 @@ vi.mock("../../server/services/enBotDraftsService", async (original) => {
 vi.mock("../../server/services/botEditorWrites", () => ({
   editBotArticle: vi.fn(),
   transitionBotArticle: state.nashr,
+  deleteBotArticle: state.del,
   changeBotVisibility: vi.fn(),
 }));
 
@@ -117,8 +118,9 @@ describe("nashr lifecycle routes", () => {
     expect((await call("POST", `${root}/a/translate-to-english`, nashr, {})).status).toBe(200);
     expect(state.nashr).toHaveBeenCalledWith(language, "translate", "a", expect.anything());
     expect((await call("POST", `${root}/a/translate-to-english`, other, {})).status).toBe(403);
-    expect((await call("DELETE", `${root}/a`, nashr, { updateReason: "حذف مسودة" })).status).toBe(200);
-    expect(state.nashr).toHaveBeenCalledWith(language, "a", "archive", expect.objectContaining({ updateReason: "حذف مسودة" }));
+    state.del.mockResolvedValue({ ok: true });
+    expect((await call("DELETE", `${root}/a`, nashr, { updateReason: "حذف مسودة", expectedUpdatedAt: "2026-01-01T00:00:00Z" })).status).toBe(200);
+    expect(state.del).toHaveBeenCalledWith(language, "a", expect.objectContaining({ updateReason: "حذف مسودة", expectedUpdatedAt: "2026-01-01T00:00:00Z" }));
     const denied = await call("DELETE", `${root}/a`, other, {});
     expect(denied.status).toBe(language === "ar" ? 405 : 403);
   });
