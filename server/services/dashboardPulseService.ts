@@ -56,17 +56,6 @@ export interface DashboardPulseStats {
     title: string;
     scheduledAt: Date | null;
   }>;
-  /** أقدم المسودات المرفوعة للمراجعة أولًا (لوحة مدير المحتوى «بانتظار قرارك»). */
-  reviewQueue: Array<{
-    id: string;
-    title: string;
-    articleType: string;
-    categoryName: string | null;
-    authorName: string | null;
-    /** informational only (#1839): لا يمنع النشر. */
-    riskLabel: string | null;
-    waitingSince: Date;
-  }>;
   hourlyViews: Array<{ hour: string; views: number }>;
   generatedAt: string;
 }
@@ -110,7 +99,6 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
     [userStats],
     trendingArticles,
     upcomingSchedule,
-    reviewQueue,
   ] = await Promise.all([
     db
       .select({
@@ -193,24 +181,6 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       .where(and(eq(articles.status, "scheduled"), gte(articles.scheduledAt, now)))
       .orderBy(asc(articles.scheduledAt))
       .limit(8),
-    // نفس شرط عدّاد pendingReview أعلاه حتى يطابق الرقمُ القائمة.
-    db
-      .select({
-        id: articles.id,
-        title: articles.title,
-        articleType: articles.articleType,
-        categoryName: categories.nameAr,
-        authorFirstName: users.firstName,
-        authorLastName: users.lastName,
-        riskLabel: articles.riskLabel,
-        waitingSince: articles.updatedAt,
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.status, "draft"), eq(articles.reviewStatus, "pending_review")))
-      .orderBy(asc(articles.updatedAt))
-      .limit(5),
   ]);
   const hourlyViews = viewsBlock.hourly;
 
@@ -247,10 +217,6 @@ async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
       recentViews: Number(article.recentViews),
     })),
     upcomingSchedule,
-    reviewQueue: reviewQueue.map(({ authorFirstName, authorLastName, ...item }) => ({
-      ...item,
-      authorName: [authorFirstName, authorLastName].filter(Boolean).join(" ").trim() || null,
-    })),
     hourlyViews: hourlyViews.map((point) => ({
       hour: point.hour,
       views: Number(point.views),

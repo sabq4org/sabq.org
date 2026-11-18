@@ -1,5 +1,5 @@
 import { Router, type Request } from "express";
-import { requireAuth, requireAnyPermission, userHasPermission } from "../rbac";
+import { requireAuth, requireAnyPermission } from "../rbac";
 import { getDashboardPulseStats } from "../services/dashboardPulseService";
 import { storage } from "../storage";
 
@@ -23,11 +23,7 @@ router.get(
         return res.status(403).json({ message: "هذه الإحصاءات غير متاحة لدور المراسل" });
       }
 
-      const pulse = await getDashboardPulseStats();
-      // عناوين مسودات الآخرين لمن يملك تحرير أي مادة فقط؛ كاتب الرأي مثلًا يملك
-      // dashboard.view_stats ولا يحق له الاطلاع على مسودات غيره.
-      const canSeeOthersDrafts = userId ? await userHasPermission(userId, "articles.edit_any") : false;
-      res.json(canSeeOthersDrafts ? pulse : { ...pulse, reviewQueue: [] });
+      res.json(await getDashboardPulseStats());
     } catch (error) {
       console.error("[Dashboard Pulse] Failed to build newsroom pulse:", error);
       res.status(500).json({ message: "تعذر تحميل نبض غرفة الأخبار" });
