@@ -118,7 +118,7 @@ function DeferredArticleSection({ children, minHeight = 120 }: { children: React
   );
 }
 
-export default function ArticleDetail() {
+export default function ArticleDetail({ article, isLoading }: { article: ArticleWithDetails | undefined; isLoading: boolean }) {
   const { slug } = useParams<{ slug: string }>();
   // Start sidebar data before the article-loading return (the chart can stay lazy).
   const insightsQuery = useArticleInsights(slug);
@@ -130,15 +130,6 @@ export default function ArticleDetail() {
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
     retry: false,
-  });
-
-  const { data: article, isLoading } = useQuery<ArticleWithDetails>({
-    queryKey: ["/api/articles", slug],
-    // Editorial credibility: corrections must surface instantly. Override the
-    // global 5min staleTime and refetch on tab focus so editors verifying
-    // their own save (and readers returning to the tab) see the latest copy.
-    staleTime: 0,
-    refetchOnWindowFocus: true,
   });
 
   // المحتوى الرئيسي جاهز → حرّر طبقة الإعلانات المؤجلة (انظر index.html)
