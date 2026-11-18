@@ -60,7 +60,7 @@ describe("burst cache layers (Pages over the api.sabq.org Worker)", () => {
     expect(fetchOrigin).toHaveBeenCalledTimes(1);
     const warm = await read("", "EN-gb");
     expect(warm?.headers.get("x-edge-cache")).toBe("HIT");
-    expect(warm?.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    expect(warm?.headers.get("cache-control")).toBe("public, max-age=3600, s-maxage=300");
     expect(await (await read("", "ar-SA"))!.json()).toEqual({ lang: "ar" });
     expect((await read("", "ur"))?.headers.get("x-edge-cache")).toBe("HIT");
     expect(fetchOrigin).toHaveBeenCalledTimes(2);
@@ -83,6 +83,46 @@ describe("burst cache layers (Pages over the api.sabq.org Worker)", () => {
     expect(await read("", "en-US", { cookie: "connect.sid=fixture" })).toBeNull();
     expect(await read("", "en-US", { authorization: "Bearer fixture" })).toBeNull();
     expect(await read("", "en-US", { "x-session-id": "fixture" })).toBeNull();
+  });
+
+  it.each([
+    { maxAge: 3600, browserAtOrigin: 3500, browserAtPages: 3480, browserAtHit: 3470 },
+    { maxAge: 115, browserAtOrigin: 15, browserAtPages: 0, browserAtHit: 0 },
+    { maxAge: 0, browserAtOrigin: 0, browserAtPages: 0, browserAtHit: 0 },
+  ])("keeps the competitions browser max-age $maxAge independent from shared freshness across both layers", async ({
+    maxAge, browserAtOrigin, browserAtPages, browserAtHit,
+  }) => {
+    vi.useFakeTimers();
+    const start = Date.UTC(2026, 10, 18, 0);
+    vi.setSystemTime(start);
+    const worker = createPublicApiBurstCache();
+    const pages = createPublicApiBurstCache();
+    const workerCache = memoryCache();
+    const pagesCache = memoryCache();
+    const request = (host: string) => new Request(`https://${host}/api/sports/competitions`);
+    const fetchOrigin = vi.fn(async () => Response.json({}, { headers: {
+      "cache-control": `public, max-age=${maxAge}, s-maxage=350`,
+      "x-sabq-public-cache": "1",
+      "vary": "Accept-Language",
+      "date": new Date(start - 90_000).toUTCString(),
+      "age": "100",
+    } }));
+    const fromWorker = () => worker(request("api.sabq.org"), { cache: workerCache, fetchOrigin, waitUntil });
+    const fromPages = () => pages(request("sabq.org"), { cache: pagesCache, fetchOrigin: fromWorker, waitUntil });
+    const check = (response: Response | null, browser: number, shared: number) => {
+      expect(response!.headers.get("cache-control")).toBe(`public, max-age=${browser}, s-maxage=${shared}`);
+      expect(response!.headers.get("cdn-cache-control")).toBe(`public, max-age=${shared}`);
+      expect(response!.headers.get("date")).toBe(new Date().toUTCString());
+      expect(response!.headers.get("age")).toBeNull();
+    };
+    check(await fromWorker(), browserAtOrigin, 250);
+    vi.setSystemTime(start + 20_000);
+    check(await fromPages(), browserAtPages, 230);
+    vi.setSystemTime(start + 30_000);
+    const hit = await fromPages();
+    expect(hit!.headers.get("x-edge-cache")).toBe("HIT");
+    check(hit, browserAtHit, 220);
+    expect(fetchOrigin).toHaveBeenCalledTimes(1);
   });
 
   it("hands on only the TTL a Worker hit has left, and Pages keeps no more than that", async () => {

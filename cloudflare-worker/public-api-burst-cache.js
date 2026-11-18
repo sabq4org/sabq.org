@@ -104,7 +104,7 @@ function positiveCacheDirective(cacheControl, name) {
   return { present: !!match, value: match ? Number(match[1]) : 0 };
 }
 
-function publicOriginTtl(response, routeTtl, path, requestOrigin = "") {
+function publicOriginTtl(response, routeTtl, path, requestOrigin = "", age = 0) {
   if (response.headers.get("X-Sabq-Public-Cache") !== "1") return 0;
   const cacheControl = (response.headers.get("cache-control") || "").toLowerCase();
   const directives = cacheControl.split(",").map((directive) => directive.trim().split("=", 1)[0]);
@@ -120,7 +120,7 @@ function publicOriginTtl(response, routeTtl, path, requestOrigin = "") {
   const sMaxAge = positiveCacheDirective(cacheControl, "s-maxage");
   // An explicit s-maxage=0 overrides a positive max-age at shared caches.
   const originTtl = sMaxAge.present ? sMaxAge.value : maxAge.value;
-  return originTtl > 0 ? Math.min(routeTtl, originTtl) : 0;
+  return Math.max(0, Math.min(routeTtl, originTtl - age));
 }
 
 // Seconds an entry has spent in cache: the Cache API's Age, or our own stamp.
@@ -129,6 +129,27 @@ function newPublicApiEntryAge(response, now = Date.now()) {
   const storedAt = Number.parseInt(response.headers.get(NEW_PUBLIC_API_STORED_AT) || "", 10);
   const stampAge = Number.isFinite(storedAt) ? Math.floor((now - storedAt) / 1000) : 0;
   return Math.max(Number.isFinite(age) ? age : 0, stampAge, 0);
+}
+
+// Convert upstream HTTP freshness to remaining seconds before handing it to
+// another layer. Updating Date with the budgets avoids counting the age twice.
+function competitionsResponseAge(response, now) {
+  const date = Date.parse(response.headers.get("date") || "");
+  const dateAge = Number.isFinite(date) ? Math.floor((now - date) / 1000) : 0;
+  const age = Number.parseInt(response.headers.get("age") || "", 10);
+  return Math.max(0, Number.isFinite(age) ? age : 0, dateAge);
+}
+
+function setPublicResponseTtls(headers, sharedTtl, path, age, asOf) {
+  let browserTtl = 0;
+  if (path === COMPETITIONS_PATH) {
+    const cacheControl = (headers.get("cache-control") || "").toLowerCase();
+    browserTtl = Math.max(0, positiveCacheDirective(cacheControl, "max-age").value - age);
+    headers.delete("age");
+    headers.set("date", new Date(asOf).toUTCString());
+  }
+  headers.set("Cache-Control", `public, max-age=${browserTtl}, s-maxage=${sharedTtl}`);
+  headers.set("CDN-Cache-Control", `public, max-age=${sharedTtl}`);
 }
 
 function newPublicApiResultResponse(result) {
@@ -233,7 +254,9 @@ async function fetchNewPublicApiResult(request, policy, fetchOrigin, runtime) {
 
   const path = new URL(request.url).pathname;
   const requestOrigin = request.headers.get("origin") || "";
-  const ttl = publicOriginTtl(res, policy.ttl, path, requestOrigin);
+  const receivedAt = Date.now();
+  const upstreamAge = path === COMPETITIONS_PATH ? competitionsResponseAge(res, receivedAt) : 0;
+  const ttl = publicOriginTtl(res, policy.ttl, path, requestOrigin, upstreamAge);
   const contentType = (res.headers.get("content-type") || "").toLowerCase();
   if (!ttl || !contentType.includes("application/json")) {
     return { shareable: false, response: res };
@@ -256,9 +279,8 @@ async function fetchNewPublicApiResult(request, policy, fetchOrigin, runtime) {
   const headers = new Headers(res.headers);
   headers.delete("content-encoding");
   headers.delete("content-length");
-  headers.set("Cache-Control", `public, max-age=0, s-maxage=${ttl}`);
-  headers.set("CDN-Cache-Control", `public, max-age=${ttl}`);
-  headers.set(NEW_PUBLIC_API_STORED_AT, String(Date.now()));
+  setPublicResponseTtls(headers, ttl, path, upstreamAge, receivedAt);
+  headers.set(NEW_PUBLIC_API_STORED_AT, String(path === COMPETITIONS_PATH ? receivedAt : Date.now()));
   const result = {
     shareable: true,
     body,
@@ -306,7 +328,8 @@ export function createPublicApiBurstCache() {
 
     // Keep origin evaluation of conditional requests, including a bodyless
     // 304, independent of cached or in-flight unconditional list responses.
-    if (new URL(request.url).pathname === COMPETITIONS_PATH &&
+    const path = new URL(request.url).pathname;
+    if (path === COMPETITIONS_PATH &&
         (request.headers.has("if-none-match") || request.headers.has("if-modified-since") ||
          request.headers.has("if-match") || request.headers.has("if-unmodified-since"))) {
       const result = await safeFetchNewPublicApiResult(request, policy, fetchOrigin, { ...runtime, canStore: () => false });
@@ -324,12 +347,14 @@ export function createPublicApiBurstCache() {
       // Pages runs this module too and fetches api.sabq.org on its own miss:
       // a hit must carry only the TTL it has left, or the second layer keeps
       // an already aged copy for a full window again.
+      const checkedAt = Date.now();
+      const entryAge = newPublicApiEntryAge(hit, checkedAt);
       const remainingTtl = publicOriginTtl(
         hit,
         policy.ttl,
-        new URL(policy.key.url).pathname,
+        path,
         request.headers.get("origin") || "",
-      ) - newPublicApiEntryAge(hit);
+      ) - entryAge;
       const hitContractValid =
         hit.status === 200 &&
         !hit.headers.has("set-cookie") &&
@@ -342,8 +367,7 @@ export function createPublicApiBurstCache() {
             JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(bodyResult.body));
             const headers = new Headers(hit.headers);
             headers.set("x-edge-cache", "HIT");
-            headers.set("Cache-Control", `public, max-age=0, s-maxage=${remainingTtl}`);
-            headers.set("CDN-Cache-Control", `public, max-age=${remainingTtl}`);
+            setPublicResponseTtls(headers, remainingTtl, path, entryAge, checkedAt);
             headers.delete("age");
             return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers });
           } catch (_) { /* discard malformed entry below */ }
