@@ -8,7 +8,7 @@ import { memoryCache } from "../memoryCache";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { assertBotEditorUnlocked } from "./botEditorLocks";
 import { recordBotEditorAudit } from "./botEditorAudit";
-import { assertEditorCapability, assertNotProtected } from "./botEditorCapabilityGuard";
+import { assertEditorCapability, assertNashrArticleType, assertNotProtected } from "./botEditorCapabilityGuard";
 import { chargePublishInTx, publisherHasUsableCredit, PUBLISHER_NO_CREDITS_MESSAGE } from "./publisherCreditService";
 import type { NashrEditorCapability } from "@shared/botEditorCapabilities";
 import { demoteOtherBreaking } from "./botEditorWritesBreaking";
@@ -196,7 +196,7 @@ export async function runNashrAction(language: Language, action: Action, id: str
     if (action === "publish" && preview?.newsType === "breaking") await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sabq-bot-editor-breaking'))`);
     const [before] = await tx.select().from(table).where(eq(table.id, id)).limit(1).for("update");
     if (!before) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
-    if (before.articleType !== "news" && before.articleType !== "infographic") throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
+    assertNashrArticleType(language, before.articleType, action);
     if (before.updatedAt?.getTime() !== new Date(input.expectedUpdatedAt).getTime()) throw new BotDraftError(409, "draft_changed", "تغيّرت المادة — أعد القراءة ثم أعد المحاولة");
     await assertBotEditorUnlocked(tx, language, id, before);
     const publishAt = "publishAt" in input && typeof input.publishAt === "string" ? input.publishAt : undefined;

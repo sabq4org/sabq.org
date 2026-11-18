@@ -9,7 +9,7 @@ import { hasMeaningfulEditorialChange } from "../utils/editorialDates";
 import { assertBotEditorUnlocked } from "./botEditorLocks";
 import { BotDraftError, appendBotDraftBodyImages, normalizeDraftContent } from "./botDraftsService";
 import { recordBotEditorAudit } from "./botEditorAudit";
-import { assertNotProtected } from "./botEditorCapabilityGuard";
+import { assertNashrArticleType, assertNotProtected } from "./botEditorCapabilityGuard";
 import { invalidateClearedBreakingArticles } from "./breakingNewsService";
 import { botEditorAssignableStaff } from "./botEditorWritesRoster";
 import { demoteOtherBreaking } from "./botEditorWritesBreaking";
@@ -63,9 +63,7 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
     if ((operation === "visibility" || operation === "edit") && input.newsType === "breaking") await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sabq-bot-editor-breaking'))`);
     const [before]: any[] = await tx.select().from(table).where(eq(table.id, id)).limit(1).for("update");
     if (!before) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
-    if (before.articleType !== "news" && before.articleType !== "infographic") {
-      throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
-    }
+    assertNashrArticleType(language, before.articleType, operation);
     if (guard && before.updatedAt?.getTime() !== guard.expectedUpdatedAt.getTime()) throw new BotDraftError(409, "draft_changed", "تغيّرت المادة أثناء التوليد — لم يُحفظ شيء");
     await assertBotEditorUnlocked(tx, language, id, before);
     const now = new Date();
@@ -280,7 +278,7 @@ export async function assertBotEditorEditable(language: BotEditorLanguage, id: s
   await db.transaction(async (tx) => {
     const [row]: any[] = await tx.select().from(table).where(eq(table.id, id)).limit(1).for("update");
     if (!row) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
-    if (row.articleType !== "news" && row.articleType !== "infographic") throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
+    assertNashrArticleType(language, row.articleType, "edit");
     if (!editable.has(row.status)) throw new BotDraftError(409, "not_a_draft", "حالة المادة لا تسمح بالتعديل", { status: row.status });
     await assertBotEditorUnlocked(tx, language, id, row);
   });
