@@ -1,6 +1,8 @@
 import { Router, type Request, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
 import { BotDraftError, type BotIdentity } from "../services/botDraftsService";
+import { requireEditorCap } from "../services/botEditorCapabilityGuard";
+import type { NashrEditorCapability } from "@shared/botEditorCapabilities";
 
 type Language = "ar" | "en";
 type EditorRequest = Request & { bot?: BotIdentity };
@@ -20,16 +22,13 @@ function operationLimiter(setting: string, fallback: number) {
 const generationLimit = operationLimiter("BOT_DRAFTS_EXTRAS_RATE_LIMIT", 10);
 const pushLimit = operationLimiter("BOT_DRAFTS_PUSH_RATE_LIMIT", 2);
 
-/** Mounted after legacy static paths and before /:id. Only shared routes fall through. */
+/**
+ * Mounted after legacy static paths and before /:id. Only shared routes fall through.
+ * كل مسار محروس بقدرة مسمّاة (shared/botEditorCapabilities.ts) بدل فحص اسم البوت،
+ * ومفتاح BOT_EDITOR_DISABLED_CAPS يعطّل أي قدرة بلا إعادة نشر.
+ */
 export function botNewsEditor(language: Language, authenticate: RequestHandler, writeLimit: RequestHandler) {
   const router = Router();
-  function authorize(shared: boolean): RequestHandler {
-    return (req: EditorRequest, res, next) => {
-      if (req.bot?.name === "nashr-sabq" && !req.bot.personal) return next();
-      if (shared) return next("router");
-      res.status(403).json({ code: "forbidden_action", message: "هذه العملية مخصصة لبوت نشر سبق" });
-    };
-  }
   type Action = (req: Request) => Promise<unknown>;
   function endpoint(action: Action, status = 200, readOperation?: string): RequestHandler {
     return async (req, res) => {
@@ -56,56 +55,70 @@ export function botNewsEditor(language: Language, authenticate: RequestHandler, 
       }
     };
   }
-  const exclusive = [authenticate, authorize(false)];
-  const shared = [authenticate, authorize(true)];
+  const exclusive = (cap: NashrEditorCapability) => [authenticate, requireEditorCap(cap)];
+  const shared = (cap: NashrEditorCapability) => [authenticate, requireEditorCap(cap, { shared: true })];
   const reads = () => import("../services/botEditorReads");
   const media = () => import("../services/botEditorMedia");
   const writes = () => import("../services/botEditorWrites");
+  const ai = () => import("../services/botEditorAi");
+  const gpt = () => import("../services/botEditorGptImages");
 
-  router.get("/", ...exclusive, endpoint(async req => (await reads()).listBotArticles(language, req.query), 200, "list_articles"));
+  router.get("/", ...exclusive("article.read"), endpoint(async req => (await reads()).listBotArticles(language, req.query), 200, "list_articles"));
   for (const kind of ["categories", "authors", "tags"]) {
-    router.get("/" + kind, ...exclusive, endpoint(async req => (await reads()).readBotReference(language, kind, req.query), 200, "list_" + kind));
+    router.get("/" + kind, ...exclusive("article.read"), endpoint(async req => (await reads()).readBotReference(language, kind, req.query), 200, "list_" + kind));
   }
-  router.get("/media/search", ...exclusive, endpoint(async req => (await media()).searchBotMedia(language, req.query), 200, "search_media"));
-  router.post("/images/generate", ...exclusive, writeLimit, generationLimit,
+  router.get("/media/search", ...exclusive("media.search"), endpoint(async req => (await media()).searchBotMedia(language, req.query), 200, "search_media"));
+  router.delete("/media/:mediaId", ...exclusive("media.delete"), writeLimit,
+    endpoint(async req => (await media()).deleteBotMedia(req.params.mediaId, req.body ?? {})));
+  router.post("/images/generate", ...exclusive("image.generate"), writeLimit, generationLimit,
     endpoint(async req => (await media()).generateBotImage(language, req.body), 201));
-  router.get("/:id/revisions", ...exclusive, endpoint(async req => {
+  router.post("/images/edit", ...exclusive("image.edit"), writeLimit, generationLimit,
+    endpoint(async req => (await media()).editBotImage(language, req.body), 201));
+  router.post("/images/generate-gpt", ...exclusive("image.generate_gpt"), writeLimit, generationLimit,
+    endpoint(async req => (await gpt()).startBotGptImage(language, req.body), 202));
+  router.get("/images/generate-gpt/:jobId", ...exclusive("image.generate_gpt"),
+    endpoint(async req => (await gpt()).getBotGptImage(req.params.jobId)));
+  router.post("/ai/titles", ...exclusive("ai.titles"), writeLimit, generationLimit,
+    endpoint(async req => (await ai()).suggestBotTitles(language, req.body)));
+  router.post("/ai/proofread", ...exclusive("ai.proofread"), writeLimit, generationLimit,
+    endpoint(async req => (await ai()).proofreadBot(language, req.body)));
+  router.post("/ai/compare-headlines", ...exclusive("ai.compare_headlines"), writeLimit, generationLimit,
+    endpoint(async req => (await ai()).compareBotHeadlines(language, req.body)));
+  router.get("/:id/revisions", ...exclusive("article.read"), endpoint(async req => {
     const { listBotEditorRevisions } = await import("../services/botEditorHistory");
     return listBotEditorRevisions(language, req.params.id, req.query);
   }, 200, "read_revisions"));
-  router.get("/:id", ...shared, endpoint(async req => (await reads()).readBotArticle(language, req.params.id, req.query), 200, "read_article"));
-  router.patch("/:id", ...shared, writeLimit, endpoint(async req => (await writes()).editBotArticle(language, req.params.id, req.body)));
+  router.get("/:id", ...shared("article.read"), endpoint(async req => (await reads()).readBotArticle(language, req.params.id, req.query), 200, "read_article"));
+  router.patch("/:id", ...shared("article.edit"), writeLimit, endpoint(async req => (await writes()).editBotArticle(language, req.params.id, req.body)));
   for (const action of ["archive", "restore", "unpublish"] as const) {
-    router.post("/:id/" + action, ...(action === "unpublish" ? exclusive : shared), writeLimit,
+    router.post("/:id/" + action, ...(action === "unpublish" ? exclusive("article.unpublish") : shared("article.archive")), writeLimit,
       endpoint(async req => (await writes()).transitionBotArticle(language, req.params.id, action, req.body ?? {})));
   }
-  router.patch("/:id/visibility", ...shared, writeLimit,
+  router.patch("/:id/visibility", ...shared("article.visibility"), writeLimit,
     endpoint(async req => (await writes()).changeBotVisibility(language, req.params.id, req.body)));
-  router.post("/:id/related", ...exclusive, writeLimit,
+  router.post("/:id/related", ...exclusive("article.read"), writeLimit,
     endpoint(async req => (await reads()).relatedBotArticles(language, req.params.id, req.body ?? {}), 200, "suggest_related"));
-  router.post("/:id/cover/generate", ...exclusive, writeLimit, generationLimit,
+  router.post("/:id/cover/generate", ...exclusive("image.cover"), writeLimit, generationLimit,
     endpoint(async req => (await media()).generateBotCover(language, req.params.id, req.body ?? {})));
-  router.post("/:id/regenerate-extras", ...shared, writeLimit, generationLimit,
+  router.post("/:id/regenerate-extras", ...shared("ai.extras"), writeLimit, generationLimit,
     endpoint(async req => (await media()).regenerateEditorExtras(language, req.params.id, req.body ?? {})));
-  router.get("/:id/push/:pushId", ...exclusive, endpoint(async req => {
+  router.get("/:id/push/:pushId", ...exclusive("article.push"), endpoint(async req => {
     const { getBotPushReceipt } = await import("../services/botEditorPush");
     return getBotPushReceipt(language, req.params.id, req.params.pushId);
   }, 200, "read_push_receipt"));
-  router.post("/:id/push", ...exclusive, writeLimit, pushLimit, endpoint(async req => {
+  router.post("/:id/push", ...exclusive("article.push"), writeLimit, pushLimit, endpoint(async req => {
     const { pushBotArticle } = await import("../services/botEditorPush");
     return pushBotArticle(language, req.params.id, req.body ?? {}, null);
   }, 202));
-  const nashrOnly: RequestHandler = (req: EditorRequest, _res, next) => {
-    if (req.bot?.name === "nashr-sabq" && !req.bot.personal) return next();
-    return next("router");
-  };
   const lifecycle = () => import("../services/botEditorLifecycle");
-  router.post("/:id/ready", authenticate, nashrOnly, writeLimit,
+  router.post("/:id/ready", ...shared("article.ready"), writeLimit,
     endpoint(async req => (await lifecycle()).runNashrAction(language, "ready", req.params.id, req.body ?? {})));
-  router.delete("/:id", authenticate, nashrOnly, writeLimit,
-    endpoint(async req => (await writes()).transitionBotArticle(language, req.params.id, "archive", req.body ?? {})));
+  // DELETE = أرشفة ناعمة بسبب إلزامي وexpectedUpdatedAt إلزامي (جسم JSON أو query).
+  router.delete("/:id", ...shared("article.delete"), writeLimit,
+    endpoint(async req => (await writes()).deleteBotArticle(language, req.params.id, { ...(req.query ?? {}), ...(req.body ?? {}) })));
   for (const action of ["resurface", "request-revision", "revert-to-draft", "translate"] as const) {
-    router.post("/:id/" + (action === "translate" ? "translate-to-english" : action), ...exclusive, writeLimit,
+    router.post("/:id/" + (action === "translate" ? "translate-to-english" : action),
+      ...exclusive(action === "translate" ? "article.translate" : "article.revision"), writeLimit,
       endpoint(async req => (await lifecycle()).runNashrAction(language, action, req.params.id, req.body ?? {})));
   }
   return router;
