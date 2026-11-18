@@ -1109,6 +1109,14 @@ function useMinuteClock() {
   return now;
 }
 
+type ArticlesListStatus = "published" | "scheduled" | "draft" | "archived" | typeof BOT_DRAFT_READY_STATUS;
+
+function initialStatusFromUrl(): ArticlesListStatus {
+  if (typeof window === "undefined") return "published";
+  const fromUrl = new URLSearchParams(window.location.search).get("status");
+  return fromUrl === "draft" || fromUrl === "scheduled" || fromUrl === "archived" ? fromUrl : "published";
+}
+
 export default function ArticlesManagement() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
@@ -1197,7 +1205,8 @@ export default function ArticlesManagement() {
   // Commit filters and page together: never fetch a new filter on the old page.
   const [listParams, setListParams] = useState({
     search: "",
-    status: "published" as "published" | "scheduled" | "draft" | "archived" | typeof BOT_DRAFT_READY_STATUS,
+    // روابط لوحة النظرة العامة تفتح التبويب المطلوب (?status=draft|scheduled|published).
+    status: initialStatusFromUrl(),
     type: "all",
     category: "all",
     page: 1,

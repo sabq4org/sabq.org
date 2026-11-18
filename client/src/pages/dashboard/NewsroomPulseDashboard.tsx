@@ -80,6 +80,7 @@ import { resolveUserRole } from "@/lib/roleMapping";
 import type { UserRole } from "@/nav/types";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { formatReadDuration, kpiComparison } from "@/lib/dailyKpiFormat";
+import { ContentManagerDesk } from "./ContentManagerDesk";
 
 interface DashboardStats {
   articles: {
@@ -1187,6 +1188,9 @@ export default function NewsroomPulseDashboard() {
     "author",
     "comments_moderator",
   );
+  // «مكتبك الآن» لمدير المحتوى وحده؛ من يجمع معه دور مدير أو محرر يبقى على اللوحة الكاملة.
+  const showContentManagerDesk =
+    isContentManager && !hasRole(user, "admin", "system_admin", "editor");
   const isReporterOnly = hasRole(user, "reporter") && !hasElevatedDashboardRole;
   const isPublisherOnly = hasRole(user, "publisher") && !hasElevatedDashboardRole;
   const canViewStats =
@@ -1231,7 +1235,7 @@ export default function NewsroomPulseDashboard() {
 
   const statsQuery = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard/stats"],
-    enabled: !!user && canViewStats,
+    enabled: !!user && canViewStats && !showContentManagerDesk,
     refetchInterval: 120_000,
   });
   const pulseQuery = useQuery<DashboardPulse>({
@@ -1333,6 +1337,14 @@ export default function NewsroomPulseDashboard() {
             ))}
           </div>
         </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (showContentManagerDesk) {
+    return (
+      <DashboardLayout>
+        <ContentManagerDesk user={user} />
       </DashboardLayout>
     );
   }
