@@ -6,6 +6,9 @@
 // «مكتب سبق» وينتظر قرار صاحب الصلاحية. لا تغيير في قاعدة البيانات: علامة
 // المقترح هي requestedAt على منشور بلا وكالة (لا يستعملها أي مسار آخر).
 //
+// الموعد (scheduledAt) اختياري: صاحب social_publish.schedule تُجدول تغريدته، وغيره
+// يذهب مقترحه للمكتب والموعد في requestedAt (كطلب الوكالة). الفيديو عبر Publer فقط.
+//
 // النطاق: خبر منشور فقط. القناة مقفلة افتراضيًا حتى BOT_DESK_EDITOR_TWEETS=on.
 // ----------------------------------------------------------------------------
 
@@ -24,8 +27,12 @@ import {
   claimPostForImmediatePublish,
   createDraftPost,
   notifyDeskOfAuthorSocialProposal,
+  assertValidScheduleTime,
+  cancelPost,
   publishClaimedPost,
+  schedulePost,
 } from "./socialPublishingService";
+import { activeSocialTransport } from "./publerApiClient";
 
 /** مهلة الحماية من الإرسال المكرر (إعادة المحاولة بعد انقطاع الشبكة). */
 export const EDITOR_TWEET_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
@@ -37,22 +44,56 @@ export function isEditorTweetChannelEnabled(
 }
 
 /** processing = طلب مطابق سابق ما زال قيد النشر؛ ليس تأكيد نشر. */
-export type EditorTweetMode = "published" | "processing" | "pending_approval" | "publish_failed";
+export type EditorTweetMode =
+  | "published"
+  | "processing"
+  | "scheduled"
+  | "pending_approval"
+  | "publish_failed";
+
+/**
+ * سقف حجم فيديو التغريدة من التطبيق (200 ميغابايت). يفحصه التطبيق قبل الرفع؛
+ * الرابط الموقّع لا يفرض الحجم، وX وPubler يرفضان ما يتجاوز حدودهما.
+ */
+export const EDITOR_TWEET_MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+
+/** الفيديو يُنشر عبر وسيلة Publer فقط (الوسيلة المباشرة لا ترفعه). */
+export function isEditorTweetVideoAvailable(): boolean {
+  return activeSocialTransport() === "publer";
+}
 
 export type EditorTweetTextSource = "title" | "custom" | "ai";
 
-/** صور التغريدة كما تُخزَّن: صورة الخبر، أو صور المحرر (وسائط متعددة)، أو بلا صور. */
+/** وسائط التغريدة كما تُخزَّن: صورة الخبر، أو صور المحرر، أو فيديو واحد، أو بلا. */
 interface EditorTweetMedia {
   imageSource: "article" | "none";
   imageUrl: string | null;
-  mediaKind: "none" | "image";
+  mediaKind: "none" | "image" | "video";
   mediaUrls: string[];
 }
 
 export function resolveEditorTweetMedia(
-  input: { includeImage: boolean; imageUrls?: string[] },
+  input: { includeImage: boolean; imageUrls?: string[]; videoUrl?: string },
   articleImageUrl: string | null,
+  videoAvailable: boolean = isEditorTweetVideoAvailable(),
 ): EditorTweetMedia {
+  const video = input.videoUrl?.trim();
+  if (video) {
+    if ((input.imageUrls ?? []).some((u) => u.trim())) {
+      throw new SocialPublishValidationError("اختر فيديو واحدًا أو صورًا، لا الاثنين");
+    }
+    if (!videoAvailable) {
+      throw new SocialPublishValidationError("نشر الفيديو غير متاح حاليًا", 409);
+    }
+    try {
+      assertSafeImageUrl(absolutizeImageUrl(video));
+    } catch (err) {
+      throw new SocialPublishValidationError(
+        `رابط الفيديو مرفوض: ${err instanceof Error ? err.message : "غير مسموح"}`,
+      );
+    }
+    return { imageSource: "none", imageUrl: null, mediaKind: "video", mediaUrls: [video] };
+  }
   const own = [...new Set((input.imageUrls ?? []).map((u) => u.trim()).filter(Boolean))];
   if (own.length > MAX_POST_IMAGES) {
     throw new SocialPublishValidationError(`الصور ${MAX_POST_IMAGES} كحد أقصى`);
@@ -84,10 +125,16 @@ export interface EditorTweetInput {
   includeImage: boolean;
   /** صور يرفعها المحرر (حتى 4) بدل صورة الخبر. */
   imageUrls?: string[];
+  /** فيديو واحد بدل الصور. */
+  videoUrl?: string;
   textSource?: EditorTweetTextSource;
+  /** موعد النشر؛ غيابه = الآن. */
+  scheduledAt?: string | Date;
   actorUserId: string;
   /** هل يملك صاحب التوكن صلاحية النشر الفوري على X؟ */
   canPublishNow: boolean;
+  /** هل يملك صلاحية الجدولة (social_publish.schedule)؟ */
+  canSchedule?: boolean;
 }
 
 export interface EditorTweetResult {
@@ -112,11 +159,14 @@ export interface EditorTweetDeps {
   loadArticle(articleId: string): Promise<EditorTweetArticle | null>;
   /** يحوّل رابط الخبر العام إلى معرّفه. */
   resolveArticleUrl(articleUrl: string): Promise<string>;
+  /** statuses: الحالات التي تُعد تكرارًا (processing/published للفوري، scheduled للمجدول). */
   findRecentSameTweet(input: {
-    articleId: string;
+    /** null = تغريدة حرة بلا خبر. */
+    articleId: string | null;
     actorUserId: string;
     text: string;
     since: Date;
+    statuses?: Array<"processing" | "published" | "scheduled">;
   }): Promise<SocialPost | null>;
   findPendingProposal(input: { articleId: string; actorUserId: string }): Promise<SocialPost | null>;
   /**
@@ -130,8 +180,10 @@ export interface EditorTweetDeps {
     textSource: EditorTweetTextSource;
     imageSource: "article" | "none";
     imageUrl: string | null;
-    mediaKind: "none" | "image";
+    mediaKind: "none" | "image" | "video";
     mediaUrls: string[];
+    /** الموعد المطلوب، أو وقت الطلب حين يكون «الآن». */
+    requestedAt: Date;
     now: Date;
   }): Promise<SocialPost | null>;
   /** قفل مشترك بين النسخ يجعل «ابحث عن مطابق ثم أنشئ واحجز» خطوة واحدة. */
@@ -139,6 +191,7 @@ export interface EditorTweetDeps {
   createDraftPost: typeof createDraftPost;
   claimPostForImmediatePublish: typeof claimPostForImmediatePublish;
   publishClaimedPost: typeof publishClaimedPost;
+  schedulePost: typeof schedulePost;
   notifyDesk: typeof notifyDeskOfAuthorSocialProposal;
   now(): Date;
 }
@@ -181,17 +234,17 @@ const defaultDeps: EditorTweetDeps = {
       throw error;
     }
   },
-  async findRecentSameTweet({ articleId, actorUserId, text, since }) {
+  async findRecentSameTweet({ articleId, actorUserId, text, since, statuses }) {
     const [row] = await db
       .select()
       .from(socialPosts)
       .where(
         and(
-          eq(socialPosts.articleId, articleId),
+          articleId ? eq(socialPosts.articleId, articleId) : isNull(socialPosts.articleId),
           eq(socialPosts.createdByUserId, actorUserId),
           eq(socialPosts.text, text),
           isNull(socialPosts.publisherId),
-          inArray(socialPosts.status, ["processing", "published"]),
+          inArray(socialPosts.status, statuses ?? ["processing", "published"]),
           gte(socialPosts.createdAt, since),
         ),
       )
@@ -216,10 +269,10 @@ const defaultDeps: EditorTweetDeps = {
       .limit(1);
     return row ?? null;
   },
-  async updatePendingProposal({ postId, text, linkUrl, textSource, imageSource, imageUrl, mediaKind, mediaUrls, now }) {
+  async updatePendingProposal({ postId, text, linkUrl, textSource, imageSource, imageUrl, mediaKind, mediaUrls, requestedAt, now }) {
     const [row] = await db
       .update(socialPosts)
-      .set({ text, linkUrl, textSource, imageSource, imageUrl, mediaKind, mediaUrls, requestedAt: now, updatedAt: now })
+      .set({ text, linkUrl, textSource, imageSource, imageUrl, mediaKind, mediaUrls, requestedAt, updatedAt: now })
       .where(
         and(
           eq(socialPosts.id, postId),
@@ -242,14 +295,17 @@ const defaultDeps: EditorTweetDeps = {
   createDraftPost,
   claimPostForImmediatePublish,
   publishClaimedPost,
+  schedulePost,
   notifyDesk: notifyDeskOfAuthorSocialProposal,
   now: () => new Date(),
 };
 
+/** null = تغريدة حرة: لا معرّف ولا رابط خبر (نص المحرر وحده، وروابطه داخله). */
 async function loadTweetableArticle(
   target: { articleId?: string; articleUrl?: string },
   deps: EditorTweetDeps,
-): Promise<EditorTweetArticle> {
+): Promise<EditorTweetArticle | null> {
+  if (!target.articleId?.trim() && !target.articleUrl?.trim()) return null;
   const resolvedId = target.articleUrl ? await deps.resolveArticleUrl(target.articleUrl) : null;
   if (resolvedId && target.articleId && resolvedId !== target.articleId) {
     throw new SocialPublishValidationError("معرّف الخبر ورابطه لا يشيران إلى الخبر نفسه");
@@ -271,13 +327,16 @@ async function loadTweetableArticle(
 export interface EditorTweetPreview {
   /** direct = تُنشر مباشرة؛ approval = تذهب مقترحًا لمكتب سبق. */
   mode: "direct" | "approval";
-  article: { id: string; title: string; url: string; imageUrl: string | null };
+  /** null = تغريدة حرة بلا خبر. */
+  article: { id: string; title: string; url: string; imageUrl: string | null } | null;
   text: string;
   linkUrl: string | null;
   /** أول صورة (توافقًا مع العملاء الأقدم). القائمة الكاملة في imageUrls. */
   imageUrl: string | null;
   imageUrls: string[];
   imageSource: "article" | "upload" | "none";
+  /** رابط الفيديو حين تحمل التغريدة فيديو بدل الصور. */
+  videoUrl: string | null;
   textSource: EditorTweetTextSource;
   composedText: string;
   weightedLength: number;
@@ -295,6 +354,7 @@ export async function previewEditorTweet(
     includeLink: boolean;
     includeImage: boolean;
     imageUrls?: string[];
+    videoUrl?: string;
     textSource?: EditorTweetTextSource;
     canPublishNow: boolean;
   },
@@ -302,21 +362,34 @@ export async function previewEditorTweet(
 ): Promise<EditorTweetPreview> {
   const deps: EditorTweetDeps = { ...defaultDeps, ...overrides };
   const article = await loadTweetableArticle(input, deps);
-  const useTitle = input.textSource === "title" || !input.text?.trim();
-  const text = useTitle ? article.title : input.text!.trim();
-  const linkUrl = input.includeLink ? article.url : null;
+  if (!article && !input.text?.trim()) {
+    throw new SocialPublishValidationError("اكتب نص التغريدة أو أرسل رابط خبر من سبق");
+  }
+  const useTitle = Boolean(article) && (input.textSource === "title" || !input.text?.trim());
+  const text = useTitle ? article!.title : input.text!.trim();
+  const linkUrl = article && input.includeLink ? article.url : null;
   const validation = validateXPostText(text, linkUrl);
-  const media = resolveEditorTweetMedia(input, article.imageUrl);
-  const imageUrls = media.mediaUrls.length > 0 ? media.mediaUrls : media.imageUrl ? [media.imageUrl] : [];
+  const media = resolveEditorTweetMedia(input, article?.imageUrl ?? null);
+  const isVideo = media.mediaKind === "video";
+  const imageUrls = isVideo
+    ? []
+    : media.mediaUrls.length > 0
+      ? media.mediaUrls
+      : media.imageUrl
+        ? [media.imageUrl]
+        : [];
   return {
     mode: input.canPublishNow ? "direct" : "approval",
-    article: { id: article.id, title: article.title, url: article.url, imageUrl: article.imageUrl },
+    article: article
+      ? { id: article.id, title: article.title, url: article.url, imageUrl: article.imageUrl }
+      : null,
     text,
     linkUrl,
     imageUrl: imageUrls[0] ?? null,
     imageUrls,
-    imageSource: media.mediaUrls.length > 0 ? "upload" : media.imageUrl ? "article" : "none",
-    textSource: useTitle ? "title" : input.textSource ?? "custom",
+    imageSource: !isVideo && media.mediaUrls.length > 0 ? "upload" : media.imageUrl ? "article" : "none",
+    videoUrl: isVideo ? media.mediaUrls[0] : null,
+    textSource: useTitle ? "title" : article ? input.textSource ?? "custom" : "custom",
     composedText: composeXPostText(text, linkUrl),
     weightedLength: validation.weightedLength,
     valid: validation.valid && !validation.empty,
@@ -332,28 +405,77 @@ export async function submitEditorTweet(
   const text = input.text.trim();
 
   const article = await loadTweetableArticle(input, deps);
-  const lockKey = `editor-tweet:${input.actorUserId}:${article.id}`;
+  const articleId = article?.id ?? null;
+  const lockKey = `editor-tweet:${input.actorUserId}:${articleId ?? "free"}`;
+  // التغريدة الحرة: النص كما كتبه (روابطه داخله)، ولا رابط خبر ولا صورة خبر.
+  const includeLink = article ? input.includeLink : false;
 
-  const image = resolveEditorTweetMedia(input, article.imageUrl);
-  const textSource: EditorTweetTextSource = input.textSource ?? "custom";
+  const image = resolveEditorTweetMedia(input, article?.imageUrl ?? null);
+  const textSource: EditorTweetTextSource = article ? input.textSource ?? "custom" : "custom";
+  const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+  if (scheduledAt) {
+    try {
+      assertValidScheduleTime(scheduledAt);
+    } catch (err) {
+      // نفس رسالة الجدولة في اللوحة، برمز 400 لا 500.
+      throw new SocialPublishValidationError(err instanceof Error ? err.message : "وقت الجدولة غير صالح");
+    }
+  }
 
-  if (input.canPublishNow) {
+  if (scheduledAt && input.canSchedule) {
+    // جدولة مباشرة: نفس قفل الفوري ونفس فحص التكرار، لكن المطابق هنا مجدول.
+    const locked = await deps.withSubmitLock(lockKey, async () => {
+      const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
+      const same = await deps.findRecentSameTweet({
+        articleId,
+        actorUserId: input.actorUserId,
+        text,
+        since,
+        statuses: ["scheduled", "processing", "published"],
+      });
+      if (same) return { same, scheduled: null };
+      const draft = await deps.createDraftPost({
+        articleId,
+        text,
+        textSource,
+        includeLink,
+        ...image,
+        createdByUserId: input.actorUserId,
+      });
+      return {
+        same: null,
+        scheduled: await deps.schedulePost(draft.id, scheduledAt, { actorUserId: input.actorUserId }),
+      };
+    });
+    if (locked.same) {
+      const mode: EditorTweetMode =
+        locked.same.status === "published"
+          ? "published"
+          : locked.same.status === "scheduled"
+            ? "scheduled"
+            : "processing";
+      return { mode, post: locked.same, duplicate: true, updated: false };
+    }
+    return { mode: "scheduled", post: locked.scheduled!, duplicate: false, updated: false };
+  }
+
+  if (input.canPublishNow && !scheduledAt) {
     // البحث عن مطابق + الإنشاء + الحجز تحت قفل واحد: طلبان متزامنان بالنص نفسه
     // لا ينشئان منشورين. النشر نفسه خارج القفل.
     const locked = await deps.withSubmitLock(lockKey, async () => {
         const since = new Date(deps.now().getTime() - EDITOR_TWEET_DUPLICATE_WINDOW_MS);
         const same = await deps.findRecentSameTweet({
-          articleId: article.id,
+          articleId,
           actorUserId: input.actorUserId,
           text,
           since,
         });
         if (same) return { same, claimed: null };
         const draft = await deps.createDraftPost({
-          articleId: article.id,
+          articleId,
           text,
           textSource,
-          includeLink: input.includeLink,
+          includeLink,
           ...image,
           createdByUserId: input.actorUserId,
         });
@@ -379,7 +501,7 @@ export async function submitEditorTweet(
     };
   }
 
-  const linkUrl = input.includeLink ? article.url : null;
+  const linkUrl = article && includeLink ? article.url : null;
   const validation = validateXPostText(text, linkUrl);
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
@@ -389,10 +511,10 @@ export async function submitEditorTweet(
   }
   // القفل نفسه: طلبان متزامنان من المحرر نفسه للخبر نفسه لا ينشئان مقترحين.
   const { post, updated } = await deps.withSubmitLock(lockKey, async () => {
-    const pending = await deps.findPendingProposal({
-      articleId: article.id,
-      actorUserId: input.actorUserId,
-    });
+    // التغريدة الحرة لا تُدمج في مقترح سابق: كل نص حر تغريدة مستقلة.
+    const pending = article
+      ? await deps.findPendingProposal({ articleId: article.id, actorUserId: input.actorUserId })
+      : null;
     // null = المكتب قرّر في المقترح السابق للتو؛ الطلب الحالي يصبح مقترحًا جديدًا
     // ولا يمس ما اعتُمد أو جُدول.
     const updatedPost = pending
@@ -402,18 +524,20 @@ export async function submitEditorTweet(
           linkUrl,
           textSource,
           ...image,
+          requestedAt: scheduledAt ?? deps.now(),
           now: deps.now(),
         })
       : null;
     if (updatedPost) return { post: updatedPost, updated: true };
     const created = await deps.createDraftPost({
-      articleId: article.id,
+      articleId,
       text,
       textSource,
-      includeLink: input.includeLink,
+      includeLink,
       ...image,
       createdByUserId: input.actorUserId,
-      requestedAt: deps.now(),
+      // علامة المقترح؛ وحين يطلب المحرر موعدًا فهي الموعد نفسه (يملأ حقل الجدولة في اللوحة).
+      requestedAt: scheduledAt ?? deps.now(),
     });
     return { post: created, updated: false };
   });
@@ -422,8 +546,8 @@ export async function submitEditorTweet(
   void deps
     .notifyDesk({
       post,
-      articleTitle: article.title,
-      articleUrl: article.url,
+      articleTitle: article?.title ?? "",
+      articleUrl: article?.url ?? "",
       authorUserId: input.actorUserId,
       isUpdate: updated,
       proposer: "editor",
@@ -438,10 +562,22 @@ export interface EditorTweetStatus {
   id: string;
   articleId: string | null;
   status: string;
-  /** pending_approval | scheduled | processing | published | rejected | failed */
-  state: "pending_approval" | "scheduled" | "processing" | "published" | "rejected" | "failed";
+  /**
+   * pending_approval | scheduled | processing | published | rejected | failed | canceled
+   * canceled = صاحبها ألغاها بنفسه (لا رفض من المكتب).
+   */
+  state:
+    | "pending_approval"
+    | "scheduled"
+    | "processing"
+    | "published"
+    | "rejected"
+    | "failed"
+    | "canceled";
   text: string;
   scheduledAt: string | null;
+  /** الموعد الذي طلبه المحرر لمقترحه (null = فور الموافقة). */
+  requestedAt: string | null;
   publishedAt: string | null;
   externalPostUrl: string | null;
   /** سبب الرفض أو آخر خطأ نشر إن وُجد. */
@@ -449,10 +585,16 @@ export interface EditorTweetStatus {
 }
 
 export function toEditorTweetStatus(post: SocialPost): EditorTweetStatus {
+  const canceledByOwner =
+    post.status === "canceled" &&
+    Boolean(post.canceledByUserId) &&
+    post.canceledByUserId === post.createdByUserId;
   const state: EditorTweetStatus["state"] =
     post.status === "draft"
       ? "pending_approval"
-      : post.status === "canceled"
+      : canceledByOwner
+        ? "canceled"
+        : post.status === "canceled"
         ? "rejected"
         : post.status === "scheduled" || post.status === "processing" || post.status === "published"
           ? post.status
@@ -465,6 +607,12 @@ export function toEditorTweetStatus(post: SocialPost): EditorTweetStatus {
     state,
     text: post.text,
     scheduledAt: iso(post.scheduledAt),
+    requestedAt:
+      // «الآن» يُخزَّن بوقت الطلب نفسه (= updatedAt)؛ الموعد المطلوب بعده بوضوح.
+      post.status === "draft" && post.requestedAt && post.updatedAt &&
+      new Date(post.requestedAt).getTime() > new Date(post.updatedAt).getTime() + 60_000
+        ? iso(post.requestedAt)
+        : null,
     publishedAt: iso(post.publishedAt),
     externalPostUrl: post.externalPostUrl ?? null,
     reason: state === "rejected" || state === "failed" ? post.lastError ?? null : null,
@@ -488,4 +636,33 @@ export async function getEditorTweetForOwner(
     )
     .limit(1);
   return row ? toEditorTweetStatus(row) : null;
+}
+
+/**
+ * صاحب التغريدة يلغي تغريدته المجدولة أو مقترحه المعلّق. المنشور أو الجاري نشره
+ * لا يُمس (الشرط ذري داخل cancelPost). null = ليست له أو غير موجودة.
+ */
+export async function cancelEditorTweetForOwner(
+  postId: string,
+  ownerUserId: string,
+): Promise<EditorTweetStatus | null> {
+  const [row] = await db
+    .select()
+    .from(socialPosts)
+    .where(
+      and(
+        eq(socialPosts.id, postId),
+        eq(socialPosts.createdByUserId, ownerUserId),
+        isNull(socialPosts.publisherId),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  if (row.status === "canceled") {
+    throw new SocialPublishValidationError("التغريدة ملغاة أو مرفوضة بالفعل", 409);
+  }
+  if (row.status !== "scheduled" && row.status !== "draft") {
+    throw new SocialPublishValidationError("لا يمكن إلغاء تغريدة نُشرت أو بدأ نشرها", 409);
+  }
+  return toEditorTweetStatus(await cancelPost(row.id, ownerUserId, null));
 }

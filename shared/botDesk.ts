@@ -58,7 +58,10 @@ export const botDeskSocialRejectSchema = z
 
 export const botDeskSocialPublishSchema = z.object({}).strict();
 
-/** تغريدة يطلبها المحرر من «نشر سبق» لخبر منشور (تُنشر أو تُحال للمكتب حسب صلاحيته). */
+/**
+ * تغريدة يطلبها المحرر من «نشر سبق» لخبر منشور، أو تغريدة حرة بلا خبر (نص المحرر
+ * وروابطه داخله). تُنشر أو تُحال للمكتب حسب صلاحيته.
+ */
 const editorTweetTarget = {
   articleId: z.string().trim().min(1).max(128).optional(),
   /** رابط الخبر العام على sabq.org بديلاً عن المعرّف. */
@@ -69,9 +72,25 @@ const editorTweetTarget = {
   imageUrls: z.array(z.string().trim().url().max(2048)).max(4, "الصور 4 كحد أقصى").optional(),
   /** مصدر النص كما في نموذج الويب: عنوان الخبر، نص المحرر، أو نص مولَّد. */
   textSource: z.enum(["title", "custom", "ai"]).optional(),
+  /**
+   * فيديو واحد بدل الصور (رابط عام بعد رفعه عبر video-upload-url). يتجاوز
+   * includeImage، ولا يجتمع مع imageUrls. ينشر عبر وسيلة Publer فقط.
+   */
+  videoUrl: z.string().trim().url().max(2048).optional(),
+  /**
+   * موعد النشر (ISO مع المنطقة الزمنية). غيابه = الآن. صاحب
+   * social_publish.schedule تُجدول تغريدته؛ غيره يذهب مقترحه للمكتب بهذا الموعد.
+   */
+  scheduledAt: z
+    .string()
+    .datetime({ offset: true, message: "صيغة وقت الجدولة غير صالحة (ISO مع المنطقة الزمنية)" })
+    .optional(),
 };
-const hasEditorTweetTarget = (v: { articleId?: string; articleUrl?: string }) =>
-  Boolean(v.articleId || v.articleUrl);
+/** خبر (معرّف أو رابط) أو نص حر: غياب الخبر = تغريدة حرة بنص المحرر وحده. */
+const hasEditorTweetTarget = (v: { articleId?: string; articleUrl?: string; text?: string }) =>
+  Boolean(v.articleId || v.articleUrl || v.text?.trim());
+const hasOneMediaKind = (v: { videoUrl?: string; imageUrls?: string[] }) =>
+  !(v.videoUrl && v.imageUrls && v.imageUrls.length > 0);
 
 export const botDeskEditorTweetSchema = z
   .object({
@@ -79,7 +98,8 @@ export const botDeskEditorTweetSchema = z
     text: z.string().trim().min(1, "نص التغريدة مطلوب").max(25_000, "النص طويل جداً"),
   })
   .strict()
-  .refine(hasEditorTweetTarget, { message: "معرّف الخبر أو رابطه مطلوب" });
+  .refine(hasEditorTweetTarget, { message: "معرّف الخبر أو رابطه أو نص التغريدة مطلوب" })
+  .refine(hasOneMediaKind, { message: "اختر فيديو واحدًا أو صورًا، لا الاثنين" });
 
 /** معاينة بلا كتابة: النص اختياري (غيابه = عنوان الخبر). */
 export const botDeskEditorTweetPreviewSchema = z
@@ -88,7 +108,8 @@ export const botDeskEditorTweetPreviewSchema = z
     text: z.string().trim().max(25_000, "النص طويل جداً").optional(),
   })
   .strict()
-  .refine(hasEditorTweetTarget, { message: "معرّف الخبر أو رابطه مطلوب" });
+  .refine(hasEditorTweetTarget, { message: "معرّف الخبر أو رابطه أو نص التغريدة مطلوب" })
+  .refine(hasOneMediaKind, { message: "اختر فيديو واحدًا أو صورًا، لا الاثنين" });
 
 export const botDeskSocialScheduleSchema = z
   .object({
@@ -186,6 +207,7 @@ export type BotDeskErrorCode =
   | "rate_limited"
   | "publish_failed"
   | "social_disabled"
+  | "video_unavailable"
   | "server_error";
 
 export interface BotDeskErrorBody {
