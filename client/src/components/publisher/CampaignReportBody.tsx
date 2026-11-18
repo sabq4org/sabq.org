@@ -40,7 +40,8 @@ export function CampaignDayStrip({ report }: { report: CampaignReport }) {
       range.push(cursor.toISOString().slice(0, 10));
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
-    days = Array.from(new Set([...days.filter((d) => d < startsOn), ...range, ...days.filter((d) => d > endsOn)])).sort();
+    // كل أيام النشر تبقى، حتى لو تجاوزت الفترة سقف الـ31 يومًا المعروضة فارغة
+    days = Array.from(new Set([...days, ...range])).sort();
   }
   if (days.length === 0) return null;
   const today = new Date(Date.now() + 3 * 3_600_000).toISOString().slice(0, 10);

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articles,
@@ -150,6 +150,14 @@ export async function addCampaignArticles(publisher: Publisher, campaignId: stri
   const campaign = await findOwnCampaign(publisher.id, campaignId);
   if (!campaign) return null;
   const unique = Array.from(new Set(articleIds));
+  // سقف الملف = ما يقرؤه التقرير، حتى لا يصدر تقرير ناقص يبدو كاملًا
+  const [{ linked }] = await db
+    .select({ linked: sql<number>`count(*)::int` })
+    .from(publisherCampaignArticles)
+    .where(eq(publisherCampaignArticles.campaignId, campaignId));
+  if (Number(linked) + unique.length > CAMPAIGN_ARTICLES_LIMIT) {
+    throw Object.assign(new Error(`الحملة تتسع لـ ${CAMPAIGN_ARTICLES_LIMIT} خبر كحد أقصى`), { status: 400 });
+  }
   const owned = await db
     .select({ id: articles.id })
     .from(articles)
