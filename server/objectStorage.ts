@@ -663,6 +663,29 @@ export class ObjectStorageService {
     }
   }
 
+  /**
+   * Public read URL for an object uploaded through getObjectEntityUploadURL().
+   * The signed PUT URL points at the storage API host (e.g.
+   * <account>.r2.cloudflarestorage.com), which is NOT publicly readable, so
+   * stripping the signature is not enough: rebuild it on the configured public
+   * base (R2/S3 public URL) + the object key.
+   */
+  publicUrlForUploadURL(uploadURL: string): string {
+    const unsigned = uploadURL.split("?")[0];
+    let pathname: string;
+    try {
+      pathname = new URL(unsigned).pathname;
+    } catch {
+      return unsigned;
+    }
+    const keyIndex = pathname.indexOf("/public/uploads/");
+    if (keyIndex < 0) return unsigned;
+    const key = pathname.slice(keyIndex + 1);
+    if (STORAGE_PROVIDER === "r2") return `${getR2PublicUrl(getR2PublicBucket())}/${key}`;
+    if (STORAGE_PROVIDER === "s3") return `${getS3PublicUrl(getS3Bucket())}/${key}`;
+    return unsigned;
+  }
+
   async getObjectEntityUploadURL(): Promise<string> {
     // S3-compatible backend (Tigris on Railway, etc.) — sign a PUT URL
     // directly against the configured S3 endpoint. The browser will PUT

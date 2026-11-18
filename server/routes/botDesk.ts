@@ -885,11 +885,13 @@ router.post(
     }
     try {
       const { ObjectStorageService } = await import("../objectStorage");
-      const uploadURL = await new ObjectStorageService().getObjectEntityUploadURL();
-      // الرابط العام = رابط الرفع بلا توقيع (كما يفعل نموذج الويب).
+      const storage = new ObjectStorageService();
+      const uploadURL = await storage.getObjectEntityUploadURL();
+      // رابط الرفع على نطاق واجهة التخزين وليس عامًا؛ الرابط العام يُبنى من
+      // عنوان التخزين العام + مفتاح الملف.
       res.json({
         uploadURL,
-        videoUrl: uploadURL.split("?")[0],
+        videoUrl: storage.publicUrlForUploadURL(uploadURL),
         maxBytes: EDITOR_TWEET_MAX_VIDEO_BYTES,
       });
     } catch (error) {
