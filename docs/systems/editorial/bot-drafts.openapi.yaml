@@ -33,6 +33,10 @@ paths:
           required: false
           schema:
             type: string
+            minLength: 3
+          description: بحث في العنوان والمتن، 3 أحرف على الأقل
+            minLength: 3
+          description: بحث في العنوان والمقدمة، 3 أحرف على الأقل
         - name: status
           in: query
           required: false

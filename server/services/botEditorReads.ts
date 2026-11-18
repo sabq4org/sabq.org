@@ -76,7 +76,14 @@ export async function listBotArticles(lang: Lang, query: Query) {
   if (status) conditions.push(eq(table.status, status));
   if (p.categoryId) conditions.push(eq(table.categoryId, p.categoryId));
   if (p.authorId) conditions.push(eq(table.authorId, p.authorId));
-  if (p.q) conditions.push(or(ilike(table.title, `%${escapeLike(p.q)}%`), ilike(table.content, `%${escapeLike(p.q)}%`))!);
+  if (p.q) {
+    // Trigram indexes need at least three characters; shorter terms would scan the whole table.
+    if (Array.from(p.q).length < 3) fail("q must be at least 3 characters");
+    const term = `%${escapeLike(p.q)}%`;
+    // Arabic searches the title and excerpt: both have trigram indexes on the ~1M-row articles table,
+    // while the body has none. The small English table keeps its indexed body search.
+    conditions.push(lang === "ar" ? or(ilike(articles.title, term), ilike(articles.excerpt, term))! : or(ilike(enArticles.title, term), ilike(enArticles.content, term))!);
+  }
   if (from) conditions.push(sql`${table.createdAt} >= ${from}`);
   if (to) conditions.push(sql`${table.createdAt} <= ${to}`);
   if (p.source && p.source !== "all") conditions.push(lang === "ar" ? (p.source === "bot" ? eq(articles.source, "bot") : sql`${articles.source} is distinct from 'bot'`) : sql`${sourceEn} = ${p.source}`);

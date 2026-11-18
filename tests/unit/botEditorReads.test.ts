@@ -7,7 +7,7 @@ describe("bot editor read validation", () => {
     { limit: "0" }, { limit: "101" }, { limit: "1.5" }, { status: "opinion" },
     { source: "email" }, { cursor: "bad!" }, { from: "2026-02-30T00:00:00Z" },
     { from: "2026-01-01" }, { from: "2026-02-01T00:00:00Z", to: "2026-01-01T00:00:00Z" },
-    { unknown: "x" }, { q: ["a", "b"] },
+    { unknown: "x" }, { q: ["a", "b"] }, { q: "خب" },
   ])("rejects invalid list query %j before accessing the database", async query => {
     await expect(listBotArticles("ar", query)).rejects.toMatchObject({ httpStatus: 400, code: "validation_error" });
   });
