@@ -1,17 +1,18 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.7.0
+  version: 1.8.0
   description: |
     مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
     النسخة الإنجليزية تحت /api/internal/bot-drafts/en بنفس التوكن. جسم المسار العربي لا يقبل sourceArticleId.
     POST /{id}/publish ينشر فوراً. POST /{id}/schedule يجدول بـ publishAt.
     PATCH /{id}/schedule يغيّر موعد مادة مجدولة. DELETE /{id}/schedule يلغي الجدولة ويعيدها draft.
-    POST /{id}/archive أرشفة ناعمة لمادة منشورة. POST /{id}/restore يعيد المؤرشفة draft دون نشر. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
-    PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
+    POST /{id}/archive أرشفة ناعمة. POST /{id}/restore يعيد المؤرشفة draft دون نشر. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
+    PATCH /{id}/ready ينقل المسودة إلى ready_to_publish دون نشر. POST /{id}/ready الاسم نفسه لهوية nashr-sabq فقط.
     للتوكنات الأخرى المواد القابلة للإدارة source=bot فقط، باستثناء أي خبر published أياً كان مصدره: يُقرأ عبر GET /{id}
     وGET /by-public-id/{publicId}، ويُعدَّل محتواه عبر PATCH /{id} وPOST /{id}/regenerate-extras.
     صفوف المحرر غير المنشورة تبقى 404 لتلك التوكنات. التوكن الشخصي يبقى محصوراً في صفوفه.
+    هوية nashr-sabq غير الشخصية تدير أخبار العربية والإنجليزية من أي مصدر (manual وios-app وbot) في الحالات الصالحة للفعل، بلا تغيير للمصدر. الجسم الجديد يتطلب updateReason وexpectedUpdatedAt. الجسم القديم (فارغ أو operationId أو publishAt فقط) يبقى لمسار source=bot وإيصال العملية؛ وعلى خبر من المحرر يرد 422 لا 404. قفل محرر بشري يبقى 409 locked_by_editor.
     التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يتطلب ترخيص مستخدم التوكن؛ تبقى صلاحيات RBAC والملكية والحصة سارية، وتبقى legacy/byline المخصصة والقنوات الأخرى خلف بوابة الترخيص القائمة.
     محرر الأخبار الموسع متاح حصرياً للتوكن القديم باسم nashr-sabq؛ تبقى صلاحيات التوكنات الأخرى كما هي.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
@@ -312,7 +313,7 @@ paths:
   /api/internal/bot-drafts/{id}/ready:
     patch:
       operationId: markSabqDraftReady
-      summary: تعليم المسودة جاهزة للنشر (draft → ready_to_publish) دون نشر
+      summary: تعليم المسودة جاهزة للنشر (draft → ready_to_publish) دون نشر. nashr-sabq يقبل أي مصدر بجسم updateReason وexpectedUpdatedAt
       parameters:
         - name: id
           in: path
@@ -348,7 +349,7 @@ paths:
   /api/internal/bot-drafts/{id}/publish:
     post:
       operationId: publishSabqDraft
-      summary: نشر فوري لمسودة بوت (draft أو ready_to_publish)
+      summary: نشر فوري. توكنات source=bot من draft أو ready_to_publish بجسم فارغ. nashr-sabq من أي مصدر وحالة draft أو ready_to_publish أو scheduled
       parameters:
         - name: id
           in: path
@@ -2497,6 +2498,98 @@ paths:
           description: forbidden_action
         "404":
           description: push_not_found
+  /api/internal/bot-drafts/{id}/resurface:
+    post:
+      operationId: resurfaceSabqArticle
+      summary: إنعاش خبر منشور لأي مصدر. حصري لـ nashr-sabq. العربية تختم resurfacedAt، والإنجليزية تحدّث ترتيب العرض أيضاً.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [updateReason, expectedUpdatedAt]
+              properties:
+                updateReason: { type: string, minLength: 1, maxLength: 500 }
+                expectedUpdatedAt: { type: string, format: date-time }
+      responses:
+        "200": { description: تم الإنعاش }
+        "409": { description: not_published أو locked_by_editor أو draft_changed }
+        "422": { description: validation_error }
+  /api/internal/bot-drafts/{id}/request-revision:
+    post:
+      operationId: requestSabqArticleRevision
+      summary: إرجاع الخبر إلى مسودة مع reviewStatus=needs_changes. حصري لـ nashr-sabq، عربي وإنجليزي.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [updateReason, expectedUpdatedAt]
+              properties:
+                updateReason: { type: string, minLength: 1, maxLength: 500 }
+                expectedUpdatedAt: { type: string, format: date-time }
+      responses:
+        "200": { description: أُرجعت المادة ووُضع سبب الطلب في reviewNotes }
+        "409": { description: not_archived أو locked_by_editor أو draft_changed }
+  /api/internal/bot-drafts/{id}/revert-to-draft:
+    post:
+      operationId: revertSabqReadyArticle
+      summary: إرجاع ready_to_publish إلى draft. حصري لـ nashr-sabq. المجدول يُلغى بـ DELETE /schedule والمنشور بـ POST /unpublish.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [updateReason, expectedUpdatedAt]
+              properties:
+                updateReason: { type: string, minLength: 1, maxLength: 500 }
+                expectedUpdatedAt: { type: string, format: date-time }
+      responses:
+        "200": { description: عادت مسودة }
+        "409": { description: not_a_draft أو locked_by_editor أو draft_changed }
+  /api/internal/bot-drafts/{id}/translate-to-english:
+    post:
+      operationId: translateSabqArticleToEnglish
+      summary: ترجمة خبر عربي منشور إلى الإنجليزية عبر خدمة لوحة التحكم. حصري لـ nashr-sabq. المسار الإنجليزي يرد 422.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [updateReason, expectedUpdatedAt]
+              properties:
+                updateReason: { type: string, minLength: 1, maxLength: 500 }
+                expectedUpdatedAt: { type: string, format: date-time }
+      responses:
+        "200": { description: "{articleId, englishArticleId, status}" }
+        "409": { description: not_published أو source_article_already_linked أو locked_by_editor أو draft_changed }
+        "422": { description: forbidden_action على المسار الإنجليزي، أو generation_failed }
+  /api/internal/bot-drafts/{id}:
+    delete:
+      operationId: archiveSabqDraft
+      summary: أرشفة ناعمة لمسودة أو جاهز أو مجدول أو منشور. حصري لـ nashr-sabq. ليست حذفاً نهائياً. غير المنشور يتطلب updateReason وexpectedUpdatedAt.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: أصبحت archived والمصدر لم يتغير }
+        "405": { description: للتوكنات الأخرى على العربي، DELETE على المعرّف يبقى ممنوعاً }
+        "409": { description: locked_by_editor أو draft_changed }
 components:
   securitySchemes:
     botToken:
@@ -2991,6 +3084,37 @@ components:
           type: string
           maxLength: 160
           nullable: true
+        imageFocalPoint:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [x, y]
+          properties:
+            x: { type: number, minimum: 0, maximum: 100 }
+            y: { type: number, minimum: 0, maximum: 100 }
+        thumbnailUrl:
+          type: string
+          format: uri
+          maxLength: 2000
+          pattern: ^https://
+          nullable: true
+        albumImages:
+          type: array
+          maxItems: 30
+          nullable: true
+          items: { type: object }
+        isVideoTemplate: { type: boolean }
+        videoUrl: { type: string, maxLength: 2000, nullable: true }
+        videoThumbnailUrl:
+          type: string
+          format: uri
+          maxLength: 2000
+          pattern: ^https://
+          nullable: true
+        hideFromHomepage: { type: boolean }
+        newsType: { type: string, enum: [breaking, featured, regular] }
+        isFeatured: { type: boolean }
+        isReading: { type: boolean }
         updateReason:
           type: string
           maxLength: 500

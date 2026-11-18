@@ -32,6 +32,21 @@ export const botEditorEditSchema = z.object({
   alternativeTitle: text(300).nullable().optional(),
   seoTitle: text(70).nullable().optional(),
   seoDescription: text(160).nullable().optional(),
+  imageFocalPoint: z.object({
+    x: z.number().min(0).max(100),
+    y: z.number().min(0).max(100),
+    needsReview: z.boolean().optional(),
+    confidence: z.enum(["high", "medium", "low"]).optional(),
+  }).strict().nullable().optional(),
+  thumbnailUrl: httpsUrl.nullable().optional(),
+  albumImages: z.array(z.record(z.string(), z.unknown())).max(30).nullable().optional(),
+  isVideoTemplate: z.boolean().optional(),
+  videoUrl: z.string().trim().max(2000).nullable().optional(),
+  videoThumbnailUrl: httpsUrl.nullable().optional(),
+  hideFromHomepage: z.boolean().optional(),
+  newsType: z.enum(["breaking", "featured", "regular"]).optional(),
+  isFeatured: z.boolean().optional(),
+  isReading: z.boolean().optional(),
   updateReason: text(500).nullable().optional(),
 }).strict().refine((v) => Object.keys(v).some((k) => k !== "contentFormat"), { message: "لا توجد حقول للتحديث" });
 
@@ -45,7 +60,11 @@ export const botEditorVisibilitySchema = z.object({
   updateReason: text(500).nullable().optional(),
 }).strict().refine((v) => Object.keys(v).some((k) => k !== "updateReason"), { message: "لا توجد حقول للتحديث" }).refine((v) => v.specialSections === undefined || (v.isFeatured === undefined && v.isReading === undefined), { message: "لا تجمع specialSections مع isFeatured أو isReading" });
 
-export const botEditorArchiveSchema = z.object({ reason: text(1000).optional() }).strict();
+export const botEditorArchiveSchema = z.object({
+  reason: text(1000).optional(),
+  updateReason: text(500).optional(),
+  expectedUpdatedAt: z.string().trim().optional(),
+}).strict();
 export const botEditorEmptySchema = z.object({}).strict();
 export type BotEditorEditInput = z.infer<typeof botEditorEditSchema>;
 export type BotEditorVisibilityInput = z.infer<typeof botEditorVisibilitySchema>;

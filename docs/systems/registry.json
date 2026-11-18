@@ -525,6 +525,7 @@
         "server/services/botEditorOperationsAudit.ts",
         "server/services/botEditorMedia.ts",
         "shared/botEditorWrites.ts",
+        "shared/botEditorLifecycle.ts",
         "migrations/20261118_bot_editor_english_history.sql",
         "tests/unit/botEditor*.test.ts",
         "server/routes/botNewsEditor.ts",

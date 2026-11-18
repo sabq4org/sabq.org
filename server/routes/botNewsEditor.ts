@@ -95,5 +95,18 @@ export function botNewsEditor(language: Language, authenticate: RequestHandler, 
     const { pushBotArticle } = await import("../services/botEditorPush");
     return pushBotArticle(language, req.params.id, req.body ?? {}, null);
   }, 202));
+  const nashrOnly: RequestHandler = (req: EditorRequest, _res, next) => {
+    if (req.bot?.name === "nashr-sabq" && !req.bot.personal) return next();
+    return next("router");
+  };
+  const lifecycle = () => import("../services/botEditorLifecycle");
+  router.post("/:id/ready", authenticate, nashrOnly, writeLimit,
+    endpoint(async req => (await lifecycle()).runNashrAction(language, "ready", req.params.id, req.body ?? {})));
+  router.delete("/:id", authenticate, nashrOnly, writeLimit,
+    endpoint(async req => (await writes()).transitionBotArticle(language, req.params.id, "archive", req.body ?? {})));
+  for (const action of ["resurface", "request-revision", "revert-to-draft", "translate"] as const) {
+    router.post("/:id/" + (action === "translate" ? "translate-to-english" : action), ...exclusive, writeLimit,
+      endpoint(async req => (await lifecycle()).runNashrAction(language, action, req.params.id, req.body ?? {})));
+  }
   return router;
 }

@@ -3,7 +3,7 @@ import { articleEvents, articleRevisions, enArticleEvents, enArticleRevisions } 
 import { db } from "../db";
 
 // Track editorial fields only; counters and timestamps are not content revisions.
-const FIELDS = ["title", "subtitle", "excerpt", "content", "categoryId", "imageUrl", "imageFocalPoint", "albumImages", "isAiGeneratedImage", "status", "newsType", "articleType", "seo", "seoMetadata", "source", "sourceMetadata", "keywords", "riskLabel", "scheduledAt", "publishedAt", "hideFromHomepage", "isFeatured", "isBreaking", "isReading", "displayOrder", "publishType", "reviewStatus", "reviewNotes", "reviewerVerdict", "authorId", "reporterId", "sourceUrl", "infographicType", "infographicBannerUrl", "imageCaption", "imageCaptionHtml", "imageAltText", "tagIds"] as const;
+const FIELDS = ["title", "subtitle", "excerpt", "content", "categoryId", "imageUrl", "imageFocalPoint", "albumImages", "thumbnailUrl", "isVideoTemplate", "videoUrl", "videoThumbnailUrl", "isAiGeneratedImage", "status", "newsType", "articleType", "seo", "seoMetadata", "source", "sourceMetadata", "keywords", "riskLabel", "scheduledAt", "publishedAt", "resurfacedAt", "hideFromHomepage", "isFeatured", "isBreaking", "isReading", "displayOrder", "publishType", "reviewStatus", "reviewNotes", "reviewerVerdict", "authorId", "reporterId", "sourceUrl", "infographicType", "infographicBannerUrl", "imageCaption", "imageCaptionHtml", "imageAltText", "tagIds"] as const;
 export interface BotEditorAuditInput {
   language: "ar" | "en";
   articleId: string;
@@ -14,6 +14,8 @@ export interface BotEditorAuditInput {
   after: object;
   updateReason?: string | null;
   pushId?: string;
+  /** Defaults to the product name already stored on the existing editor routes. */
+  actorName?: string;
 }
 
 export function botEditorChanges(before: object, after: object) {
@@ -34,14 +36,15 @@ export function botEditorChanges(before: object, after: object) {
 export async function recordBotEditorAudit(tx: Pick<typeof db, "insert">, input: BotEditorAuditInput) {
   const { changedFields, previousValues } = botEditorChanges(input.before, input.after);
   const reason = input.updateReason?.trim() || null;
+  const actorName = input.actorName?.trim() || "نشر سبق";
   const originalSource = input.originalSource ?? (input.language === "en" ? "manual" : null);
   const eventType = ({ created: "created", published: "published", archive: "archived", unpublish: "unpublished", restore: "restored" } as Record<string, string>)[input.operation] ?? "updated";
   const event = {
     articleId: input.articleId, actorId: input.actorId, eventType,
-    summary: `نشر سبق: ${input.operation}${reason ? ` — ${reason}` : ""}`,
-    metadata: { actorName: "نشر سبق", operation: input.operation, originalSource, changedFields, updateReason: reason, ...(input.pushId ? { pushId: input.pushId } : {}) },
+    summary: `${actorName}: ${input.operation}${reason ? ` — ${reason}` : ""}`,
+    metadata: { actorName, operation: input.operation, originalSource, changedFields, updateReason: reason, ...(input.pushId ? { pushId: input.pushId } : {}) },
   };
-  const revision = { articleId: input.articleId, editorUserId: input.actorId, editorName: "نشر سبق", changedFields, previousValues: input.pushId ? { ...previousValues, pushId: input.pushId } : previousValues, updateReason: reason, originalSource: typeof originalSource === "string" ? originalSource : null };
+  const revision = { articleId: input.articleId, editorUserId: input.actorId, editorName: actorName, changedFields, previousValues: input.pushId ? { ...previousValues, pushId: input.pushId } : previousValues, updateReason: reason, originalSource: typeof originalSource === "string" ? originalSource : null };
   if (input.language === "ar") {
     await tx.insert(articleEvents).values(event);
     await tx.insert(articleRevisions).values(revision);
