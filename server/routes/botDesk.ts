@@ -75,6 +75,7 @@ import {
   type BotPublisherPrincipal,
 } from "@shared/botPublisherTokens";
 import { logActivity, userHasPermission } from "../rbac";
+import { isProtectedArticleId } from "@shared/botEditorCapabilities";
 import { authenticatePublisherToken } from "../services/botPublisherTokenService";
 import {
   OpinionTicketServiceError,
@@ -946,6 +947,18 @@ router.get(
 //  view = opinion.review أو articles.schedule؛ schedule = view + (articles.schedule أو articles.publish)؛
 //  publish = view + articles.publish؛ return = view + (opinion.review أو articles.edit_any).
 
+
+/** المواد المحمية (shared/botEditorCapabilities.ts) لا تُكتب من bot-desk أيضاً: 423 بعد المصادقة، والقراءة مسموحة. */
+async function blockProtectedDeskWrite(req: BotDeskRequest, res: Response, next: NextFunction) {
+  const id = req.params?.id;
+  if (!id || !isProtectedArticleId(id)) return next();
+  try {
+    const { recordBotEditorOperation } = await import("../services/botEditorOperationsAudit");
+    await recordBotEditorOperation({ actorId: null, operation: "protected_write_blocked", outcome: "failed", metadata: { articleId: id, method: req.method, principal: "bot-desk" } });
+  } catch { /* السجل لا يعطّل الرفض */ }
+  res.status(423).json({ code: "protected_article", message: "هذه المادة محمية من الكتابة الآلية" });
+}
+
 function requireOpinionCapability(key: keyof StaffOpinionCapabilities) {
   return async (req: BotDeskRequest, res: Response, next: NextFunction) => {
     try {
@@ -1073,6 +1086,7 @@ router.get(
 router.patch(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id`,
   requireBotDeskAuth,
+  blockProtectedDeskWrite,
   requireOpinionCapability("schedule"),
   botDeskWriteLimiter,
   botDeskOpinionActionLimiter,
@@ -1151,6 +1165,7 @@ router.get(
 router.post(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/prepare`,
   requireBotDeskAuth,
+  blockProtectedDeskWrite,
   requireOpinionCapability("schedule"),
   botDeskWriteLimiter,
   botDeskOpinionActionLimiter,
@@ -1208,6 +1223,7 @@ router.get(
 router.post(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/image`,
   requireBotDeskAuth,
+  blockProtectedDeskWrite,
   requireOpinionCapability("schedule"),
   botDeskWriteLimiter,
   botDeskOpinionActionLimiter,
@@ -1262,6 +1278,7 @@ router.get(
 router.post(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/schedule`,
   requireBotDeskAuth,
+  blockProtectedDeskWrite,
   requireOpinionCapability("schedule"),
   botDeskWriteLimiter,
   botDeskOpinionActionLimiter,
@@ -1307,6 +1324,7 @@ router.post(
 router.post(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/publish`,
   requireBotDeskAuth,
+  blockProtectedDeskWrite,
   requireOpinionCapability("publish"),
   botDeskWriteLimiter,
   botDeskPublishLimiter,
@@ -1341,6 +1359,7 @@ router.post(
 router.post(
   `${BOT_DESK_BASE_PATH}/opinion/drafts/:id/return`,
   requireBotDeskAuth,
+  blockProtectedDeskWrite,
   requireOpinionCapability("returnToWriter"),
   botDeskWriteLimiter,
   botDeskOpinionActionLimiter,

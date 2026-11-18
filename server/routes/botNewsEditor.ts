@@ -39,6 +39,11 @@ export function botNewsEditor(language: Language, authenticate: RequestHandler, 
           await recordBotEditorOperation({ actorId: null, operation: readOperation, outcome: "succeeded",
             metadata: { language, articleId: req.params.id ?? null, originalSource: result && typeof result === "object" && "source" in result && typeof result.source === "string" ? result.source : null } });
         }
+        if (result && typeof result === "object" && "__httpStatus" in result) {
+          const wrapped = result as unknown as { __httpStatus: number; body: unknown };
+          res.status(Number(wrapped.__httpStatus)).json(wrapped.body);
+          return;
+        }
         res.status(status).json(result);
       } catch (error) {
         if (error instanceof BotDraftError) {
@@ -84,6 +89,24 @@ export function botNewsEditor(language: Language, authenticate: RequestHandler, 
     endpoint(async req => (await ai()).proofreadBot(language, req.body)));
   router.post("/ai/compare-headlines", ...exclusive("ai.compare_headlines"), writeLimit, generationLimit,
     endpoint(async req => (await ai()).compareBotHeadlines(language, req.body)));
+  if (language === "ar") {
+    // مقالات الرأي (نوع opinion) عبر مكتب الرأي نفسه. analysis وcolumn بدورة الأخبار العادية.
+    const opinion = () => import("../services/botEditorOpinion");
+    const base = "/opinion/drafts";
+    router.get(base, ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionBoard(req.query), 200, "opinion_board"));
+    router.get(base + "/:id", ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionDetail(req.params.id), 200, "opinion_read"));
+    router.patch(base + "/:id", ...exclusive("opinion.edit"), writeLimit, endpoint(async req => (await opinion()).editOpinion(req.params.id, req.body)));
+    router.get(base + "/:id/slot-check", ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionSlotCheck(req.params.id, req.query)));
+    router.post(base + "/:id/prepare", ...exclusive("opinion.lifecycle"), writeLimit, generationLimit,
+      endpoint(async req => { const out = await (await opinion()).prepareOpinion(req.params.id, req.body); return { __httpStatus: 202, body: out }; }));
+    router.get(base + "/:id/prepare", ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionPrepareStatus(req.params.id)));
+    router.post(base + "/:id/image", ...exclusive("opinion.image"), writeLimit, generationLimit,
+      endpoint(async req => (await opinion()).imageOpinion(req.params.id, req.body)));
+    router.get(base + "/:id/image", ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionImageStatus(req.params.id)));
+    router.post(base + "/:id/schedule", ...exclusive("opinion.lifecycle"), writeLimit, endpoint(async req => (await opinion()).scheduleOpinion(req.params.id, req.body)));
+    router.post(base + "/:id/publish", ...exclusive("opinion.lifecycle"), writeLimit, endpoint(async req => (await opinion()).publishOpinion(req.params.id, req.body)));
+    router.post(base + "/:id/return", ...exclusive("opinion.lifecycle"), writeLimit, endpoint(async req => (await opinion()).returnOpinion(req.params.id, req.body)));
+  }
   router.get("/:id/revisions", ...exclusive("article.read"), endpoint(async req => {
     const { listBotEditorRevisions } = await import("../services/botEditorHistory");
     return listBotEditorRevisions(language, req.params.id, req.query);
