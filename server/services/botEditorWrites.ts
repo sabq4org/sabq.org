@@ -27,6 +27,19 @@ export type BotEditorLanguage = "ar" | "en";
 type Guard = { expectedUpdatedAt: Date };
 const editable = new Set(["draft", "ready_to_publish", "scheduled", "published"]);
 
+function noteOf(input: { updateReason?: string | null; reason?: string | null }): string | null {
+  return (input.updateReason ?? input.reason ?? "").trim() || null;
+}
+
+function assertEditorFresh(before: { updatedAt?: Date | null }, raw: unknown): void {
+  if (typeof raw !== "string" || !raw.trim()) throw new BotDraftError(422, "validation_error", "expectedUpdatedAt مطلوب");
+  const expected = new Date(raw);
+  if (Number.isNaN(expected.getTime()) || !/(?:Z|[+-]\d{2}:\d{2})$/.test(raw.trim())) {
+    throw new BotDraftError(422, "validation_error", "expectedUpdatedAt يجب أن يكون ISO-8601 مع منطقة زمنية");
+  }
+  if (before.updatedAt?.getTime() !== expected.getTime()) throw new BotDraftError(409, "draft_changed", "تغيّرت المادة — أعد القراءة ثم أعد المحاولة");
+}
+
 function parse<T>(schema: { safeParse: (input: unknown) => { success: true; data: T } | { success: false; error: unknown } }, input: unknown): T {
   const result = schema.safeParse(input ?? {});
   if (!result.success) {
@@ -45,10 +58,10 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
   let cleared: any[] = [];
   let clearedEnglish: any[] = [];
   const result = await db.transaction(async (tx) => {
-    if (operation === "visibility" && input.newsType === "breaking") await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sabq-bot-editor-breaking'))`);
+    if ((operation === "visibility" || operation === "edit") && input.newsType === "breaking") await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sabq-bot-editor-breaking'))`);
     const [before]: any[] = await tx.select().from(table).where(eq(table.id, id)).limit(1).for("update");
     if (!before) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
-    if (before.articleType !== "news" && !(before.articleType === "infographic" && (language === "ar" ? before.source === "bot" : before.seoMetadata?.source === "bot"))) {
+    if (before.articleType !== "news" && before.articleType !== "infographic") {
       throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
     }
     if (guard && before.updatedAt?.getTime() !== guard.expectedUpdatedAt.getTime()) throw new BotDraftError(409, "draft_changed", "تغيّرت المادة أثناء التوليد — لم يُحفظ شيء");
@@ -69,7 +82,9 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
       }
       if (before.status === "published" && (input.notes !== undefined || input.clientReference !== undefined || input.infographic !== undefined)) throw new BotDraftError(422, "forbidden_fields", "المرجع والملاحظات ونوع المادة لا تتغير بعد النشر");
       if (language === "ar" && input.sourceArticleId !== undefined) throw new BotDraftError(422, "forbidden_fields", "ربط الأصل متاح للإنجليزية فقط");
-      if (input.infographic === true && !(language === "ar" ? before.source === "bot" : before.seoMetadata?.source === "bot")) throw new BotDraftError(422, "forbidden_fields", "تحويل الإنفوجرافيك متاح لمواد البوت فقط");
+      if (language === "en" && ["thumbnailUrl", "albumImages", "isVideoTemplate", "videoUrl", "videoThumbnailUrl"].some((key) => input[key] !== undefined)) {
+        throw new BotDraftError(422, "forbidden_fields", "حقول الفيديو والألبوم والصورة المصغرة خاصة بالنسخة العربية");
+      }
       if (input.infographic !== undefined) { patch.articleType = input.infographic ? "infographic" : "news"; if (language === "ar" && input.infographic) patch.infographicType = "image"; }
       if (language === "ar") {
         if (input.infographicBannerUrl !== undefined) patch.infographicBannerUrl = input.infographicBannerUrl;
@@ -111,7 +126,7 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
           await tx.insert(articleMediaAssets).values({ articleId: id, locale: "ar", displayOrder: 0, altText: input.imageAltText || before.title, captionPlain: input.imageCaption || null });
         }
       }
-      for (const key of ["title", "subtitle", "imageUrl"]) if (input[key] !== undefined) patch[key] = input[key];
+      for (const key of ["title", "subtitle", "imageUrl", "imageFocalPoint", "thumbnailUrl", "albumImages", "isVideoTemplate", "videoUrl", "videoThumbnailUrl", "hideFromHomepage", "newsType", "isFeatured", "isReading"]) if (input[key] !== undefined) patch[key] = input[key];
       if (input.tagIds !== undefined) {
         const requested = input.tagIds as string[];
         const activeTags = requested.length ? await tx.select().from(tags).where(and(inArray(tags.id, requested), eq(tags.status, "active"))) : [];
@@ -169,8 +184,13 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
       if (input.specialSections !== undefined) { patch.isFeatured = input.specialSections.includes("featured"); patch.isReading = input.specialSections.includes("reading"); }
       for (const key of ["isFeatured", "newsType", "hideFromHomepage", "isReading", "displayOrder"]) if (input[key] !== undefined) patch[key] = input[key];
     } else if (operation === "archive") {
-      if (before.status !== "published") throw new BotDraftError(409, "not_published", "الأرشفة تتطلب خبرًا منشورًا");
-      patch = { ...patch, status: "archived", reviewStatus: null, ...(input.reason ? { reviewNotes: input.reason } : {}) };
+      if (!["draft", "ready_to_publish", "scheduled", "published"].includes(before.status)) throw new BotDraftError(409, "not_published", "لا يمكن أرشفة هذه الحالة");
+      const note = (input.updateReason ?? input.reason ?? "").trim();
+      if (before.status !== "published") {
+        if (!note) throw new BotDraftError(422, "validation_error", "updateReason مطلوب لأرشفة المسودة");
+        assertEditorFresh(before, input.expectedUpdatedAt);
+      }
+      patch = { ...patch, status: "archived", reviewStatus: null, publishType: "instant", scheduledAt: null, ...(note ? { reviewNotes: note } : {}) };
     } else if (operation === "restore") {
       if (before.status !== "archived") throw new BotDraftError(409, "not_archived", "المادة غير مؤرشفة");
       patch = { ...patch, status: "draft", publishType: "instant", scheduledAt: null };
@@ -192,11 +212,11 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
       if (banned) throw new BotDraftError(403, "forbidden_action", banned.message, { reason: "banned_word", bannedWords: banned.bannedWords });
     }
     const [after]: any[] = await tx.update(table).set(patch).where(eq(table.id, id)).returning();
-    if (operation === "visibility" && input.newsType === "breaking") {
-      const demoted = await demoteOtherBreaking(tx, language, id, input.updateReason ?? null);
+    if (input.newsType === "breaking" && (operation === "visibility" || (operation === "edit" && before.status === "published"))) {
+      const demoted = await demoteOtherBreaking(tx, language, id, input.updateReason ?? null, "nashr-sabq");
       cleared = demoted.cleared; clearedEnglish = demoted.english;
     }
-    await recordBotEditorAudit(tx, { language, articleId: id, actorId: null, operation, originalSource: language === "ar" ? before.source : before.seoMetadata?.source, before: auditBefore, after: { ...after, ...auditAfterExtra }, updateReason: input.updateReason ?? input.reason ?? null });
+    await recordBotEditorAudit(tx, { language, articleId: id, actorId: null, operation, originalSource: language === "ar" ? before.source : before.seoMetadata?.source, before: auditBefore, after: { ...after, ...auditAfterExtra }, updateReason: input.updateReason ?? input.reason ?? noteOf(input), actorName: operation === "archive" && before.status !== "published" ? "nashr-sabq" : undefined });
     return { before, after };
   });
   if (cleared.length) invalidateClearedBreakingArticles(cleared, `bot-editor:${operation}`);
@@ -247,7 +267,7 @@ export async function assertBotEditorEditable(language: BotEditorLanguage, id: s
   await db.transaction(async (tx) => {
     const [row]: any[] = await tx.select().from(table).where(eq(table.id, id)).limit(1).for("update");
     if (!row) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
-    if (row.articleType !== "news" && !(row.articleType === "infographic" && (language === "ar" ? row.source === "bot" : row.seoMetadata?.source === "bot"))) throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
+    if (row.articleType !== "news" && row.articleType !== "infographic") throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
     if (!editable.has(row.status)) throw new BotDraftError(409, "not_a_draft", "حالة المادة لا تسمح بالتعديل", { status: row.status });
     await assertBotEditorUnlocked(tx, language, id, row);
   });

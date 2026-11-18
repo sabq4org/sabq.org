@@ -55,6 +55,8 @@ import {
   updateEnBotDraft,
   updateEnBotDraftVisibility,
 } from "../services/enBotDraftsService";
+import { isLegacyNashr } from "../services/botEditorLegacyAudit";
+import { isLegacyLifecycleBody, nashrArticleScope, runNashrAction } from "../services/botEditorLifecycle";
 
 const router = Router();
 const BASE = BOT_DRAFTS_EN_BASE_PATH;
@@ -162,6 +164,21 @@ function handleError(res: Response, error: unknown, action: string): void {
 
 function requestContext(req: Request) {
   return { ip: req.ip, userAgent: req.get("user-agent") };
+}
+
+async function forNashr(req: BotRequest, res: Response, action: Parameters<typeof runNashrAction>[1], label: string): Promise<boolean> {
+  if (!req.bot || !isLegacyNashr(req.bot)) return false;
+  if (isLegacyLifecycleBody(action, req.body ?? {})) {
+    if (await nashrArticleScope("en", req.params.id) !== "other") return false;
+    sendError(res, 422, { code: "validation_error", message: "updateReason و expectedUpdatedAt مطلوبان للمواد التي لم ينشئها البوت" });
+    return true;
+  }
+  try {
+    res.json(await runNashrAction("en", action, req.params.id, req.body ?? {}));
+  } catch (error) {
+    handleError(res, error, label);
+  }
+  return true;
 }
 
 const botImageUpload = multer({
@@ -316,6 +333,7 @@ router.post(`${BASE}/:id/regenerate-extras`, requireBotToken, botWriteLimiter, b
 });
 
 router.patch(`${BASE}/:id/ready`, requireBotToken, botWriteLimiter, rejectForbiddenFields, async (req: BotRequest, res: Response) => {
+  if (await forNashr(req, res, "ready", "ready")) return;
   const parsed = botDraftReadySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return sendError(res, 400, { code: "validation_error", message: "تعليم الجاهزية لا يقبل حقولاً — أرسل جسماً فارغاً", details: parsed.error.flatten() });
@@ -328,6 +346,7 @@ router.patch(`${BASE}/:id/ready`, requireBotToken, botWriteLimiter, rejectForbid
 });
 
 router.post(`${BASE}/:id/publish`, requireBotToken, botWriteLimiter, rejectForbiddenFields, async (req: BotRequest, res: Response) => {
+  if (await forNashr(req, res, "publish", "publish")) return;
   const parsed = botDraftPublishSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return sendError(res, 400, { code: "validation_error", message: "النشر الفوري لا يقبل حقولاً — أرسل جسماً فارغاً", details: parsed.error.flatten() });
@@ -354,6 +373,7 @@ router.get(`${BASE}/:id/operations/:operationId`, requireBotToken, async (req: B
 });
 
 router.post(`${BASE}/:id/schedule`, requireBotToken, botWriteLimiter, rejectForbiddenFields, async (req: BotRequest, res: Response) => {
+  if (await forNashr(req, res, "schedule", "schedule")) return;
   const parsed = botDraftScheduleSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return sendError(res, 400, { code: "validation_error", message: "الجدولة تتطلب publishAt بصيغة ISO-8601 مع منطقة زمنية", details: parsed.error.flatten() });
@@ -368,6 +388,7 @@ router.post(`${BASE}/:id/schedule`, requireBotToken, botWriteLimiter, rejectForb
 });
 
 router.patch(`${BASE}/:id/schedule`, requireBotToken, botWriteLimiter, rejectForbiddenFields, async (req: BotRequest, res: Response) => {
+  if (await forNashr(req, res, "reschedule", "reschedule")) return;
   const parsed = botDraftScheduleSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return sendError(res, 400, { code: "validation_error", message: "تغيير الموعد يتطلب publishAt بصيغة ISO-8601 مع منطقة زمنية", details: parsed.error.flatten() });
@@ -382,6 +403,7 @@ router.patch(`${BASE}/:id/schedule`, requireBotToken, botWriteLimiter, rejectFor
 });
 
 router.delete(`${BASE}/:id/schedule`, requireBotToken, botWriteLimiter, rejectForbiddenFields, async (req: BotRequest, res: Response) => {
+  if (await forNashr(req, res, "unschedule", "unschedule")) return;
   const parsed = botDraftUnscheduleSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return sendError(res, 400, { code: "validation_error", message: "إلغاء الجدولة لا يقبل حقولاً — أرسل جسماً فارغاً", details: parsed.error.flatten() });

@@ -77,6 +77,8 @@ import {
   updateBotDraftVisibility,
   type BotIdentity,
 } from "../services/botDraftsService";
+import { isLegacyNashr } from "../services/botEditorLegacyAudit";
+import { isLegacyLifecycleBody, nashrArticleScope, runNashrAction } from "../services/botEditorLifecycle";
 
 import { authenticatePublisherToken } from "../services/botPublisherTokenService";
 
@@ -181,6 +183,21 @@ function handleError(res: Response, error: unknown, action: string): void {
 
 function requestContext(req: Request) {
   return { ip: req.ip, userAgent: req.get("user-agent") };
+}
+
+async function forNashr(req: BotRequest, res: Response, action: Parameters<typeof runNashrAction>[1], label: string): Promise<boolean> {
+  if (!req.bot || !isLegacyNashr(req.bot)) return false;
+  if (isLegacyLifecycleBody(action, req.body ?? {})) {
+    if (await nashrArticleScope("ar", req.params.id) !== "other") return false;
+    sendError(res, 422, { code: "validation_error", message: "updateReason و expectedUpdatedAt مطلوبان للمواد التي لم ينشئها البوت" });
+    return true;
+  }
+  try {
+    res.json(await runNashrAction("ar", action, req.params.id, req.body ?? {}));
+  } catch (error) {
+    handleError(res, error, label);
+  }
+  return true;
 }
 
 const botImageUpload = multer({
@@ -434,6 +451,7 @@ router.patch(
   botWriteLimiter,
   rejectForbiddenFields,
   async (req: BotRequest, res: Response) => {
+    if (await forNashr(req, res, "ready", "ready")) return;
     const parsed = botDraftReadySchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return sendError(res, 400, {
@@ -457,6 +475,7 @@ router.post(
   botWriteLimiter,
   rejectForbiddenFields,
   async (req: BotRequest, res: Response) => {
+    if (await forNashr(req, res, "publish", "publish")) return;
     const parsed = botDraftPublishSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return sendError(res, 400, {
@@ -524,6 +543,7 @@ router.post(
   botWriteLimiter,
   rejectForbiddenFields,
   async (req: BotRequest, res: Response) => {
+    if (await forNashr(req, res, "schedule", "schedule")) return;
     const parsed = botDraftScheduleSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return sendError(res, 400, {
@@ -551,6 +571,7 @@ router.patch(
   botWriteLimiter,
   rejectForbiddenFields,
   async (req: BotRequest, res: Response) => {
+    if (await forNashr(req, res, "reschedule", "reschedule")) return;
     const parsed = botDraftScheduleSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return sendError(res, 400, {
@@ -578,6 +599,7 @@ router.delete(
   botWriteLimiter,
   rejectForbiddenFields,
   async (req: BotRequest, res: Response) => {
+    if (await forNashr(req, res, "unschedule", "unschedule")) return;
     const parsed = botDraftUnscheduleSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return sendError(res, 400, {

@@ -919,8 +919,17 @@ Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal 
 | `GET {base}/:id?includeContent=1` | تفاصيل خبر، بما فيها المتن عند إرسال `includeContent=1`. غيابه يحذف المتن؛ القيم الأخرى غير صالحة. |
 | `GET {base}/categories`, `/authors`, `/tags` | قوائم مرجعية، تدعم `q`, `limit`, `cursor` وتعيد `{items,nextCursor}`؛ لا تعرض بيانات اتصال المؤلف. |
 | `GET {base}/:id/revisions` | سجل مراجعات الخبر `{items,nextOffset}`؛ `limit` من 1 إلى 100 (الافتراضي 25)، و`offset` من 0 إلى 1000 (الافتراضي صفر). أرسل `includeDetails=1` لإدراج اللقطات والقيم السابقة؛ بدونها لا تُعاد هذه البيانات. |
-| `PATCH {base}/:id` | تحديث حقول التحرير للمسودة أو الجاهز أو المجدول أو المنشور. يحافظ على المصدر ويقبل تعديل الإسناد لحساب تحريري نشط؛ المادة المؤرشفة تُستعاد أولاً. |
-| `POST {base}/:id/archive` | أرشفة ناعمة؛ `{}` أو `{"reason":"سبب"}`. |
+| `PATCH {base}/:id` | تحديث حقول التحرير للمسودة أو الجاهز أو المجدول أو المنشور، بما فيها الغلاف ونقطة التركيز والفيديو والألبوم والظهور قبل النشر. يحافظ على المصدر ويقبل تعديل الإسناد لحساب تحريري نشط؛ المادة المؤرشفة تُستعاد أولاً. |
+| `POST {base}/:id/publish` | نشر فوري لأي مصدر من `draft` أو `ready_to_publish` أو `scheduled`. الجسم `{updateReason, expectedUpdatedAt}` و`operationId` اختياري يُقبل ولا يُستخدم كإيصال. لا يغيّر `source`. |
+| `POST {base}/:id/schedule` | جدولة أي مصدر من `draft` أو `ready_to_publish`. الجسم يضيف `publishAt` المستقبلي. المادة المجدولة أصلًا تُرفض وتُحال إلى `PATCH`. الإنجليزية لا تُختم `seoMetadata.source=bot` حتى يبقى نشرها على جدولة اللوحة. |
+| `PATCH {base}/:id/schedule` | تغيير موعد مادة `scheduled` من أي مصدر. |
+| `DELETE {base}/:id/schedule` | إلغاء الجدولة وإرجاعها `draft`. |
+| `PATCH {base}/:id/ready` و`POST {base}/:id/ready` | نقل `draft` إلى `ready_to_publish`. `POST` اسم إضافي لهذه الهوية فقط. |
+| `POST {base}/:id/revert-to-draft` | إرجاع `ready_to_publish` إلى `draft`. |
+| `POST {base}/:id/archive` و`DELETE {base}/:id` | أرشفة ناعمة من `draft` أو `ready_to_publish` أو `scheduled` أو `published`. المنشور يقبل `{}` أو `reason`. غير المنشور يتطلب `updateReason` و`expectedUpdatedAt`. ليست حذفاً نهائياً. |
+| `POST {base}/:id/resurface` | إنعاش خبر منشور. العربية تختم `resurfacedAt`، والإنجليزية تحدّث ترتيب العرض أيضاً. |
+| `POST {base}/:id/request-revision` | إرجاع الخبر مسودة مع `reviewStatus=needs_changes` ونص السبب في `reviewNotes`، ثم تنبيه أصحاب الخبر. الإنجليزية تُبطل كاش القرّاء والحافة بآثار السحب نفسها (`archive`). |
+| `POST {base}/:id/translate-to-english` | ترجمة خبر عربي منشور عبر `translateArticleToEnglish`. المسار الإنجليزي `422`. |
 | `POST {base}/:id/restore` | `{}` يعيد المؤرشف مسودة؛ لا ينشر. |
 | `POST {base}/:id/unpublish` | `{}` يسحب المنشور ويعيده مسودة. |
 | `PATCH {base}/:id/visibility` | ظهور الخبر المنشور؛ لا يرسل إشعارًا تلقائيًا. |
@@ -948,11 +957,11 @@ Content-Type: application/json
 {"title":"عنوان مصحح","updateReason":"تصحيح العنوان"}
 ```
 
-القفل والتعارض يعيدان `409`، والمعرّف غير الموجود `404`، والطلب المخالف `400` أو `422` بحسب فحصه. لا تُرسل `status` أو حقل المصدر ضمن تعديل المحتوى؛ استخدم إجراءات الحالة المنفصلة. يلزم تنفيذ هجرات سجل الإنجليزية وأقفالها وإيصالات الدفع يدويًا وفق سياسة الإنتاج قبل تشغيل المسارات المعتمدة عليهما.
+القفل والتعارض يعيدان `409`، والمعرّف غير الموجود `404`، والطلب المخالف `400` أو `422` بحسب فحصه. جسم النشر القديم (فارغ أو `operationId` فقط) وجسم الجدولة الذي يقتصر على `publishAt` يبقيان على مسار `source=bot` وإيصال العملية كما هما. إن وُجّه هذا الجسم القديم إلى خبر لم ينشئه البوت فالجواب `422` وليس `404`. الجسم الذي يحمل `updateReason` و`expectedUpdatedAt` يعمل على أي مصدر. إن تغيّر `updatedAt` فالرد `409 draft_changed`. قفل تحرير بشري قائم لا يُتجاوز ولا يُحذف، والرد `409 locked_by_editor`. السجل يكتب اسم الفاعل `nashr-sabq` و`updateReason` في `article_revisions` أو `en_article_revisions`، ومع العربية لقطة في `article_versions`. لا تُرسل `status` أو حقل المصدر ضمن تعديل المحتوى؛ استخدم إجراءات الحالة المنفصلة. يلزم تنفيذ هجرات سجل الإنجليزية وأقفالها وإيصالات الدفع يدويًا وفق سياسة الإنتاج قبل تشغيل المسارات المعتمدة عليهما.
 
 ### حقول تعديل `nashr-sabq`
 
-يقبل `PATCH {base}/:id` الحقول `title`، `subtitle`، `content`، `contentFormat`، `excerpt`، `authorId`، `reporterId`، `categoryId`، `categorySlug`، `imageUrl`، `imageUrls`، `bodyImages`، `imageCaption`، `imageAltText`، `isAiGeneratedImage`، `infographic`، `infographicBannerUrl`، `sourceUrl`، `sourceArticleId`، `riskLabel`، `clientReference`، `notes`، `tagIds`، `keywords`، `alternativeTitle`، `seoTitle`، `seoDescription` و`updateReason`. الحدود الدقيقة في مخطط `BotNewsEditorUpdate` في OpenAPI. `sourceArticleId` للإنجليزية فقط؛ `clientReference` و`notes` و`infographic` لا تتغير بعد النشر. نوع إنفوجرافيك خاص بمواد البوت. `tagIds` معرّفات وسوم فريدة موجودة؛ تختلف عن `keywords`.
+يقبل `PATCH {base}/:id` الحقول `title`، `subtitle`، `content`، `contentFormat`، `excerpt`، `authorId`، `reporterId`، `categoryId`، `categorySlug`، `imageUrl`، `imageFocalPoint`، `thumbnailUrl`، `albumImages`، `isVideoTemplate`، `videoUrl`، `videoThumbnailUrl`، `hideFromHomepage`، `newsType`، `isFeatured`، `isReading`، `imageUrls`، `bodyImages`، `imageCaption`، `imageAltText`، `isAiGeneratedImage`، `infographic`، `infographicBannerUrl`، `sourceUrl`، `sourceArticleId`، `riskLabel`، `clientReference`، `notes`، `tagIds`، `keywords`، `alternativeTitle`، `seoTitle`، `seoDescription` و`updateReason`. الحدود الدقيقة في مخطط `BotNewsEditorUpdate` في OpenAPI. `sourceArticleId` للإنجليزية فقط؛ `clientReference` و`notes` و`infographic` لا تتغير بعد النشر. تحويل الإنفوجرافيك متاح لأي خبر، لا لمواد البوت وحدها. حقول الفيديو والألبوم والصورة المصغرة عربية فقط وترد `422 forbidden_fields` على الإنجليزية. `tagIds` معرّفات وسوم فريدة موجودة؛ تختلف عن `keywords`. ربط العربي بالإنجليزي عبر `sourceArticleId` في تعديل الخبر الإنجليزي. الظهور والترتيب والعاجل على المنشور يبقيان في `PATCH /visibility`.
 
 `bodyImages` حتى 40 عنصرًا من `{url, alt?, caption?}`، ويجب وجود `alt` أو `caption`؛ URL آمن HTTPS. `imageUrls` يضيف حتى 20 صورة متن. `imageCaption` و`imageAltText` للغلاف. `updateReason` حتى 500 حرف ويظهر في سجل التعديلات.
 
