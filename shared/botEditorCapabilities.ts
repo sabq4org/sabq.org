@@ -84,3 +84,9 @@ export function botGptDailyCap(raw: string | undefined = process.env.BOT_EDITOR_
   const n = Number(raw);
   return Number.isInteger(n) && n >= 0 ? n : BOT_GPT_DEFAULT_DAILY_CAP;
 }
+
+/** أنواع المواد غير الخبرية التي يديرها نشر سبق في PR الرأي. نوع «opinion» يمرّ عبر مكتب الرأي. */
+export const OPINION_ARTICLE_TYPES = ["opinion", "analysis", "column"] as const;
+export function isOpinionArticleType(type: unknown): type is (typeof OPINION_ARTICLE_TYPES)[number] {
+  return typeof type === "string" && (OPINION_ARTICLE_TYPES as readonly string[]).includes(type);
+}

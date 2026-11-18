@@ -989,3 +989,21 @@ Content-Type: application/json
 **المواد المحمية:** `d05bc8d5…`، `690f5287…`، `8dab8d72…`، `4cfda185…`، `7696f378…` (بالمعرّف الكامل في `shared/botEditorCapabilities.ts`) أي كتابة عليها من أي توكن ترد `423 protected_article` وتُسجَّل في `bot_editor_operations`؛ القراءة مسموحة. إضافة معرّفات: `BOT_EDITOR_PROTECTED_ARTICLE_IDS` (قائمة مفصولة بفواصل).
 
 **مفتاح الإيقاف:** `BOT_EDITOR_DISABLED_CAPS` قائمة قدرات مفصولة بفواصل (أو `*`) ترد عليها المسارات `403 capability_disabled` فوراً بلا إعادة نشر. أسماء القدرات في `shared/botEditorCapabilities.ts`.
+
+## مقالات الرأي والتحليل والزاوية لـ `nashr-sabq` — 2026-11-18
+
+حصرية للاعتماد `nashr-sabq` على القاعدة العربية فقط (`/api/internal/bot-drafts`)، وبقدرات `opinion.read` و`opinion.edit` و`opinion.lifecycle` و`opinion.image` القابلة للإيقاف عبر `BOT_EDITOR_DISABLED_CAPS`. الفاعل هو حساب إسناد البوت، والدوال هي نفسها التي يستدعيها مكتب الرأي في تطبيق الديسك و`bot-desk` (`staffOpinionDeskService` وخدمات التجهيز والصورة والمحتوى) بلا منطق موازٍ.
+
+| المسار | الوصف |
+| --- | --- |
+| `GET /opinion/drafts` · `GET /opinion/drafts/:id` | لوحة الرأي المسطّحة (بانتظار المكتب ← مجدول ← منشور) وتفاصيل مقال مع المسودة وتحذيرات تعارض الموعد وحالة التجهيز. |
+| `PATCH /opinion/drafts/:id` | تعديل `title` و/أو `content` لمسودة بانتظار المكتب أو مجدول (الحالة والموعد كما هما). |
+| `POST /opinion/drafts/:id/prepare` (202) · `GET` | «جهّز وجدول»: تدقيق + ملحقات + صورة + جدولة. تُحتسب صورته ضمن السقف اليومي لصور GPT. |
+| `POST /opinion/drafts/:id/image` · `GET` | توليد الصورة وحدها (`force` اختياري). |
+| `GET /opinion/drafts/:id/slot-check?scheduledAt=` · `POST .../schedule` · `POST .../publish` · `POST .../return` | فحص التعارض، الجدولة (جسم فارغ = موعد الكاتب الثابت أو `scheduledAt`)، النشر الفوري، والإرجاع للكاتب بملاحظة (3–2000 حرف). |
+
+- **أرشفة/استعادة/سحب النشر/حذف ناعم** لمقالات `opinion` و`analysis` و`column` عبر المسارات المشتركة نفسها (`POST /:id/archive|restore|unpublish`، `DELETE /:id` بسبب و`expectedUpdatedAt` إلزاميين).
+- **`analysis` و`column`** تتبعان دورة الخبر كاملة (تعديل، جاهزية، جدولة، نشر، سحب…) بالمسارات المشتركة نفسها.
+- **نوع `opinion`** لا يُحرَّر ولا يُنشر ولا يُجدوَل عبر المسارات العامة (`403 forbidden_action`)؛ يمر بمكتب الرأي أعلاه.
+- **القراءة:** `GET /:id` تقرأ الأنواع الثلاثة، و`GET /?articleType=opinion|analysis|column` قائمتها (الافتراضي أخبار فقط).
+- **المحميتان رأياً** `8dab8d72…` و`4cfda185…` (ضمن الخمس المحمية): كل كتابة عليهما `423 protected_article` عبر مسارات نشر سبق ومسارات `bot-desk/opinion/drafts/:id` أيضاً؛ القراءة مسموحة.

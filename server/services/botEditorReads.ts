@@ -2,6 +2,8 @@ import { and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql, type SQL 
 import { articles, enArticles, categories, enCategories, users, tags, articleTags, articleMediaAssets } from "@shared/schema";
 import { db } from "../db";
 import { BotDraftError, toBotDraftResponse } from "./botDraftsService";
+import { OPINION_ARTICLE_TYPES, isOpinionArticleType } from "@shared/botEditorCapabilities";
+import { assertEditorCapability } from "./botEditorCapabilityGuard";
 import { toEnBotDraftResponse } from "./enBotDraftsService";
 import { botEditorAssignableStaff } from "./botEditorWritesRoster";
 
@@ -65,14 +67,20 @@ function listItem<T extends { bodyImageUrls: string[]; status: string }>(item: T
 }
 export async function listBotArticles(lang: Lang, query: Query) {
   langCheck(lang);
-  const p = parameters(query, ["q", "status", "source", "categoryId", "authorId", "from", "to", "limit", "cursor"]);
+  const p = parameters(query, ["q", "status", "source", "categoryId", "authorId", "from", "to", "limit", "cursor", "articleType"]);
   const limit = pageSize(p.limit), cursor = decodeArticleCursor(p.cursor), from = date(p.from), to = date(p.to);
   if (from && to && from > to) fail("from must not be after to");
   const status = p.status === "ready" ? "ready_to_publish" : p.status;
   if (status && !statuses.includes(status)) fail("Invalid status");
   if (p.source && !["bot", "manual", "all"].includes(p.source)) fail("Invalid source");
   const table = lang === "ar" ? articles : enArticles;
-  const conditions: SQL[] = [eq(table.articleType, "news")];
+  // articleType غير الخبري (opinion|analysis|column) للعربية فقط وبقدرة opinion.read.
+  const wantedType = p.articleType ?? "news";
+  if (wantedType !== "news") {
+    if (lang !== "ar" || !isOpinionArticleType(wantedType)) fail("articleType must be news, or opinion|analysis|column for Arabic");
+    assertEditorCapability("opinion.read");
+  }
+  const conditions: SQL[] = [eq(table.articleType, wantedType)];
   if (status) conditions.push(eq(table.status, status));
   if (p.categoryId) conditions.push(eq(table.categoryId, p.categoryId));
   if (p.authorId) conditions.push(eq(table.authorId, p.authorId));
@@ -127,8 +135,9 @@ export async function readBotArticle(lang: Lang, id: string, query: Query) {
   if (p.includeContent && p.includeContent !== "1") fail("includeContent must be 1");
   if (!id || id.length > 200) fail("Invalid id");
   if (lang === "ar") {
-    const [row] = await db.select().from(articles).where(and(eq(articles.id, id), or(eq(articles.articleType, "news"), and(eq(articles.articleType, "infographic"), eq(articles.source, "bot"))))).limit(1);
+    const [row] = await db.select().from(articles).where(and(eq(articles.id, id), or(eq(articles.articleType, "news"), and(eq(articles.articleType, "infographic"), eq(articles.source, "bot")), inArray(articles.articleType, [...OPINION_ARTICLE_TYPES])))).limit(1);
     if (!row) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
+    if (isOpinionArticleType(row.articleType)) assertEditorCapability("opinion.read");
     return arResponse(row, true, p.includeContent === "1");
   }
   const [row] = await db.select().from(enArticles).where(and(eq(enArticles.id, id), or(eq(enArticles.articleType, "news"), and(eq(enArticles.articleType, "infographic"), sql`${enArticles.seoMetadata}->>'source' = 'bot'`)))).limit(1);

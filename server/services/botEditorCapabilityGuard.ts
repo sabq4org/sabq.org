@@ -1,6 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import {
   isEditorCapabilityEnabled,
+  isOpinionArticleType,
   isProtectedArticleId,
   type NashrEditorCapability,
 } from "@shared/botEditorCapabilities";
@@ -69,4 +70,24 @@ export async function blockProtectedWrite(req: GuardedRequest, res: Response, ne
     // السجل لا يعطّل الرفض.
   }
   return res.status(423).json({ code: "protected_article", message: PROTECTED_ARTICLE_MESSAGE });
+}
+
+const NEWS_TYPES = new Set(["news", "infographic"]);
+const OPINION_STATE_OPERATIONS = new Set(["archive", "restore", "unpublish"]);
+
+/**
+ * نوع المادة المسموح لمحرر نشر سبق. الأخبار والإنفوجرافيك كما كانت. المقالات الرأيية (العربية فقط) تتطلب
+ * القدرة opinion.lifecycle: analysis وcolumn بدورة الخبر كاملة، وopinion بالأرشفة والاستعادة وسحب النشر فقط
+ * لأن تحريرها وجدولتها ونشرها تمر بمكتب الرأي (/opinion/drafts).
+ */
+export function assertNashrArticleType(language: "ar" | "en", articleType: unknown, operation: string): void {
+  if (typeof articleType === "string" && NEWS_TYPES.has(articleType)) return;
+  if (language === "ar" && isOpinionArticleType(articleType)) {
+    assertEditorCapability("opinion.lifecycle");
+    if (articleType === "opinion" && !OPINION_STATE_OPERATIONS.has(operation)) {
+      throw new BotDraftError(403, "forbidden_action", "مقالات الرأي تُحرَّر وتُجدوَل وتُنشر عبر مسارات مكتب الرأي /opinion/drafts", { articleType, operation });
+    }
+    return;
+  }
+  throw new BotDraftError(403, "forbidden_action", "نوع المادة غير مدعوم");
 }
