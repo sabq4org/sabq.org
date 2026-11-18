@@ -1,3 +1,4 @@
+import { enHomepageOrder } from "../services/enHomepageOrder";
 /**
  * Edge metadata endpoints for the Cloudflare Worker that fronts the
  * Vercel-hosted frontend. The worker calls these to:
@@ -1635,8 +1636,8 @@ const ROUTE_HANDLERS: RouteHandler[] = [
             title: enArticles.title,
           })
           .from(enArticles)
-          .where(eq(enArticles.status, "published"))
-          .orderBy(desc(enArticles.publishedAt))
+          .where(and(eq(enArticles.status, "published"), eq(enArticles.hideFromHomepage, false)))
+          .orderBy(enHomepageOrder(), desc(enArticles.publishedAt), desc(enArticles.id))
           .limit(60),
         db
           .select({ name: enCategories.name, slug: enCategories.slug })
@@ -3223,7 +3224,7 @@ router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async
         imageCaption: row.imageCaption, imageSource: row.imageSource,
         isAiGeneratedImage: row.isAiGeneratedImage, isAiGeneratedThumbnail: row.isAiGeneratedThumbnail } : {}),
       // English hero caption/alt live in en_articles.seo (shared/enArticleImageText.ts).
-      ...(lang === "en" ? (({ alt, caption }) => ({ imageAlt: alt, imageCaption: caption }))(getEnHeroImageText(row.seo, row.title)) : {}),
+      ...(lang === "en" ? (({ alt, caption }) => ({ imageAlt: alt, imageCaption: caption, isAiGeneratedImage: "seoMetadata" in row && row.seoMetadata != null && "isAiGeneratedImage" in row.seoMetadata && row.seoMetadata.isAiGeneratedImage === true }))(getEnHeroImageText(row.seo, row.title)) : {}),
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
       author: meta.author,

@@ -63,6 +63,8 @@ import { queueEnBotDraftSurfaceEffects } from "./enBotDraftPublishEffects";
 import { clearOtherBreakingArticles, clearOtherEnBreakingArticles, isBreakingNewsType } from "./breakingNewsService";
 import { getPublishFirstFlags, botDraftUploadIssue } from "./publishFirstService";
 import { authenticatePublisherTokenId } from "./botPublisherTokenService";
+import { recordBotEditorAudit } from "./botEditorAudit";
+import { legacyEnAuditedWrite } from "./botEditorLegacyEnAudit";
 
 export { normalizeBotDraftPublicId };
 
@@ -401,6 +403,10 @@ export async function createEnBotDraft(
         displayOrder: Math.floor(now.getTime() / 1000),
       })
       .returning();
+    if (bot.name === "nashr-sabq" && !bot.personal) {
+      await recordBotEditorAudit(tx, { language: "en", articleId: created.id, actorId: null,
+        operation: "created", originalSource: created.seoMetadata?.source, before: {}, after: created });
+    }
     return created;
   });
 
@@ -644,7 +650,8 @@ export async function markEnBotDraftReady(
   if (existing.status !== BOT_DRAFT_STATUS) {
     throw new BotDraftError(409, "not_a_draft", botDraftReadyBlockedMessage(existing.status), { status: existing.status });
   }
-  const [row] = await db
+  const row = await legacyEnAuditedWrite(bot, articleId, "ready", async executor => {
+    const [saved] = await executor
     .update(enArticles)
     .set({ status: "ready_to_publish", updatedAt: new Date() })
     .where(and(
@@ -654,6 +661,8 @@ export async function markEnBotDraftReady(
       enOwnership(bot),
     ))
     .returning();
+    return saved;
+  });
   if (!row) throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التعليم", { status: "unknown" });
   memoryCache.invalidatePattern("^articles:");
   await logEn(row, bot, "ready", ctx);
@@ -806,6 +815,10 @@ export async function publishEnBotDraft(
         ...(locked.englishSlug ? {} : { englishSlug: generateEnglishSlug(locked.title) }),
       }).where(eq(enArticles.id, articleId)).returning();
       if (!saved) throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
+      if (bot.name === "nashr-sabq" && !bot.personal) {
+        await recordBotEditorAudit(tx, { language: "en", articleId: saved.id, actorId: null,
+          operation: "published", originalSource: locked.seoMetadata?.source, before: locked, after: saved });
+      }
       if (isBreakingNewsType(saved.newsType)) await clearOtherEnBreakingArticles(saved.id, tx);
       const [category] = await tx.select({ slug: enCategories.slug }).from(enCategories).where(eq(enCategories.id, saved.categoryId ?? "")).limit(1);
       response = toEnBotDraftResponse(saved, category?.slug ?? null);
@@ -884,7 +897,8 @@ export async function scheduleEnBotDraft(
     meta.publisherTokenId = bot.personal.tokenId;
     delete meta.scheduleFailure;
   }
-  const [row] = await db
+  const row = await legacyEnAuditedWrite(bot, articleId, "scheduled", async executor => {
+    const [saved] = await executor
     .update(enArticles)
     .set({
       ...buildBotDraftScheduleUpdate(publishAt, now),
@@ -898,6 +912,8 @@ export async function scheduleEnBotDraft(
       enOwnership(bot),
     ))
     .returning();
+    return saved;
+  });
   if (!row) throw new BotDraftError(409, "not_a_draft", botDraftPublishBlockedMessage("unknown"), { status: "unknown" });
   memoryCache.invalidatePattern("^articles:");
   await logEn(row, bot, "scheduled", ctx, { scheduledAt: publishAt.toISOString() });
@@ -916,11 +932,14 @@ export async function rescheduleEnBotDraft(
   }
   const existing = await findOwned(articleId, bot);
   throwBlock(botDraftScheduledBlock(existing ? statusView(existing) : null));
-  const [row] = await db
+  const row = await legacyEnAuditedWrite(bot, articleId, "rescheduled", async executor => {
+    const [saved] = await executor
     .update(enArticles)
     .set(buildBotDraftRescheduleUpdate(publishAt, new Date()))
     .where(and(eq(enArticles.id, articleId), eq(enArticles.status, "scheduled"), sql`${enArticles.seoMetadata}->>'source' = 'bot'`, enOwnership(bot)))
     .returning();
+    return saved;
+  });
   if (!row) throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء تغيير الموعد");
   await logEn(row, bot, "rescheduled", ctx);
   return toEnBotDraftResponse(row, await categorySlugFor(row.categoryId));
@@ -934,11 +953,14 @@ export async function unscheduleEnBotDraft(
   assertPersonalCapability(bot, "cancelSchedule");
   const existing = await findOwned(articleId, bot);
   throwBlock(botDraftScheduledBlock(existing ? statusView(existing) : null));
-  const [row] = await db
+  const row = await legacyEnAuditedWrite(bot, articleId, "unscheduled", async executor => {
+    const [saved] = await executor
     .update(enArticles)
     .set(buildBotDraftUnscheduleUpdate(new Date()))
     .where(and(eq(enArticles.id, articleId), eq(enArticles.status, "scheduled"), sql`${enArticles.seoMetadata}->>'source' = 'bot'`, enOwnership(bot)))
     .returning();
+    return saved;
+  });
   if (!row) throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء إلغاء الجدولة");
   memoryCache.invalidatePattern("^articles:");
   await logEn(row, bot, "unscheduled", ctx);

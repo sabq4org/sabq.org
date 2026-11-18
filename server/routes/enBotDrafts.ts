@@ -2,6 +2,7 @@
 // POST /api/internal/bot-drafts/en كان سيُلتقط كمعرّف «en» أو كفعل ممنوع.
 
 import { Router, type NextFunction, type Request, type Response } from "express";
+import { botNewsEditor } from "./botNewsEditor";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import {
@@ -274,6 +275,8 @@ router.get(`${BASE}/by-public-id/:publicId`, requireBotToken, async (req: BotReq
     handleError(res, error, "by-public-id");
   }
 });
+
+router.use(BASE, botNewsEditor("en", requireBotToken, botWriteLimiter));
 
 router.get(`${BASE}/:id`, requireBotToken, async (req: BotRequest, res: Response) => {
   if (req.query.includeContent !== undefined && (typeof req.query.includeContent !== "string" || req.query.includeContent !== "1")) {

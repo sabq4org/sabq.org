@@ -1218,6 +1218,7 @@ export const articleRevisions = pgTable("article_revisions", {
   changedFields: jsonb("changed_fields").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   previousValues: jsonb("previous_values").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   updateReason: text("update_reason"),
+  originalSource: text("original_source"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_article_revisions_article").on(table.articleId, table.createdAt.asc()),
@@ -16043,3 +16044,36 @@ export const publishBannedWordBlocks = pgTable("publish_banned_word_blocks", {
 
 export type PublishBannedWordRow = typeof publishBannedWords.$inferSelect;
 export type PublishBannedWordBlockRow = typeof publishBannedWordBlocks.$inferSelect;
+
+// English articles have a separate primary key space; keep their audit foreign keys independent.
+export const enArticleEvents = pgTable("en_article_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => enArticles.id, { onDelete: "cascade" }).notNull(),
+  eventType: text("event_type").notNull(),
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: "set null" }),
+  summary: text("summary"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("idx_en_article_events_article").on(table.articleId, table.createdAt)]);
+
+export const enArticleRevisions = pgTable("en_article_revisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => enArticles.id, { onDelete: "cascade" }).notNull(),
+  editorUserId: varchar("editor_user_id").references(() => users.id, { onDelete: "set null" }),
+  editorName: text("editor_name"),
+  changedFields: jsonb("changed_fields").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  previousValues: jsonb("previous_values").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updateReason: text("update_reason"),
+  originalSource: text("original_source"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("idx_en_article_revisions_article").on(table.articleId, table.createdAt)]);
+
+// Audit for bot editor operations that do not necessarily target an article.
+export const botEditorOperations = pgTable("bot_editor_operations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: "set null" }),
+  operation: text("operation").notNull(),
+  outcome: text("outcome").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("idx_bot_editor_operations_created").on(table.createdAt)]);

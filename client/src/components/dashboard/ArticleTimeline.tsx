@@ -379,7 +379,7 @@ export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimeli
     const meta = event.metadata ?? {};
     const style = EVENT_STYLE[event.eventType] ?? { icon: Clock, label: event.eventType, tone: "bg-muted text-foreground" };
     const Icon = meta.autosave ? History : style.icon;
-    const name = actorName(event.actorFirstName, event.actorLastName);
+    const name = typeof meta.actorName === "string" ? meta.actorName : actorName(event.actorFirstName, event.actorLastName);
     const changes = Array.isArray(meta.changes) ? meta.changes : [];
     const fieldKeys = Array.isArray(meta.fields) ? meta.fields : [];
     const legacyLabels = !meta.fields && Array.isArray(meta.changedFields) ? meta.changedFields : [];

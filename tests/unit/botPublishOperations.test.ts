@@ -15,6 +15,7 @@ const state = vi.hoisted(() => {
     articleUpdates: 0,
     queueCount: 0,
     transactionQueue: Promise.resolve(),
+    editorAudits: [] as any[],
     inTransaction: false,
     charges: [] as any[],
     chargeOutcome: "deducted" as string,
@@ -149,6 +150,7 @@ const state = vi.hoisted(() => {
 });
 
 vi.mock("../../server/db", () => ({ db: state.db }));
+vi.mock("../../server/services/botEditorAudit", () => ({ recordBotEditorAudit: vi.fn(async (_tx, input) => { state.s.editorAudits.push(input); }) }));
 vi.mock("../../server/rbac", () => ({
   getUserRoleNames: vi.fn(async () => ["admin"]),
   logActivity: vi.fn(async () => undefined),
@@ -232,6 +234,7 @@ function reset(over: Record<string, unknown> = {}) {
     articleUpdates: 0,
     queueCount: 0,
     transactionQueue: Promise.resolve(),
+    editorAudits: [],
     inTransaction: false,
     charges: [],
     chargeOutcome: "deducted",
@@ -257,6 +260,8 @@ describe("BotDraft publish operation receipts", () => {
     const replay = await publishBotDraft(legacyBot, "art-1", {}, { operationId });
     expect(replay).toMatchObject({ status: "succeeded", operationId });
     expect(state.s.queueCount).toBe(1);
+    expect(state.s.editorAudits).toHaveLength(1);
+    expect(state.s.editorAudits[0]).toMatchObject({ actorId: null, operation: "published", originalSource: "bot" });
   });
 
   it("replays the same receipt when an older client resends legacy override fields", async () => {

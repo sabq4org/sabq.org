@@ -1,8 +1,12 @@
 # Bot Drafts API — مسودات ونشر وجدولة وإدارة بعد النشر لبوت «نشر سبق»
 
-> آخر مراجعة: 2026-10-02 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر موثوق قابل للاستعادة، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
+> آخر مراجعة: 2026-11-18 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر موثوق قابل للاستعادة، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
 
-## الملخص (للبوت)
+> **ابدأ من «محرر الأخبار الموسّع» أسفل هذا الدليل عند استخدام اعتماد `nashr-sabq`.** الأوصاف التاريخية التالية تخص بقية الاعتمادات عند الاختلاف؛ لا تمس صلاحيات التوكن الشخصي.
+
+## الملخص (للتوكنات السابقة)
+
+> عقد `nashr-sabq` الموسّع أدناه هو المرجع لهذه الهوية عند تعارض الوصف التاريخي؛ بقية الاعتمادات تتبع هذا القسم.
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
 2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على مسودة البوت `draft`، وعلى **أي** خبر `published` أياً كان مصدره (بوت أو محرر أو وكيل بريد/واتساب). ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: كل حقول التحرير (العنوان والعنوان الفرعي والمتن والموجز والغلاف وصور المتن `imageUrls` والتصنيف `categorySlug`/`categoryId` والكلمات وحقلا SEO والمصدر) ما عدا `clientReference` و`notes` (422). الحالة تبقى `published` والرابط و`publishedAt` و`source` لا تتغير.
@@ -18,7 +22,7 @@
 
 12. **إيجاد خبر من رابطه العام:** `GET .../by-public-id/<x>` حيث `<x>` هو الجزء الأخير من `https://sabq.org/article/<x>`. يرد `id` الخبر المنشور ثم يُعدَّل عبر `PATCH /<id>`.
 
-كل المسارات أعلاه تعمل فقط على مادة `source=bot`، باستثناء أي خبر `published` (أياً كان مصدره): يُقرأ عبر `GET /:id` و`GET /by-public-id/:publicId`، ويُعدَّل محتواه عبر `PATCH /:id` و`POST /:id/regenerate-extras`. صفوف المحرر غير المنشورة (مسودة، جاهزة، مجدولة، مؤرشفة) تبقى `404 not_found`. قفل التحرير النشط يُرجع `409 locked_by_editor`. التوكن الشخصي (`botpub_`) يبقى محصوراً في صفوفه هو (`sourceMetadata.publisherUserId`) في كل المسارات، فلا يصل إلى أخبار المحررين.
+بالنسبة للتوكنات الأخرى، تعمل المسارات أعلاه فقط على مادة `source=bot`، باستثناء أي خبر `published` (أياً كان مصدره): يُقرأ عبر `GET /:id` و`GET /by-public-id/:publicId`، ويُعدَّل محتواه عبر `PATCH /:id` و`POST /:id/regenerate-extras`. صفوف المحرر غير المنشورة (مسودة، جاهزة، مجدولة، مؤرشفة) تبقى `404 not_found` لهذه التوكنات. الاستثناء الحصري لتوكن `nashr-sabq` موثق في قسم محرر البوت أدناه. قفل التحرير النشط يُرجع `409 locked_by_editor`. التوكن الشخصي (`botpub_`) يبقى محصوراً في صفوفه هو (`sourceMetadata.publisherUserId`) في كل المسارات، فلا يصل إلى أخبار المحررين.
 
 ---
 
@@ -904,3 +908,56 @@ Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal 
 - **العاجل:** حصرية داخل `en_articles`. إن وُجد `sourceArticleId` تُزامَن حالة الخبر العربي الأصلي كما يفعل زر العاجل في لوحة الإنجليزية.
 - **ما لا يُنسخ من العربي:** لا `article_events` ولا `article_versions` ولا `article_revisions` (مفاتيحها على `articles`). السجل `activity_logs` بنوع `en_article`. لا حكم مراجع. لا تاريخ شخصي. بانر الإنفوجرافيك يُحفظ في `seo_metadata.infographicBannerUrl` لأن `en_articles` بلا عمود بانر؛ صفحة القارئ الإنجليزية تعرض `imageUrl`. لا قفل مسودات على `en_articles`.
 - **العميل:** `tsx scripts/bot-drafts-client.ts --lang=en create ...` والافتراضي يبقى عربياً.
+
+## محرر الأخبار الموسّع لـ `nashr-sabq` — 2026-11-18
+
+العقد في هذا القسم محصور بالاعتماد القديم المصادق عليه واسمه **بالضبط** `nashr-sabq`؛ لا يمنح أي توكن آخر أو توكن شخصي صلاحيات إضافية. الأقسام السابقة تصف السلوك المتوافق للتوكنات الأخرى. يستخدم المسارات نفسها بقاعدتين: العربية `/api/internal/bot-drafts` والإنجليزية `/api/internal/bot-drafts/en`؛ الرمز `{base}` أدناه يعني إحدى القاعدتين. لا يغيّر التعديل مصدر الخبر. يمكن تعديل `authorId` و`reporterId` لحساب تحريري نشط، و`reporterId: null` يمسح إسناد المراسل. لا تختبر الكتابة أو الإرسال على الإنتاج بمحتوى تجريبي.
+
+| الطريقة والمسار | العقد |
+|---|---|
+| `GET {base}` | قائمة الأخبار `{items,nextCursor}`. المرشحات الاختيارية `q`, `status`, `source` (`bot` أو `manual` أو `all`)، و`status=ready` مرادف `ready_to_publish`، `categoryId`, `authorId`, `from`, `to`, `limit`, `cursor`. التواريخ ISO مع منطقة زمنية؛ `limit` من 1 إلى 100 والافتراضي 25. احتفظ بالمؤشر كما ورد واستعمله مع المرشحات نفسها. |
+| `GET {base}/:id?includeContent=1` | تفاصيل خبر، بما فيها المتن عند إرسال `includeContent=1`. غيابه يحذف المتن؛ القيم الأخرى غير صالحة. |
+| `GET {base}/categories`, `/authors`, `/tags` | قوائم مرجعية، تدعم `q`, `limit`, `cursor` وتعيد `{items,nextCursor}`؛ لا تعرض بيانات اتصال المؤلف. |
+| `GET {base}/:id/revisions` | سجل مراجعات الخبر `{items,nextOffset}`؛ `limit` من 1 إلى 100 (الافتراضي 25)، و`offset` من 0 إلى 1000 (الافتراضي صفر). أرسل `includeDetails=1` لإدراج اللقطات والقيم السابقة؛ بدونها لا تُعاد هذه البيانات. |
+| `PATCH {base}/:id` | تحديث حقول التحرير للمسودة أو الجاهز أو المجدول أو المنشور. يحافظ على المصدر ويقبل تعديل الإسناد لحساب تحريري نشط؛ المادة المؤرشفة تُستعاد أولاً. |
+| `POST {base}/:id/archive` | أرشفة ناعمة؛ `{}` أو `{"reason":"سبب"}`. |
+| `POST {base}/:id/restore` | `{}` يعيد المؤرشف مسودة؛ لا ينشر. |
+| `POST {base}/:id/unpublish` | `{}` يسحب المنشور ويعيده مسودة. |
+| `PATCH {base}/:id/visibility` | ظهور الخبر المنشور؛ لا يرسل إشعارًا تلقائيًا. |
+| `POST {base}/images/generate` | توليد صورة محفوظة: `prompt` من 3 إلى 2000 حرف، `style` اختياري حتى 200، و`aspectRatio` اختياري (`1:1`, `16:9`, `4:3`, `9:16`, `21:9`, `3:4`). الرد يتضمن `deliveryUrl`, `media`, `isAiGenerated`, `model`. |
+| `POST {base}/:id/cover/generate` | توليد الغلاف من عنوان الخبر؛ `style` و`aspectRatio` اختياريان. يحفظ بشرط عدم تغير نسخة الخبر أثناء التوليد؛ التعارض `409 draft_changed`. |
+| `GET {base}/media/search?q=...&limit=20` | صور المكتبة مع معلومات الحقوق؛ `limit` من 1 إلى 50، و`total` عدد النتائج المعادة. افحص الحقوق قبل الاستخدام. |
+| `POST {base}/:id/regenerate-extras` | `{}` أو `fields` من `summary`, `keywords`, `seo`, `subtitle`, `excerpt`, `alternativeTitle`, `seoTitle`, `seoDescription`. الافتراضي `summary`, `keywords`, `seo`. التوليد يتطلب متنًا لا يقل عن 100 حرف ويحفظ بشرط عدم تغير نسخة الخبر. |
+| `POST {base}/:id/related` | `{}` أو `{"limit":5}`، الحد 1–20؛ يعيد `{items}` من أخبار منشورة في تصنيف الخبر نفسه. |
+| `GET {base}/:id/push/:pushId` | إيصال الدفع بحالات `sending`, `sent`, `partial`, `failed`, `delivery_unknown` وعدادات المزود. عند قراءة إيصال `sending` مضى عليه 30 دقيقة يُعرض مؤقتًا كـ `delivery_unknown` إلى أن تصل نتيجة مؤكدة؛ لا إعادة تلقائية. عند `409 duplicate_push` استخدم `details.pushId` لقراءة الإيصال. |
+| `POST {base}/:id/push` | `{}` لإرسال إشعار عاجل لخبر منشور وموسوم عاجلًا. يقبل محاولة واحدة لكل خبر ولغة. `sending` قبول للمعالجة لا إثبات وصول؛ لا إعادة تلقائية لحالة تسليم غير مؤكدة. الإنجليزية بلا رابط أو معرّف خبر لأن التطبيق لا يدعم فتح الخبر الإنجليزي من الإشعار. |
+
+مثال قراءة ثم تعديل عربي، واستخدم `/en` قبل المعرّف للإنجليزية:
+
+```http
+GET /api/internal/bot-drafts?status=draft&limit=25
+Authorization: Bearer <token>
+
+GET /api/internal/bot-drafts/ARTICLE_ID?includeContent=1
+Authorization: Bearer <token>
+
+PATCH /api/internal/bot-drafts/ARTICLE_ID
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"title":"عنوان مصحح","updateReason":"تصحيح العنوان"}
+```
+
+القفل والتعارض يعيدان `409`، والمعرّف غير الموجود `404`، والطلب المخالف `400` أو `422` بحسب فحصه. لا تُرسل `status` أو حقل المصدر ضمن تعديل المحتوى؛ استخدم إجراءات الحالة المنفصلة. يلزم تنفيذ هجرات سجل الإنجليزية وأقفالها وإيصالات الدفع يدويًا وفق سياسة الإنتاج قبل تشغيل المسارات المعتمدة عليهما.
+
+### حقول تعديل `nashr-sabq`
+
+يقبل `PATCH {base}/:id` الحقول `title`، `subtitle`، `content`، `contentFormat`، `excerpt`، `authorId`، `reporterId`، `categoryId`، `categorySlug`، `imageUrl`، `imageUrls`، `bodyImages`، `imageCaption`، `imageAltText`، `isAiGeneratedImage`، `infographic`، `infographicBannerUrl`، `sourceUrl`، `sourceArticleId`، `riskLabel`، `clientReference`، `notes`، `tagIds`، `keywords`، `alternativeTitle`، `seoTitle`، `seoDescription` و`updateReason`. الحدود الدقيقة في مخطط `BotNewsEditorUpdate` في OpenAPI. `sourceArticleId` للإنجليزية فقط؛ `clientReference` و`notes` و`infographic` لا تتغير بعد النشر. نوع إنفوجرافيك خاص بمواد البوت. `tagIds` معرّفات وسوم فريدة موجودة؛ تختلف عن `keywords`.
+
+`bodyImages` حتى 40 عنصرًا من `{url, alt?, caption?}`، ويجب وجود `alt` أو `caption`؛ URL آمن HTTPS. `imageUrls` يضيف حتى 20 صورة متن. `imageCaption` و`imageAltText` للغلاف. `updateReason` حتى 500 حرف ويظهر في سجل التعديلات.
+
+في `PATCH {base}/:id/visibility` تقبل `specialSections` مصفوفة استبدال كامل من `featured` و`reading`، ولا تُجمع مع `isFeatured` أو `isReading`. `displayOrder` وزن غير سالب؛ الحد الأعلى 2147483647 للإنجليزية و9007199254740991 للعربية. يقبل أيضًا `newsType` و`hideFromHomepage` و`updateReason`. لا يرسل تغيير الظهور إشعارًا.
+
+البحث `q` (3 أحرف على الأقل) يشمل العنوان والمقدمة في العربية، والعنوان والمتن في الإنجليزية. القوائم والأخبار المرتبطة للأخبار فقط؛ قراءة الخبر تشمل أيضًا إنفوجرافيك البوت القديم.
+
+فهارس البحث موثقة في `migrations/20261118_bot_editor_search_indexes.sql`، ويجب بناء الفهارس خارج transaction بعد التحقق من `pg_trgm`. لم تُنفَّذ بمجرد إضافة الملف.

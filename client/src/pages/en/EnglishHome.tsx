@@ -37,7 +37,7 @@ export default function EnglishHome() {
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<EnArticleWithDetails[]>({
     // Fetch a wider window than the API default (20): featured pieces share the
     // same feed, so 20 often left only ~7 regular items for "Latest News".
-    queryKey: ["/api/en/articles", { limit: LATEST_FETCH_LIMIT }],
+    queryKey: ["/api/en/articles", { limit: LATEST_FETCH_LIMIT, homepage: 1 }],
   });
   const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
 

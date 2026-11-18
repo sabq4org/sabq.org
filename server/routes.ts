@@ -1,3 +1,4 @@
+import { enHomepageOrder } from "./services/enHomepageOrder";
 import { createSitemapIndexHandler } from "./routes/sitemapIndex";
 import { registerShutdownHook } from "./shutdown";
 import { buildMediaSearch, mediaListSortFields } from "./mediaSearch";
@@ -26932,7 +26933,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         conditions.push(eq(enArticles.categoryId, categoryId as string));
       }
 
-      // Create alias for reporter
+      const homepage = req.query.homepage === "1";
+      if (homepage) conditions.push(eq(enArticles.hideFromHomepage, false));
       const reporterAlias = aliasedTable(users, 'reporter');
 
       // Get articles with category, author and reporter information using leftJoin
@@ -26943,7 +26945,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .leftJoin(users, eq(enArticles.authorId, users.id))
         .leftJoin(reporterAlias, eq(enArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(enArticles.publishedAt))
+        .orderBy(homepage ? enHomepageOrder() : desc(enArticles.publishedAt), desc(enArticles.publishedAt), desc(enArticles.id))
         .limit(pg.limit)
         .offset(pg.offset);
 

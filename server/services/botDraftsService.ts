@@ -9,6 +9,7 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "node:crypto";
+import { isLegacyNashr, legacyArabicWrite, recordLegacyArabicAudit } from "./botEditorLegacyAudit";
 import { and, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { draftLockBlocksUser, draftLockedMessage } from "@shared/draftLock";
 import { db } from "../db";
@@ -1165,7 +1166,8 @@ export async function createBotDraft(
   const now = new Date();
   const normalizedExcerpt = input.excerpt?.trim() || null;
 
-  const [row] = await db
+  const create = async (executor: typeof db) => {
+  const [created] = await executor
     .insert(articles)
     .values({
       title: input.title,
@@ -1220,6 +1222,13 @@ export async function createBotDraft(
       displayOrder: Math.floor(now.getTime() / 1000),
     })
     .returning();
+  return created;
+  };
+  const row = isLegacyNashr(bot) ? await db.transaction(async tx => {
+    const created = await create(tx as unknown as typeof db);
+    await recordLegacyArabicAudit(tx, null, created, "created");
+    return created;
+  }) : await create(db);
 
   invalidateAdminListCaches();
   await recordEvent(row.id, authorId, "created", `أنشأ البوت «${bot.name}» مسودة`, bot, input.clientReference, ctx, row);
@@ -1781,11 +1790,14 @@ export async function markBotDraftReady(
   const lock = await findActiveEditLock(articleId, bot, existing);
   if (lock) throw editLockError(lock);
 
-  const [row] = await db
+  const row = await legacyArabicWrite(bot, articleId, "ready", async executor => {
+    const [saved] = await executor
     .update(articles)
     .set({ status: BOT_DRAFT_READY_STATUS, updatedAt: new Date() })
     .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
     .returning();
+    return saved;
+  });
   if (!row) {
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التعليم", { status: "unknown" });
   }
@@ -1888,12 +1900,13 @@ function releasableWhere(articleId: string, bot: BotIdentity) {
 export async function recordBotReviewerVerdict(
   articleId: string,
   input: { verdict: string; reviewerName: string; note?: string | null },
+  bot?: BotIdentity,
 ) {
   const existing = await findBotArticle(articleId);
   if (!existing) throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
-  const saved = await recordReviewerVerdict({ articleId, ...input });
+  const saved = await recordReviewerVerdict({ articleId, ...input }, !!bot && isLegacyNashr(bot));
   if (!saved.ok) {
-    throw new BotDraftError(saved.notFound ? 404 : 422, "validation_error", saved.message);
+    throw new BotDraftError("notFound" in saved && saved.notFound ? 404 : 422, "validation_error", saved.message);
   }
   return {
     articleId,
@@ -1974,6 +1987,7 @@ export async function publishBotDraft(
     articleWriteStarted = true;
     const [updated] = await tx.update(articles).set(publishPatch).where(eq(articles.id, articleId)).returning();
     if (!updated) throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
+    if (isLegacyNashr(bot)) await recordLegacyArabicAudit(tx, lockedArticle, updated, "published");
     if (isBreakingNewsType(updated.newsType)) {
       clearedBreaking = await clearOtherBreakingArticles(updated.id, tx);
     }
@@ -2127,7 +2141,10 @@ export async function scheduleBotDraft(
     sourceMetadata: { ...existing!.sourceMetadata, publisherTokenId: bot.personal.tokenId, scheduleFailure: undefined },
   });
 
-  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId, bot)).returning();
+  const row = await legacyArabicWrite(bot, articleId, "scheduled", async executor => {
+    const [saved] = await executor.update(articles).set(patch).where(releasableWhere(articleId, bot)).returning();
+    return saved;
+  });
   if (!row) {
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء الجدولة", { status: "unknown" });
   }
@@ -2233,11 +2250,14 @@ export async function rescheduleBotDraft(
     sourceMetadata: { ...existing!.sourceMetadata, publisherTokenId: bot.personal.tokenId, scheduleFailure: undefined },
   });
 
-  const [row] = await db
+  const row = await legacyArabicWrite(bot, articleId, "rescheduled", async executor => {
+    const [saved] = await executor
     .update(articles)
     .set(patch)
     .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled"), personalOwnershipWhere(bot)))
     .returning();
+    return saved;
+  });
   if (!row) {
     throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء تغيير الموعد", { status: "unknown" });
   }
@@ -2275,11 +2295,14 @@ export async function unscheduleBotDraft(
 
   const now = new Date();
   const patch = buildBotDraftUnscheduleUpdate(now);
-  const [row] = await db
+  const row = await legacyArabicWrite(bot, articleId, "unscheduled", async executor => {
+    const [saved] = await executor
     .update(articles)
     .set(patch)
     .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled"), personalOwnershipWhere(bot)))
     .returning();
+    return saved;
+  });
   if (!row) {
     throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء إلغاء الجدولة", { status: "unknown" });
   }
@@ -2441,7 +2464,10 @@ async function recordEvent(
   };
   // تعديلات البوت تمر بسجل النسخ نفسه الذي يمر به المحرر: نسخة كاملة وقيم قبل وبعد
   // لكل حقل (الصورة ومصدرها والمتن…)، لا وصف الحدث وحده. الحذف يبقى حدثًا فقط.
-  const history =
+  const alreadyAudited = isLegacyNashr(bot) && (action === "created" || action === "published"
+    || summary.includes("المسودة جاهزة للنشر") || summary.includes("جدول البوت")
+    || summary.includes("موعد النشر") || summary.includes("الجدولة وأعاد"));
+  const history = alreadyAudited ? Promise.resolve(null) :
     action === "deleted" && activityAction !== "archived"
       ? logArticleEvent({ articleId, eventType: action, actorId, summary, metadata })
       : recordArticleSave({ before: oldValue ?? null, after: newValue, actorId, summary, metadata });

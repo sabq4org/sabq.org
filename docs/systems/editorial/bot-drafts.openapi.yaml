@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.6.0
+  version: 1.7.0
   description: |
     مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
     النسخة الإنجليزية تحت /api/internal/bot-drafts/en بنفس التوكن. جسم المسار العربي لا يقبل sourceArticleId.
@@ -9,10 +9,11 @@ info:
     PATCH /{id}/schedule يغيّر موعد مادة مجدولة. DELETE /{id}/schedule يلغي الجدولة ويعيدها draft.
     POST /{id}/archive أرشفة ناعمة لمادة منشورة. POST /{id}/restore يعيد المؤرشفة draft دون نشر. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
     PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
-    المواد القابلة للإدارة source=bot فقط، باستثناء أي خبر published أياً كان مصدره: يُقرأ عبر GET /{id}
+    للتوكنات الأخرى المواد القابلة للإدارة source=bot فقط، باستثناء أي خبر published أياً كان مصدره: يُقرأ عبر GET /{id}
     وGET /by-public-id/{publicId}، ويُعدَّل محتواه عبر PATCH /{id} وPOST /{id}/regenerate-extras.
-    صفوف المحرر غير المنشورة تبقى 404. التوكن الشخصي يبقى محصوراً في صفوفه.
+    صفوف المحرر غير المنشورة تبقى 404 لتلك التوكنات. التوكن الشخصي يبقى محصوراً في صفوفه.
     التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يتطلب ترخيص مستخدم التوكن؛ تبقى صلاحيات RBAC والملكية والحصة سارية، وتبقى legacy/byline المخصصة والقنوات الأخرى خلف بوابة الترخيص القائمة.
+    محرر الأخبار الموسع متاح حصرياً للتوكن القديم باسم nashr-sabq؛ تبقى صلاحيات التوكنات الأخرى كما هي.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
@@ -23,6 +24,92 @@ security:
   - botToken: []
 paths:
   /api/internal/bot-drafts:
+    get:
+      operationId: listEditorNewsAr
+      summary: قائمة الأخبار لهوية nashr-sabq فقط
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 3
+          description: بحث في العنوان والمتن، 3 أحرف على الأقل
+            minLength: 3
+          description: بحث في العنوان والمقدمة، 3 أحرف على الأقل
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - ready
+              - ready_to_publish
+              - scheduled
+              - published
+              - archived
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - all
+              - manual
+              - bot
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: authorId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: قائمة وصفحة تالية اختيارية
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items: { type: array, items: { type: object } },
+                      nextCursor: { type: string, nullable: true }
+                    }
+                }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: الهوية غير مخوّلة }
     post:
       operationId: createSabqDraft
       summary: إنشاء مسودة عربية جديدة في لوحة تحكم سبق (status=draft)
@@ -54,7 +141,7 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [file]
+              required: [ file ]
               properties:
                 file:
                   type: string
@@ -62,7 +149,8 @@ paths:
                   description: صورة واحدة JPEG/PNG/WEBP/GIF بحد أقصى 10MB
       responses:
         "201":
-          description: رُفعت الصورة إلى R2 — deliveryUrl هو https://media.sabq.org/news/… يُمرَّر كـ imageUrl (غلاف) أو داخل imageUrls (متن)
+          description: رُفعت الصورة إلى R2 — deliveryUrl هو https://media.sabq.org/news/…
+            يُمرَّر كـ imageUrl (غلاف) أو داخل imageUrls (متن)
           content:
             application/json:
               schema:
@@ -77,7 +165,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "503":
-          description: not_configured (توكنات البوت) أو storage_unavailable (R2 غير مضبوط — لا بديل Cloudflare Images)
+          description: not_configured (توكنات البوت) أو storage_unavailable (R2 غير مضبوط
+            — لا بديل Cloudflare Images)
           content:
             application/json:
               schema:
@@ -87,14 +176,17 @@ paths:
       operationId: findSabqArticleByPublicId
       summary: إيجاد خبر منشور من رابطه العام /article/{publicId}
       description: >
-        يطابق كما يحلّه الموقع (slug = x أو english_slug = x) مع تفضيل english_slug، وstatus=published فقط.
-        يُفك ترميز URL مرة واحدة (Express) ثم يُقص الفراغ. نفس مصادقة GET /{id} وصلاحية read، والتوكن الشخصي محصور في صفوفه.
+        يطابق كما يحلّه الموقع (slug = x أو english_slug = x) مع تفضيل
+        english_slug، وstatus=published فقط. يُفك ترميز URL مرة واحدة (Express)
+        ثم يُقص الفراغ. نفس مصادقة GET /{id} وصلاحية read، والتوكن الشخصي محصور
+        في صفوفه.
       parameters:
         - name: publicId
           in: path
           required: true
           schema: { type: string, minLength: 1, maxLength: 300 }
-          description: الجزء الأخير من https://sabq.org/article/{publicId} (englishSlug أو slug)
+          description: الجزء الأخير من https://sabq.org/article/{publicId} (englishSlug أو
+            slug)
       responses:
         "200":
           description: الخبر المنشور
@@ -121,15 +213,15 @@ paths:
     get:
       operationId: getSabqDraft
       summary: حالة المسودة ومعرّفها ورابط التحرير الداخلي
-      description: >
-        صف source=bot بأي حالة. إن لم يكن الصف للبوت يُعاد أي خبر published بالشكل نفسه (قراءة؛ التعديل عبر PATCH)،
-        وsource يحمل المصدر الأصلي. صفوف المحرر غير المنشورة → 404.
+      description: "لـ nashr-sabq: قراءة خبر بأي حالة؛ بقية الاعتمادات تتبع قيود
+        الملكية والحالة السابقة. includeContent=1 يعيد المتن."
       parameters:
         - name: includeContent
           in: query
           required: false
-          description: أرسل 1 لإعادة المتن الكنسي المخزّن كـ HTML. القيمة الافتراضية لا تعيد المتن؛ القيم الأخرى والمصفوفات مرفوضة.
-          schema: { type: string, enum: ["1"] }
+          description: أرسل 1 لإعادة المتن الكنسي المخزّن كـ HTML. القيمة الافتراضية لا
+            تعيد المتن؛ القيم الأخرى والمصفوفات مرفوضة.
+          schema: { type: string, enum: [ "1" ] }
       responses:
         "200":
           description: المسودة
@@ -142,35 +234,81 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       operationId: updateSabqDraft
-      summary: تحديث محتوى مسودة بوت draft أو أي خبر published أياً كان مصدره (نفس شكل الجسم)
-      description: >
-        على المنشور: نفس الحقول المسموحة، وclientReference/notes → 422 forbidden_fields. status وpublishedAt وslug
-        وenglishSlug وsource والإسناد لا تتغير. سجل النسخ وسجل اللوحة يحملان originalSource.
-        صف ليس للبوت وغير منشور → 404.
+      summary: تعديل الخبر حسب صلاحية الاعتماد وحالته
+      description: nashr-sabq يستخدم BotNewsEditorUpdate على draft وready_to_publish
+        وscheduled وpublished. التوكنات الأخرى تستخدم العقد السابق؛ المؤرشف
+        يستعاد أولاً. المصدر لا يتغير؛ يسمح للمحرر بتعديل الإسناد لحساب تحريري
+        نشط.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BotDraftUpdate"
+              anyOf:
+                - $ref: "#/components/schemas/BotDraftUpdate"
+                - $ref: "#/components/schemas/BotNewsEditorUpdate"
       responses:
         "200":
           description: المسودة بعد التحديث
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BotDraft"
+                description: مادة محدّثة؛ حقول nashr-sabq ترجع صف المادة بعد التحديث
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - draft
+                      - ready_to_publish
+                      - scheduled
+                      - published
+                  title:
+                    type: string
+                  content:
+                    type: string
+                  updatedAt:
+                    type: string
+                    format: date-time
+                  authorId:
+                    type: string
+                  reporterId:
+                    type: string
+                    nullable: true
+                  source:
+                    type: string
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: not_a_draft (صف source=bot ليس draft ولا published، مثل الجاهزة أو المجدولة أو المؤرشفة) أو locked_by_editor
+          description: not_a_draft (صف source=bot ليس draft ولا published، مثل الجاهزة أو
+            المجدولة أو المؤرشفة) أو locked_by_editor
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "403":
+          description: forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: generation_failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: الخدمة غير متاحة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/internal/bot-drafts/{id}/ready:
     patch:
       operationId: markSabqDraftReady
@@ -199,7 +337,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: not_a_draft (ليست draft، بما فيها الجاهزة مسبقاً أو المنشورة) أو locked_by_editor
+          description: not_a_draft (ليست draft، بما فيها الجاهزة مسبقاً أو المنشورة) أو
+            locked_by_editor
           content:
             application/json:
               schema:
@@ -223,16 +362,23 @@ paths:
               type: object
               additionalProperties: false
               description: >-
-                جسم فارغ أو operationId فقط. sensitiveOverride وoverrideReason مقبولان من عملاء قدامى ويُتجاهلان؛
-                شارة الحساسية لا تمنع النشر.
+                جسم فارغ أو operationId فقط. sensitiveOverride وoverrideReason
+                مقبولان من عملاء قدامى ويُتجاهلان؛ شارة الحساسية لا تمنع النشر.
                 أي حقل آخر يُرفض. status أو authorId يُرفضان 422.
               properties:
-                operationId: { type: string, format: uuid, description: معرّف عملية ثابت لإعادة المحاولة الآمنة وقراءة الإيصال }
+                operationId:
+                  {
+                    type: string,
+                    format: uuid,
+                    description: معرّف عملية ثابت لإعادة المحاولة الآمنة وقراءة الإيصال
+                  }
                 sensitiveOverride: { type: boolean, deprecated: true, description: يُتجاهل }
                 overrideReason: { type: string, maxLength: 500, deprecated: true, description: يُتجاهل }
       responses:
         "200":
-          description: نُشرت أو أعيدت نتيجة الإيصال. مع operationId يعاد {operationId, articleId, action, status=succeeded, response}; failed يعني not_applied فقط.
+          description: نُشرت أو أعيدت نتيجة الإيصال. مع operationId يعاد {operationId,
+            articleId, action, status=succeeded, response}; failed يعني
+            not_applied فقط.
           content:
             application/json:
               schema:
@@ -240,7 +386,8 @@ paths:
                   - $ref: "#/components/schemas/BotDraft"
                   - $ref: "#/components/schemas/BotDraftPublishOperation"
         "202":
-          description: العملية قيد التنفيذ أو نتيجتها غير محسومة؛ لا تُعاد محاولة النشر تلقائياً
+          description: العملية قيد التنفيذ أو نتيجتها غير محسومة؛ لا تُعاد محاولة النشر
+            تلقائياً
           content:
             application/json:
               schema:
@@ -248,7 +395,9 @@ paths:
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
-          description: license_required إن كان byline غير مؤسسي بلا ترخيص. التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يطلب ترخيص مستخدم التوكن. PATCH على هذا المسار forbidden_action
+          description: license_required إن كان byline غير مؤسسي بلا ترخيص. التوكن الشخصي
+            لخبر news ذي byline صحيفة سبق لا يطلب ترخيص مستخدم التوكن. PATCH على
+            هذا المسار forbidden_action
           content:
             application/json:
               schema:
@@ -277,7 +426,8 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: processing أو succeeded أو failed؛ الفشل المؤكد يحمل executionOutcome=not_applied
+          description: processing أو succeeded أو failed؛ الفشل المؤكد يحمل
+            executionOutcome=not_applied
           content:
             application/json:
               schema:
@@ -301,12 +451,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [publishAt]
+              required: [ publishAt ]
               properties:
                 publishAt:
                   type: string
                   format: date-time
-                  description: ISO-8601 مستقبلي مع منطقة زمنية. الرياض +03:00 أو ما يعادله UTC. بلا إزاحة أو في الماضي = 400.
+                  description: ISO-8601 مستقبلي مع منطقة زمنية. الرياض +03:00 أو ما يعادله UTC.
+                    بلا إزاحة أو في الماضي = 400.
                   example: "2026-09-24T18:30:00+03:00"
       responses:
         "200":
@@ -318,7 +469,8 @@ paths:
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
-          description: license_required إن كان byline غير مؤسسي بلا ترخيص. التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يطلب ترخيص مستخدم التوكن
+          description: license_required إن كان byline غير مؤسسي بلا ترخيص. التوكن الشخصي
+            لخبر news ذي byline صحيفة سبق لا يطلب ترخيص مستخدم التوكن
           content:
             application/json:
               schema:
@@ -347,7 +499,7 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [publishAt]
+              required: [ publishAt ]
               properties:
                 publishAt:
                   type: string
@@ -423,7 +575,8 @@ paths:
                 reason:
                   type: string
                   maxLength: 1000
-                  description: سبب اختياري يدخله المستخدم فقط؛ يُحفظ بعد trim في reviewNotes ويظهر في article_events وسجل النشاط
+                  description: سبب اختياري يدخله المستخدم فقط؛ يُحفظ بعد trim في reviewNotes ويظهر
+                    في article_events وسجل النشاط
       responses:
         "200":
           description: status=archived. تختفي من الموقع والرئيسية والخلاصات والخرائط
@@ -479,10 +632,8 @@ paths:
     post:
       operationId: regenerateSabqDraftExtras
       summary: إعادة توليد الموجز والكلمات المفتاحية وSEO لمسودة بوت أو لأي خبر منشور
-      description: >
-        المولّدات نفسها في محرر اللوحة (summarizeArticle وgenerateSeoMetadata). الحفظ يمر عبر
-        PATCH /{id} فيرث القفل والحالة وسجل النسخ وإبطال الكاش. سقف 10 طلبات في الدقيقة لكل بوت.
-        الحفظ مشروط ذرياً بـupdated_at المقروء قبل التوليد؛ إن عُدّلت المادة أثناءه يرجع 409 draft_changed بلا كتابة.
+      description: حقول nashr-sabq الموسعة؛ التوكنات الأخرى تقبل summary وkeywords
+        وseo فقط. يعاد 409 عند تغير المادة أثناء التوليد.
       parameters:
         - name: id
           in: path
@@ -493,40 +644,56 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: false
-              properties:
-                fields:
-                  type: array
-                  minItems: 1
-                  items: { type: string, enum: [summary, keywords, seo] }
-                  description: غيابه يولّد الثلاثة. summary → excerpt، keywords → keywords، seo → seoTitle وseoDescription
+              $ref: "#/components/schemas/BotNewsEditorExtras"
       responses:
         "200":
-          description: المادة بعد الحفظ وما كُتب فعلاً
+          description: المادة والقيم المولدة
           content:
             application/json:
               schema:
                 type: object
-                required: [draft, regenerated]
+                required:
+                  - draft
+                  - regenerated
                 properties:
-                  draft: { $ref: "#/components/schemas/BotDraft" }
+                  draft:
+                    type: object
                   regenerated:
                     type: object
-                    required: [fields]
                     properties:
-                      fields: { type: array, items: { type: string, enum: [summary, keywords, seo] } }
-                      excerpt: { type: string }
-                      keywords: { type: array, items: { type: string } }
-                      seoTitle: { type: string }
-                      seoDescription: { type: string }
-                      seoProvider: { type: string }
-                      seoModel: { type: string }
+                      fields:
+                        type: array
+                        items:
+                          type: string
+                          enum:
+                            - summary
+                            - keywords
+                            - seo
+                            - subtitle
+                            - excerpt
+                            - alternativeTitle
+                            - seoTitle
+                            - seoDescription
+                      excerpt:
+                        type: string
+                      subtitle:
+                        type: string
+                      alternativeTitle:
+                        type: string
+                      keywords:
+                        type: array
+                        items:
+                          type: string
+                      seoTitle:
+                        type: string
+                      seoDescription:
+                        type: string
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: not_a_draft أو locked_by_editor أو draft_changed (عُدّلت المادة أثناء التوليد؛ لم يُحفظ شيء)
+          description: not_a_draft أو locked_by_editor أو draft_changed (عُدّلت المادة
+            أثناء التوليد؛ لم يُحفظ شيء)
           content:
             application/json:
               schema:
@@ -540,6 +707,18 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "502":
           description: generation_failed — فشل المولّد، ولم يُحفظ شيء
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: الخدمة غير متاحة
           content:
             application/json:
               schema:
@@ -558,16 +737,24 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: false
-              minProperties: 1
-              properties:
-                isFeatured: { type: boolean, description: مميز }
-                newsType:
-                  type: string
-                  enum: [breaking, regular]
-                  description: breaking عاجل. featured ليست قيمة مقبولة
-                hideFromHomepage: { type: boolean, description: true يخفي من الرئيسية ويبقي الرابط }
+              anyOf:
+                - type: object
+                  additionalProperties: false
+                  minProperties: 1
+                  properties:
+                    isFeatured:
+                      type: boolean
+                      description: مميز
+                    newsType:
+                      type: string
+                      enum:
+                        - breaking
+                        - regular
+                      description: breaking عاجل. featured ليست قيمة مقبولة
+                    hideFromHomepage:
+                      type: boolean
+                      description: true يخفي من الرئيسية ويبقي الرابط
+                - $ref: "#/components/schemas/BotNewsEditorVisibility"
       responses:
         "200":
           description: الحقول المحدّثة. تعليم العاجل لا يرسل دفعاً للقرّاء
@@ -586,7 +773,109 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "403":
+          description: forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: generation_failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: الخدمة غير متاحة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      description: nashr-sabq يستخدم BotNewsEditorVisibility، والاعتمادات الأخرى
+        تستخدم العقد السابق. لا يرسل تغيير الظهور إشعاراً.
   /api/internal/bot-drafts/en:
+    get:
+      operationId: listEditorNewsEn
+      summary: قائمة الأخبار لهوية nashr-sabq فقط
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - ready
+              - ready_to_publish
+              - scheduled
+              - published
+              - archived
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - all
+              - manual
+              - bot
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: authorId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: قائمة وصفحة تالية اختيارية
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      items: { type: array, items: { type: object } },
+                      nextCursor: { type: string, nullable: true }
+                    }
+                }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: الهوية غير مخوّلة }
     post:
       operationId: createEnglishSabqDraft
       summary: إنشاء مسودة إنجليزية في en_articles (status=draft)
@@ -646,16 +935,25 @@ paths:
       summary: قراءة مسودة إنجليزية أو خبر إنجليزي منشور
       parameters:
         - $ref: "#/components/parameters/ArticleId"
+        - name: includeContent
+          in: query
+          schema:
+            type: string
+            enum:
+              - "1"
       responses:
         "200":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
         "404": { $ref: "#/components/responses/NotFound" }
+      description: "لـ nashr-sabq: قراءة خبر بأي حالة؛ بقية الاعتمادات تتبع قيود
+        الملكية والحالة السابقة. includeContent=1 يعيد المتن."
     patch:
       operationId: updateEnglishSabqDraft
-      summary: تعديل مسودة إنجليزية أو خبر إنجليزي منشور
+      summary: تعديل الخبر حسب صلاحية الاعتماد وحالته
       parameters:
         - $ref: "#/components/parameters/ArticleId"
       requestBody:
@@ -663,15 +961,89 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EnBotDraftUpdate"
+              anyOf:
+                - $ref: "#/components/schemas/EnBotDraftUpdate"
+                - $ref: "#/components/schemas/BotNewsEditorUpdate"
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EnBotDraft"
+                description: مادة محدّثة؛ حقول nashr-sabq ترجع صف المادة بعد التحديث
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - draft
+                      - ready_to_publish
+                      - scheduled
+                      - published
+                  title:
+                    type: string
+                  content:
+                    type: string
+                  updatedAt:
+                    type: string
+                    format: date-time
+                  authorId:
+                    type: string
+                  reporterId:
+                    type: string
+                    nullable: true
+                  source:
+                    type: string
+          description: نجح الطلب
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+        "400":
+          description: validation_error أو invalid_input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: not_found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: rate_limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: generation_failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: الخدمة غير متاحة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      description: nashr-sabq يستخدم BotNewsEditorUpdate على draft وready_to_publish
+        وscheduled وpublished. التوكنات الأخرى تستخدم العقد السابق؛ المؤرشف
+        يستعاد أولاً. المصدر لا يتغير؛ يسمح للمحرر بتعديل الإسناد لحساب تحريري
+        نشط.
   /api/internal/bot-drafts/en/{id}/regenerate-extras:
     post:
       operationId: regenerateEnglishDraftExtras
@@ -682,16 +1054,96 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RegenerateExtras"
+              $ref: "#/components/schemas/BotNewsEditorExtras"
       responses:
         "200":
-          description: الملخص بالإنجليزية وSEO باللغة en
+          description: المادة والقيم المولدة
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RegenerateExtrasResult"
+                type: object
+                required:
+                  - draft
+                  - regenerated
+                properties:
+                  draft:
+                    type: object
+                  regenerated:
+                    type: object
+                    properties:
+                      fields:
+                        type: array
+                        items:
+                          type: string
+                          enum:
+                            - summary
+                            - keywords
+                            - seo
+                            - subtitle
+                            - excerpt
+                            - alternativeTitle
+                            - seoTitle
+                            - seoDescription
+                      excerpt:
+                        type: string
+                      subtitle:
+                        type: string
+                      alternativeTitle:
+                        type: string
+                      keywords:
+                        type: array
+                        items:
+                          type: string
+                      seoTitle:
+                        type: string
+                      seoDescription:
+                        type: string
         "422": { $ref: "#/components/responses/Unprocessable" }
         "502": { $ref: "#/components/responses/Error" }
+        "400":
+          description: validation_error أو invalid_input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: not_found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: locked_by_editor أو draft_changed أو تعارض الحالة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: rate_limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: الخدمة غير متاحة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      description: حقول nashr-sabq الموسعة؛ التوكنات الأخرى تقبل summary وkeywords
+        وseo فقط. يعاد 409 عند تغير المادة أثناء التوليد.
   /api/internal/bot-drafts/en/{id}/ready:
     patch:
       operationId: markEnglishDraftReady
@@ -703,6 +1155,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
   /api/internal/bot-drafts/en/{id}/publish:
     post:
       operationId: publishEnglishSabqDraft
@@ -736,6 +1189,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PublishOperation"
+          description: نجح الطلب
         "404": { $ref: "#/components/responses/NotFound" }
   /api/internal/bot-drafts/en/{id}/schedule:
     post:
@@ -754,6 +1208,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
     patch:
       operationId: rescheduleEnglishSabqDraft
       parameters:
@@ -770,6 +1225,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
     delete:
       operationId: unscheduleEnglishSabqDraft
       parameters:
@@ -780,6 +1236,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
   /api/internal/bot-drafts/en/{id}/archive:
     post:
       operationId: archiveEnglishSabqDraft
@@ -796,6 +1253,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
   /api/internal/bot-drafts/en/{id}/restore:
     post:
       operationId: restoreEnglishSabqDraft
@@ -807,6 +1265,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
   /api/internal/bot-drafts/en/{id}/visibility:
     patch:
       operationId: setEnglishDraftVisibility
@@ -817,19 +1276,1234 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/VisibilityBody"
+              anyOf:
+                - $ref: "#/components/schemas/VisibilityBody"
+                - $ref: "#/components/schemas/BotNewsEditorVisibility"
       responses:
         "200":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnBotDraft"
+          description: نجح الطلب
+        "400":
+          description: validation_error أو invalid_input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: not_found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: locked_by_editor أو draft_changed أو تعارض الحالة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: forbidden_fields أو category_not_found أو content_too_short أو
+            تعارض بيانات
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: rate_limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: generation_failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: الخدمة غير متاحة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      description: nashr-sabq يستخدم BotNewsEditorVisibility، والاعتمادات الأخرى
+        تستخدم العقد السابق. لا يرسل تغيير الظهور إشعاراً.
+  /api/internal/bot-drafts/categories:
+    get:
+      operationId: categoriesArEditorNews
+      summary: تصنيفات الأخبار (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: صفحة مرجعية؛ لا تعرض بيانات اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        slug:
+                          type: string
+                        nameAr:
+                          type: string
+                          nullable: true
+                        nameEn:
+                          type: string
+                          nullable: true
+                        name:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        firstNameEn:
+                          type: string
+                          nullable: true
+                        lastNameEn:
+                          type: string
+                          nullable: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/authors:
+    get:
+      operationId: authorsArEditorNews
+      summary: مؤلفو الأخبار (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: صفحة مرجعية؛ لا تعرض بيانات اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        slug:
+                          type: string
+                        nameAr:
+                          type: string
+                          nullable: true
+                        nameEn:
+                          type: string
+                          nullable: true
+                        name:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        firstNameEn:
+                          type: string
+                          nullable: true
+                        lastNameEn:
+                          type: string
+                          nullable: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/tags:
+    get:
+      operationId: tagsArEditorNews
+      summary: وسوم الأخبار (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: صفحة مرجعية؛ لا تعرض بيانات اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        slug:
+                          type: string
+                        nameAr:
+                          type: string
+                          nullable: true
+                        nameEn:
+                          type: string
+                          nullable: true
+                        name:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        firstNameEn:
+                          type: string
+                          nullable: true
+                        lastNameEn:
+                          type: string
+                          nullable: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/media/search:
+    get:
+      operationId: mediaSearchArEditorNews
+      summary: البحث في مكتبة الصور وحقوقها (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: النتائج وحقوقها وعدد النتائج المعادة
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - files
+                  - total
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        url:
+                          type: string
+                        thumbnailUrl:
+                          type: string
+                          nullable: true
+                        title:
+                          type: string
+                          nullable: true
+                        altText:
+                          type: string
+                          nullable: true
+                        caption:
+                          type: string
+                          nullable: true
+                        isAiGenerated:
+                          type: boolean
+                        licenseType:
+                          type: string
+                          nullable: true
+                        rightsVerified:
+                          type: boolean
+                        rightsNote:
+                          type: string
+                          nullable: true
+                        creditText:
+                          type: string
+                          nullable: true
+                        copyrightHolder:
+                          type: string
+                          nullable: true
+                  total:
+                    type: integer
+                    minimum: 0
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/images/generate:
+    post:
+      operationId: generateImageArEditorNews
+      summary: توليد صورة وحفظها (nashr-sabq فقط)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [ prompt ],
+                properties:
+                  {
+                    prompt: { type: string, minLength: 3, maxLength: 2000 },
+                    style: { type: string, maxLength: 200 },
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                  }
+              }
+      responses:
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+        "201":
+          description: الصورة محفوظة
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deliveryUrl
+                  - media
+                  - isAiGenerated
+                  - model
+                properties:
+                  deliveryUrl:
+                    type: string
+                    format: uri
+                    maxLength: 2000
+                    pattern: ^https://
+                  media:
+                    type: object
+                  isAiGenerated:
+                    type: boolean
+                    enum:
+                      - true
+                  model:
+                    type: string
+      description: prompt مطلوب، 16:9 افتراضياً. الرد 201 بصورة محفوظة؛ أخطاء 400
+        invalid_input و502 generation_failed.
+  /api/internal/bot-drafts/{id}/revisions:
+    get:
+      operationId: revisionsArEditorNews
+      summary: سجل مراجعات الخبر (nashr-sabq فقط)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+            default: 0
+        - name: includeDetails
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "1"
+          description: يعيد لقطات النسخ والقيم السابقة؛ الغياب يحجبها
+      responses:
+        "200":
+          description: أحدث الأحداث والمراجعات أولاً
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextOffset
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - kind
+                        - id
+                        - createdAt
+                        - data
+                      properties:
+                        kind:
+                          type: string
+                          enum:
+                            - version
+                            - event
+                            - revision
+                            - activity
+                        id:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        data:
+                          type: object
+                          nullable: true
+                  nextOffset:
+                    type: integer
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/{id}/unpublish:
+    post:
+      operationId: unpublishArEditorNews
+      summary: سحب المنشور إلى مسودة (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "200": { description: نجح الطلب }
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/{id}/cover/generate:
+    post:
+      operationId: generateCoverArEditorNews
+      summary: توليد غلاف الخبر وحفظه بشرط ثبات نسخته (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                properties:
+                  {
+                    style: { type: string, maxLength: 200 },
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                  }
+              }
+      responses:
+        "200": { description: نجح الطلب }
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/{id}/related:
+    post:
+      operationId: relatedArEditorNews
+      summary: أخبار منشورة من التصنيف نفسه (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                properties: { limit: { type: integer, minimum: 1, maximum: 20, default: 5 } }
+              }
+      responses:
+        "200":
+          description: مواد منشورة مرتبطة
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/{id}/push:
+    post:
+      operationId: pushArEditorNews
+      summary: إرسال إشعار عاجل؛ قبول المعالجة لا يعني التسليم (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "202":
+          description: بدأ الإرسال، ولا يثبت ذلك وصوله
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - pushId
+                  - totalDevices
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - sending
+                  pushId:
+                    type: string
+                  totalDevices:
+                    type: integer
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+      description: خبر منشور وعاجل، محاولة واحدة لكل خبر ولغة. sending قبول للمعالجة؛
+        لا إثبات وصول ولا إعادة تلقائية. الإنجليزية بلا رابط للخبر.
+  /api/internal/bot-drafts/en/categories:
+    get:
+      operationId: categoriesEnEditorNews
+      summary: تصنيفات الأخبار (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: صفحة مرجعية؛ لا تعرض بيانات اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        slug:
+                          type: string
+                        nameAr:
+                          type: string
+                          nullable: true
+                        nameEn:
+                          type: string
+                          nullable: true
+                        name:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        firstNameEn:
+                          type: string
+                          nullable: true
+                        lastNameEn:
+                          type: string
+                          nullable: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/authors:
+    get:
+      operationId: authorsEnEditorNews
+      summary: مؤلفو الأخبار (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: صفحة مرجعية؛ لا تعرض بيانات اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        slug:
+                          type: string
+                        nameAr:
+                          type: string
+                          nullable: true
+                        nameEn:
+                          type: string
+                          nullable: true
+                        name:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        firstNameEn:
+                          type: string
+                          nullable: true
+                        lastNameEn:
+                          type: string
+                          nullable: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/tags:
+    get:
+      operationId: tagsEnEditorNews
+      summary: وسوم الأخبار (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: صفحة مرجعية؛ لا تعرض بيانات اتصال
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        slug:
+                          type: string
+                        nameAr:
+                          type: string
+                          nullable: true
+                        nameEn:
+                          type: string
+                          nullable: true
+                        name:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        firstNameEn:
+                          type: string
+                          nullable: true
+                        lastNameEn:
+                          type: string
+                          nullable: true
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/media/search:
+    get:
+      operationId: mediaSearchEnEditorNews
+      summary: البحث في مكتبة الصور وحقوقها (nashr-sabq فقط)
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: النتائج وحقوقها وعدد النتائج المعادة
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - files
+                  - total
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        url:
+                          type: string
+                        thumbnailUrl:
+                          type: string
+                          nullable: true
+                        title:
+                          type: string
+                          nullable: true
+                        altText:
+                          type: string
+                          nullable: true
+                        caption:
+                          type: string
+                          nullable: true
+                        isAiGenerated:
+                          type: boolean
+                        licenseType:
+                          type: string
+                          nullable: true
+                        rightsVerified:
+                          type: boolean
+                        rightsNote:
+                          type: string
+                          nullable: true
+                        creditText:
+                          type: string
+                          nullable: true
+                        copyrightHolder:
+                          type: string
+                          nullable: true
+                  total:
+                    type: integer
+                    minimum: 0
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/images/generate:
+    post:
+      operationId: generateImageEnEditorNews
+      summary: توليد صورة وحفظها (nashr-sabq فقط)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                required: [ prompt ],
+                properties:
+                  {
+                    prompt: { type: string, minLength: 3, maxLength: 2000 },
+                    style: { type: string, maxLength: 200 },
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                  }
+              }
+      responses:
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+        "201":
+          description: الصورة محفوظة
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deliveryUrl
+                  - media
+                  - isAiGenerated
+                  - model
+                properties:
+                  deliveryUrl:
+                    type: string
+                    format: uri
+                    maxLength: 2000
+                    pattern: ^https://
+                  media:
+                    type: object
+                  isAiGenerated:
+                    type: boolean
+                    enum:
+                      - true
+                  model:
+                    type: string
+      description: prompt مطلوب، 16:9 افتراضياً. الرد 201 بصورة محفوظة؛ أخطاء 400
+        invalid_input و502 generation_failed.
+  /api/internal/bot-drafts/en/{id}/revisions:
+    get:
+      operationId: revisionsEnEditorNews
+      summary: سجل مراجعات الخبر (nashr-sabq فقط)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+            default: 0
+        - name: includeDetails
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "1"
+          description: يعيد لقطات النسخ والقيم السابقة؛ الغياب يحجبها
+      responses:
+        "200":
+          description: أحدث الأحداث والمراجعات أولاً
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - nextOffset
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - kind
+                        - id
+                        - createdAt
+                        - data
+                      properties:
+                        kind:
+                          type: string
+                          enum:
+                            - version
+                            - event
+                            - revision
+                            - activity
+                        id:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        data:
+                          type: object
+                          nullable: true
+                  nextOffset:
+                    type: integer
+                    nullable: true
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/{id}/unpublish:
+    post:
+      operationId: unpublishEnEditorNews
+      summary: سحب المنشور إلى مسودة (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "200": { description: نجح الطلب }
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/{id}/cover/generate:
+    post:
+      operationId: generateCoverEnEditorNews
+      summary: توليد غلاف الخبر وحفظه بشرط ثبات نسخته (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                properties:
+                  {
+                    style: { type: string, maxLength: 200 },
+                    aspectRatio: { type: string, enum: [ "1:1", "16:9", "4:3", "9:16", "21:9", "3:4" ] }
+                  }
+              }
+      responses:
+        "200": { description: نجح الطلب }
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/{id}/related:
+    post:
+      operationId: relatedEnEditorNews
+      summary: أخبار منشورة من التصنيف نفسه (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                additionalProperties: false,
+                properties: { limit: { type: integer, minimum: 1, maximum: 20, default: 5 } }
+              }
+      responses:
+        "200":
+          description: مواد منشورة مرتبطة
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+  /api/internal/bot-drafts/en/{id}/push:
+    post:
+      operationId: pushEnEditorNews
+      summary: إرسال إشعار عاجل؛ قبول المعالجة لا يعني التسليم (nashr-sabq فقط)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "202":
+          description: بدأ الإرسال، ولا يثبت ذلك وصوله
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - pushId
+                  - totalDevices
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - sending
+                  pushId:
+                    type: string
+                  totalDevices:
+                    type: integer
+        "400": { description: طلب غير صالح }
+        "401": { description: توكن غير صالح }
+        "403": { description: الهوية غير مخوّلة }
+        "404": { description: الخبر غير موجود }
+        "409": { description: تعارض الحالة أو القفل أو محاولة دفع سابقة }
+        "422": { description: بيانات أو حالة غير مدعومة }
+        "429": { description: السعة مشغولة أو تجاوز المعدل }
+        "502": { description: فشل التوليد أو الخدمة }
+        "503": { description: الخدمة غير متاحة }
+      description: خبر منشور وعاجل، محاولة واحدة لكل خبر ولغة. sending قبول للمعالجة؛
+        لا إثبات وصول ولا إعادة تلقائية. الإنجليزية بلا رابط للخبر.
+  /api/internal/bot-drafts/{id}/push/{pushId}:
+    get:
+      operationId: getEditorPushReceiptAr
+      summary: قراءة حالة إشعار nashr-sabq
+      description: قد تنتقل sending بعد 30 دقيقة إلى delivery_unknown عند قراءة
+        الإيصال؛ لا توجد إعادة إرسال تلقائية. sent يشير إلى نتائج المزود ولا
+        يثبت وصول الأجهزة.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pushId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: إيصال الإرسال
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  language:
+                    type: string
+                    enum:
+                      - ar
+                      - en
+                  article_id:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - sending
+                      - sent
+                      - partial
+                      - failed
+                      - delivery_unknown
+                  total_devices:
+                    type: integer
+                  sent_count:
+                    type: integer
+                  failed_count:
+                    type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: invalid_push_id أو invalid_article_id
+        "401":
+          description: unauthorized
+        "403":
+          description: forbidden_action
+        "404":
+          description: push_not_found
+  /api/internal/bot-drafts/en/{id}/push/{pushId}:
+    get:
+      operationId: getEditorPushReceiptEn
+      summary: قراءة حالة إشعار nashr-sabq
+      description: قد تنتقل sending بعد 30 دقيقة إلى delivery_unknown عند قراءة
+        الإيصال؛ لا توجد إعادة إرسال تلقائية. sent يشير إلى نتائج المزود ولا
+        يثبت وصول الأجهزة.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pushId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: إيصال الإرسال
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  language:
+                    type: string
+                    enum:
+                      - ar
+                      - en
+                  article_id:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - sending
+                      - sent
+                      - partial
+                      - failed
+                      - delivery_unknown
+                  total_devices:
+                    type: integer
+                  sent_count:
+                    type: integer
+                  failed_count:
+                    type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: invalid_push_id أو invalid_article_id
+        "401":
+          description: unauthorized
+        "403":
+          description: forbidden_action
+        "404":
+          description: push_not_found
 components:
   securitySchemes:
     botToken:
       type: http
       scheme: bearer
-      description: توكن البوت من BOT_DRAFTS_API_TOKENS (Railway). يُخزَّن في مدير أسرار البوت باسم SABQ_BOT_DRAFTS_TOKEN.
+      description: توكن البوت من BOT_DRAFTS_API_TOKENS (Railway). يُخزَّن في مدير
+        أسرار البوت باسم SABQ_BOT_DRAFTS_TOKEN.
   parameters:
     ArticleId:
       name: id
@@ -846,33 +2520,73 @@ components:
       type: object
       properties:
         title: { type: string, minLength: 3, maxLength: 300, description: عنوان الخبر }
-        content: { type: string, minLength: 20, maxLength: 300000, description: HTML أو نص خام (يتحول لفقرات). وسوم img https تُعاد كتابتها لشكل محرر TipTap }
-        contentFormat: { type: string, enum: [html, text] }
+        content:
+          {
+            type: string,
+            minLength: 20,
+            maxLength: 300000,
+            description: HTML أو نص خام (يتحول لفقرات). وسوم img https تُعاد كتابتها لشكل
+              محرر TipTap
+          }
+        contentFormat: { type: string, enum: [ html, text ] }
         subtitle:
           type: string
           maxLength: 300
           nullable: true
-          description: مع publish_first_validation (الافتراضي مفعّل) السقف الفعلي 120 ويرد 422 subtitle_too_long. إطفاء العلم يعيد 300.
+          description: مع publish_first_validation (الافتراضي مفعّل) السقف الفعلي 120 ويرد
+            422 subtitle_too_long. إطفاء العلم يعيد 300.
         riskLabel:
           type: string
           nullable: true
-          enum: [safe, needs_look, sensitive]
+          enum: [ safe, needs_look, sensitive ]
           description: شارة المخاطر معلوماتية فقط؛ لا تمنع النشر ولا الجدولة ولا التصحيح.
         updateReason:
           type: string
           maxLength: 500
           nullable: true
-          description: سبب التحديث على خبر منشور. يظهر للقارئ إن كان علم سطر التحديث مفعّلاً.
-        excerpt: { type: string, maxLength: 1000, nullable: true, description: المقدمة/الموجز }
-        seoTitle: { type: string, maxLength: 70, nullable: true, description: يُحفظ في seo.metaTitle؛ غيابه يحافظ على القيمة وnull/الفارغ يمسحها }
-        seoDescription: { type: string, maxLength: 160, nullable: true, description: يُحفظ في seo.metaDescription؛ غيابه يحافظ على القيمة وnull/الفارغ يمسحها }
+          description: سبب التحديث على خبر منشور. يظهر للقارئ إن كان علم سطر التحديث
+            مفعّلاً.
+        excerpt:
+          {
+            type: string,
+            maxLength: 1000,
+            nullable: true,
+            description: المقدمة/الموجز
+          }
+        seoTitle:
+          {
+            type: string,
+            maxLength: 70,
+            nullable: true,
+            description: يُحفظ في seo.metaTitle؛ غيابه يحافظ على القيمة وnull/الفارغ يمسحها
+          }
+        seoDescription:
+          {
+            type: string,
+            maxLength: 160,
+            nullable: true,
+            description: يُحفظ في seo.metaDescription؛ غيابه يحافظ على القيمة وnull/الفارغ
+              يمسحها
+          }
         categoryId: { type: string }
-        categorySlug: { type: string, description: slug تصنيف منشور (status=visible في الإنتاج؛ يُقبل active تاريخياً) من GET /api/categories }
-        imageUrl: { type: string, format: uri, nullable: true, description: صورة الغلاف فقط — https. لا تُنسخ إلى المتن }
+        categorySlug:
+          {
+            type: string,
+            description: slug تصنيف منشور (status=visible في الإنتاج؛ يُقبل active تاريخياً)
+              من GET /api/categories
+          }
+        imageUrl:
+          {
+            type: string,
+            format: uri,
+            nullable: true,
+            description: صورة الغلاف فقط — https. لا تُنسخ إلى المتن
+          }
         imageUrls:
           type: array
           maxItems: 20
-          description: صور المتن. تُلحَق أسفل الجسم كوسوم img بنفس عقد محرر TipTap (ليست ألبوماً). يُفضَّل deliveryUrl من POST /images
+          description: صور المتن. تُلحَق أسفل الجسم كوسوم img بنفس عقد محرر TipTap (ليست
+            ألبوماً). يُفضَّل deliveryUrl من POST /images
           items: { type: string, format: uri }
         keywords:
           type: array
@@ -880,18 +2594,25 @@ components:
           items: { type: string, maxLength: 60 }
         sourceUrl: { type: string, format: uri, nullable: true }
         clientReference: { type: string, maxLength: 120, description: معرّف البوت الداخلي للمادة }
-        notes: { type: string, maxLength: 2000, nullable: true, description: ملاحظة للمحررين }
+        notes:
+          {
+            type: string,
+            maxLength: 2000,
+            nullable: true,
+            description: ملاحظة للمحررين
+          }
       additionalProperties: false
     BotDraftCreate:
       allOf:
         - $ref: "#/components/schemas/DraftFields"
-        - required: [title, content]
+        - required: [ title, content ]
     BotDraftUpdate:
       description: >
         نفس حقول الإنشاء وكلها اختيارية وحقل واحد على الأقل. على خبر published
-        مصدره bot كل الحقول مسموحة ما عدا clientReference وnotes (422 forbidden_fields).
-        imageUrls تُلحق أسفل المتن بلا تكرار، وcategorySlug/categoryId ينقل التصنيف
-        (غير موجود → 422 category_not_found). status وpublishedAt وslug لا تُكتب.
+        مصدره bot كل الحقول مسموحة ما عدا clientReference وnotes (422
+        forbidden_fields). imageUrls تُلحق أسفل المتن بلا تكرار،
+        وcategorySlug/categoryId ينقل التصنيف (غير موجود → 422
+        category_not_found). status وpublishedAt وslug لا تُكتب.
       allOf:
         - $ref: "#/components/schemas/DraftFields"
         - minProperties: 1
@@ -900,7 +2621,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/DraftFields"
         - type: object
-          required: [title, content]
+          required: [ title, content ]
           properties:
             sourceArticleId:
               type: string
@@ -925,7 +2646,7 @@ components:
         fields:
           type: array
           minItems: 1
-          items: { type: string, enum: [summary, keywords, seo] }
+          items: { type: string, enum: [ summary, keywords, seo ] }
     RegenerateExtrasResult:
       type: object
       properties:
@@ -941,9 +2662,13 @@ components:
     ScheduleBody:
       type: object
       additionalProperties: false
-      required: [publishAt]
+      required: [ publishAt ]
       properties:
-        publishAt: { type: string, description: ISO-8601 مع إزاحة، مثال 2026-12-01T18:30:00+03:00 }
+        publishAt:
+          {
+            type: string,
+            description: "ISO-8601 مع إزاحة، مثال 2026-12-01T18:30:00+03:00"
+          }
     ArchiveBody:
       type: object
       additionalProperties: false
@@ -954,20 +2679,38 @@ components:
       additionalProperties: false
       properties:
         isFeatured: { type: boolean }
-        newsType: { type: string, enum: [breaking, regular] }
+        newsType: { type: string, enum: [ breaking, regular ] }
         hideFromHomepage: { type: boolean }
     PublishOperation:
       $ref: "#/components/schemas/BotDraftPublishOperation"
     BotPublicArticleLookup:
       type: object
-      required: [id, status, title, slug, englishSlug, source, categorySlug, publishedAt, updatedAt, publicUrl, updatable]
+      required:
+        [
+          id,
+          status,
+          title,
+          slug,
+          englishSlug,
+          source,
+          categorySlug,
+          publishedAt,
+          updatedAt,
+          publicUrl,
+          updatable
+        ]
       properties:
         id: { type: string }
-        status: { type: string, enum: [published] }
+        status: { type: string, enum: [ published ] }
         title: { type: string }
         slug: { type: string }
         englishSlug: { type: string, nullable: true }
-        source: { type: string, nullable: true, description: مصدر الصف الأصلي (bot أو manual أو email …) }
+        source:
+          {
+            type: string,
+            nullable: true,
+            description: مصدر الصف الأصلي (bot أو manual أو email …)
+          }
         categorySlug: { type: string, nullable: true }
         publishedAt: { type: string, format: date-time, nullable: true }
         updatedAt: { type: string, format: date-time }
@@ -977,11 +2720,30 @@ components:
       type: object
       properties:
         id: { type: string }
-        status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
-        updatable: { type: boolean, description: true لمسودة بوت draft ولأي خبر published أياً كان مصدره. false بعد الجاهزية أو الجدولة أو الأرشفة. إلغاء الجدولة يعيدها true }
+        status:
+          {
+            type: string,
+            description: الحالة الحالية في اللوحة
+              (draft/ready_to_publish/published/scheduled/archived)
+          }
+        updatable:
+          {
+            type: boolean,
+            description: true لمسودة بوت draft ولأي خبر published أياً كان مصدره. false بعد
+              الجاهزية أو الجدولة أو الأرشفة. إلغاء الجدولة يعيدها true
+          }
         title: { type: string }
-        content: { type: string, description: يظهر فقط في GET مع includeContent=1، وهو HTML الكنسي المخزّن }
-        contentFormat: { type: string, enum: [html], description: يظهر مع content في GET مع includeContent=1 فقط }
+        content:
+          {
+            type: string,
+            description: يظهر فقط في GET مع includeContent=1، وهو HTML الكنسي المخزّن
+          }
+        contentFormat:
+          {
+            type: string,
+            enum: [ html ],
+            description: يظهر مع content في GET مع includeContent=1 فقط
+          }
         subtitle: { type: string, nullable: true }
         slug: { type: string }
         excerpt: { type: string, nullable: true }
@@ -992,7 +2754,8 @@ components:
         imageUrl: { type: string, nullable: true }
         bodyImageUrls:
           type: array
-          description: روابط صور المتن بالترتيب. الغلاف لا يدخل إلا إذا وُضع في الجسم. المتن نفسه لا يُعاد
+          description: روابط صور المتن بالترتيب. الغلاف لا يدخل إلا إذا وُضع في الجسم.
+            المتن نفسه لا يُعاد
           items: { type: string, format: uri }
         sourceUrl: { type: string, nullable: true }
         keywords: { type: array, items: { type: string } }
@@ -1006,9 +2769,17 @@ components:
           type: string
           format: uri
           nullable: true
-          description: رابط القارئ https://sabq.org/article/{englishSlug}. الصفحة العامة تعرضه عندما status=published. أثناء scheduled نفس الرابط يُفتح بعد الموعد.
+          description: رابط القارئ https://sabq.org/article/{englishSlug}. الصفحة العامة
+            تعرضه عندما status=published. أثناء scheduled نفس الرابط يُفتح بعد
+            الموعد.
         publishedAt: { type: string, format: date-time, nullable: true }
-        scheduledAt: { type: string, format: date-time, nullable: true, description: موعد الجدولة المؤكد }
+        scheduledAt:
+          {
+            type: string,
+            format: date-time,
+            nullable: true,
+            description: موعد الجدولة المؤكد
+          }
         isFeatured: { type: boolean, description: مميز }
         newsType: { type: string, description: breaking أو regular }
         hideFromHomepage: { type: boolean, description: مخفي من الرئيسية }
@@ -1016,9 +2787,14 @@ components:
         updatedAt: { type: string, format: date-time }
     BotDraftImageUpload:
       type: object
-      required: [deliveryUrl, purpose]
+      required: [ deliveryUrl, purpose ]
       properties:
-        deliveryUrl: { type: string, format: uri, description: رابط R2 العام https://media.sabq.org/news/… لتمريره كـ imageUrl (غلاف) أو داخل imageUrls (متن) }
+        deliveryUrl:
+          {
+            type: string,
+            format: uri,
+            description: "رابط R2 العام https://media.sabq.org/news/… لتمريره كـ imageUrl (غلاف) أو داخل imageUrls (متن)"
+          }
         imageId: { type: string, nullable: true }
         filename: { type: string }
         provider: { type: string, nullable: true, description: r2 دائماً على هذا المسار }
@@ -1028,30 +2804,253 @@ components:
         purpose: { type: string, example: bot-article-image }
     BotDraftPublishOperation:
       type: object
-      required: [operationId, articleId, action, status]
+      required: [ operationId, articleId, action, status ]
       properties:
         operationId: { type: string, format: uuid }
         articleId: { type: string }
-        action: { type: string, enum: [publish] }
-        status: { type: string, enum: [processing, succeeded, failed] }
+        action: { type: string, enum: [ publish ] }
+        status: { type: string, enum: [ processing, succeeded, failed ] }
         response: { $ref: "#/components/schemas/BotDraft" }
         error:
           type: object
-          required: [code, message]
+          required: [ code, message ]
           properties:
             code: { type: string }
             message: { type: string }
             details: {}
-        executionOutcome: { type: string, enum: [not_applied], description: يظهر فقط عند فشل مؤكد قبل الكتابة }
+        executionOutcome:
+          {
+            type: string,
+            enum: [ not_applied ],
+            description: يظهر فقط عند فشل مؤكد قبل الكتابة
+          }
     Error:
       type: object
-      required: [code, message]
+      required: [ code, message ]
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, not_archived, locked_by_editor, draft_changed, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error, content_too_short, generation_failed, source_article_not_found, source_article_already_linked]
+          description: رمز الخطأ، مثل validation_error أو invalid_input أو
+            locked_by_editor أو draft_changed أو forbidden_action أو
+            push_not_found
         message: { type: string }
         details: {}
+    BotNewsEditorUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: حصري لـ nashr-sabq؛ sourceArticleId للإنجليزية فقط، وnotes
+        وclientReference وinfographic غير قابلة للتعديل بعد النشر. status
+        والمصدر غير قابلين للتعديل. authorId وreporterId يتطلبان حساباً تحريرياً
+        نشطاً.
+      properties:
+        title:
+          type: string
+          maxLength: 300
+          minLength: 3
+        authorId:
+          type: string
+          maxLength: 64
+          minLength: 1
+        reporterId:
+          type: string
+          maxLength: 64
+          minLength: 1
+          nullable: true
+        subtitle:
+          type: string
+          maxLength: 300
+          nullable: true
+        content:
+          type: string
+          maxLength: 300000
+          minLength: 20
+        contentFormat:
+          type: string
+          enum:
+            - html
+            - text
+        excerpt:
+          type: string
+          maxLength: 1000
+          nullable: true
+        categoryId:
+          type: string
+          maxLength: 64
+          minLength: 1
+        categorySlug:
+          type: string
+          maxLength: 150
+          minLength: 1
+        imageUrl:
+          type: string
+          format: uri
+          maxLength: 2000
+          pattern: ^https://
+          nullable: true
+        isAiGeneratedImage:
+          type: boolean
+        infographic:
+          type: boolean
+        infographicBannerUrl:
+          type: string
+          format: uri
+          maxLength: 2000
+          pattern: ^https://
+          nullable: true
+        imageUrls:
+          type: array
+          maxItems: 20
+          items: &a1
+            type: string
+            format: uri
+            maxLength: 2000
+            pattern: ^https://
+        bodyImages:
+          type: array
+          maxItems: 40
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - url
+            anyOf:
+              - required:
+                  - alt
+              - required:
+                  - caption
+            properties:
+              url: *a1
+              alt:
+                type: string
+                maxLength: 300
+                nullable: true
+              caption:
+                type: string
+                maxLength: 500
+                nullable: true
+        imageCaption:
+          type: string
+          maxLength: 300
+          nullable: true
+        imageAltText:
+          type: string
+          maxLength: 125
+          nullable: true
+        sourceUrl:
+          type: string
+          format: uri
+          pattern: ^https?://
+          maxLength: 2000
+          nullable: true
+        sourceArticleId:
+          type: string
+          maxLength: 64
+          minLength: 1
+          nullable: true
+        riskLabel:
+          type: string
+          nullable: true
+          enum:
+            - safe
+            - needs_look
+            - sensitive
+            - null
+        clientReference:
+          type: string
+          maxLength: 120
+          minLength: 1
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        tagIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            maxLength: 64
+            minLength: 1
+        keywords:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 60
+            minLength: 1
+        alternativeTitle:
+          type: string
+          maxLength: 300
+          nullable: true
+        seoTitle:
+          type: string
+          maxLength: 70
+          nullable: true
+        seoDescription:
+          type: string
+          maxLength: 160
+          nullable: true
+        updateReason:
+          type: string
+          maxLength: 500
+          nullable: true
+    BotNewsEditorVisibility:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: "خاص بـ nashr-sabq: specialSections استبدال كامل، ولا يجتمع مع
+        isFeatured أو isReading. displayOrder وزن؛ حد الإنجليزية 2147483647
+        والعربية 9007199254740991."
+      properties:
+        specialSections:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - featured
+              - reading
+        isFeatured:
+          type: boolean
+        isReading:
+          type: boolean
+        newsType:
+          type: string
+          enum:
+            - breaking
+            - regular
+        hideFromHomepage:
+          type: boolean
+        displayOrder:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        updateReason:
+          type: string
+          maxLength: 500
+          nullable: true
+    BotNewsEditorExtras:
+      type: object
+      additionalProperties: false
+      properties:
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            enum:
+              - summary
+              - keywords
+              - seo
+              - subtitle
+              - excerpt
+              - alternativeTitle
+              - seoTitle
+              - seoDescription
+          description: افتراضياً summary, keywords, seo
   responses:
     ValidationError:
       description: validation_error — حقل ناقص/غير صالح/غير معروف

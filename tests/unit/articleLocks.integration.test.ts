@@ -16,8 +16,11 @@ if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) throw ne
 describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
   let pool: Pool, server: Server, base: string;
   beforeAll(async () => {
-    pool = new Pool({ connectionString: url, options: "-c search_path=lock_audit", max: 10 });
-    await pool.query("CREATE SCHEMA lock_audit");
+    const schema = `lock_audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: 10 });
+    await pool.query(`CREATE SCHEMA ${schema}`);
+    await pool.query("CREATE TABLE articles (id varchar PRIMARY KEY)");
+    await pool.query("INSERT INTO articles (id) VALUES ('a'), ('b')");
     await pool.query(`CREATE TABLE article_edit_locks (article_id varchar PRIMARY KEY, user_id varchar NOT NULL,
       user_name text NOT NULL, acquired_at timestamp NOT NULL, expires_at timestamp NOT NULL, last_heartbeat timestamp NOT NULL)`);
     state.db = drizzle(pool);
@@ -29,7 +32,7 @@ describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
     base = `http://127.0.0.1:${(server.address() as any).port}/api/admin/articles/a/lock`;
   });
   beforeEach(async () => { await pool.query("DELETE FROM article_edit_locks"); });
-  afterAll(async () => { if (server) await new Promise<void>(r => server.close(() => r())); if (pool) { await pool.query("DROP SCHEMA lock_audit CASCADE"); await pool.end(); } });
+  afterAll(async () => { if (server) await new Promise<void>(r => server.close(() => r())); if (pool) await pool.end(); });
   const request = (user: string, method = "POST", suffix = "") => fetch(base + suffix, { method, headers: { "x-user": user } });
   const takeOver = (user: string) => fetch(base, { method: "POST", headers: { "x-user": user, "content-type": "application/json" }, body: JSON.stringify({ force: true }) });
   it("allows exactly one of ten simultaneous editors", async () => {

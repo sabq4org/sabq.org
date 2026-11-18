@@ -72,12 +72,13 @@ function restoreImageWidths(fragment: DocumentFragment): void {
   });
 }
 
-export function sanitizeArticleHtml(html: string): string {
+export function sanitizeArticleHtml(html: string, editFragment?: (fragment: DocumentFragment) => void): string {
   if (!html) return "";
   try {
-    if (!html.includes("data-width")) return sanitize(html, SANITIZE_CONFIG);
+    if (!editFragment && !html.includes("data-width")) return sanitize(html, SANITIZE_CONFIG);
 
     const fragment = sanitize(html, { ...SANITIZE_CONFIG, RETURN_DOM_FRAGMENT: true });
+    editFragment?.(fragment);
     restoreImageWidths(fragment);
     const host = fragment.ownerDocument.createElement("div");
     host.appendChild(fragment);

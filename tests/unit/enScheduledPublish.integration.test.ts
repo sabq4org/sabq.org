@@ -45,7 +45,7 @@ describe.skipIf(!url)("scheduled English dashboard articles", () => {
     const schema = `en_sched_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const admin = new Pool({ connectionString: url, max: 1 });
     try { await admin.query(`CREATE SCHEMA ${schema}`); } finally { await admin.end(); }
-    pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: 2 });
+    pool = new Pool({ connectionString: url, options: `-c search_path=${schema} -c timezone=UTC`, max: 2 });
     await pool.query(ddlFor(enArticles));
     state.db = drizzle(pool);
     const insert = (id: string, status: string, at: string, meta: string | null) =>
