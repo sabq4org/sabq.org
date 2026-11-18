@@ -31,6 +31,60 @@ const waitUntil = () => {};
 describe("burst cache layers (Pages over the api.sabq.org Worker)", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("shares the real competitions Vary only within a language, query and origin", async () => {
+    const cache = memoryCache();
+    const handle = createPublicApiBurstCache();
+    const fetchOrigin = vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      const query = url.searchParams.getAll("lang").join(",").trim().toLowerCase();
+      const header = request.headers.get("accept-language")?.toLowerCase();
+      const lang = query === "en" || query === "ar" ? query : header?.startsWith("en") ? "en" : "ar";
+      const headers = {
+        vary: "Origin, Accept-Language, Accept-Encoding",
+        "cache-control": "public, max-age=3600, s-maxage=86400",
+        "x-sabq-public-cache": "1",
+      };
+      if (request.headers.has("if-match")) return new Response(null, { status: 412, headers });
+      if (request.headers.has("if-none-match") || request.headers.has("if-modified-since")) {
+        return new Response(null, { status: 304, headers });
+      }
+      return Response.json({ lang }, { headers });
+    });
+    const read = (query: string, language: string, headers: Record<string, string> = {}) => handle(
+      new Request("https://sabq.org/api/sports/competitions" + query, {
+        headers: { "accept-language": language, ...headers },
+      }), { cache, fetchOrigin, waitUntil },
+    );
+    const burst = await Promise.all(Array.from({ length: 12 }, () => read("", "en-US")));
+    expect(await Promise.all(burst.map(r => r!.json()))).toEqual(Array(12).fill({ lang: "en" }));
+    expect(fetchOrigin).toHaveBeenCalledTimes(1);
+    const warm = await read("", "EN-gb");
+    expect(warm?.headers.get("x-edge-cache")).toBe("HIT");
+    expect(warm?.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    expect(await (await read("", "ar-SA"))!.json()).toEqual({ lang: "ar" });
+    expect((await read("", "ur"))?.headers.get("x-edge-cache")).toBe("HIT");
+    expect(fetchOrigin).toHaveBeenCalledTimes(2);
+    const validators: Record<string, string>[] = [
+      { "if-none-match": '"list"' }, { "if-modified-since": new Date(0).toUTCString() },
+    ];
+    for (const headers of validators) {
+      const response = await read("", "en-GB", headers);
+      expect(response?.status).toBe(304);
+      expect(response?.body).toBeNull();
+    }
+    expect((await read("", "en-GB", { "if-match": '"unmatched"' }))?.status).toBe(412);
+    expect(cache.put).toHaveBeenCalledTimes(2);
+    expect(await (await read("?lang=Ar", "en-US"))!.json()).toEqual({ lang: "ar" });
+    expect(await (await read("?lang=En", "ar-SA"))!.json()).toEqual({ lang: "en" });
+    expect(await (await read("?lang=en&lang=ar", "en-US"))!.json()).toEqual({ lang: "en" });
+    expect(await (await read("?lang=en&lang=ar", "ar-SA"))!.json()).toEqual({ lang: "ar" });
+    expect((await read("?status=upcoming", "en-US"))?.headers.get("x-edge-cache")).toBeNull();
+    expect((await read("", "en-US", { origin: "https://reader.example" }))?.headers.get("x-edge-cache")).toBeNull();
+    expect(await read("", "en-US", { cookie: "connect.sid=fixture" })).toBeNull();
+    expect(await read("", "en-US", { authorization: "Bearer fixture" })).toBeNull();
+    expect(await read("", "en-US", { "x-session-id": "fixture" })).toBeNull();
+  });
+
   it("hands on only the TTL a Worker hit has left, and Pages keeps no more than that", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-22T10:00:00Z"));

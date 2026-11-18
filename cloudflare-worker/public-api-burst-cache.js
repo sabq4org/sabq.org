@@ -6,6 +6,8 @@
  * caller's signing, fallback, and routing contract.
  */
 
+const COMPETITIONS_PATH = "/api/sports/competitions";
+
 export const NEW_PUBLIC_API_CACHE_ROUTES = [
   { match: (path) => /^\/api\/articles\/[^/]+\/comments$/.test(path), ttl: 15 },
   { match: (path) => path === "/api/system/dms-top-ads", ttl: 15 },
@@ -25,7 +27,7 @@ export const NEW_PUBLIC_API_CACHE_ROUTES = [
   { match: (path) => path === "/api/v1/authors/by-name", ttl: 120 },
   { match: (path) => path === "/api/homepage", ttl: 60 },
   { match: (path) => path === "/api/categories", ttl: 60 },
-  { match: (path) => path === "/api/sports/competitions", ttl: 300 },
+  { match: (path) => path === COMPETITIONS_PATH, ttl: 300 },
   { match: (path) => path === "/api/opinion", ttl: 60 },
   { match: (path) => /^\/api\/opinion\/related\/category\/[^/]+$/.test(path), ttl: 60 },
   { match: (path) => path === "/api/stories", ttl: 60 },
@@ -70,7 +72,12 @@ export function newPublicApiCacheKey(request) {
   url.searchParams.set("__sabq_origin", requestOrigin ? `present:${requestOrigin}` : "absent");
   // Preserve every caller query parameter. Sports reads also vary by the
   // effective language selected from ?lang or Accept-Language.
-  if (SPORTS_LANG_PATHS.has(url.pathname)) {
+  if (url.pathname === COMPETITIONS_PATH) {
+    // The full query already distinguishes ?lang (including repeated values).
+    // Retain the origin's two header fallbacks even for non-scalar queries.
+    const accept = request.headers.get("accept-language") || "";
+    url.searchParams.set("__sabq_sports_lang", accept.trim().toLowerCase().startsWith("en") ? "en" : "ar");
+  } else if (SPORTS_LANG_PATHS.has(url.pathname)) {
     const queryLang = (url.searchParams.get("lang") || "").toLowerCase();
     const acceptLanguage = (request.headers.get("accept-language") || "").toLowerCase();
     const lang = queryLang === "en" || queryLang === "ar"
@@ -105,7 +112,7 @@ function publicOriginTtl(response, routeTtl, path, requestOrigin = "") {
   if (directives.some((directive) => ["private", "no-store", "no-cache"].includes(directive))) return 0;
   const vary = (response.headers.get("vary") || "").split(",").map((name) => name.trim().toLowerCase());
   const allowedVary = new Set(["accept-encoding", "origin"]);
-  if (SPORTS_LANG_PATHS.has(path)) allowedVary.add("accept-language");
+  if (path === COMPETITIONS_PATH || SPORTS_LANG_PATHS.has(path)) allowedVary.add("accept-language");
   if (vary.some((name) => name && (name === "*" || !allowedVary.has(name)))) return 0;
   const allowOrigin = response.headers.get("access-control-allow-origin");
   if (allowOrigin && allowOrigin !== "*" && allowOrigin !== requestOrigin) return 0;
@@ -296,6 +303,15 @@ export function createPublicApiBurstCache() {
     const policy = newPublicApiPolicy(request);
     if (!policy) return null;
     const runtime = { cache, waitUntil: (promise) => waitUntil(promise) };
+
+    // Keep origin evaluation of conditional requests, including a bodyless
+    // 304, independent of cached or in-flight unconditional list responses.
+    if (new URL(request.url).pathname === COMPETITIONS_PATH &&
+        (request.headers.has("if-none-match") || request.headers.has("if-modified-since") ||
+         request.headers.has("if-match") || request.headers.has("if-unmodified-since"))) {
+      const result = await safeFetchNewPublicApiResult(request, policy, fetchOrigin, { ...runtime, canStore: () => false });
+      return newPublicApiResultResponse(result);
+    }
 
     let hit;
     try {
