@@ -928,7 +928,7 @@ Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal 
 | `POST {base}/:id/revert-to-draft` | إرجاع `ready_to_publish` إلى `draft`. |
 | `POST {base}/:id/archive` و`DELETE {base}/:id` | أرشفة ناعمة من `draft` أو `ready_to_publish` أو `scheduled` أو `published`. المنشور يقبل `{}` أو `reason`. غير المنشور يتطلب `updateReason` و`expectedUpdatedAt`. ليست حذفاً نهائياً. |
 | `POST {base}/:id/resurface` | إنعاش خبر منشور. العربية تختم `resurfacedAt`، والإنجليزية تحدّث ترتيب العرض أيضاً. |
-| `POST {base}/:id/request-revision` | إرجاع الخبر مسودة مع `reviewStatus=needs_changes` ونص السبب في `reviewNotes`، ثم تنبيه أصحاب الخبر. |
+| `POST {base}/:id/request-revision` | إرجاع الخبر مسودة مع `reviewStatus=needs_changes` ونص السبب في `reviewNotes`، ثم تنبيه أصحاب الخبر. الإنجليزية تُبطل كاش القرّاء والحافة بآثار السحب نفسها (`archive`). |
 | `POST {base}/:id/translate-to-english` | ترجمة خبر عربي منشور عبر `translateArticleToEnglish`. المسار الإنجليزي `422`. |
 | `POST {base}/:id/restore` | `{}` يعيد المؤرشف مسودة؛ لا ينشر. |
 | `POST {base}/:id/unpublish` | `{}` يسحب المنشور ويعيده مسودة. |

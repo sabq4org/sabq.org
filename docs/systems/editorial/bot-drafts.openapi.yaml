@@ -2522,7 +2522,7 @@ paths:
   /api/internal/bot-drafts/{id}/request-revision:
     post:
       operationId: requestSabqArticleRevision
-      summary: إرجاع الخبر إلى مسودة مع reviewStatus=needs_changes. حصري لـ nashr-sabq، عربي وإنجليزي.
+      summary: إرجاع الخبر إلى مسودة مع reviewStatus=needs_changes. حصري لـ nashr-sabq، عربي وإنجليزي. الإنجليزية تُبطل كاش القرّاء والحافة بآثار السحب.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       requestBody:

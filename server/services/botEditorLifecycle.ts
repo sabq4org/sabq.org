@@ -217,6 +217,7 @@ export async function runNashrAction(language: Language, action: Action, id: str
     for (const item of clearedEnglish) queueEnBotDraftSurfaceEffects(item, "visibility");
   } else if (action === "publish") queueEnBotDraftSurfaceEffects(after as any, "publish");
   else if (action === "resurface") queueEnBotDraftSurfaceEffects(after as any, "update");
+  else if (action === "request-revision") queueEnBotDraftSurfaceEffects(after as any, "archive");
   else memoryCache.invalidatePattern("^articles:");
   return respond(language, after);
 }

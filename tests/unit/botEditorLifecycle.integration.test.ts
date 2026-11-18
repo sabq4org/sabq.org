@@ -41,6 +41,7 @@ vi.mock("../../server/services/enArticleTranslationService", () => ({
 
 import arabicRouter from "../../server/routes/botDrafts";
 import englishRouter from "../../server/routes/enBotDrafts";
+import { queueEnBotDraftSurfaceEffects } from "../../server/services/enBotDraftPublishEffects";
 
 const url = process.env.BOT_EDITOR_TEST_URL || process.env.SESSION_REVOCATION_TEST_URL || process.env.EN_BOT_DRAFTS_TEST_URL;
 if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) throw new Error("Local database only");
@@ -221,6 +222,14 @@ describe.skipIf(!url)("nashr-sabq lifecycle against local Postgres", () => {
     expect(back.status).toBe(200);
     const cleared = await pool.query(`SELECT status, seo_metadata->>'source' AS source FROM en_articles WHERE id = 'en-ios'`);
     expect(cleared.rows[0]).toEqual({ status: "draft", source: "ios-app" });
+    vi.mocked(queueEnBotDraftSurfaceEffects).mockClear();
+    const pulled = await call("POST", "/api/internal/bot-drafts/en/en-live/request-revision", nashr, body(await stamp("en_articles", "en-live")));
+    expect(pulled.status).toBe(200);
+    const pulledRow = await pool.query(`SELECT status, review_status FROM en_articles WHERE id = 'en-live'`);
+    expect(pulledRow.rows[0]).toEqual({ status: "draft", review_status: "needs_changes" });
+    expect(queueEnBotDraftSurfaceEffects).toHaveBeenCalledWith(expect.objectContaining({ id: "en-live", status: "draft" }), "archive");
+    const restored = await call("POST", "/api/internal/bot-drafts/en/en-live/publish", nashr, body(await stamp("en_articles", "en-live")));
+    expect(restored.status).toBe(200);
   });
 
   it("marks ready, reverts, archives a draft, resurfaces, and requests revision", async () => {
@@ -238,11 +247,12 @@ describe.skipIf(!url)("nashr-sabq lifecycle against local Postgres", () => {
     expect(kept.rows[0].source).toBe("manual");
     const resurfaced = await call("POST", "/api/internal/bot-drafts/live-story/resurface", nashr, body(await stamp("articles", "live-story")));
     expect(resurfaced.status).toBe(200);
+    const notifiedBefore = state.notified;
     const revision = await call("POST", "/api/internal/bot-drafts/live-story/request-revision", nashr, body(await stamp("articles", "live-story")));
     expect(revision.status).toBe(200);
     const story = await pool.query(`SELECT status, review_status, review_notes, resurfaced_at IS NOT NULL AS resurfaced FROM articles WHERE id = 'live-story'`);
     expect(story.rows[0]).toMatchObject({ status: "draft", review_status: "needs_changes", review_notes: "مراجعة نشر سبق", resurfaced: true });
-    expect(state.notified).toBe(1);
+    expect(state.notified).toBe(notifiedBefore + 1);
     const bare = await call("POST", "/api/internal/bot-drafts/live-story/publish", nashr, {});
     expect(bare.status).toBe(422);
     expect(await bare.json()).toMatchObject({ code: "validation_error" });
