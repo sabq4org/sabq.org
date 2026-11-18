@@ -1195,6 +1195,9 @@ export default function NewsroomPulseDashboard() {
       hasRole(user, "admin", "system_admin", "editor", "content_manager"));
   const canReviewMuqtarab = hasPermission(user, "muqtarab.manage");
   const canViewMessages = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES);
+  // نفس شرط عنصر «سلوك القراء» في القائمة الجانبية (nav.config: admin/analyst + analytics.view).
+  const canViewReaderAnalytics =
+    hasRole(user, "admin", "analyst") || hasPermission(user, "analytics.view");
   const canViewWriterTickets = hasRole(user, "admin", "editor", "system_admin");
   const canSocialPublish =
     !isReporterOnly &&
@@ -1371,6 +1374,37 @@ export default function NewsroomPulseDashboard() {
         recentViews: 0,
         categoryName: article.category?.nameAr ?? null,
       }));
+  const scheduleCard = (
+    <Card className={cn("rounded-xl border border-border/70 bg-card shadow-sm", !isContentManager && "lg:col-span-5")}>
+      <CardHeader className="pb-3 border-b border-border/50 flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base font-bold">
+            <CalendarClock className="h-4 w-4 text-primary" />
+            جدول النشر المجدول القادم
+          </CardTitle>
+          <CardDescription className="mt-0.5 text-xs">
+            المواد المجدولة للنشر التلقائي بتوقيت الرياض
+          </CardDescription>
+        </div>
+        <Badge variant="secondary" className="text-xs tabular-nums">
+          {number(schedule.length)} مجدول
+        </Badge>
+      </CardHeader>
+      <CardContent className="pt-4">
+        <UpcomingScheduleList schedule={schedule} />
+      </CardContent>
+    </Card>
+  );
+  const quickActionsSection = (
+    <section className="grid gap-6 lg:grid-cols-12">
+      <div className="min-w-0 lg:col-span-8">
+        <QuickActionsSection />
+      </div>
+      <div className="min-w-0 lg:col-span-4">
+        <OnlineModeratorsWidget />
+      </div>
+    </section>
+  );
   const maxTrendingViews = Math.max(1, ...trending.slice(0, 5).map((a) => a.views || 0));
 
   const hourlyViews = stats?.hourlyViews ?? [];
@@ -1441,12 +1475,14 @@ export default function NewsroomPulseDashboard() {
                     خبر جديد
                   </Link>
                 </Button>
+                {canViewReaderAnalytics && (
                 <Button asChild variant="outline" size="sm" className="gap-1.5">
                   <Link href="/dashboard/analytics/behavior">
                     <BarChart3 className="h-4 w-4 text-primary" />
                     سلوك القراء
                   </Link>
                 </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1479,6 +1515,7 @@ export default function NewsroomPulseDashboard() {
         </Card>
 
         {/* Favorites / Quick Access Section — Placed right at the top on both Mobile & Desktop */}
+        {(!isContentManager || favoriteItems.length > 0) && (
         <section className="space-y-2.5 sm:space-y-3" data-testid="dashboard-favorites">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -1539,6 +1576,7 @@ export default function NewsroomPulseDashboard() {
             </div>
           )}
         </section>
+        )}
 
         {/* 6 Executive KPI Cards */}
         {!isContentManager && (
@@ -1616,7 +1654,10 @@ export default function NewsroomPulseDashboard() {
           <div
             className={cn(
               "grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2",
-              !isContentManager && "lg:grid-cols-3 xl:grid-cols-5",
+              // مدير المحتوى: 3 بطاقات في صف على الشاشة الواسعة، والبطاقة الفردية الأخيرة بعرض كامل على الجوال
+              isContentManager
+                ? "lg:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1"
+                : "lg:grid-cols-3 xl:grid-cols-5",
             )}
           >
             {!isContentManager && (
@@ -1682,21 +1723,14 @@ export default function NewsroomPulseDashboard() {
           )}
         </section>
 
-        {/* Quick Actions + Online Moderators */}
-        <section className="grid gap-6 lg:grid-cols-12">
-          <div className="min-w-0 lg:col-span-8">
-            <QuickActionsSection />
-          </div>
-          <div className="min-w-0 lg:col-span-4">
-            <OnlineModeratorsWidget />
-          </div>
-        </section>
+        {/* Quick Actions + Online Moderators (مدير المحتوى: بعد المسار والمجدول) */}
+        {!isContentManager && quickActionsSection}
 
         {/* فجوات التغطية — مخفية من الداشبورد بقرار تشغيلي (2026-07-19). غيّر الشرط لإعادة التفعيل. */}
         {false && canViewStats && !isContentManager && <CoverageGapsSection />}
 
-        {/* Hourly Views Chart (7 cols) + Editorial Pipeline (5 cols) */}
-        <section className={cn("grid gap-6", !isContentManager && "lg:grid-cols-12")}>
+        {/* Hourly Views Chart (7 cols) + Editorial Pipeline (5 cols); مدير المحتوى: المسار + المجدول */}
+        <section className={cn("grid gap-6", isContentManager ? "lg:grid-cols-2" : "lg:grid-cols-12")}>
           {!isContentManager && (
             <Card className="rounded-xl border border-border/70 bg-card shadow-sm lg:col-span-7">
               <CardHeader className="pb-3 border-b border-border/50">
@@ -1826,13 +1860,18 @@ export default function NewsroomPulseDashboard() {
               </CardContent>
             </Card>
           )}
-          <div className={cn(!isContentManager && "lg:col-span-5")}>
+          <div className={cn("min-w-0", !isContentManager && "lg:col-span-5")}>
             {stats && <EditorialPipeline stats={stats} />}
           </div>
+          {/* مدير المحتوى: المجدول بجانب المسار بدل أن يتمدد كل منهما على العرض كله */}
+          {isContentManager && <div className="min-w-0">{scheduleCard}</div>}
         </section>
 
+        {isContentManager && quickActionsSection}
+
         {/* Trending Articles (7 cols) + Upcoming Schedule (5 cols) */}
-        <section className={cn("grid gap-6", !isContentManager && "lg:grid-cols-12")}>
+        {!isContentManager && (
+        <section className="grid gap-6 lg:grid-cols-12">
           {!isContentManager && (
             <Card className="rounded-xl border border-border/70 bg-card shadow-sm lg:col-span-7">
               <CardHeader className="pb-3 border-b border-border/50 flex-row items-center justify-between space-y-0">
@@ -1921,26 +1960,9 @@ export default function NewsroomPulseDashboard() {
             </Card>
           )}
 
-          <Card className={cn("rounded-xl border border-border/70 bg-card shadow-sm", !isContentManager && "lg:col-span-5")}>
-            <CardHeader className="pb-3 border-b border-border/50 flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base font-bold">
-                  <CalendarClock className="h-4 w-4 text-primary" />
-                  جدول النشر المجدول القادم
-                </CardTitle>
-                <CardDescription className="mt-0.5 text-xs">
-                  المواد المجدولة للنشر التلقائي بتوقيت الرياض
-                </CardDescription>
-              </div>
-              <Badge variant="secondary" className="text-xs tabular-nums">
-                {number(schedule.length)} مجدول
-              </Badge>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <UpcomingScheduleList schedule={schedule} />
-            </CardContent>
-          </Card>
+          {scheduleCard}
         </section>
+        )}
 
         {/* Operations & Reminders */}
         {!isContentManager && (
