@@ -32,6 +32,7 @@ export const NASHR_EDITOR_CAPABILITIES = [
   // مقالات الرأي والتحليل والعمود (عبر خدمة مكتب الرأي)
   "opinion.read",
   "opinion.edit",
+  "opinion.edit_published",
   "opinion.lifecycle",
   "opinion.image",
 ] as const;

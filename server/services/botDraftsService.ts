@@ -52,6 +52,7 @@ import {
 } from "./breakingNewsService";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
+import { cleanBotArticleHtml } from "../utils/botArticleHtml";
 import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
 import { logActivity, getUserRoleNames } from "../rbac";
 import { memoryCache } from "../memoryCache";
@@ -362,11 +363,13 @@ export function normalizeDraftContent(
   content: string,
   format?: "html" | "text",
   imageUrls?: string[],
+  options: { rtl?: boolean } = {},
 ): string {
   const trimmed = (content ?? "").trim();
   const isHtml = format ? format === "html" : HTML_TAG_RE.test(trimmed);
   if (isHtml) {
-    const rewritten = transformImgTags(sanitizeArticleHtml(trimmed), rewriteImgTag);
+    // فقرات فارغة و`text-align: right` لا تُحفظ من البوت (انظر utils/botArticleHtml). rtl=false للإنجليزية.
+    const rewritten = transformImgTags(cleanBotArticleHtml(sanitizeArticleHtml(trimmed), options), rewriteImgTag);
     return appendBotDraftBodyImages(rewritten, imageUrls);
   }
   const paragraphs = trimmed
