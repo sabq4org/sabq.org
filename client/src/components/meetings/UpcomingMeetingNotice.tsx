@@ -25,6 +25,8 @@ type NoticeMeeting = {
 };
 
 const WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+// اجتماع مجدول تأخر بدؤه يبقى ظاهراً ساعتين، وما بعدها فائت لا يحجب الدعوات القادمة
+const GRACE_MS = 2 * 60 * 60 * 1000;
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "";
@@ -57,7 +59,11 @@ export function UpcomingMeetingNotice() {
   const meeting =
     live[0] ??
     upcoming
-      .filter((m) => m.scheduledAt && new Date(m.scheduledAt).getTime() - now < WINDOW_MS)
+      .filter((m) => {
+        if (!m.scheduledAt) return false;
+        const delta = new Date(m.scheduledAt).getTime() - now;
+        return delta > -GRACE_MS && delta < WINDOW_MS;
+      })
       .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime())[0];
 
   const rsvp = useMutation({
