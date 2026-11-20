@@ -96,6 +96,9 @@ export function botNewsEditor(language: Language, authenticate: RequestHandler, 
     router.get(base, ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionBoard(req.query), 200, "opinion_board"));
     router.get(base + "/:id", ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionDetail(req.params.id), 200, "opinion_read"));
     router.patch(base + "/:id", ...exclusive("opinion.edit"), writeLimit, endpoint(async req => (await opinion()).editOpinion(req.params.id, req.body)));
+    // تحرير مقال رأي «منشور» (عنوان/متن/ملخص/صور/وسوم/SEO…) بـexpectedUpdatedAt وupdateReason إلزاميين.
+    router.patch("/opinion/published/:id", ...exclusive("opinion.edit_published"), writeLimit,
+      endpoint(async req => (await writes()).editPublishedOpinion(req.params.id, req.body)));
     router.get(base + "/:id/slot-check", ...exclusive("opinion.read"), endpoint(async req => (await opinion()).opinionSlotCheck(req.params.id, req.query)));
     router.post(base + "/:id/prepare", ...exclusive("opinion.lifecycle"), writeLimit, generationLimit,
       endpoint(async req => { const out = await (await opinion()).prepareOpinion(req.params.id, req.body); return { __httpStatus: 202, body: out }; }));

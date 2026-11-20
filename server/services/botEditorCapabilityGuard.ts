@@ -81,11 +81,19 @@ const OPINION_STATE_OPERATIONS = new Set(["archive", "restore", "unpublish"]);
  * لأن تحريرها وجدولتها ونشرها تمر بمكتب الرأي (/opinion/drafts).
  */
 export function assertNashrArticleType(language: "ar" | "en", articleType: unknown, operation: string): void {
+  // تحرير مقال رأي «منشور» عبر PATCH /opinion/published/:id فقط (قدرة مستقلة قابلة للإيقاف).
+  if (operation === "edit_published_opinion") {
+    if (language === "ar" && articleType === "opinion") {
+      assertEditorCapability("opinion.edit_published");
+      return;
+    }
+    throw new BotDraftError(403, "forbidden_action", "هذا المسار لمقالات الرأي المنشورة فقط؛ بقية الأنواع تُحرَّر عبر PATCH /:id", { articleType, operation });
+  }
   if (typeof articleType === "string" && NEWS_TYPES.has(articleType)) return;
   if (language === "ar" && isOpinionArticleType(articleType)) {
     assertEditorCapability("opinion.lifecycle");
     if (articleType === "opinion" && !OPINION_STATE_OPERATIONS.has(operation)) {
-      throw new BotDraftError(403, "forbidden_action", "مقالات الرأي تُحرَّر وتُجدوَل وتُنشر عبر مسارات مكتب الرأي /opinion/drafts", { articleType, operation });
+      throw new BotDraftError(403, "forbidden_action", "مقالات الرأي تُحرَّر وتُجدوَل وتُنشر عبر مسارات مكتب الرأي /opinion/drafts، والمنشور منها عبر PATCH /opinion/published/:id", { articleType, operation });
     }
     return;
   }

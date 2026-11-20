@@ -1007,3 +1007,17 @@ Content-Type: application/json
 - **نوع `opinion`** لا يُحرَّر ولا يُنشر ولا يُجدوَل عبر المسارات العامة (`403 forbidden_action`)؛ يمر بمكتب الرأي أعلاه.
 - **القراءة:** `GET /:id` تقرأ الأنواع الثلاثة، و`GET /?articleType=opinion|analysis|column` قائمتها (الافتراضي أخبار فقط).
 - **المحميتان رأياً** `8dab8d72…` و`4cfda185…` (ضمن الخمس المحمية): كل كتابة عليهما `423 protected_article` عبر مسارات نشر سبق ومسارات `bot-desk/opinion/drafts/:id` أيضاً؛ القراءة مسموحة.
+
+## تحرير مقال رأي منشور — `PATCH /opinion/published/:id` (2026-11-20)
+
+حصري للاعتماد `nashr-sabq` على القاعدة العربية، بقدرة مستقلة `opinion.edit_published` قابلة للإيقاف عبر `BOT_EDITOR_DISABLED_CAPS` (أو `*`). لنوع `opinion` **المنشور** فقط؛ المسودات والمجدولة تبقى على `/opinion/drafts/:id`، و`analysis`/`column` على `PATCH /:id`.
+
+| | |
+| --- | --- |
+| الجسم | حقول `PATCH /:id` نفسها (`title`, `content`+`contentFormat`, `excerpt`, `subtitle`, `imageUrl`, `imageCaption`, `imageAltText`, `imageUrls`, `bodyImages`, `tagIds`, `categoryId`/`categorySlug`, `keywords`, `seoTitle`, `seoDescription`, `alternativeTitle`, `isFeatured`, `hideFromHomepage`، …) **مع `expectedUpdatedAt` (ISO-8601 بمنطقة زمنية) و`updateReason` (٣ أحرف+) إلزاميين**. |
+| ممنوع | `authorId` / `reporterId` / `sourceArticleId` (422 `forbidden_fields`: كاتب الرأي ونسبته لا يتغيران)، و`newsType: "breaking"`. |
+| الأخطاء | `422` ناقص/خاطئ `expectedUpdatedAt` أو `updateReason`؛ `409 draft_changed` الإصدار قديم؛ `409 not_published` المقال ليس منشوراً؛ `403 forbidden_action` ليس `opinion` أو توكن آخر؛ `403 capability_disabled`؛ `423 protected_article` للمواد الخمس المحمية. |
+| الأثر | مراجعة (`article_revisions`) وحدث (`article_events`) وسجل عمليات (`edit_published_opinion`)، وإبطال الكاش/ISR (`invalidateArticleWrite`: قوائم الرأي والمقال وCloudflare والصفحة الرئيسية) وفحص الكلمات المحظورة والقفل التحريري. تعديل **تنسيقي فقط** (النص نفسه بعد نزع الوسوم) لا يُظهر «تم التحديث» للقارئ. |
+| تنظيف | يُحذف من متن كل حفظ للبوت (العربي): الفقرات الفارغة (`<p>&nbsp;</p>`, `<p><br></p>`) و`text-align: right|start` الزائد (تبقى center/left/justify). |
+
+الاستجابة: كائن المسودة نفسه (`id`, `status`, `updatedAt`, …) مع `updatable`. مثال: `PATCH /api/internal/bot-drafts/opinion/published/<id>` بجسم `{"content": "<p>…</p>", "contentFormat": "html", "updateReason": "إصلاح تنسيق", "expectedUpdatedAt": "2026-11-20T06:00:00.126Z"}`.

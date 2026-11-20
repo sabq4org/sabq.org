@@ -9,7 +9,7 @@ import { hasMeaningfulEditorialChange } from "../utils/editorialDates";
 import { assertBotEditorUnlocked } from "./botEditorLocks";
 import { BotDraftError, appendBotDraftBodyImages, normalizeDraftContent } from "./botDraftsService";
 import { recordBotEditorAudit } from "./botEditorAudit";
-import { assertNashrArticleType, assertNotProtected } from "./botEditorCapabilityGuard";
+import { assertEditorCapability, assertNashrArticleType, assertNotProtected } from "./botEditorCapabilityGuard";
 import { invalidateClearedBreakingArticles } from "./breakingNewsService";
 import { botEditorAssignableStaff } from "./botEditorWritesRoster";
 import { demoteOtherBreaking } from "./botEditorWritesBreaking";
@@ -25,7 +25,13 @@ import { invalidateSitemapXmlCache } from "./sitemapCacheService";
 import { purgeContentSurfaces } from "./cloudflarePurge";
 
 export type BotEditorLanguage = "ar" | "en";
-type Guard = { expectedUpdatedAt: Date };
+type Guard = { expectedUpdatedAt: Date; message?: string };
+/** publishedOpinion: PATCH /opinion/published/:id، تعديل مقال رأي منشور بحراسة إصدار وسبب إلزاميين. */
+type MutateOptions = { publishedOpinion?: boolean };
+
+function plainText(html: unknown): string {
+  return String(html ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#0*160;|\u00a0/gi, " ").replace(/\s+/g, " ").trim();
+}
 const editable = new Set(["draft", "ready_to_publish", "scheduled", "published"]);
 
 function noteOf(input: { updateReason?: string | null; reason?: string | null }): string | null {
@@ -53,7 +59,7 @@ function parse<T>(schema: { safeParse: (input: unknown) => { success: true; data
 }
 
 // Runtime selection retains the real Drizzle table's columns in each language.
-async function mutate(language: BotEditorLanguage, id: string, operation: string, input: Record<string, any>, guard?: Guard) {
+async function mutate(language: BotEditorLanguage, id: string, operation: string, input: Record<string, any>, guard?: Guard, options: MutateOptions = {}) {
   assertNotProtected(id);
   const table: any = language === "ar" ? articles : enArticles;
   const categoryTable: any = language === "ar" ? categories : enCategories;
@@ -63,8 +69,9 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
     if ((operation === "visibility" || operation === "edit") && input.newsType === "breaking") await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sabq-bot-editor-breaking'))`);
     const [before]: any[] = await tx.select().from(table).where(eq(table.id, id)).limit(1).for("update");
     if (!before) throw new BotDraftError(404, "not_found", "الخبر غير موجود");
-    assertNashrArticleType(language, before.articleType, operation);
-    if (guard && before.updatedAt?.getTime() !== guard.expectedUpdatedAt.getTime()) throw new BotDraftError(409, "draft_changed", "تغيّرت المادة أثناء التوليد — لم يُحفظ شيء");
+    assertNashrArticleType(language, before.articleType, options.publishedOpinion ? "edit_published_opinion" : operation);
+    if (options.publishedOpinion && before.status !== "published") throw new BotDraftError(409, "not_published", "المقال غير منشور؛ المسودات والمجدولة تُحرَّر عبر /opinion/drafts/:id", { status: before.status });
+    if (guard && before.updatedAt?.getTime() !== guard.expectedUpdatedAt.getTime()) throw new BotDraftError(409, "draft_changed", guard.message ?? "تغيّرت المادة أثناء التوليد — لم يُحفظ شيء");
     await assertBotEditorUnlocked(tx, language, id, before);
     const now = new Date();
     const auditBefore: Record<string, unknown> = { ...before };
@@ -72,6 +79,7 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
     let patch: Record<string, any> = { updatedAt: now };
     if (operation === "edit") {
       if (!editable.has(before.status)) throw new BotDraftError(409, "not_a_draft", "حالة المادة لا تسمح بالتعديل", { status: before.status });
+      if (options.publishedOpinion && ["authorId", "reporterId", "sourceArticleId"].some((key) => input[key] !== undefined)) throw new BotDraftError(422, "forbidden_fields", "كاتب مقال الرأي ونسبته لا يتغيران من هذا المسار");
       for (const key of ["authorId", "reporterId"]) {
         const candidate = input[key];
         if (candidate === undefined) continue;
@@ -80,6 +88,7 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
         if (!staff) throw new BotDraftError(422, "validation_error", "المؤلف أو المراسل غير موجود ضمن طاقم التحرير النشط", { field: key });
         patch[key] = candidate;
       }
+      if (options.publishedOpinion && input.newsType === "breaking") throw new BotDraftError(422, "validation_error", "لا يُجعل مقال رأي عاجلاً");
       if (before.status === "published" && (input.notes !== undefined || input.clientReference !== undefined || input.infographic !== undefined)) throw new BotDraftError(422, "forbidden_fields", "المرجع والملاحظات ونوع المادة لا تتغير بعد النشر");
       if (language === "ar" && input.sourceArticleId !== undefined) throw new BotDraftError(422, "forbidden_fields", "ربط الأصل متاح للإنجليزية فقط");
       if (language === "en" && ["thumbnailUrl", "albumImages", "isVideoTemplate", "videoUrl", "videoThumbnailUrl"].some((key) => input[key] !== undefined)) {
@@ -146,7 +155,7 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
         }
       }
       if (input.content !== undefined) {
-        const normalized = normalizeDraftContent(input.content, input.contentFormat, input.imageUrls);
+        const normalized = normalizeDraftContent(input.content, input.contentFormat, input.imageUrls, { rtl: language === "ar" });
         patch.content = normalized;
       } else if (input.imageUrls !== undefined) patch.content = appendBotDraftBodyImages(before.content ?? "", input.imageUrls);
       if (input.content !== undefined || input.imageUrls !== undefined || input.bodyImages !== undefined) patch.content = mergeBotEditorBodyImages(before.content, patch.content ?? before.content, input.bodyImages);
@@ -172,7 +181,9 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
         patch.seo = seo;
       }
       if (before.status === "published") {
-        const visibleChange = hasMeaningfulEditorialChange(patch, before) || ["imageCaption", "imageAltText"].some((key) => key in auditAfterExtra && auditAfterExtra[key] !== auditBefore[key]);
+        // تعديل تنسيقي فقط (النص نفسه بعد نزع الوسوم) لمقال رأي لا يُظهر «تم التحديث» للقارئ؛ المراجعة والتدقيق يُسجَّلان.
+        const cosmeticOnly = options.publishedOpinion && patch.content !== undefined && plainText(patch.content) === plainText(before.content);
+        const visibleChange = hasMeaningfulEditorialChange(cosmeticOnly ? { ...patch, content: before.content } : patch, before) || ["imageCaption", "imageAltText"].some((key) => key in auditAfterExtra && auditAfterExtra[key] !== auditBefore[key]);
         if (visibleChange && language === "ar") patch.correctedAt = now;
         if (visibleChange || (language === "en" && input.updateReason !== undefined)) {
           patch.seoMetadata = { ...(before.seoMetadata ?? {}), ...(patch.seoMetadata ?? {}), ...(visibleChange ? { editorialModifiedAt: now.toISOString(), ...(language === "en" ? { correctedAt: now.toISOString() } : {}) } : {}), ...(language === "en" && input.updateReason !== undefined ? { updateReason: input.updateReason } : {}) };
@@ -253,6 +264,29 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
 
 export async function editBotArticle(language: BotEditorLanguage, id: string, body: unknown, guard?: Guard) {
   return mutate(language, id, "edit", parse(botEditorEditSchema, body), guard);
+}
+/**
+ * تحرير مقال رأي منشور (نوع opinion فقط) بكل ما تسمح به لوحة التحرير للمنشور: العنوان والمتن والملخص والصور
+ * والوسوم والتصنيف وSEO… بنفس مسار الخبر المنشور (مراجعة + حدث + إبطال كاش/ISR + فحص الكلمات المحظورة).
+ * expectedUpdatedAt وupdateReason إلزاميان. المواد المحمية 423. غير مسموح: تغيير الكاتب/النسبة.
+ */
+export async function editPublishedOpinion(id: string, body: unknown) {
+  assertEditorCapability("opinion.edit_published");
+  assertNotProtected(id);
+  const raw = body && typeof body === "object" && !Array.isArray(body) ? { ...(body as Record<string, unknown>) } : {};
+  const expectedRaw = raw.expectedUpdatedAt;
+  delete raw.expectedUpdatedAt;
+  if (typeof expectedRaw !== "string" || !expectedRaw.trim()) throw new BotDraftError(422, "validation_error", "expectedUpdatedAt مطلوب");
+  const expected = new Date(expectedRaw);
+  if (Number.isNaN(expected.getTime()) || !/(?:Z|[+-]\d{2}:\d{2})$/.test(expectedRaw.trim())) {
+    throw new BotDraftError(422, "validation_error", "expectedUpdatedAt يجب أن يكون ISO-8601 مع منطقة زمنية");
+  }
+  const input = parse(botEditorEditSchema, raw);
+  if (!(input.updateReason ?? "").trim() || (input.updateReason ?? "").trim().length < 3) throw new BotDraftError(422, "validation_error", "updateReason مطلوب (3 أحرف على الأقل) لتعديل مقال رأي منشور");
+  const result = await mutate("ar", id, "edit", input, { expectedUpdatedAt: expected, message: "تغيّرت المادة — أعد القراءة ثم أعد المحاولة" }, { publishedOpinion: true });
+  const { recordBotEditorOperation } = await import("./botEditorOperationsAudit");
+  await recordBotEditorOperation({ actorId: null, operation: "edit_published_opinion", outcome: "succeeded", metadata: { language: "ar", articleId: id } }).catch(() => undefined);
+  return result;
 }
 export async function transitionBotArticle(language: BotEditorLanguage, id: string, action: "archive" | "restore" | "unpublish", body: unknown) {
   return mutate(language, id, action, action === "archive" ? parse(botEditorArchiveSchema, body) : parse(botEditorEmptySchema, body));

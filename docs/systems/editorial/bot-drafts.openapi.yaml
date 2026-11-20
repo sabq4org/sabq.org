@@ -2863,6 +2863,33 @@ paths:
       responses:
         "200": { description: "{ article }" }
         "423": { description: مادة محمية }
+  /api/internal/bot-drafts/opinion/published/{id}:
+    patch:
+      operationId: opinionPublishedEditEditorNews
+      summary: تحرير مقال رأي منشور (opinion.edit_published؛ nashr-sabq فقط). expectedUpdatedAt وupdateReason إلزاميان
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ expectedUpdatedAt, updateReason ]
+              description: حقول PATCH /{id} (title, content, excerpt, imageUrl, tagIds, seo…) مع الحقلين الإلزاميين. authorId وreporterId وsourceArticleId ممنوعة.
+              properties:
+                expectedUpdatedAt: { type: string, format: date-time }
+                updateReason: { type: string, minLength: 3, maxLength: 500 }
+                title: { type: string }
+                content: { type: string }
+                contentFormat: { type: string, enum: [ html, text ] }
+                excerpt: { type: string, nullable: true }
+      responses:
+        "200": { description: "المسودة بعد التعديل (status يبقى published)" }
+        "403": { description: "ليس opinion، أو توكن آخر، أو capability_disabled" }
+        "409": { description: "draft_changed (إصدار قديم) أو not_published" }
+        "422": { description: "expectedUpdatedAt/updateReason ناقصان أو حقول ممنوعة" }
+        "423": { description: مادة محمية }
 components:
   securitySchemes:
     botToken:

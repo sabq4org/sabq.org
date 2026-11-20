@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 const m = vi.hoisted(() => ({
   board: vi.fn(), item: vi.fn(), draft: vi.fn(), clash: vi.fn(), schedule: vi.fn(), publish: vi.fn(), ret: vi.fn(),
-  prepStart: vi.fn(), prepGet: vi.fn(), imgStart: vi.fn(), imgGet: vi.fn(), edit: vi.fn(), audit: vi.fn(), transition: vi.fn(),
+  prepStart: vi.fn(), prepGet: vi.fn(), imgStart: vi.fn(), imgGet: vi.fn(), edit: vi.fn(), audit: vi.fn(), transition: vi.fn(), editPublished: vi.fn(),
 }));
 vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/rbac", () => ({ logActivity: vi.fn() }));
@@ -23,7 +23,7 @@ vi.mock("../../server/services/staffOpinionImageService", () => ({ startOpinionI
 vi.mock("../../server/services/staffOpinionContentService", () => ({ editOpinionDraftFromDesk: m.edit }));
 vi.mock("../../server/services/botEditorOperationsAudit", () => ({ recordBotEditorOperation: m.audit }));
 vi.mock("../../server/services/botEditorWrites", () => ({
-  editBotArticle: vi.fn(), transitionBotArticle: m.transition, deleteBotArticle: vi.fn(), changeBotVisibility: vi.fn(),
+  editBotArticle: vi.fn(), editPublishedOpinion: m.editPublished, transitionBotArticle: m.transition, deleteBotArticle: vi.fn(), changeBotVisibility: vi.fn(),
 }));
 
 import arabicRouter from "../../server/routes/botDrafts";
@@ -167,5 +167,39 @@ describe("opinion routes: exclusivity, kill switch, protected articles", () => {
     const res = await call("GET", "/api/internal/bot-drafts/en/opinion/drafts");
     expect([403, 404, 405]).toContain(res.status);
     expect(m.board).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /opinion/published/:id (published opinion edit)", () => {
+  const PUB = "/api/internal/bot-drafts/opinion/published";
+  const body = { title: "عنوان معدّل للمقال المنشور", updateReason: "إصلاح", expectedUpdatedAt: "2026-11-20T06:00:00.126Z" };
+  it("nashr reaches editPublishedOpinion with the id and raw body", async () => {
+    m.editPublished.mockResolvedValue({ id: "a1", status: "published" });
+    const res = await call("PATCH", `${PUB}/a1`, nashr, body);
+    expect(res.status).toBe(200);
+    expect(m.editPublished).toHaveBeenCalledWith("a1", body);
+  });
+  it("another legacy token gets 403 forbidden_action and the service is not called", async () => {
+    const res = await call("PATCH", `${PUB}/a1`, other, body);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "forbidden_action" });
+    expect(m.editPublished).not.toHaveBeenCalled();
+  });
+  it("kill switch opinion.edit_published or * returns 403 capability_disabled before the service", async () => {
+    for (const caps of ["opinion.edit_published", "*"]) {
+      vi.stubEnv("BOT_EDITOR_DISABLED_CAPS", caps);
+      const res = await call("PATCH", `${PUB}/a1`, nashr, body);
+      expect(res.status, caps).toBe(403);
+      expect(await res.json()).toMatchObject({ code: "capability_disabled", details: { capability: "opinion.edit_published" } });
+    }
+    expect(m.editPublished).not.toHaveBeenCalled();
+  });
+  it("the five protected ids answer 423 at the router, before the service", async () => {
+    for (const id of PROTECTED_ARTICLE_IDS) {
+      const res = await call("PATCH", `${PUB}/${id}`, nashr, body);
+      expect(res.status, id.slice(0, 8)).toBe(423);
+      expect(await res.json()).toMatchObject({ code: "protected_article" });
+    }
+    expect(m.editPublished).not.toHaveBeenCalled();
   });
 });
