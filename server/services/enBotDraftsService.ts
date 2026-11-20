@@ -383,7 +383,7 @@ export async function createEnBotDraft(
         subtitle: input.subtitle ?? null,
         slug: slugs.slug,
         englishSlug: slugs.englishSlug,
-        content: normalizeDraftContent(input.content, input.contentFormat, input.imageUrls),
+        content: normalizeDraftContent(input.content, input.contentFormat, input.imageUrls, { rtl: false }),
         excerpt,
         ...(input.excerpt !== undefined ? { aiSummary: excerpt, smartSummary: excerpt } : {}),
         imageUrl: input.imageUrl ?? null,
@@ -517,7 +517,7 @@ export async function updateEnBotDraft(
     if (input.title !== undefined) patch.title = input.title;
     if (input.subtitle !== undefined) patch.subtitle = input.subtitle;
     if (input.content !== undefined) {
-      patch.content = normalizeDraftContent(input.content, input.contentFormat, input.imageUrls);
+      patch.content = normalizeDraftContent(input.content, input.contentFormat, input.imageUrls, { rtl: false });
     } else if (input.imageUrls !== undefined) {
       const appended = appendBotDraftBodyImages(locked.content ?? "", input.imageUrls);
       if (appended !== (locked.content ?? "")) patch.content = appended;
