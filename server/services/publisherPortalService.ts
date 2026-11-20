@@ -1595,6 +1595,12 @@ export async function listOwnPublisherRequests(publisherId: string) {
  * سجل الطلبات. الافتراضي «المفتوحة» فقط كما كان، لكن الإدارة تحتاج أيضاً
  * رؤية المعالج والمرفوض — الطلب كان يختفي بلا أثر بعد إغلاقه.
  */
+/**
+ * طلب ينتظر قرار سبق: جديد، أو عرض قبلته الوكالة (بانتظار تأكيد الدفع)، أو عرض
+ * ردّت عليه الوكالة بطلب التواصل. هذا ما تعدّه «بانتظار إجراء» وتبويب «بانتظار قرارك».
+ */
+const needsSabqDecisionSql = sql`(${publisherRequests.status} in ('open', 'accepted') or (${publisherRequests.status} = 'offered' and ${publisherRequests.offer}->>'response' = 'contact'))`;
+
 export async function listPublisherRequests(status: PublisherRequestStatus | "all" = "open") {
   return db
     .select({
@@ -1615,7 +1621,8 @@ export async function listPublisherRequests(status: PublisherRequestStatus | "al
     })
     .from(publisherRequests)
     .innerJoin(publishers, eq(publisherRequests.publisherId, publishers.id))
-    .where(status === "all" ? undefined : eq(publisherRequests.status, status))
+    // «open» = كل ما ينتظر قرار سبق (انظر needsSabqDecisionSql)، لا الحالة الحرفية فقط
+    .where(status === "all" ? undefined : status === "open" ? needsSabqDecisionSql : eq(publisherRequests.status, status))
     .orderBy(desc(publisherRequests.createdAt))
     .limit(200);
 }
@@ -1764,7 +1771,7 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
         openRequests: sql<number>`count(*)`,
       })
       .from(publisherRequests)
-      .where(and(inArray(publisherRequests.publisherId, ids), inArray(publisherRequests.status, ["open", "accepted"])))
+      .where(and(inArray(publisherRequests.publisherId, ids), needsSabqDecisionSql))
       .groupBy(publisherRequests.publisherId),
   ]);
 
@@ -1891,8 +1898,8 @@ export async function getPublishersSummary() {
     db
       .select({ openRequests: sql<number>`count(*)` })
       .from(publisherRequests)
-      // بانتظار قرار الإدارة: طلب جديد، أو عرض قبلته الوكالة وينتظر تأكيد الدفع
-      .where(inArray(publisherRequests.status, ["open", "accepted"])),
+      // بانتظار قرار الإدارة: طلب جديد، أو عرض قبلته الوكالة، أو وكالة طلبت التواصل
+      .where(needsSabqDecisionSql),
   ]);
 
   return {

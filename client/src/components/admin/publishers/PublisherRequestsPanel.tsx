@@ -76,7 +76,7 @@ const REQUEST_LABELS: Record<string, string> = {
 };
 
 const STATUS_TABS = [
-  { value: "open", label: "مفتوحة" },
+  { value: "open", label: "بانتظار قرارك" },
   { value: "offered", label: "عرض مُرسل" },
   { value: "accepted", label: "بانتظار الدفع" },
   { value: "closed", label: "مُعالجة" },
@@ -246,13 +246,16 @@ export function PublisherRequestsPanel({ openCount }: { openCount: number }) {
         ) : requests.length === 0 ? (
           <div className="rounded-xl border border-dashed py-10 text-center">
             <p className="text-sm text-muted-foreground">
-              {statusTab === "open" ? "لا توجد طلبات مفتوحة" : "لا توجد طلبات في هذا السجل"}
+              {statusTab === "open" ? "لا توجد طلبات بانتظار قرارك" : "لا توجد طلبات في هذا السجل"}
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {requests.map((request) => {
-              const statusMeta = STATUS_META[request.status] ?? STATUS_META.open;
+              const wantsContact = request.status === "offered" && request.offer?.response === "contact";
+              const statusMeta = wantsContact
+                ? { label: "طلبت التواصل", className: STATUS_META.open.className }
+                : STATUS_META[request.status] ?? STATUS_META.open;
               const isOpen = request.status === "open";
               const isRenewal = request.type === "renewal";
               const canOffer = isRenewal && (request.status === "open" || request.status === "offered");
