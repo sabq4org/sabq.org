@@ -12,6 +12,7 @@ import { getRedisClient } from "../../redis";
 import { notificationsInbox, sportsInsights, sportsMatchViews } from "@shared/schema";
 import { filterUsersByEventPref } from "../sportsAlertPrefsService";
 import { pushToUserDevices } from "../sportsAlertsService";
+import { findPostponedFixtureIds } from "./postponedGuard";
 import { getTeamFollowerUserIds } from "../sportsFollowsService";
 import {
   SPORTS_SNAPS_PUSH_CAPS,
@@ -370,7 +371,10 @@ export async function runSnapsPushCycle(): Promise<SportsSnapsPushCycleSummary> 
   if (isQuietHours()) return { candidates: 0, recipients: 0, skippedQuietHours: true };
 
   const [upcoming, behavioral] = await Promise.all([getUpcomingCandidates(), getBehavioralCandidates()]);
-  const candidates = [...upcoming, ...behavioral].filter((candidate) => candidate.candidates.length > 0);
+  const withAudience = [...upcoming, ...behavioral].filter((candidate) => candidate.candidates.length > 0);
+  // لقطات خُزّنت قبل تأجيل المباراة تبقى صالحة حتى موعدها القديم — أعد الفحص.
+  const postponed = await findPostponedFixtureIds(withAudience.map((c) => c.fixtureId));
+  const candidates = withAudience.filter((candidate) => !postponed.has(candidate.fixtureId));
 
   let recipients = 0;
   for (const candidate of candidates) {
