@@ -45,6 +45,7 @@ import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvide
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
+import { PublisherAgreementBanner } from "./PublisherAgreementBanner";
 
 interface PublisherLayoutProps {
   children: ReactNode;
@@ -424,6 +425,8 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
               <DashboardThemePickerButton />
               <ThemeToggle />
             </header>
+
+            <PublisherAgreementBanner />
 
             <main className="min-w-0 flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/[0.04] via-background to-background p-4 md:p-6 lg:p-8">
               {children}
