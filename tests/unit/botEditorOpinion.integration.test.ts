@@ -42,6 +42,7 @@ vi.mock("../../server/services/newsImageStorageService", async (original) => {
 });
 vi.mock("../../server/services/mediaGenerationService", () => ({ saveGeneratedImage: vi.fn(async () => ({ id: "media-from-gpt" })) }));
 
+import { queueBotDraftPublishedContentEffects } from "../../server/services/botDraftPublishEffects";
 import arabicRouter from "../../server/routes/botDrafts";
 import englishRouter from "../../server/routes/enBotDrafts";
 
@@ -288,6 +289,111 @@ describe.skipIf(!url)("nashr-sabq opinion / analysis / column against local Post
         expect((await call("GET", `${AR}/${id}`)).status).toBe(200);
         expect((await call("GET", `${OP}/${id}`)).status).toBe(200);
       }
+    });
+  });
+
+  describe("published opinion edit (PATCH /opinion/published/:id)", () => {
+    const PUB = `${AR}/opinion/published`;
+    const dirty = '<p style="text-align: right">الفقرة الأولى من المقال</p><p style="text-align: right">&nbsp;</p><p style="text-align: right">الفقرة الثانية من المقال</p>';
+    const seed = (id: string, type = "opinion", status = "published", content = dirty) => pool.query(
+      `INSERT INTO articles (id, title, slug, content, status, author_id, source, article_type, news_type, published_at)
+       VALUES ($1::varchar, $2::text, $3::text, $4::text, $5::text, 'writer-1', 'manual', $6::text, 'regular', now() - interval '1 hour')`,
+      [id, `عنوان ${id}`, id, content, status, type]);
+    const full = async (id: string) => (await pool.query(`SELECT title, content, excerpt, status, corrected_at, seo_metadata, updated_at FROM articles WHERE id = $1`, [id])).rows[0];
+    const payload = async (id: string, extra: Record<string, unknown> = {}) => ({ expectedUpdatedAt: await stamp(id), updateReason: "إصلاح تنسيق", ...extra });
+
+    it("edits title/body/excerpt of a published opinion: revision + event + cache effect, same status, no wrong-writer change", async () => {
+      await seed("pub-1");
+      vi.mocked(queueBotDraftPublishedContentEffects).mockClear();
+      const before = await full("pub-1");
+      const res = await call("PATCH", `${PUB}/pub-1`, nashr, await payload("pub-1", { title: "عنوان معدّل للمقال المنشور", excerpt: "ملخص جديد للمقال", content: '<p>متن جديد كامل للمقال المنشور بعد التحرير.</p>' }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ id: "pub-1", status: "published", title: "عنوان معدّل للمقال المنشور" });
+      const after = await full("pub-1");
+      expect(after).toMatchObject({ title: "عنوان معدّل للمقال المنشور", excerpt: "ملخص جديد للمقال", status: "published" });
+      expect(after.content).toContain("متن جديد كامل");
+      expect(after.corrected_at).not.toBeNull();
+      expect(new Date(after.updated_at).getTime()).toBeGreaterThan(new Date(before.updated_at).getTime());
+      const revisions = (await pool.query(`SELECT editor_name, changed_fields FROM article_revisions WHERE article_id = 'pub-1'`)).rows;
+      expect(revisions).toHaveLength(1);
+      expect(revisions[0].editor_name).toBe("نشر سبق");
+      expect(revisions[0].changed_fields).toEqual(expect.arrayContaining(["title", "content", "excerpt"]));
+      expect((await pool.query(`SELECT summary FROM article_events WHERE article_id = 'pub-1' AND event_type = 'updated'`)).rows[0].summary).toContain("إصلاح تنسيق");
+      expect(queueBotDraftPublishedContentEffects).toHaveBeenCalledTimes(1);
+      expect((await pool.query(`SELECT outcome FROM bot_editor_operations WHERE operation = 'edit_published_opinion'`)).rows.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("formatting-only fix: strips redundant text-align + the empty &nbsp; paragraph, keeps text, and does not stamp a reader-facing correction", async () => {
+      await seed("pub-2");
+      const res = await call("PATCH", `${PUB}/pub-2`, nashr, await payload("pub-2", { content: dirty, contentFormat: "html" }));
+      expect(res.status).toBe(200);
+      const after = await full("pub-2");
+      expect(after.content).toBe("<p>الفقرة الأولى من المقال</p><p>الفقرة الثانية من المقال</p>");
+      expect(after.corrected_at).toBeNull();
+      expect(after.seo_metadata?.editorialModifiedAt).toBeUndefined();
+      expect((await pool.query(`SELECT changed_fields FROM article_revisions WHERE article_id = 'pub-2'`)).rows[0].changed_fields).toContain("content");
+    });
+
+    it("requires expectedUpdatedAt (422), rejects a stale one (409) and requires updateReason (422); nothing is written", async () => {
+      await seed("pub-3");
+      const snapshot = await full("pub-3");
+      expect((await call("PATCH", `${PUB}/pub-3`, nashr, { title: "عنوان بلا إصدار", updateReason: "سبب" })).status).toBe(422);
+      expect((await call("PATCH", `${PUB}/pub-3`, nashr, { title: "عنوان بلا سبب", expectedUpdatedAt: await stamp("pub-3") })).status).toBe(422);
+      expect((await call("PATCH", `${PUB}/pub-3`, nashr, { title: "عنوان قديم", updateReason: "سبب", expectedUpdatedAt: "2020-01-01T00:00:00Z" })).status).toBe(409);
+      expect((await call("PATCH", `${PUB}/pub-3`, nashr, { title: "عنوان بلا منطقة", updateReason: "سبب", expectedUpdatedAt: "2026-01-01 00:00:00" })).status).toBe(422);
+      expect(await full("pub-3")).toEqual(snapshot);
+    });
+
+    it("refuses writer/attribution changes and unknown fields; refuses non-published opinion, news and the shared route", async () => {
+      await seed("pub-4"); await seed("pub-news", "news"); await seed("pub-draft", "opinion", "draft");
+      const snapshot = await full("pub-4");
+      expect((await call("PATCH", `${PUB}/pub-4`, nashr, await payload("pub-4", { authorId: "bot-author" }))).status).toBe(422);
+      expect((await call("PATCH", `${PUB}/pub-4`, nashr, await payload("pub-4", { status: "draft" }))).status).toBe(422);
+      expect(await full("pub-4")).toEqual(snapshot);
+      const draft = await call("PATCH", `${PUB}/pub-draft`, nashr, await payload("pub-draft", { title: "عنوان مسودة" }));
+      expect(draft.status).toBe(409);
+      expect(await draft.json()).toMatchObject({ code: "not_published" });
+      const news = await call("PATCH", `${PUB}/pub-news`, nashr, await payload("pub-news", { title: "عنوان خبر" }));
+      expect(news.status).toBe(403);
+      // المسار المشترك يبقى مغلقاً لنوع opinion، والمكتب يرفض المنشور
+      const shared = await call("PATCH", `${AR}/pub-4`, nashr, { title: "عنوان من المسار المشترك" });
+      expect(shared.status).toBe(403);
+      expect((await shared.json()).message).toContain("/opinion/published/:id");
+      expect((await call("PATCH", `${OP}/pub-4`, nashr, { title: "عنوان من المكتب" })).status).toBe(409);
+      expect(await full("pub-4")).toEqual(snapshot);
+    });
+
+    it("other legacy tokens get 403; the kill switch (opinion.edit_published or *) returns 403 capability_disabled", async () => {
+      await seed("pub-5");
+      const snapshot = await full("pub-5");
+      expect((await call("PATCH", `${PUB}/pub-5`, other, await payload("pub-5", { title: "عنوان من توكن آخر" }))).status).toBe(403);
+      for (const caps of ["opinion.edit_published", "*"]) {
+        vi.stubEnv("BOT_EDITOR_DISABLED_CAPS", caps);
+        const res = await call("PATCH", `${PUB}/pub-5`, nashr, await payload("pub-5", { title: "عنوان أثناء الإيقاف" }));
+        expect(res.status, caps).toBe(403);
+        expect(await res.json()).toMatchObject({ code: "capability_disabled" });
+      }
+      vi.stubEnv("BOT_EDITOR_DISABLED_CAPS", "opinion.edit");
+      expect((await call("PATCH", `${PUB}/pub-5`, nashr, await payload("pub-5", { title: "عنوان بقدرة مستقلة" }))).status).toBe(200);
+      vi.stubEnv("BOT_EDITOR_DISABLED_CAPS", "");
+      expect(snapshot.title).not.toBe((await full("pub-5")).title);
+    });
+
+    it("423 on the protected published opinion (4cfda185) with the row unchanged", async () => {
+      const id = PROTECTED_OPINION_2;
+      const snapshot = await full(id);
+      const res = await call("PATCH", `${PUB}/${id}`, nashr, { title: "تعديل ممنوع على المحمية", updateReason: "سبب", expectedUpdatedAt: await stamp(id) });
+      expect(res.status).toBe(423);
+      expect(await res.json()).toMatchObject({ code: "protected_article" });
+      expect(await full(id)).toEqual(snapshot);
+    });
+
+    it("bot-draft saves (analysis edit) drop empty paragraphs and redundant text-align", async () => {
+      await seed("pub-an", "analysis", "published");
+      const res = await call("PATCH", `${AR}/pub-an`, nashr, { content: dirty, contentFormat: "html", updateReason: "تنظيف" });
+      expect(res.status).toBe(200);
+      expect((await full("pub-an")).content).toBe("<p>الفقرة الأولى من المقال</p><p>الفقرة الثانية من المقال</p>");
     });
   });
 });
