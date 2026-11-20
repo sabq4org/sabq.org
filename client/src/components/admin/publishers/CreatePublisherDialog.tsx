@@ -622,7 +622,7 @@ export function CreatePublisherDialog({
                       />
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
-                      بعد هذا التاريخ يُمنع الناشر من إضافة أو نشر مواد جديدة. اتركه فارغاً لنشر مفتوح بلا تاريخ انتهاء.
+                      يُستخدم فقط حين لا توجد للوكالة باقة سارية؛ مع وجود باقة يتبع تاريخ انتهائها تلقائيًا. بعده يُمنع إضافة أو نشر مواد جديدة.
                     </p>
                     <FormMessage />
                   </FormItem>

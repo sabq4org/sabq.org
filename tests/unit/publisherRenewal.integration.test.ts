@@ -25,7 +25,7 @@ import {
   respondToRenewalOffer,
   sendRenewalOffer,
 } from "../../server/services/publisherRenewalService";
-import { listPublisherRequests } from "../../server/services/publisherPortalService";
+import { getPublishersSummary, listPublisherRequests, loadEffectivePublishingEndsAt } from "../../server/services/publisherPortalService";
 
 const url = process.env.EDITORIAL_LIST_TEST_DATABASE_URL ?? process.env.SESSION_REVOCATION_TEST_URL;
 const local = url && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(new URL(url).hostname);
@@ -179,6 +179,19 @@ const validOffer = (startDate?: string) => ({
     expect(req.offer.response).toBe("contact");
     // طلب التواصل ينتظر قرار سبق، فيظهر في تبويب «بانتظار قرارك» (open) لا في «عرض مُرسل» فقط
     expect((await listPublisherRequests("open")).map((r) => r.id)).toEqual(["req"]);
+  });
+
+  it("lets the publishing window follow the package, not the stored date", async () => {
+    // مثل «روافد»: نافذة مخزنة انتهت قبل الباقة — لا تُحسب منتهية ولا تمنع النشر
+    const expiry = await seed({ expiresInDays: 400 });
+    await pool.query(`UPDATE publishers SET publishing_ends_at = now() - interval '1 day'`);
+    expect((await loadEffectivePublishingEndsAt(await agencyRow()))?.getTime()).toBe(expiry.getTime());
+    expect((await getPublishersSummary()).windowEnded).toBe(0);
+
+    // بلا باقة سارية تعود النافذة المخزنة
+    await pool.query(`UPDATE publisher_credits SET is_active = false`);
+    expect((await loadEffectivePublishingEndsAt(await agencyRow()))!.getTime()).toBeLessThan(Date.now());
+    expect((await getPublishersSummary()).windowEnded).toBe(1);
   });
 
   it("keeps a sent offer awaiting the agency out of the Sabq decision list", async () => {
