@@ -214,11 +214,17 @@ object HtmlSimpleParser {
             scanner.skipWhitespace()
             if (scanner.isAtEnd()) break
 
+            val before = scanner.index
             val block = parseNextBlock(scanner)
             if (block != null) {
                 if (block is BlockNode.Paragraph && runsAreEmpty(block.runs)) continue
                 blocks.add(block)
-            } else {
+            } else if (scanner.index == before) {
+                // التقدّم القسري فقط عندما لا يتحرك الماسح (وقاية من حلقة لا نهائية على
+                // مدخل مشوّه). كان يتقدّم حرفًا بعد كل null حتى لو استُهلك الوسم كاملًا
+                // (فقرة فارغة <p>&nbsp;</p> أو <br> أو وسم مجهول) فيأكل '<' الوسم التالي
+                // ويحوّل `<p style="text-align: right">نص` إلى فقرة نصية تبدأ بـ `p style=...`.
+                // يطابق إصلاح iOS في ArticleHtmlParser.parse.
                 scanner.advance(1)
             }
         }
