@@ -24,10 +24,13 @@ import {
   staffJobTitles,
   staffProfiles,
   users,
+  roles,
+  userRoles,
   type Meeting,
   type MeetingAgendaItem,
   type MeetingParticipant,
 } from "@shared/schema";
+import { MEETING_GROUP_ROLE_NAMES, MEETING_ROLE_GROUPS, resolveMeetingInvitees } from "@shared/meetingInvitees";
 
 // ────────────────────────────────────────────────────────────────────
 // إعداد LiveKit
@@ -247,6 +250,10 @@ export interface CreateMeetingInput {
   accessType: "all" | "department" | "selected" | "link";
   departmentId?: string;
   memberIds?: string[];
+  /** فئات أدوار (selected فقط) — تُحوَّل لأسماء عند الإنشاء */
+  roleGroups?: string[];
+  /** إدارات (selected فقط) — تُحوَّل لأسماء عند الإنشاء، ويمكن جمع أكثر من إدارة */
+  departmentIds?: string[];
   requireApproval: boolean;
   muteOnJoin: boolean;
   scheduledAt?: Date | null;
@@ -333,8 +340,16 @@ export async function createMeeting(hostUserId: string, input: CreateMeetingInpu
     status: "admitted",
   });
 
-  if (input.accessType === "selected" && input.memberIds?.length) {
-    const uniqueIds = Array.from(new Set(input.memberIds)).filter((id) => id !== hostUserId);
+  if (input.accessType === "selected") {
+    const hasGroups = Boolean(input.roleGroups?.length || input.departmentIds?.length);
+    const invitees = hasGroups
+      ? resolveMeetingInvitees(await getMeetingInviteeCandidates(), {
+          roleGroups: input.roleGroups,
+          departmentIds: input.departmentIds,
+          memberIds: input.memberIds,
+        }).userIds
+      : input.memberIds ?? [];
+    const uniqueIds = Array.from(new Set(invitees)).filter((id) => id !== hostUserId);
     if (uniqueIds.length) {
       await db.insert(meetingParticipants).values(
         uniqueIds.map((userId) => ({ meetingId: meeting.id, userId, status: "invited" })),
@@ -1307,9 +1322,81 @@ async function sweepPendingMinutes(): Promise<void> {
 // قوائم مساعدة لنموذج الإنشاء
 // ────────────────────────────────────────────────────────────────────
 
+export interface MeetingFormStaff {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  department: string | null;
+  departmentId: string | null;
+  /** أدوار المستخدم (عمود users.role + user_roles) — تُبنى عليها فئات المدعوين */
+  roles: string[];
+}
+
+/**
+ * المرشحون للدعوة: كل منسوب نشط له ملف في دليل المنسوبين، ومعهم كل مستخدم
+ * نشط يحمل دوراً تغطيه فئات الاجتماعات (المراسلون، كتّاب الرأي…) وإن لم يكن
+ * له ملف — كاتب الرأي مثلاً قد لا يكون في الدليل.
+ */
+export async function getMeetingInviteeCandidates(): Promise<MeetingFormStaff[]> {
+  const roleRows = await db
+    .select({ userId: userRoles.userId, name: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(roles.id, userRoles.roleId));
+  const rolesByUser = new Map<string, Set<string>>();
+  for (const r of roleRows) {
+    if (!rolesByUser.has(r.userId)) rolesByUser.set(r.userId, new Set());
+    rolesByUser.get(r.userId)!.add(r.name);
+  }
+  const groupRoleUserIds = roleRows
+    .filter((r) => MEETING_GROUP_ROLE_NAMES.includes(r.name))
+    .map((r) => r.userId);
+
+  const rows = await db
+    .select({
+      userId: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      role: users.role,
+      profileImageUrl: users.profileImageUrl,
+      officialPhotoUrl: staffProfiles.officialPhotoUrl,
+      hasProfile: staffProfiles.userId,
+      departmentId: staffProfiles.departmentId,
+      departmentName: staffDepartments.nameAr,
+    })
+    .from(users)
+    .leftJoin(staffProfiles, eq(staffProfiles.userId, users.id))
+    .leftJoin(staffDepartments, eq(staffDepartments.id, staffProfiles.departmentId))
+    .where(
+      and(
+        eq(users.status, "active"),
+        or(
+          sql`${staffProfiles.userId} IS NOT NULL`,
+          inArray(users.role, MEETING_GROUP_ROLE_NAMES),
+          groupRoleUserIds.length ? inArray(users.id, groupRoleUserIds) : sql`false`,
+        ),
+      ),
+    )
+    .orderBy(users.firstName);
+
+  return rows.map((r) => {
+    const userRoleSet = new Set(rolesByUser.get(r.userId) ?? []);
+    if (r.role) userRoleSet.add(r.role);
+    return {
+      userId: r.userId,
+      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email || "بدون اسم",
+      avatarUrl: r.officialPhotoUrl || r.profileImageUrl || null,
+      department: r.departmentName || null,
+      departmentId: r.departmentId || null,
+      roles: Array.from(userRoleSet),
+    };
+  });
+}
+
 export async function getMeetingFormOptions(): Promise<{
   departments: { id: string; nameAr: string }[];
-  staff: { userId: string; name: string; avatarUrl: string | null; department: string | null }[];
+  roleGroups: { id: string; label: string }[];
+  staff: MeetingFormStaff[];
 }> {
   const departments = await db
     .select({ id: staffDepartments.id, nameAr: staffDepartments.nameAr })
@@ -1317,29 +1404,9 @@ export async function getMeetingFormOptions(): Promise<{
     .where(eq(staffDepartments.isActive, true))
     .orderBy(staffDepartments.sortOrder, staffDepartments.nameAr);
 
-  const staffRows = await db
-    .select({
-      userId: staffProfiles.userId,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      email: users.email,
-      profileImageUrl: users.profileImageUrl,
-      officialPhotoUrl: staffProfiles.officialPhotoUrl,
-      departmentName: staffDepartments.nameAr,
-    })
-    .from(staffProfiles)
-    .innerJoin(users, eq(users.id, staffProfiles.userId))
-    .leftJoin(staffDepartments, eq(staffDepartments.id, staffProfiles.departmentId))
-    .where(eq(users.status, "active"))
-    .orderBy(users.firstName);
-
   return {
     departments,
-    staff: staffRows.map((r) => ({
-      userId: r.userId,
-      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || r.email || "بدون اسم",
-      avatarUrl: r.officialPhotoUrl || r.profileImageUrl || null,
-      department: r.departmentName || null,
-    })),
+    roleGroups: MEETING_ROLE_GROUPS.map((g) => ({ id: g.id, label: g.label })),
+    staff: await getMeetingInviteeCandidates(),
   };
 }

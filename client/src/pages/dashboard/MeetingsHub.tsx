@@ -2,7 +2,7 @@
 // اجتماعات صوتية مع مشاركة شاشة داخل اللوحة: المباشر الآن في المقدمة،
 // ثم المجدولة والمنتهية حديثاً. الإنشاء عبر حوار بأنماط الوصول الأربعة.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -36,9 +36,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { MinutesArchivePanel } from "@/components/meetings/MinutesArchivePanel";
 import { OpenTasksPanel } from "@/components/meetings/OpenTasksPanel";
+import { InviteePicker } from "@/components/meetings/InviteePicker";
 import {
   Building2, CalendarClock, Check, FileText, Headphones, Link2, ListChecks, Loader2,
-  Lock, Mic, Plus, Radio, Search, Trash2, UsersRound, X,
+  Lock, Mic, Plus, Radio, Trash2, UsersRound, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -74,9 +75,19 @@ type MeetingsResponse = {
   configured: boolean;
 };
 
+type FormStaff = {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  department: string | null;
+  departmentId: string | null;
+  roles: string[];
+};
+
 type FormOptions = {
   departments: { id: string; nameAr: string }[];
-  staff: { userId: string; name: string; avatarUrl: string | null; department: string | null }[];
+  roleGroups?: { id: string; label: string }[];
+  staff: FormStaff[];
 };
 
 const ACCESS_META: Record<
@@ -636,12 +647,6 @@ function RsvpGroup({
 // حوار إنشاء الاجتماع
 // ────────────────────────────────────────────────────────────────────
 
-const ACCESS_OPTIONS: { value: MeetingListItem["accessType"]; label: string; icon: LucideIcon }[] = [
-  { value: "all", label: "جميع المنسوبين", icon: UsersRound },
-  { value: "department", label: "إدارة محددة", icon: Building2 },
-  { value: "selected", label: "أعضاء محددون", icon: ListChecks },
-  { value: "link", label: "رابط دعوة", icon: Link2 },
-];
 
 function CreateMeetingDialog({
   onClose,
@@ -653,10 +658,12 @@ function CreateMeetingDialog({
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [accessType, setAccessType] = useState<MeetingListItem["accessType"]>("all");
-  const [departmentId, setDepartmentId] = useState("");
+  const { user } = useAuth();
+  // «جميع المنسوبين» أو مزيج من فئات أدوار وإدارات وأسماء؛ لا شيء مختار = بالرابط فقط
+  const [everyone, setEveryone] = useState(true);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [memberSearch, setMemberSearch] = useState("");
   const [requireApproval, setRequireApproval] = useState(true);
   const [muteOnJoin, setMuteOnJoin] = useState(true);
   // «أمين المحضر» مفعّل افتراضياً (قرار أبو محمد 2026-11-17) — يطفئه المضيف من المفتاح أدناه
@@ -670,12 +677,11 @@ function CreateMeetingDialog({
   const options = (optionsRaw ?? null) as FormOptions | null;
   const departments = Array.isArray(options?.departments) ? options.departments : [];
   const staff = Array.isArray(options?.staff) ? options.staff : [];
+  const roleGroupOptions = Array.isArray(options?.roleGroups) ? options.roleGroups : [];
 
-  const filteredStaff = useMemo(() => {
-    const q = memberSearch.trim();
-    if (!q) return staff;
-    return staff.filter((s) => s.name.includes(q) || (s.department ?? "").includes(q));
-  }, [staff, memberSearch]);
+  const pickedAnything =
+    selectedGroups.length > 0 || selectedDepartments.length > 0 || memberIds.length > 0;
+  const accessType: MeetingListItem["accessType"] = everyone ? "all" : pickedAnything ? "selected" : "link";
 
   const createMutation = useMutation({
     mutationFn: async () =>
@@ -685,8 +691,10 @@ function CreateMeetingDialog({
           title,
           description: description || undefined,
           accessType,
-          departmentId: accessType === "department" ? departmentId : undefined,
-          memberIds: accessType === "selected" ? memberIds : undefined,
+          memberIds: accessType === "selected" && memberIds.length ? memberIds : undefined,
+          roleGroups: accessType === "selected" && selectedGroups.length ? selectedGroups : undefined,
+          departmentIds:
+            accessType === "selected" && selectedDepartments.length ? selectedDepartments : undefined,
           requireApproval,
           muteOnJoin,
           minutesEnabled,
@@ -703,11 +711,7 @@ function CreateMeetingDialog({
     onError: (e: Error) => toast({ title: "تعذر إنشاء الاجتماع", description: e.message, variant: "destructive" }),
   });
 
-  const valid =
-    title.trim().length >= 3 &&
-    (accessType !== "department" || departmentId) &&
-    (accessType !== "selected" || memberIds.length > 0) &&
-    (!schedule || scheduledAt);
+  const valid = title.trim().length >= 3 && (!schedule || scheduledAt);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -782,105 +786,20 @@ function CreateMeetingDialog({
             ) : null}
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold">من يستطيع الدخول؟</label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {ACCESS_OPTIONS.map((opt) => {
-                const Icon = opt.icon;
-                const selected = accessType === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setAccessType(opt.value)}
-                    className={cn(
-                      "flex flex-col items-center gap-1 rounded-lg border px-2 py-3 text-xs transition-colors",
-                      selected
-                        ? "border-primary bg-primary/10 font-bold text-primary ring-1 ring-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40",
-                    )}
-                    data-testid={`button-access-${opt.value}`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-            {accessType === "link" ? (
-              <p className="text-[11px] leading-5 text-muted-foreground">
-                يُنشأ رابط دعوة تشاركه مع من تريد — غير المسجَّلين يدخلون كضيوف بعد موافقتك.
-              </p>
-            ) : null}
-          </div>
-
-          {accessType === "department" ? (
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold">الإدارة</label>
-              <Select value={departmentId} onValueChange={setDepartmentId}>
-                <SelectTrigger data-testid="select-meeting-department">
-                  <SelectValue placeholder="اختر الإدارة" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.nameAr}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          {accessType === "selected" ? (
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold">
-                الأعضاء <span className="font-normal text-muted-foreground">({memberIds.length} مختار)</span>
-              </label>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={memberSearch}
-                  onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder="ابحث بالاسم أو الإدارة"
-                  className="pr-9"
-                />
-              </div>
-              <div className="max-h-44 overflow-y-auto rounded-lg border border-border">
-                {filteredStaff.map((s) => {
-                  const selected = memberIds.includes(s.userId);
-                  return (
-                    <button
-                      key={s.userId}
-                      type="button"
-                      onClick={() =>
-                        setMemberIds((prev) =>
-                          selected ? prev.filter((id) => id !== s.userId) : [...prev, s.userId],
-                        )
-                      }
-                      className={cn(
-                        "flex w-full items-center gap-2 border-b border-border px-3 py-2 text-right text-sm last:border-b-0",
-                        selected ? "bg-primary/10" : "hover:bg-muted/50",
-                      )}
-                    >
-                      <Avatar className="h-7 w-7">
-                        {s.avatarUrl ? <AvatarImage src={s.avatarUrl} alt="" /> : null}
-                        <AvatarFallback className="text-[10px]">{initialsOf(s.name)}</AvatarFallback>
-                      </Avatar>
-                      <span className="flex-1">
-                        {s.name}
-                        {s.department ? (
-                          <span className="mr-1 text-xs text-muted-foreground">· {s.department}</span>
-                        ) : null}
-                      </span>
-                      {selected ? <Badge className="text-[10px]">مختار</Badge> : null}
-                    </button>
-                  );
-                })}
-                {filteredStaff.length === 0 ? (
-                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">لا نتائج</div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+          <InviteePicker
+            staff={staff}
+            departments={departments}
+            roleGroups={roleGroupOptions}
+            hostUserId={user?.id ?? null}
+            everyone={everyone}
+            onEveryoneChange={setEveryone}
+            selectedGroups={selectedGroups}
+            onGroupsChange={setSelectedGroups}
+            selectedDepartments={selectedDepartments}
+            onDepartmentsChange={setSelectedDepartments}
+            memberIds={memberIds}
+            onMembersChange={setMemberIds}
+          />
 
           <div className="space-y-2.5">
             <ToggleRow
