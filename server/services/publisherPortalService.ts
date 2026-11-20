@@ -875,9 +875,10 @@ async function buildPortalOverview(publisher: Publisher) {
         action: renewAction,
       });
     }
-    // التجديد: الباقة المفتوحة قبل 90 يومًا، والمحدودة قبل 30 — ما لم يكن
-    // للوكالة طلب تجديد حي أو باقة لاحقة مفعلة (تظهر حينها في بطاقة التجديد).
-    if (activeCredit.expiryDate && renewal.due && !renewal.request) {
+    // التجديد للباقة المحدودة قبل 30 يومًا — ما لم يكن للوكالة طلب تجديد حي
+    // أو باقة لاحقة مفعلة (تظهر حينها في بطاقة التجديد). الباقة المفتوحة يغطيها
+    // الشريط الأحمر أعلى البوابة (PublisherAgreementBanner) فلا نكرر التنبيه هنا.
+    if (!activeCredit.isUnlimited && activeCredit.expiryDate && renewal.due && !renewal.request) {
       const expiryDays = Math.ceil((activeCredit.expiryDate.getTime() - now.getTime()) / 86_400_000);
       if (currentRenewalMilestone(expiryDays, activeCredit.isUnlimited) !== null) {
         attention.push({
