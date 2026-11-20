@@ -285,7 +285,8 @@ export default function MeetingDetailPage() {
 
           {/* رأس */}
           <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-start gap-4">
+            {/* الجوال والآيباد العمودي: النص بعرض كامل ثم الأزرار تحته؛ جنباً إلى جنب من lg */}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-bold", st.className)}>
@@ -321,7 +322,7 @@ export default function MeetingDetailPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 lg:max-w-[50%] lg:justify-end">
                 {meeting.status === "live" ? (
                   <Button
                     onClick={() => setLocation(`/dashboard/meetings/room/${meeting.id}`)}

@@ -281,7 +281,7 @@ export default function MeetingsHub() {
                   </span>
                 )}
                 action={(m) => (
-                  <div className="flex items-center gap-2">
+                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                     {m.hostUserId === user?.id ? (
                       <>
                         <HostRsvpSummary meeting={m} />
@@ -456,14 +456,15 @@ function MeetingRows({
           <div
             key={m.id}
             className={cn(
-              "flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-b-0",
+              // الجوال: العنوان أولاً بعرض كامل، ثم سطر البيانات، ثم الأزرار — لا عمود ضيق يكسر العنوان كلمة كلمة
+              "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3 last:border-b-0",
               muted && "opacity-70",
             )}
           >
             {right?.(m)}
             <button
               type="button"
-              className="min-w-[160px] flex-1 text-right text-sm font-medium hover:text-primary"
+              className="order-first w-full text-right text-sm font-medium hover:text-primary sm:order-none sm:w-auto sm:min-w-[160px] sm:flex-1"
               onClick={() => setLocation(`/dashboard/meetings/${m.id}`)}
             >
               {m.title}
