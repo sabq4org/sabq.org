@@ -433,11 +433,15 @@ export default function AdminPublishers() {
                         {credit && (
                           <ExpiryChip label="الباقة" date={credit.expiryDate} operational={health.operational} />
                         )}
-                        <ExpiryChip
-                          label="النافذة"
-                          date={publisher.publishingEndsAt}
-                          operational={health.operational}
-                        />
+                        {/* النافذة تتبع الباقة؛ تظهر وحدها فقط حين تختلف (باقة تجديد لاحقة، أو لا باقة) */}
+                        {!(credit?.expiryDate && publisher.publishingEndsAt &&
+                          new Date(credit.expiryDate).toDateString() === new Date(publisher.publishingEndsAt).toDateString()) && (
+                          <ExpiryChip
+                            label="النافذة"
+                            date={publisher.publishingEndsAt}
+                            operational={health.operational}
+                          />
+                        )}
                       </div>
 
                       <div className="mt-auto flex items-center justify-between border-t pt-2.5 text-xs text-muted-foreground">

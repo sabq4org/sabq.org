@@ -30,7 +30,8 @@ import { denyPublish } from "../../server/services/publishGate";
 const publisher = { id: "agency", autoPublish: true, isActive: true, publishingEndsAt: null };
 beforeEach(() => {
   state.permissionData.mockReset().mockResolvedValue({ permissions: [], deniedPermissionCodes: ["articles.publish"] });
-  state.reads = [[publisher]]; state.writes = [];
+  // [] = باقات الوكالة التي تقرؤها بوابة النشر لتحسب نافذة النشر (تتبع الباقة)
+  state.reads = [[publisher], []]; state.writes = [];
 });
 describe("publisher grant respects personal deny at execution", () => {
   it("refuses the trusted-publisher shortcut used by direct publish and submitForReview", async () => {
@@ -53,7 +54,7 @@ describe("publisher grant respects personal deny at execution", () => {
   it("fails closed before writing when overrides cannot be read", async () => {
     state.permissionData.mockRejectedValue(new Error("permission store unavailable"));
     await expect(trustedPublisherCanPublish("publisher")).rejects.toThrow("permission store unavailable");
-    state.reads = [[publisher], [{ id: "article", status: "draft" }]];
+    state.reads = [[publisher], [], [{ id: "article", status: "draft" }]];
     await expect(submitPortalArticle("publisher", "article")).rejects.toThrow("permission store unavailable");
     expect(state.writes).toEqual([]);
   });

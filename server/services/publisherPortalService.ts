@@ -22,6 +22,7 @@ import { storage } from "../storage";
 import { deductPublisherCreditSafely } from "./publisherCreditService";
 import { invalidatePublishedContent } from "./contentInvalidation";
 import { PUBLISHER_GUIDE_DEFAULT_SECTIONS } from "@shared/publisherGuideDefaults";
+import { effectivePublishingEndsAt } from "@shared/publisherWindow";
 import { getUserPermissionData } from "../rbac";
 import { getArticlePlacements, getPublisherBenchmark, withUsualComparison } from "./publisherInsightsService";
 import {
@@ -63,6 +64,23 @@ export async function resolvePublisherForUser(userId: string): Promise<Publisher
   return linked ?? null;
 }
 
+/**
+ * نهاية نافذة النشر الفعلية: تتبع الباقة (انظر shared/publisherWindow.ts).
+ * للقراءة فقط — لا تُكتب في publishers.publishing_ends_at.
+ */
+export async function loadEffectivePublishingEndsAt(publisher: Publisher, now = new Date()): Promise<Date | null> {
+  const packages = await db
+    .select({ isActive: publisherCredits.isActive, expiryDate: publisherCredits.expiryDate })
+    .from(publisherCredits)
+    .where(eq(publisherCredits.publisherId, publisher.id));
+  return effectivePublishingEndsAt(publisher.publishingEndsAt, packages, now);
+}
+
+/** نسخة للعرض والتنبيهات بنافذة تتبع الباقة. لا تُمرَّر لأي كتابة على جدول الناشرين. */
+async function withEffectiveWindow(publisher: Publisher, now = new Date()): Promise<Publisher> {
+  return { ...publisher, publishingEndsAt: await loadEffectivePublishingEndsAt(publisher, now) };
+}
+
 export type PublishingGate = {
   allowed: boolean;
   /** machine-readable سبب المنع */
@@ -72,7 +90,7 @@ export type PublishingGate = {
 };
 
 /**
- * بوابة النشر الموحدة: نشط + داخل نافذة النشر (publishingEndsAt).
+ * بوابة النشر الموحدة: نشط + داخل نافذة النشر (تتبع الباقة؛ loadEffectivePublishingEndsAt).
  * تُستدعى قبل إنشاء/نشر أي مادة لحساب مرتبط بناشر.
  */
 export async function getPublishingGate(userId: string): Promise<PublishingGate> {
@@ -88,8 +106,9 @@ export async function getPublishingGate(userId: string): Promise<PublishingGate>
     };
   }
 
-  if (publisher.publishingEndsAt && publisher.publishingEndsAt.getTime() < Date.now()) {
-    const endDate = publisher.publishingEndsAt.toLocaleDateString("ar-SA-u-ca-gregory");
+  const windowEndsAt = await loadEffectivePublishingEndsAt(publisher);
+  if (windowEndsAt && windowEndsAt.getTime() < Date.now()) {
+    const endDate = windowEndsAt.toLocaleDateString("ar-SA-u-ca-gregory");
     return {
       allowed: false,
       code: "WINDOW_CLOSED",
@@ -725,7 +744,7 @@ export async function getPortalOverview(userId: string) {
 
   // لوحة الوكالة كانت ~2.2ث بعد الإقلاع (5+ استعلامات). كاش دقيقة يكفي للأرقام.
   return withCache(`publisher:portal:overview:${publisher.id}`, 60_000, async () => {
-    return buildPortalOverview(publisher);
+    return buildPortalOverview(await withEffectiveWindow(publisher));
   });
 }
 
@@ -845,7 +864,8 @@ async function buildPortalOverview(publisher: Publisher) {
         message: "انتهت فترة النشر المتاحة لحسابكم.",
         action: extendAction,
       });
-    } else if (daysLeft <= 14) {
+    } else if (daysLeft <= 14 && !activeCredit) {
+      // مع باقة سارية تتبعها النافذة، فتنبيه الباقة (أو الشريط الأحمر للمفتوحة) يكفي
       attention.push({
         type: "window_ending",
         severity: "warning",
@@ -1181,7 +1201,7 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
     try {
       const activeCredit = await findActivePublisherCredit(publisher.id, now);
 
-      const events = collectAlertEvents(publisher, activeCredit, now);
+      const events = collectAlertEvents(await withEffectiveWindow(publisher, now), activeCredit, now);
       const reminder = renewalRemindersEnabled() ? await buildRenewalReminder(publisher, now) : null;
       if (reminder) {
         events.push({
@@ -1595,6 +1615,12 @@ export async function listOwnPublisherRequests(publisherId: string) {
  * سجل الطلبات. الافتراضي «المفتوحة» فقط كما كان، لكن الإدارة تحتاج أيضاً
  * رؤية المعالج والمرفوض — الطلب كان يختفي بلا أثر بعد إغلاقه.
  */
+/**
+ * طلب ينتظر قرار سبق: جديد، أو عرض قبلته الوكالة (بانتظار تأكيد الدفع)، أو عرض
+ * ردّت عليه الوكالة بطلب التواصل. هذا ما تعدّه «بانتظار إجراء» وتبويب «بانتظار قرارك».
+ */
+const needsSabqDecisionSql = sql`(${publisherRequests.status} in ('open', 'accepted') or (${publisherRequests.status} = 'offered' and ${publisherRequests.offer}->>'response' = 'contact'))`;
+
 export async function listPublisherRequests(status: PublisherRequestStatus | "all" = "open") {
   return db
     .select({
@@ -1615,7 +1641,8 @@ export async function listPublisherRequests(status: PublisherRequestStatus | "al
     })
     .from(publisherRequests)
     .innerJoin(publishers, eq(publisherRequests.publisherId, publishers.id))
-    .where(status === "all" ? undefined : eq(publisherRequests.status, status))
+    // «open» = كل ما ينتظر قرار سبق (انظر needsSabqDecisionSql)، لا الحالة الحرفية فقط
+    .where(status === "all" ? undefined : status === "open" ? needsSabqDecisionSql : eq(publisherRequests.status, status))
     .orderBy(desc(publisherRequests.createdAt))
     .limit(200);
 }
@@ -1764,12 +1791,19 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
         openRequests: sql<number>`count(*)`,
       })
       .from(publisherRequests)
-      .where(and(inArray(publisherRequests.publisherId, ids), inArray(publisherRequests.status, ["open", "accepted"])))
+      .where(and(inArray(publisherRequests.publisherId, ids), needsSabqDecisionSql))
       .groupBy(publisherRequests.publisherId),
   ]);
 
   const isCreditUsable = (credit: typeof credits[number]) =>
     credit.isActive && (!credit.expiryDate || new Date(credit.expiryDate) >= now);
+
+  const creditsByPublisher = new Map<string, Array<typeof credits[number]>>();
+  for (const credit of credits) {
+    const list = creditsByPublisher.get(credit.publisherId) ?? [];
+    list.push(credit);
+    creditsByPublisher.set(credit.publisherId, list);
+  }
 
   const activeCreditByPublisher = new Map<string, typeof credits[number]>();
   const lastCreditByPublisher = new Map<string, typeof credits[number]>();
@@ -1789,6 +1823,7 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
       const credit = activeCreditByPublisher.get(publisher.id) ?? null;
       const lastCredit = lastCreditByPublisher.get(publisher.id) ?? null;
       const agg = articlesByPublisher.get(publisher.id);
+      const windowEndsAt = effectivePublishingEndsAt(publisher.publishingEndsAt, creditsByPublisher.get(publisher.id) ?? [], now);
       return {
         id: publisher.id,
         agencyName: publisher.agencyName,
@@ -1796,7 +1831,7 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
         contactPerson: publisher.contactPerson,
         isActive: publisher.isActive,
         autoPublish: publisher.autoPublish,
-        publishingEndsAt: publisher.publishingEndsAt,
+        publishingEndsAt: windowEndsAt,
         createdAt: publisher.createdAt,
         activeCredit: credit
           ? {
@@ -1818,7 +1853,7 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
             : null,
         health: derivePublisherHealth({
           isActive: publisher.isActive,
-          publishingEndsAt: publisher.publishingEndsAt,
+          publishingEndsAt: windowEndsAt,
           activeCredit: credit,
           hadPackageBefore: !!lastCredit,
           now,
@@ -1853,11 +1888,19 @@ export async function getPublishersSummary() {
 
   // الأقواس ضرورية: `NOT` أعلى أولوية من `AND` في Postgres، فبدونها
   // يصبح `not (a and b)` هو `(not a) and b` — شرط لا يتحقق أبداً.
-  const windowEndedSql = sql`(${publishers.publishingEndsAt} is not null
-    and ${publishers.publishingEndsAt} < now())`;
+  /** نهاية النافذة الفعلية = أبعد انتهاء لباقة سارية، وإلا المخزّنة (مثل effectivePublishingEndsAt). */
+  const windowEndsSql = sql`coalesce((
+    select max(pc.expiry_date) from ${publisherCredits} pc
+    where pc.publisher_id = ${publishers.id}
+      and pc.is_active
+      and pc.expiry_date >= now()
+  ), ${publishers.publishingEndsAt})`;
+
+  const windowEndedSql = sql`(${windowEndsSql} is not null
+    and ${windowEndsSql} < now())`;
 
   const expiringSoonSql = sql`(
-    (${publishers.publishingEndsAt} between now() and now() + ${warningInterval})
+    (${windowEndsSql} between now() and now() + ${warningInterval})
     or exists (
       select 1 from ${publisherCredits} pc
       where pc.publisher_id = ${publishers.id}
@@ -1891,8 +1934,8 @@ export async function getPublishersSummary() {
     db
       .select({ openRequests: sql<number>`count(*)` })
       .from(publisherRequests)
-      // بانتظار قرار الإدارة: طلب جديد، أو عرض قبلته الوكالة وينتظر تأكيد الدفع
-      .where(inArray(publisherRequests.status, ["open", "accepted"])),
+      // بانتظار قرار الإدارة: طلب جديد، أو عرض قبلته الوكالة، أو وكالة طلبت التواصل
+      .where(needsSabqDecisionSql),
   ]);
 
   return {
