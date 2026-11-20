@@ -37,9 +37,12 @@ body {
     min-width: 0;
     position: relative;
   }
-  button[role="checkbox"]::after,
-  button[role="radio"]::after,
-  button[role="switch"]::after {
+  /* Same :not() as above: an opted-out control has no position:relative, so
+     its ::after would size itself against a distant ancestor and swallow every
+     tap on the page (e.g. «اجتماع جديد» ticked an open task on iPad). */
+  button[role="checkbox"]:not(.no-min-touch-size)::after,
+  button[role="radio"]:not(.no-min-touch-size)::after,
+  button[role="switch"]:not(.no-min-touch-size)::after {
     content: "";
     position: absolute;
     top: 50%;
