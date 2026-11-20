@@ -11,6 +11,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
+import { MEETING_ROLE_GROUP_IDS, type MeetingRoleGroupId } from "@shared/meetingInvitees";
 import { isAuthenticated } from "../auth";
 import { userHasPermission } from "../rbac";
 import {
@@ -222,6 +223,8 @@ export const createMeetingSchema = z
     accessType: z.enum(["all", "department", "selected", "link"]),
     departmentId: z.string().optional(),
     memberIds: z.array(z.string()).max(200).optional(),
+    roleGroups: z.array(z.enum(MEETING_ROLE_GROUP_IDS as [MeetingRoleGroupId, ...MeetingRoleGroupId[]])).max(10).optional(),
+    departmentIds: z.array(z.string()).max(50).optional(),
     requireApproval: z.boolean().default(true),
     muteOnJoin: z.boolean().default(true),
     // مفعّل افتراضياً حين يُغفل الحقل (2026-11-17)؛ false صريحة تُحترم
@@ -233,9 +236,12 @@ export const createMeetingSchema = z
   .refine((v) => v.accessType !== "department" || Boolean(v.departmentId), {
     message: "اختر الإدارة المستهدفة",
   })
-  .refine((v) => v.accessType !== "selected" || (v.memberIds?.length ?? 0) > 0, {
-    message: "اختر عضواً واحداً على الأقل",
-  });
+  .refine(
+    (v) =>
+      v.accessType !== "selected" ||
+      (v.memberIds?.length ?? 0) + (v.roleGroups?.length ?? 0) + (v.departmentIds?.length ?? 0) > 0,
+    { message: "اختر فئة أو عضواً واحداً على الأقل" },
+  );
 
 const updateMeetingSchema = z.object({
   title: z.string().trim().min(3, "العنوان قصير").max(120).optional(),
