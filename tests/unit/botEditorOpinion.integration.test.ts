@@ -335,6 +335,35 @@ describe.skipIf(!url)("nashr-sabq opinion / analysis / column against local Post
       expect((await pool.query(`SELECT changed_fields FROM article_revisions WHERE article_id = 'pub-2'`)).rows[0].changed_fields).toContain("content");
     });
 
+    it("image swap/add with identical plain text is a visible change (stamps correctedAt/editorialModifiedAt); cleanup-only around an unchanged image is not", async () => {
+      const withImg = (src: string) => `<p style="text-align: right">الفقرة الأولى من المقال</p><p style="text-align: right">&nbsp;</p><p><img src="${src}" alt="صورة"></p><p>الفقرة الثانية من المقال</p>`;
+      // 1) استبدال صورة في المتن بنص مطابق
+      await seed("pub-img-1", "opinion", "published", withImg("https://cdn.test/a.jpg"));
+      const swap = await call("PATCH", `${PUB}/pub-img-1`, nashr, await payload("pub-img-1", { content: withImg("https://cdn.test/b.jpg"), contentFormat: "html" }));
+      expect(swap.status).toBe(200);
+      const swapped = await full("pub-img-1");
+      expect(swapped.content).toContain("https://cdn.test/b.jpg");
+      expect(swapped.corrected_at).not.toBeNull();
+      expect(swapped.seo_metadata?.editorialModifiedAt).toBeTruthy();
+      // 2) إضافة صورة عبر imageUrls دون أي تغيير نصي
+      await seed("pub-img-2");
+      const added = await call("PATCH", `${PUB}/pub-img-2`, nashr, await payload("pub-img-2", { imageUrls: ["https://cdn.test/new.jpg"] }));
+      expect(added.status).toBe(200);
+      const addedRow = await full("pub-img-2");
+      expect(addedRow.content).toContain("https://cdn.test/new.jpg");
+      expect(addedRow.corrected_at).not.toBeNull();
+      expect(addedRow.seo_metadata?.editorialModifiedAt).toBeTruthy();
+      // 3) تنظيف فقط والصورة نفسها: لا «تم التحديث»
+      await seed("pub-img-3", "opinion", "published", withImg("https://cdn.test/a.jpg"));
+      const clean = await call("PATCH", `${PUB}/pub-img-3`, nashr, await payload("pub-img-3", { content: withImg("https://cdn.test/a.jpg"), contentFormat: "html" }));
+      expect(clean.status).toBe(200);
+      const cleanRow = await full("pub-img-3");
+      expect(cleanRow.content).toContain("https://cdn.test/a.jpg");
+      expect(cleanRow.content).not.toMatch(/text-align|&nbsp;<\/p>/);
+      expect(cleanRow.corrected_at).toBeNull();
+      expect(cleanRow.seo_metadata?.editorialModifiedAt).toBeUndefined();
+    });
+
     it("requires expectedUpdatedAt (422), rejects a stale one (409) and requires updateReason (422); nothing is written", async () => {
       await seed("pub-3");
       const snapshot = await full("pub-3");

@@ -5,7 +5,7 @@ vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/rbac", () => ({ logActivity: vi.fn() }));
 vi.mock("../../server/memoryCache", () => ({ memoryCache: { invalidatePattern: vi.fn(), delete: vi.fn() }, CACHE_TTL: {} }));
 
-import { cleanBotArticleHtml, dropEmptyParagraphs, stripRedundantRtlAlign } from "../../server/utils/botArticleHtml";
+import { cleanBotArticleHtml, dropEmptyParagraphs, isCleanupOnlyChange, stripRedundantRtlAlign } from "../../server/utils/botArticleHtml";
 import { normalizeDraftContent } from "../../server/services/botDraftsService";
 
 const real = readFileSync(new URL("../fixtures/opinion_empty_nbsp_paragraph.html", import.meta.url), "utf8");
@@ -50,5 +50,27 @@ describe("normalizeDraftContent applies the cleanup on every bot save path", () 
       .toBe("<p>الفقرة الأولى من المقال</p><p>الفقرة الثانية من المقال</p>");
     expect(normalizeDraftContent("الأولى\n\nالثانية")).toBe("<p>الأولى</p>\n<p>الثانية</p>");
     expect(normalizeDraftContent('<p style="text-align: right">a</p>', "html", undefined, { rtl: false })).toBe('<p style="text-align: right">a</p>');
+  });
+});
+
+describe("isCleanupOnlyChange", () => {
+  const a = '<p style="text-align: right">نص</p><p>&nbsp;</p><p><img src="https://x.test/a.jpg"></p>';
+  it("true for the known cleanup only (empty paragraph, redundant text-align, whitespace)", () => {
+    expect(isCleanupOnlyChange(a, '<p>نص</p>\n<p><img src="https://x.test/a.jpg"></p>')).toBe(true);
+    expect(isCleanupOnlyChange(real, cleanBotArticleHtml(real))).toBe(true);
+  });
+  it("false when an image is swapped or added, or a link/text changes, even if the plain text is identical", () => {
+    expect(isCleanupOnlyChange(a, '<p>نص</p><p><img src="https://x.test/b.jpg"></p>')).toBe(false);
+    expect(isCleanupOnlyChange(a, '<p>نص</p><p><img src="https://x.test/a.jpg"></p><p><img src="https://x.test/c.jpg"></p>')).toBe(false);
+    expect(isCleanupOnlyChange('<p><a href="/x">نص</a></p>', '<p><a href="/y">نص</a></p>')).toBe(false);
+    expect(isCleanupOnlyChange('<p>نص</p>', '<p>نص آخر</p>')).toBe(false);
+    expect(isCleanupOnlyChange('<p>نص</p>', '<p style="text-align: center">نص</p>')).toBe(false);
+  });
+  it("ignores presentational attributes the sanitizer adds to an unchanged image (class/style/data-align)", () => {
+    expect(isCleanupOnlyChange('<p><img src="https://x.test/a.jpg" alt="ص"></p>', '<p><img src="https://x.test/a.jpg" alt="ص" data-align="center" class="sabq-article-image" style="width: 100%"></p>')).toBe(true);
+    expect(isCleanupOnlyChange('<p><img src="https://x.test/a.jpg" alt="ص"></p>', '<p><img src="https://x.test/a.jpg" alt="غيره"></p>')).toBe(false);
+  });
+  it("false for non-string input", () => {
+    expect(isCleanupOnlyChange(null, "<p>x</p>")).toBe(false);
   });
 });

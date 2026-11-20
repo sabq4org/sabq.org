@@ -46,3 +46,33 @@ export function cleanBotArticleHtml(html: string, options: { rtl?: boolean } = {
   if (rtl) out = stripRedundantRtlAlign(out);
   return out.trim();
 }
+
+const MEDIA_TAG = /<(img|a|iframe|video|audio|source|embed)\b([^>]*)>/gi;
+const MEDIA_ATTRS = ["src", "href", "alt", "poster", "data-src", "srcset"];
+
+/** يُبقي من وسوم الوسائط والروابط قيمها الدلالية فقط (src/href/alt…) ويُسقط ما يضيفه المنظِّف من class/style/data-align. */
+function reduceMediaTags(html: string): string {
+  return html.replace(MEDIA_TAG, (_tag, name: string, attrs: string) => {
+    const kept = MEDIA_ATTRS.map((key) => {
+      const m = new RegExp(`\\s${key}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i").exec(attrs);
+      return m ? `${key}=${(m[1] ?? m[2] ?? "").trim()}` : "";
+    }).filter(Boolean);
+    return `<${name.toLowerCase()} ${kept.join(" ")}>`;
+  });
+}
+
+function canonicalForCompare(html: string, rtl: boolean): string {
+  return reduceMediaTags(cleanBotArticleHtml(String(html ?? ""), { rtl })).replace(/\s+/g, " ").replace(/>\s+</g, "><").trim();
+}
+
+/**
+ * هل الفرق بين المتنين هو التنظيف المعروف فقط (فقرات فارغة / text-align الزائد / فراغات)؟
+ * نطبّق التنظيف نفسه على الطرفين ثم نقارن HTML كاملاً، فأي صورة أو رابط (src/href/alt) أو نص أو وسم
+ * مضاف أو مستبدل (حتى بلا تغيّر في النص المجرد) يُعدّ تغييراً ظاهراً للقارئ.
+ * سمات العرض التي يضيفها المنظِّف على الصور (class/style/data-align) لا تُحتسب.
+ */
+export function isCleanupOnlyChange(before: unknown, after: unknown, options: { rtl?: boolean } = {}): boolean {
+  if (typeof before !== "string" || typeof after !== "string") return false;
+  const rtl = options.rtl !== false;
+  return canonicalForCompare(before, rtl) === canonicalForCompare(after, rtl);
+}

@@ -14,6 +14,7 @@ import { invalidateClearedBreakingArticles } from "./breakingNewsService";
 import { botEditorAssignableStaff } from "./botEditorWritesRoster";
 import { demoteOtherBreaking } from "./botEditorWritesBreaking";
 import { toBotDraftResponse } from "./botDraftsService";
+import { isCleanupOnlyChange } from "../utils/botArticleHtml";
 import { toEnBotDraftResponse } from "./enBotDraftsService";
 import { invalidateArticleWrite } from "./contentInvalidation";
 import { queueEnBotDraftSurfaceEffects } from "./enBotDraftPublishEffects";
@@ -29,9 +30,6 @@ type Guard = { expectedUpdatedAt: Date; message?: string };
 /** publishedOpinion: PATCH /opinion/published/:id، تعديل مقال رأي منشور بحراسة إصدار وسبب إلزاميين. */
 type MutateOptions = { publishedOpinion?: boolean };
 
-function plainText(html: unknown): string {
-  return String(html ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#0*160;|\u00a0/gi, " ").replace(/\s+/g, " ").trim();
-}
 const editable = new Set(["draft", "ready_to_publish", "scheduled", "published"]);
 
 function noteOf(input: { updateReason?: string | null; reason?: string | null }): string | null {
@@ -181,8 +179,8 @@ async function mutate(language: BotEditorLanguage, id: string, operation: string
         patch.seo = seo;
       }
       if (before.status === "published") {
-        // تعديل تنسيقي فقط (النص نفسه بعد نزع الوسوم) لمقال رأي لا يُظهر «تم التحديث» للقارئ؛ المراجعة والتدقيق يُسجَّلان.
-        const cosmeticOnly = options.publishedOpinion && patch.content !== undefined && plainText(patch.content) === plainText(before.content);
+        // تعديل تنسيقي فقط (الفرق هو التنظيف المعروف حصراً؛ أي صورة/رابط/وسم مختلف يُعدّ تغييراً ظاهراً) لمقال رأي لا يُظهر «تم التحديث» للقارئ؛ المراجعة والتدقيق يُسجَّلان.
+        const cosmeticOnly = options.publishedOpinion && patch.content !== undefined && isCleanupOnlyChange(before.content, patch.content, { rtl: language === "ar" });
         const visibleChange = hasMeaningfulEditorialChange(cosmeticOnly ? { ...patch, content: before.content } : patch, before) || ["imageCaption", "imageAltText"].some((key) => key in auditAfterExtra && auditAfterExtra[key] !== auditBefore[key]);
         if (visibleChange && language === "ar") patch.correctedAt = now;
         if (visibleChange || (language === "en" && input.updateReason !== undefined)) {
