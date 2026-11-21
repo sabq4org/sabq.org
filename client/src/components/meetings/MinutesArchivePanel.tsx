@@ -6,9 +6,9 @@ import { useLocation } from "wouter";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiUrl } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2 } from "lucide-react";
+import { Download, Loader2, Trash2 } from "lucide-react";
 import {
   DECISIONS_FORMS,
   MINUTES_FORMS,
@@ -28,6 +28,7 @@ export type ArchiveItem = {
   decisions: number;
   tasks: number;
   openTasks: number;
+  canDownloadPdf?: boolean;
 };
 
 type ArchivePage = { items: ArchiveItem[]; nextBefore: string | null };
@@ -128,7 +129,7 @@ export function MinutesArchivePanel({
             return (
               <li
                 key={m.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)_auto_auto]"
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)_auto_auto_auto]"
                 data-testid={`row-archive-${m.id}`}
               >
                 <span className="col-span-2 text-xs tabular-nums text-muted-foreground sm:col-span-1">
@@ -151,11 +152,28 @@ export function MinutesArchivePanel({
                 >
                   {chip.label}
                 </span>
+                {m.canDownloadPdf && m.minutesStatus === "approved" ? (
+                  <Button
+                    asChild
+                    size="icon"
+                    variant="ghost"
+                    className="col-start-2 row-start-3 h-8 w-8 text-muted-foreground hover:text-primary sm:col-start-auto sm:row-start-auto"
+                  >
+                    <a
+                      href={apiUrl(`/api/meetings/${m.id}/minutes/pdf`)}
+                      download
+                      aria-label={`تحميل محضر ${m.title} PDF`}
+                      data-testid={`link-archive-pdf-${m.id}`}
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : null}
                 {onDelete && m.isHost ? (
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="col-start-2 row-span-2 row-start-2 h-8 w-8 text-muted-foreground hover:text-destructive sm:col-start-auto sm:row-span-1 sm:row-start-auto"
+                    className="col-start-2 row-start-2 h-8 w-8 text-muted-foreground hover:text-destructive sm:col-start-auto sm:row-start-auto"
                     onClick={() => onDelete(m)}
                     aria-label={`حذف اجتماع ${m.title}`}
                     data-testid={`button-archive-delete-${m.id}`}

@@ -40,6 +40,8 @@ export interface ArchiveItem {
   decisions: number;
   tasks: number;
   openTasks: number;
+  /** ملف PDF متاح: للمضيف (مسودة/معتمد) ولمن حضر بعد الاعتماد */
+  canDownloadPdf: boolean;
 }
 
 // ─── دوال نقية (tests/unit/meetingArchive.test.ts) ───────────────────────────
@@ -162,8 +164,32 @@ export async function listMinutesArchive(
 
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
+
+  // من حضر فعلاً من صفوف هذه الصفحة — استعلام واحد لا استعلام لكل صف
+  const approvedIds = page.filter((r) => r.minutesStatus === "approved").map((r) => r.id);
+  const attendedRows = approvedIds.length
+    ? await db
+        .select({ meetingId: meetingParticipants.meetingId })
+        .from(meetingParticipants)
+        .where(
+          and(
+            eq(meetingParticipants.userId, viewerId),
+            eq(meetingParticipants.status, "admitted"),
+            inArray(meetingParticipants.meetingId, approvedIds),
+            sql`${meetingParticipants.joinedAt} is not null`,
+          ),
+        )
+    : [];
+  const attended = new Set(attendedRows.map((r) => r.meetingId));
+  const canPdf = (r: (typeof page)[number]) => {
+    const host = canManage || r.hostUserId === viewerId;
+    if (host) return r.minutesStatus === "draft" || r.minutesStatus === "approved";
+    return r.minutesStatus === "approved" && attended.has(r.id);
+  };
+
   return {
     items: page.map((r) => ({
+      canDownloadPdf: canPdf(r),
       id: r.id,
       title: r.title,
       startedAt: r.startedAt ? r.startedAt.toISOString() : null,
