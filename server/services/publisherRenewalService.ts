@@ -183,6 +183,8 @@ export async function getPortalRenewal(publisher: Publisher, now = new Date()) {
           startDate: current.startDate,
           expiryDate: current.expiryDate,
           daysLeft,
+          totalCredits: current.totalCredits,
+          remainingCredits: current.remainingCredits,
         }
       : null,
     upcoming: upcoming

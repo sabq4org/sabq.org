@@ -32,6 +32,8 @@ export interface PortalRenewal {
     startDate: string;
     expiryDate: string | null;
     daysLeft: number | null;
+    totalCredits?: number;
+    remainingCredits?: number;
   } | null;
   upcoming: {
     id: string;

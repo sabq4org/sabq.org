@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, X } from "lucide-react";
 import { formatDate } from "@/lib/format";
-import { agreementBannerState, agreementDaysText } from "@shared/publisherAgreementBanner";
+import { agreementBannerState, agreementCreditsText, agreementDaysText } from "@shared/publisherAgreementBanner";
 import type { PortalRenewal } from "./PublisherRenewalCard";
 
 function readDismissed(id: string): boolean {
@@ -14,7 +14,10 @@ function readDismissed(id: string): boolean {
   }
 }
 
-/** شريط أحمر أعلى صفحات البوابة حين يبقى على الاتفاقية المفتوحة 90 يومًا أو أقل. */
+/**
+ * شريط أحمر أعلى صفحات البوابة: للاتفاقية المفتوحة حين يبقى 90 يومًا أو أقل،
+ * وللباقة المحدودة حين يقارب رصيدها النفاد (20% ثم 10% ثم آخر خبر) أو ينفد.
+ */
 export function PublisherAgreementBanner() {
   const { data } = useQuery<PortalRenewal>({
     queryKey: ["/api/publisher/portal/renewal"],
@@ -41,6 +44,30 @@ export function PublisherAgreementBanner() {
 
   const expiry = data?.current?.expiryDate ? formatDate(data.current.expiryDate) : null;
   const hasRequest = Boolean(data?.request);
+  const upcomingStart = data?.upcoming?.startDate ? formatDate(data.upcoming.startDate) : null;
+
+  let headline: string;
+  let detail: string;
+  if (state.kind === "days") {
+    headline = `تنبيه: متبقٍّ من الاتفاقية المفتوحة ${agreementDaysText(state.daysLeft)}`;
+    detail = expiry ? ` · تنتهي في ${expiry}.` : ".";
+  } else if (state.remaining <= 0) {
+    headline = "تنبيه: نفد رصيد باقتكم";
+    detail = upcomingStart ? ` · تبدأ باقتكم الجديدة في ${upcomingStart}.` : "، ولا يمكن نشر مواد جديدة.";
+  } else {
+    headline = state.remaining === 1
+      ? "تنبيه: بقي في رصيد باقتكم خبر واحد"
+      : `تنبيه: متبقٍّ من رصيد باقتكم ${agreementCreditsText(state.remaining)}`;
+    detail = ` من أصل ${state.total}.`;
+  }
+  const renewed = Boolean(data?.upcoming);
+  const exhausted = state.kind === "credits" && state.remaining <= 0;
+  const followUp = renewed
+    ? ""
+    : hasRequest
+      ? " طلب التجديد قيد المتابعة."
+      : exhausted ? " اطلبوا التجديد لاستئناف النشر." : " اطلبوا التجديد ليستمر النشر دون انقطاع.";
+  const linkLabel = renewed ? "تفاصيل الباقة" : hasRequest ? "متابعة طلب التجديد" : "اطلب التجديد";
 
   return (
     <div
@@ -50,18 +77,16 @@ export function PublisherAgreementBanner() {
     >
       <AlertTriangle className="hidden h-5 w-5 shrink-0 sm:block" aria-hidden />
       <p className="min-w-[14rem] flex-1 text-sm leading-relaxed md:text-[15px]">
-        <strong className="font-bold">
-          تنبيه: متبقٍّ من الاتفاقية المفتوحة {agreementDaysText(state.daysLeft)}
-        </strong>
-        {expiry ? ` · تنتهي في ${expiry}.` : "."}
-        {hasRequest ? " طلب التجديد قيد المتابعة." : " اطلبوا التجديد ليستمر النشر دون انقطاع."}
+        <strong className="font-bold">{headline}</strong>
+        {detail}
+        {followUp}
       </p>
       <Link
         href="/dashboard/publisher/credits"
         className="order-last whitespace-nowrap rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#B42318] hover:bg-red-50 sm:order-none"
         data-testid="link-agreement-renew"
       >
-        {hasRequest ? "متابعة طلب التجديد" : "اطلب التجديد"}
+        {linkLabel}
       </Link>
       <button
         type="button"

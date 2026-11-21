@@ -876,25 +876,8 @@ async function buildPortalOverview(publisher: Publisher) {
   }
 
   if (activeCredit) {
-    const ratio = activeCredit.totalCredits > 0
-      ? activeCredit.remainingCredits / activeCredit.totalCredits
-      : 0;
-    // الباقة المفتوحة لا تنبيهات رصيد لها — تنبيه الانتهاء فقط
-    if (!activeCredit.isUnlimited && activeCredit.remainingCredits <= 0) {
-      attention.push({
-        type: "credits_exhausted",
-        severity: "critical",
-        message: "نفد رصيد باقتكم الحالية. لا يمكن نشر مواد جديدة حتى التجديد.",
-        action: renewAction,
-      });
-    } else if (!activeCredit.isUnlimited && ratio <= 0.2) {
-      attention.push({
-        type: "credits_low",
-        severity: "warning",
-        message: `تبقى ${activeCredit.remainingCredits} فقط من رصيد باقة «${activeCredit.packageName}».`,
-        action: renewAction,
-      });
-    }
+    // تنبيه الرصيد (قارب على النفاد أو نفد) يغطيه الشريط الأحمر أعلى البوابة
+    // (PublisherAgreementBanner) حسب نسبة المتبقي، فلا نكرره هنا.
     // التجديد للباقة المحدودة قبل 30 يومًا — ما لم يكن للوكالة طلب تجديد حي
     // أو باقة لاحقة مفعلة (تظهر حينها في بطاقة التجديد). الباقة المفتوحة يغطيها
     // الشريط الأحمر أعلى البوابة (PublisherAgreementBanner) فلا نكرر التنبيه هنا.
