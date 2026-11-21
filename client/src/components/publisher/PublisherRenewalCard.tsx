@@ -32,8 +32,9 @@ export interface PortalRenewal {
     startDate: string;
     expiryDate: string | null;
     daysLeft: number | null;
-    totalCredits?: number;
-    remainingCredits?: number;
+    /** مجموع الباقات المحدودة السارية؛ null إن وُجدت باقة مفتوحة سارية. */
+    totalCredits?: number | null;
+    remainingCredits?: number | null;
   } | null;
   upcoming: {
     id: string;

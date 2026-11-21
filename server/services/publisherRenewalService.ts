@@ -161,12 +161,27 @@ export async function getRenewalContext(publisherId: string, now = new Date()) {
     ? packages.find((p) => p.id !== current.id && p.startDate.getTime() >= current.expiryDate!.getTime() - DAY) ?? null
     : packages.find((p) => p.startDate.getTime() > now.getTime()) ?? null;
 
-  return { current, upcoming };
+  return { current, upcoming, started };
+}
+
+/**
+ * رصيد الباقة المحدودة كما يراه شريط البوابة: مجموع الباقات المحدودة السارية
+ * التي بدأت، لأن الخصم يأخذ من أي باقة سارية فيها رصيد. إن كانت هناك باقة
+ * مفتوحة سارية فالنشر غير مقيد بالرصيد، فلا رقم (null).
+ */
+export function startedCreditTotals(
+  started: Array<{ isUnlimited: boolean; totalCredits: number; remainingCredits: number }>,
+): { totalCredits: number | null; remainingCredits: number | null } {
+  if (!started.length || started.some((p) => p.isUnlimited)) return { totalCredits: null, remainingCredits: null };
+  return {
+    totalCredits: started.reduce((n, p) => n + p.totalCredits, 0),
+    remainingCredits: started.reduce((n, p) => n + Math.max(0, p.remainingCredits), 0),
+  };
 }
 
 /** حالة التجديد كما تراها الوكالة في لوحتها. */
 export async function getPortalRenewal(publisher: Publisher, now = new Date()) {
-  const [{ current, upcoming }, request] = await Promise.all([
+  const [{ current, upcoming, started }, request] = await Promise.all([
     getRenewalContext(publisher.id, now),
     liveRenewalRequest(publisher.id),
   ]);
@@ -183,8 +198,7 @@ export async function getPortalRenewal(publisher: Publisher, now = new Date()) {
           startDate: current.startDate,
           expiryDate: current.expiryDate,
           daysLeft,
-          totalCredits: current.totalCredits,
-          remainingCredits: current.remainingCredits,
+          ...startedCreditTotals(started),
         }
       : null,
     upcoming: upcoming
