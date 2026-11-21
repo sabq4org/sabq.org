@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/services/email", () => ({ sendEmailNotification: vi.fn() }));
 import {
+  startedCreditTotals,
   addMonths,
   currentRenewalMilestone,
   renewalMilestones,
@@ -112,5 +113,21 @@ describe("renewal reminders switch", () => {
     vi.stubEnv("PUBLISHER_RENEWAL_REMINDERS", "ON");
     expect(renewalRemindersEnabled()).toBe(true);
     vi.unstubAllEnvs();
+  });
+});
+
+describe("startedCreditTotals (portal banner credit)", () => {
+  it("sums every started limited package, since debits draw from any of them", () => {
+    expect(startedCreditTotals([
+      { isUnlimited: false, totalCredits: 50, remainingCredits: 0 },
+      { isUnlimited: false, totalCredits: 50, remainingCredits: 30 },
+    ])).toEqual({ totalCredits: 100, remainingCredits: 30 });
+  });
+  it("gives no credit figure while an open package is running", () => {
+    expect(startedCreditTotals([
+      { isUnlimited: false, totalCredits: 50, remainingCredits: 0 },
+      { isUnlimited: true, totalCredits: 0, remainingCredits: 0 },
+    ])).toEqual({ totalCredits: null, remainingCredits: null });
+    expect(startedCreditTotals([])).toEqual({ totalCredits: null, remainingCredits: null });
   });
 });
