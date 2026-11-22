@@ -283,6 +283,13 @@
         "e2e/fixtures/dashboard-session.*",
         "client/src/components/ui/sidebar.tsx",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
+        "client/src/pages/dashboard/ContentDutyPage.tsx",
+        "client/src/components/dashboard/content-duty/**",
+        "client/src/hooks/useContentDuty.ts",
+        "client/src/lib/contentDuty.ts",
+        "shared/contentDuty.ts",
+        "server/routes/contentDuty.ts",
+        "server/services/contentDutyService.ts",
         "client/src/components/NewsMap.tsx",
         "client/src/components/NewsMapHudhud.tsx",
         "client/src/lib/hudhudMap.ts",
@@ -599,7 +606,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-11-21"
+      "lastReviewed": "2026-11-22"
     },
     {
       "id": "ifox",

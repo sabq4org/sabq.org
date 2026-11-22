@@ -142,6 +142,7 @@ import mawaeedRouter from "./mawaeed";
 import publishBannedWordsRouter from "./publishBannedWords";
 import infathRouter from "./infath";
 import servicePagesRouter from "./servicePages";
+import contentDutyRouter from "./contentDuty";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -309,4 +310,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(publishBannedWordsRouter);
   app.use(infathRouter);
   app.use(servicePagesRouter);
+  app.use(contentDutyRouter);
 }
