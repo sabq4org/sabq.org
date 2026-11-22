@@ -1,6 +1,10 @@
 // تعارض موعد مقال رأي مع مقال كاتب آخر مجدول في الدقيقة نفسها.
 // منطق خالص بلا قاعدة بيانات: تطبيق الديسك ينبّه ولا يمنع (قرار المالك 2026-10-28).
-import type { StaffOpinionWarning } from "@shared/staffApp";
+import type {
+  StaffOpinionSlotClashWarning,
+  StaffOpinionWriterGapWarning,
+} from "@shared/staffApp";
+import { formatOpinionSlotRiyadh } from "./opinionDraftDeskNotice";
 
 export interface OpinionSlotCandidate {
   articleId: string;
@@ -39,11 +43,40 @@ export function findOpinionSlotClashes(input: {
 
 export function buildOpinionSlotClashWarnings(
   clashes: readonly OpinionSlotCandidate[],
-): StaffOpinionWarning[] {
+): StaffOpinionSlotClashWarning[] {
   return clashes.map((c) => ({
     code: "slot_clash" as const,
     message: `تنبيه: الكاتب ${c.writerName} مجدول في الموعد نفسه`,
     otherWriterName: c.writerName,
     otherArticleId: c.articleId,
   }));
+}
+
+export interface OpinionWriterGapCandidate {
+  articleId: string;
+  title: string | null;
+  status: string;
+  at: Date;
+}
+
+/**
+ * تحذير «الفاصل الأسبوعي» للكاتب نفسه — نفس التعارض الذي ترفض به الجدولة 409
+ * ما لم يُرسل overrideWeeklyGap=true. blocking=true ليعرف المستدعي ذلك مسبقاً.
+ */
+export function buildWriterGapWarnings(
+  conflicts: readonly OpinionWriterGapCandidate[],
+): StaffOpinionWriterGapWarning[] {
+  return conflicts.map((c) => {
+    const verb = c.status === "published" ? "منشور" : "مجدول";
+    const title = c.title?.trim() ? `«${c.title.trim()}» ` : "";
+    return {
+      code: "writer_gap" as const,
+      message: `هذا الموعد قريب من مقال آخر للكاتب نفسه: ${title}${verb} ${formatOpinionSlotRiyadh(c.at)}. الفاصل المطلوب أسبوع؛ أرسل overrideWeeklyGap=true للتجاوز.`,
+      otherArticleId: c.articleId,
+      otherTitle: c.title ?? null,
+      otherStatus: c.status,
+      otherAt: c.at.toISOString(),
+      blocking: true as const,
+    };
+  });
 }

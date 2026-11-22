@@ -18,22 +18,46 @@ function asDate(value: Date | string | null | undefined): Date | null {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+/** اللحظة التي يشغلها صف واحد (منشور/مجدول/قيد المراجعة)، أو null. */
+export function occupiedScheduleInstantOf(row: ScheduleInstantRow): Date | null {
+  const instant =
+    row.status === "published"
+      ? row.publishedAt
+      : row.status === "scheduled"
+        ? row.scheduledAt
+        : row.reviewStatus === "pending_review" || row.reviewStatus === "approved"
+          ? row.scheduledAt ?? row.updatedAt
+          : null;
+  return asDate(instant);
+}
+
 /** لحظات مشغولة لكاتب آخر المقال نفسه: منشور، مجدول، أو قيد المراجعة/الاعتماد. */
 export function collectOccupiedScheduleInstants(rows: ScheduleInstantRow[]): Date[] {
   const occupied: Date[] = [];
   for (const row of rows) {
-    const instant =
-      row.status === "published"
-        ? row.publishedAt
-        : row.status === "scheduled"
-          ? row.scheduledAt
-          : row.reviewStatus === "pending_review" || row.reviewStatus === "approved"
-            ? row.scheduledAt ?? row.updatedAt
-            : null;
-    const date = asDate(instant);
+    const date = occupiedScheduleInstantOf(row);
     if (date) occupied.push(date);
   }
   return occupied;
+}
+
+/**
+ * الصفوف التي تخرق الفاصل الأسبوعي مع الموعد المرشح (المنطق نفسه في
+ * scheduleConflictsWith)، مع لحظة كل صف. يستعملها الرفض 409 و slot-check معاً.
+ */
+export function findScheduleGapConflicts<T extends ScheduleInstantRow>(
+  candidate: Date,
+  rows: readonly T[],
+  gapMs = OPINION_SLOT_GAP_MS,
+): Array<{ row: T; at: Date }> {
+  const at = candidate.getTime();
+  if (!Number.isFinite(at)) return [];
+  const out: Array<{ row: T; at: Date }> = [];
+  for (const row of rows) {
+    const instant = occupiedScheduleInstantOf(row);
+    if (instant && Math.abs(at - instant.getTime()) < gapMs) out.push({ row, at: instant });
+  }
+  return out;
 }
 
 export function scheduleConflictsWith(

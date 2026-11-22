@@ -239,12 +239,29 @@ export interface StaffOpinionBoard {
   pendingCount: number;
 }
 
-export interface StaffOpinionWarning {
+export interface StaffOpinionSlotClashWarning {
   code: "slot_clash";
   message: string;
   otherWriterName: string;
   otherArticleId: string;
 }
+
+/**
+ * مقال آخر للكاتب نفسه أقرب من الفاصل الأسبوعي (6.5 يوم). الجدولة ترد 409
+ * إلا مع overrideWeeklyGap=true؛ لذلك blocking=true.
+ */
+export interface StaffOpinionWriterGapWarning {
+  code: "writer_gap";
+  message: string;
+  otherArticleId: string;
+  otherTitle: string | null;
+  otherStatus: string;
+  /** لحظة المقال الآخر (نشره أو جدولته) ISO. */
+  otherAt: string;
+  blocking: true;
+}
+
+export type StaffOpinionWarning = StaffOpinionSlotClashWarning | StaffOpinionWriterGapWarning;
 
 const isoDateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "صيغة التاريخ YYYY-MM-DD");
 
@@ -263,16 +280,28 @@ export const staffOpinionBoardQuerySchema = z.object({
   weekStart: isoDateOnly.optional(),
 });
 
+/** تجاوز قاعدة الفاصل الأسبوعي للكاتب نفسه بقرار المحرر (قرار أبو محمد 2026-11-22). */
+const overrideWeeklyGapField = z.boolean().optional();
+
 export const staffOpinionScheduleSchema = z.union([
-  z.object({ mode: z.literal("fixed_slot") }).strict(),
+  z.object({ mode: z.literal("fixed_slot"), overrideWeeklyGap: overrideWeeklyGapField }).strict(),
   z
     .object({
       scheduledAt: z
         .string()
         .datetime({ offset: true, message: "صيغة وقت الجدولة غير صالحة (ISO مع المنطقة الزمنية)" }),
+      overrideWeeklyGap: overrideWeeklyGapField,
     })
     .strict(),
 ]);
+
+/** جسم بلا mode ولا scheduledAt = الموعد الثابت (مع الإبقاء على overrideWeeklyGap إن وُجد). */
+export function withDefaultOpinionScheduleMode(body: unknown): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { mode: "fixed_slot" };
+  const obj = body as Record<string, unknown>;
+  if ("mode" in obj || "scheduledAt" in obj) return obj;
+  return { mode: "fixed_slot", ...obj };
+}
 
 export const staffOpinionSlotCheckQuerySchema = z.object({
   scheduledAt: z

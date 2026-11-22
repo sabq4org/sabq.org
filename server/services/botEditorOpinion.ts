@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { botDeskOpinionEditSchema, botDeskOpinionImageSchema } from "@shared/botDesk";
-import { staffOpinionBoardQuerySchema, staffOpinionPrepareSchema, staffOpinionReturnSchema, staffOpinionScheduleSchema, staffOpinionSlotCheckQuerySchema } from "@shared/staffApp";
+import { staffOpinionBoardQuerySchema, staffOpinionPrepareSchema, staffOpinionReturnSchema, staffOpinionScheduleSchema, staffOpinionSlotCheckQuerySchema, withDefaultOpinionScheduleMode } from "@shared/staffApp";
 import type { NashrEditorCapability } from "@shared/botEditorCapabilities";
 import { BotDraftError, resolveBotAuthorId } from "./botDraftsService";
 import { assertEditorCapability, assertNotProtected } from "./botEditorCapabilityGuard";
 import { recordBotEditorOperation } from "./botEditorOperationsAudit";
 import {
-  StaffOpinionDeskError, checkOpinionSlotClashes, getOpinionDraftContent, getStaffOpinionBoard, getStaffOpinionItem,
+  StaffOpinionDeskError, checkOpinionSlotClashes, hasWeeklyGapConflict, getOpinionDraftContent, getStaffOpinionBoard, getStaffOpinionItem,
   publishOpinionFromDesk, returnOpinionToWriterFromDesk, scheduleOpinionFromDesk,
 } from "./staffOpinionDeskService";
 import { getOpinionPrepJob, startOpinionPrep } from "./staffOpinionPrepareService";
@@ -81,7 +81,8 @@ export const opinionImageStatus = (id: string) => run("opinion.read", id, async 
 export const opinionSlotCheck = (id: string, query: unknown) => run("opinion.read", id, async () => {
   const parsed = parse(staffOpinionSlotCheckQuerySchema, query);
   const scheduledAt = new Date(parsed.scheduledAt);
-  return { scheduledAt: scheduledAt.toISOString(), warnings: await checkOpinionSlotClashes(id, scheduledAt) };
+  const warnings = await checkOpinionSlotClashes(id, scheduledAt);
+  return { scheduledAt: scheduledAt.toISOString(), warnings, weeklyGapConflict: hasWeeklyGapConflict(warnings) };
 });
 
 export const editOpinion = (id: string, body: unknown) => run("opinion.edit", id, async () => {
@@ -110,11 +111,11 @@ export const imageOpinion = (id: string, body: unknown) => run("opinion.image", 
 });
 
 export const scheduleOpinion = (id: string, body: unknown) => run("opinion.lifecycle", id, async () => {
-  const input = parse(staffOpinionScheduleSchema, body && Object.keys(body as object).length > 0 ? body : { mode: "fixed_slot" });
+  const input = parse(staffOpinionScheduleSchema, withDefaultOpinionScheduleMode(body));
   const actorId = await resolveBotAuthorId();
   const result = await scheduleOpinionFromDesk({ articleId: id, actorId, request: input });
-  await audit("opinion_schedule", id, { mode: "mode" in input ? input.mode : "custom", scheduledAt: result.scheduledAt });
-  return { article: result.article, scheduledAt: result.scheduledAt, warnings: result.warnings };
+  await audit("opinion_schedule", id, { mode: "mode" in input ? input.mode : "custom", scheduledAt: result.scheduledAt, overrodeWeeklyGap: result.overrodeWeeklyGap });
+  return { article: result.article, scheduledAt: result.scheduledAt, warnings: result.warnings, overrodeWeeklyGap: result.overrodeWeeklyGap };
 });
 
 export const publishOpinion = (id: string, body: unknown) => run("opinion.lifecycle", id, async () => {
