@@ -63,7 +63,13 @@ import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService"
 import { getMeetingByInviteToken } from "../services/meetingsService";
 import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
 import { paginationOrReject } from "../utils/pagination";
-import { LEGACY_ARTICLE_PREFIXES, resolveLegacyArticlePath, resolveArchiveCanonical } from "../services/archiveSeo";
+import {
+  LEGACY_ARTICLE_PREFIXES,
+  isKnownArchiveCanonicalPath,
+  resolveKnownArchiveCanonical,
+  resolveLegacyArticlePath,
+  resolveArchiveCanonical,
+} from "../services/archiveSeo";
 
 import { getAuthorPageByName } from "../services/authorProfileService";
 import { buildServicePageEdgeMeta } from "../services/servicePageEdgeMeta";
@@ -187,7 +193,9 @@ function abs(url: string | null | undefined): string {
 
 // Resolve the 301 target (or null) for a path. Pure DB logic — wrapped by the
 // route below with an in-process cache. Returns the canonical redirect path.
-async function computeSlugRedirect(path: string): Promise<string | null> {
+async function computeSlugRedirect(path: string, host = ""): Promise<string | null> {
+  const knownArchiveCanonical = await resolveKnownArchiveCanonical(path, host);
+  if (knownArchiveCanonical) return knownArchiveCanonical;
   if (/^\/home\/?$/i.test(path)) return "/";
   const legacyRoot = LEGACY_ROOT_REDIRECTS[path.replace(/\/$/, "").toLowerCase()];
   if (legacyRoot) {
@@ -367,7 +375,16 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // is a deterministic regex non-match. This stops bot/crawler 404 probes from
     // minting unbounded negative cache keys (the recurring edgeSlugRedirectCache
     // cap warning). The edge HTTP Cache-Control above still absorbs repeats.
-    if (!isRedirectCandidate(path)) {
+    const host = String(req.query.host || "").toLowerCase();
+    const isKnownArchivePath = isKnownArchiveCanonicalPath(safeDecode(path));
+    if (isKnownArchivePath) {
+      // Editorial status is part of the redirect decision for these exact
+      // archive exceptions. Do not let an origin/CDN cache preserve a 301
+      // after the target is withdrawn.
+      res.set("Cache-Control", "no-store");
+      res.set("CDN-Cache-Control", "no-store");
+    }
+    if (!isRedirectCandidate(path) && !isKnownArchivePath) {
       return res.json({ redirect: null, gone: false });
     }
 
@@ -375,16 +392,26 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // the CF worker, but the redirect decision for a given path is stable. Cache
     // both positive AND negative ({redirect:null}) results to avoid a DB
     // round-trip on the hot path.
-    const cacheKey = `edge:slug-redirect:${path}`;
-    const cached = edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
+    // The exact archive map is intentionally host-scoped: a duplicate/foreign
+    // host must not inherit a canonical-host redirect from a shared cache key.
+    // Keep the established path-only key for every other route so this host
+    // guard does not multiply the high-cardinality negative cache.
+    const cacheKey = `edge:slug-redirect:${path}${isKnownArchivePath ? `:${host}` : ""}`;
+    // Bypass both cache reads and writes for these editorially withdrawable
+    // exceptions; a prior positive answer must never survive a new request.
+    const cached = isKnownArchivePath
+      ? null
+      : edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
     if (cached !== null) return res.json(cached);
 
-    const redirect = await computeSlugRedirect(path);
+    const redirect = await computeSlugRedirect(path, host);
     // Only probe "gone" when there's NO redirect: a redirect 301s first at the
     // edge so the gone flag would never be consulted, and this saves the extra
     // DB lookup on the (Arabic-slug) redirect path.
     const gone = redirect ? false : await computeArticleGone(path);
-    const payload = { redirect, gone };
+    const payload = isKnownArchivePath
+      ? { redirect, gone, noStore: true }
+      : { redirect, gone };
     // Positive results (a real 301 target, or an existing-but-unpublished "gone"
     // article) are stable AND bounded by article/category count → cache LONG.
     // Negative results are dominated by non-existent-slug probes (high
@@ -392,7 +419,7 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // s-maxage) so the periodic sweep reclaims them ~3x faster and they don't
     // pin the bucket at its cap.
     const ttl = redirect || gone ? CACHE_TTL.LONG : CACHE_TTL.MEDIUM;
-    edgeRedirectCache.set(cacheKey, payload, ttl);
+    if (!isKnownArchivePath) edgeRedirectCache.set(cacheKey, payload, ttl);
     return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);

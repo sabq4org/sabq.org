@@ -844,15 +844,31 @@ export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) 
   let payload;
   try { payload = JSON.parse(text); } catch (_) { return null; }
   const ttlSeconds = typeof ttl === "function" ? ttl(payload) : ttl;
-  const write = cache.put(
-    key,
-    new Response(text, {
-      headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttlSeconds}` },
-    }),
-  ).catch((err) => console.warn("[pages-fn] metadata cache write failed:", err));
-  // Cache persistence must not delay an otherwise ready HTML response.
-  context.waitUntil(write);
+  const originCacheControl = (res.headers.get("Cache-Control") || "").toLowerCase();
+  if (!originCacheControl.includes("no-store")) {
+    const write = cache.put(
+      key,
+      new Response(text, {
+        headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttlSeconds}` },
+      }),
+    ).catch((err) => console.warn("[pages-fn] metadata cache write failed:", err));
+    // Cache persistence must not delay an otherwise ready HTML response.
+    context.waitUntil(write);
+  }
   return payload;
+}
+
+function redirectResponse(url, redirectTo, search, noStore = false) {
+  const response = Response.redirect(`${url.origin}${redirectTo}${search}`, 301);
+  if (!noStore) return response;
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.set("CDN-Cache-Control", "no-store");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function escapeHtml(s) {
@@ -1736,7 +1752,7 @@ async function handleRequest(context) {
     try {
       const seoPath = seoRequestPath(url);
       const slug = await cachedJson(
-        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}`,
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}&host=${encodeURIComponent(url.hostname)}`,
         SLUG_REDIRECT_TTL,
         context,
         request,
@@ -1744,7 +1760,7 @@ async function handleRequest(context) {
       );
       const redirectTo = slug && slug.redirect ? slug.redirect : null;
       if (redirectTo && redirectTo !== path) {
-        return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
+        return redirectResponse(url, redirectTo, url.search, !!slug.noStore);
       }
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
@@ -1788,7 +1804,7 @@ async function handleRequest(context) {
     const seoPath = seoRequestPath(url);
     const [slug, shell, meta] = await Promise.all([
       cachedJson(
-        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}`,
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}&host=${encodeURIComponent(url.hostname)}`,
         SLUG_REDIRECT_TTL,
         context,
         request,
@@ -1805,7 +1821,7 @@ async function handleRequest(context) {
     ]);
     const redirectTo = slug && slug.redirect ? slug.redirect : null;
     if (redirectTo && redirectTo !== path) {
-      return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
+      return redirectResponse(url, redirectTo, url.search, !!slug.noStore);
     }
     // Archived/unpublished article → 410 Gone for CRAWLERS only (mirrors the
     // SSR-crawler path). Humans keep the SPA shell, whose client-side render
