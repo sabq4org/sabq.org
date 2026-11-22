@@ -1,17 +1,17 @@
+import { displayTimeZone } from "@/lib/displayTimeZone";
 // تنسيقات النشر الاجتماعي الموحدة — ميلادي دائماً، أرقام لاتينية،
-// بتوقيت الرياض. (ar-SA الافتراضي يعطي التقويم الهجري — لا نستخدمه هنا)
+// بتوقيت جهاز المستخدم. (ar-SA الافتراضي يعطي التقويم الهجري — لا نستخدمه هنا)
 const AR_GREGORIAN_LATN = "ar-u-ca-gregory-nu-latn";
-const RIYADH = "Asia/Riyadh";
 
 const dateFmt = new Intl.DateTimeFormat(AR_GREGORIAN_LATN, {
-  timeZone: RIYADH,
+  timeZone: displayTimeZone(),
   day: "numeric",
   month: "long",
   year: "numeric",
 });
 
 const timeFmt = new Intl.DateTimeFormat(AR_GREGORIAN_LATN, {
-  timeZone: RIYADH,
+  timeZone: displayTimeZone(),
   hour: "numeric",
   minute: "2-digit",
   hour12: true,

@@ -1,25 +1,18 @@
 /**
  * المنطقة الزمنية لعرض الأوقات في الويب.
  *
- * التخزين يبقى بالتوقيت العالمي كما هو؛ هذا الملف يقرر فقط بأي منطقة تُعرض
- * الأوقات:
- *  - صفحات القراء: بتوقيت جهاز القارئ (قارئ في القاهرة يرى وقت القاهرة).
- *  - صفحات العمل (لوحة التحكم): تبقى بتوقيت الرياض، لأن حقول الجدولة
- *    والاجتماعات والمناوبات تُدخل بتوقيت الرياض والمحررون معتادون عليه.
+ * التخزين يبقى بالتوقيت العالمي كما هو؛ العرض بتوقيت جهاز المستخدم في موقع
+ * القراء ولوحة التحكم معًا (قارئ أو محرر في القاهرة يرى وقت القاهرة).
+ * عند تعذر معرفة منطقة الجهاز نعود للرياض.
+ *
+ * يبقى بتوقيت الرياض عمدًا ما يمثّل قاعدة أو تاريخًا تقويميًا لا لحظة:
+ * ورديات المناوبة، فتحات النشرة الصوتية، مواعيد كتّاب الرأي الأسبوعية،
+ * تواريخ الباقات والتراخيص، صفحات الرياضة، وسطر «تحديث» المحفوظ في نص الخبر.
  *
  * التحويل يتم في المتصفح وقت العرض، فلا يدخل في HTML المخزن على الحافة.
  */
 
 export const RIYADH_TIME_ZONE = "Asia/Riyadh";
-
-/** بادئات مسارات العمل التي تبقى أوقاتها بتوقيت الرياض. */
-const STAFF_PATH_PREFIXES = ["/dashboard", "/admin", "/en/dashboard", "/ur/dashboard"];
-
-export function isStaffPath(pathname: string): boolean {
-  return STAFF_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
 
 function isValidTimeZone(tz: string): boolean {
   try {
@@ -30,8 +23,8 @@ function isValidTimeZone(tz: string): boolean {
   }
 }
 
-/** منطقة جهاز القارئ، والرياض عند تعذر معرفتها (مثل بيئة الخادم). */
-export function readerTimeZone(): string {
+/** منطقة جهاز المستخدم، والرياض عند تعذر معرفتها. */
+export function displayTimeZone(): string {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tz && isValidTimeZone(tz)) return tz;
@@ -39,15 +32,4 @@ export function readerTimeZone(): string {
     // نعود للرياض
   }
   return RIYADH_TIME_ZONE;
-}
-
-/**
- * المنطقة التي تُعرض بها الأوقات في الصفحة الحالية.
- * يُقرأ المسار عند كل استدعاء لأن التطبيق صفحة واحدة يتنقل بلا إعادة تحميل.
- */
-export function displayTimeZone(pathname?: string): string {
-  const path =
-    pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
-  if (!path || isStaffPath(path)) return RIYADH_TIME_ZONE;
-  return readerTimeZone();
 }

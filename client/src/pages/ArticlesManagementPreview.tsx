@@ -98,6 +98,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 /* ------------------------------------------------------------------ */
 /* ثوابت العرض                                                         */
@@ -162,7 +163,7 @@ function formatDateTime(iso: string | null) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Riyadh",
+    timeZone: displayTimeZone(),
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -174,7 +175,7 @@ function formatDateTime(iso: string | null) {
 function riyadhDay(iso: string | null) {
   if (!iso) return "";
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Riyadh",
+    timeZone: displayTimeZone(),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

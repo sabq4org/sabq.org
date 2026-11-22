@@ -15,8 +15,7 @@
  * The contract:
  *  - All numbers ALWAYS render with Latin digits (1234, not ١٢٣٤).
  *  - All dates ALWAYS render in the Gregorian calendar.
- *  - Times render in the reader's device timezone on public pages and in
- *    Asia/Riyadh on staff pages (see displayTimeZone.ts).
+ *  - Times render in the user's device timezone (see displayTimeZone.ts).
  *
  * Don't add `toLocaleString("ar-SA")` / `toLocaleDateString("ar-SA")` calls
  * anywhere else in the codebase. Route through this file instead — that's

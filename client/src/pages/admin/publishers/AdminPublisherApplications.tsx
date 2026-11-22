@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { publisherApplicationRef } from "@shared/publisherApplications";
 import { Check, Inbox, Link2, Loader2, X } from "lucide-react";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type Application = {
   id: string;
@@ -46,7 +47,7 @@ const dateFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
   month: "long",
   hour: "2-digit",
   minute: "2-digit",
-  timeZone: "Asia/Riyadh",
+  timeZone: displayTimeZone(),
 });
 const fmt = (iso: string | null) => (iso ? dateFmt.format(new Date(iso)) : "");
 

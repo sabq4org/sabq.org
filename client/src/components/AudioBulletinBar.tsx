@@ -17,7 +17,7 @@ function minutesLabel(n: number): string {
   return n <= 10 ? `${n} دقائق` : `${n} دقيقة`;
 }
 
-// وقت النشر بتوقيت جهاز القارئ (يُبنى عند العرض لأن المنطقة تتبع الصفحة الحالية)
+// وقت النشر بتوقيت جهاز القارئ
 const timeFormat = () => new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: displayTimeZone() });
 
 /**

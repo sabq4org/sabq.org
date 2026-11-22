@@ -50,7 +50,7 @@ export function AccessibleDate({
     );
   }
 
-  // Reader's device timezone on public pages, Riyadh on staff pages
+  // User's device timezone (displayTimeZone.ts)
   const getFormattedDate = () => {
     const locale = language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US';
     const timeZone = displayTimeZone();

@@ -1,13 +1,13 @@
 /**
  * Unified time formatting utility for Sabq News Platform
- * All timestamps are stored in UTC. Public pages display them in the reader's
- * device timezone; staff pages keep Asia/Riyadh (see displayTimeZone.ts).
+ * All timestamps are stored in UTC and displayed in the user's device timezone
+ * (see displayTimeZone.ts).
  */
 
 import { displayTimeZone, RIYADH_TIME_ZONE as RIYADH_TIMEZONE } from "./displayTimeZone";
 
 /**
- * Format a timestamp for display, converting from UTC to Riyadh timezone
+ * Format a timestamp for display, converting from UTC to the display timezone
  */
 export function formatArticleTimestamp(
   publishedAt: string | Date | null | undefined,

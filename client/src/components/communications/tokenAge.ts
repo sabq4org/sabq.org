@@ -1,3 +1,4 @@
+import { displayTimeZone } from "@/lib/displayTimeZone";
 // وصف عمر رمز النشر لصف المرسل: نسبة الشريط ولونه والنص تحته. منطق خالص يُختبر وحده.
 
 export const TOKEN_EXPIRY_WARNING_DAYS = 14;
@@ -26,8 +27,8 @@ function toDate(value?: string | Date | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-const riyadhDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
-const riyadhTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: false });
+const riyadhDate = new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone(), year: "numeric", month: "2-digit", day: "2-digit" });
+const riyadhTime = new Intl.DateTimeFormat("en-GB", { timeZone: displayTimeZone(), hour: "2-digit", minute: "2-digit", hour12: false });
 
 /** التاريخ داخل عزل اتجاه (LRI…PDI) حتى لا يقلبه سياق العربية إلى يوم-شهر-سنة. */
 export function formatTokenDate(date: Date, withTime = false): string {

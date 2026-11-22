@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  displayTimeZone,
-  isStaffPath,
-  RIYADH_TIME_ZONE,
-} from "../../client/src/lib/displayTimeZone";
+import { displayTimeZone, RIYADH_TIME_ZONE } from "../../client/src/lib/displayTimeZone";
 
 function mockDeviceTimeZone(tz: string) {
   const real = Intl.DateTimeFormat.prototype.resolvedOptions;
@@ -17,39 +13,27 @@ afterEach(() => {
 });
 
 describe("displayTimeZone", () => {
-  it("يعرض صفحات القراء بتوقيت جهاز القارئ", () => {
+  it("يعرض بتوقيت جهاز المستخدم", () => {
     mockDeviceTimeZone("Africa/Cairo");
-    expect(displayTimeZone("/article/some-slug")).toBe("Africa/Cairo");
-    expect(displayTimeZone("/")).toBe("Africa/Cairo");
-    expect(displayTimeZone("/en/article/x")).toBe("Africa/Cairo");
-    expect(displayTimeZone("/opinion/123")).toBe("Africa/Cairo");
+    expect(displayTimeZone()).toBe("Africa/Cairo");
   });
 
-  it("يبقي صفحات العمل بتوقيت الرياض", () => {
-    mockDeviceTimeZone("Africa/Cairo");
-    expect(displayTimeZone("/dashboard/articles")).toBe(RIYADH_TIME_ZONE);
-    expect(displayTimeZone("/dashboard")).toBe(RIYADH_TIME_ZONE);
-    expect(displayTimeZone("/admin/x")).toBe(RIYADH_TIME_ZONE);
-    expect(displayTimeZone("/en/dashboard/news")).toBe(RIYADH_TIME_ZONE);
-    expect(displayTimeZone("/ur/dashboard")).toBe(RIYADH_TIME_ZONE);
-  });
-
-  it("لا يخلط مسارًا يبدأ بالاسم نفسه مع صفحة العمل", () => {
-    expect(isStaffPath("/dashboarding")).toBe(false);
-    expect(isStaffPath("/administration")).toBe(false);
-  });
-
-  it("يعود للرياض إذا كانت منطقة الجهاز غير صالحة", () => {
+  it("يعود للرياض إذا كانت منطقة الجهاز غير صالحة أو غائبة", () => {
     mockDeviceTimeZone("Not/AZone");
-    expect(displayTimeZone("/article/x")).toBe(RIYADH_TIME_ZONE);
+    expect(displayTimeZone()).toBe(RIYADH_TIME_ZONE);
+    vi.restoreAllMocks();
+    mockDeviceTimeZone("");
+    expect(displayTimeZone()).toBe(RIYADH_TIME_ZONE);
   });
 
-  it("وقت نشر 20:00 بالتوقيت العالمي يظهر 10 مساء في القاهرة و11 مساء في الرياض", () => {
+  it("خبر نُشر 20:00 بالتوقيت العالمي يظهر 10 مساء في القاهرة و11 مساء في الرياض", () => {
     const publishedAt = new Date("2026-11-22T20:00:00Z");
-    const fmt = (tz: string) =>
-      new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(publishedAt);
+    const fmt = () =>
+      new Intl.DateTimeFormat("en-GB", { timeZone: displayTimeZone(), hour: "2-digit", minute: "2-digit", hour12: false }).format(publishedAt);
     mockDeviceTimeZone("Africa/Cairo");
-    expect(fmt(displayTimeZone("/article/x"))).toBe("22:00");
-    expect(fmt(displayTimeZone("/dashboard/articles"))).toBe("23:00");
+    expect(fmt()).toBe("22:00");
+    vi.restoreAllMocks();
+    mockDeviceTimeZone("Asia/Riyadh");
+    expect(fmt()).toBe("23:00");
   });
 });

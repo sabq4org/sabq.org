@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   emailStatusFor,
   flowCounts,
@@ -10,6 +10,12 @@ import {
   trackOf,
   whatsappStatusFor,
 } from "../../client/src/components/communications/inboxModel";
+
+// هذه الاختبارات تفترض مستخدمًا في الرياض؛ العرض يتبع منطقة الجهاز (displayTimeZone).
+vi.mock("../../client/src/lib/displayTimeZone", () => ({
+  RIYADH_TIME_ZONE: "Asia/Riyadh",
+  displayTimeZone: () => "Asia/Riyadh",
+}));
 
 const email = (overrides: Record<string, unknown> = {}) =>
   fromEmailLog({

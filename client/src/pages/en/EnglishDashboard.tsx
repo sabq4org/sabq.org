@@ -8,8 +8,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { EnglishDashboardLayout } from "@/components/en/EnglishDashboardLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { riyadhDayStart, type EnDeskNeed, type EnDeskOverview, type EnDeskPublishedItem, type EnDeskPulseItem } from "@shared/enDeskOverview";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
-const RIYADH = "Asia/Riyadh";
+const RIYADH = displayTimeZone(); // device timezone (name kept for the existing call sites)
 const OVERVIEW_KEY = ["/api/en/admin/desk-overview"];
 
 const fmtTime = (iso: string | null | undefined) =>
@@ -255,7 +256,7 @@ function EnglishDeskHome() {
         <div className="mx-auto flex max-w-[1280px] flex-col gap-5">
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <p className="text-[13px] text-[#6B7B8A]">{dateLine} · {timeLine} Riyadh</p>
+              <p className="text-[13px] text-[#6B7B8A]">{dateLine} · {timeLine}</p>
               <h1 className="mt-1 text-[28px] font-bold text-[#1B2B3A]" data-testid="text-greeting">
                 {greetingFor(now)}{u?.firstNameEn ? `, ${u.firstNameEn}` : ""}
               </h1>

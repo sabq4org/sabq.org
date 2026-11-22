@@ -81,6 +81,7 @@ import { resolveUserRole } from "@/lib/roleMapping";
 import type { UserRole } from "@/nav/types";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { formatReadDuration, kpiComparison } from "@/lib/dailyKpiFormat";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 interface DashboardStats {
   articles: {
@@ -197,14 +198,14 @@ const scheduleDateFormatter = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-lat
   day: "numeric",
   month: "long",
   year: "numeric",
-  timeZone: "Asia/Riyadh",
+  timeZone: displayTimeZone(),
 });
 
 const scheduleTimeFormatter = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
   hour: "numeric",
   minute: "2-digit",
   hour12: true,
-  timeZone: "Asia/Riyadh",
+  timeZone: displayTimeZone(),
 });
 
 function scheduleCountdown(scheduledAt: string | null, nowMs: number): string | null {
@@ -1385,7 +1386,7 @@ export default function NewsroomPulseDashboard() {
             جدول النشر المجدول القادم
           </CardTitle>
           <CardDescription className="mt-0.5 text-xs">
-            المواد المجدولة للنشر التلقائي بتوقيت الرياض
+            المواد المجدولة للنشر التلقائي
           </CardDescription>
         </div>
         <Badge variant="secondary" className="text-xs tabular-nums">

@@ -1,3 +1,4 @@
+import { displayTimeZone } from "@/lib/displayTimeZone";
 // نموذج «الوارد» الموحّد لقنوات الاتصال: يحوّل سجل البريد وسجل واتساب إلى عنصر واحد،
 // ويحسب «مسار الرسالة» (وصول، تحقق، تحرير، نشر). منطق خالص يُختبر وحده.
 
@@ -300,11 +301,11 @@ export function whatsappStatusFor(filter: InboxFilter): string {
   return filter;
 }
 
-const riyadhDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
-const riyadhClock = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: false });
-const riyadhShort = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh", day: "numeric", month: "short" });
+const riyadhDay = new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone(), year: "numeric", month: "2-digit", day: "2-digit" });
+const riyadhClock = new Intl.DateTimeFormat("en-GB", { timeZone: displayTimeZone(), hour: "2-digit", minute: "2-digit", hour12: false });
+const riyadhShort = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { timeZone: displayTimeZone(), day: "numeric", month: "short" });
 
-/** وقت الصف بتوقيت الرياض: الساعة لرسائل اليوم، واليوم والشهر لما قبله. */
+/** وقت الصف بتوقيت جهاز المستخدم: الساعة لرسائل اليوم، واليوم والشهر لما قبله. */
 export function inboxTime(at: Date | null, now: Date = new Date()): { primary: string; secondary: string | null } {
   if (!at) return { primary: "—", secondary: null };
   const clock = riyadhClock.format(at);

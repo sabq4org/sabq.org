@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 interface RowActionsProps {
   articleId: string;
@@ -368,7 +369,7 @@ export function RowActions({
     const date = new Date(iso);
     return Number.isNaN(date.getTime())
       ? null
-      : date.toLocaleString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
+      : date.toLocaleString("ar-SA-u-nu-latn", { timeZone: displayTimeZone(), day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
   };
   const notifiedLabel = doneAt(notifiedAt);
   const socialLabel = doneAt(socialPublishedAt);

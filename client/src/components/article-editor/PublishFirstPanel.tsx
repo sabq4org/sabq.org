@@ -13,6 +13,7 @@ import {
   type PublishFirstRiskLabel,
   type PublishFirstVerdict,
 } from "@shared/publishFirst";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type RiskValue = "" | PublishFirstRiskLabel;
 
@@ -54,7 +55,7 @@ function riyadh(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
-    timeZone: "Asia/Riyadh",
+    timeZone: displayTimeZone(),
     dateStyle: "medium",
     timeStyle: "short",
   });

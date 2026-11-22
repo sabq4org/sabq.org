@@ -203,6 +203,7 @@ import { ArticleEditRequestsBanner } from "@/components/articles/ArticleEditRequ
 import { EditorTitleCheckNotice } from "@/components/articles/TitleCheckBadge";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
 import { uploadNewsImage, newsImageUploadLabel, NEWS_IMAGE_MAX_BYTES, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -1926,7 +1927,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const isScheduled = !isOpinionAuthor && variables.publishNow && publishType === "scheduled";
       const scheduledLabel = isScheduled && scheduledAt
         ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
-            timeZone: "Asia/Riyadh",
+            timeZone: displayTimeZone(),
             dateStyle: "medium",
             timeStyle: "short",
           })

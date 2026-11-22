@@ -2,7 +2,6 @@
 // عبر مسارات الويب /api/predictions/* (جلسة Passport). كل البطولات ما عدا
 // مونديال 2026 (يبقى على صفحاته القديمة حتى نهايته).
 
-import { formatTime } from "@/lib/format";
 
 const AR_LATN_GREGORY = "ar-SA-u-nu-latn-ca-gregory";
 
@@ -232,8 +231,16 @@ export function lockCountdownAr(locksAt: string, now = Date.now()): string | nul
   return `يُقفل بعد ${latn(Math.max(minutes, 1))}د`;
 }
 
+// الرياضة تبقى بتوقيت الرياض لتطابق جداول المباريات المكتوب عليها «بتوقيت الرياض».
 export function kickoffTimeAr(locksAt: string): string {
-  return formatTime(locksAt);
+  const date = new Date(locksAt);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("ar-SA-u-nu-latn-ca-gregory", {
+    timeZone: "Asia/Riyadh",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
 }
 
 export function kickoffDayAr(locksAt: string): string {
