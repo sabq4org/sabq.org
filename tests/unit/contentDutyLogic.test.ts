@@ -178,3 +178,21 @@ describe("server helpers", () => {
     expect(activityKindFor("OPTIONS", "/api/x")).toBeNull();
   });
 });
+
+describe("before presence tracking started", () => {
+  it("does not mark the early part of a shift as absent", () => {
+    const start = riyadhMidnight(THU) + 20 * 60 * MIN;
+    const occ = { start, end: start + 6 * 60 * MIN };
+    const trackedFrom = start + 140 * MIN;
+    const minutes = new Map<number, ActivityKind>();
+    for (let m = 140; m < 150; m++) minutes.set(start + m * MIN, "action");
+    const now = start + 150 * MIN;
+    const cells = buildPresenceCells(occ, minutes, now, 5, trackedFrom);
+    expect(cells.slice(0, 28).every((c) => c === "untracked")).toBe(true);
+    expect(cells[28]).toBe("action");
+    const s = summarizePresence(occ, cells, minutes, now);
+    expect(s.presentPct).toBe(100);
+    expect(s.lateStartMin).toBe(0);
+    expect(s.longestGap).toBeNull();
+  });
+});
