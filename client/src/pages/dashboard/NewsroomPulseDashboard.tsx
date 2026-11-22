@@ -53,6 +53,7 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardAnnouncementBanner } from "@/components/DashboardAnnouncementBanner";
 import { MessagesTabs } from "@/components/dashboard/MessagesTabs";
+import ContentDutyCard from "@/components/dashboard/content-duty/ContentDutyCard";
 import { OnlineModeratorsWidget } from "@/components/OnlineModeratorsWidget";
 import { QuickActionsSection } from "@/components/QuickActionsSection";
 import { Badge } from "@/components/ui/badge";
@@ -1343,6 +1344,7 @@ export default function NewsroomPulseDashboard() {
   if (!stats && !statsQuery.isLoading) {
     return (
       <DashboardLayout>
+        <div className="mx-auto mb-5 max-w-5xl"><ContentDutyCard /></div>
         <Card className="mx-auto max-w-xl rounded-2xl">
           <CardContent className="p-8 text-center">
             <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive" />
@@ -1513,6 +1515,8 @@ export default function NewsroomPulseDashboard() {
             )}
           </CardContent>
         </Card>
+
+        <ContentDutyCard />
 
         {/* Favorites / Quick Access Section — Placed right at the top on both Mobile & Desktop */}
         {(!isContentManager || favoriteItems.length > 0) && (

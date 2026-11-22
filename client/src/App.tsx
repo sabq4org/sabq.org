@@ -201,6 +201,7 @@ const ArchivePage = lazy(() => retryImport(() => import("@/pages/ArchivePage")))
 
 // === LAZY IMPORTS (Dashboard Core) ===
 const Dashboard = lazy(() => retryImport(() => import("@/pages/Dashboard")));
+const ContentDutyPage = lazy(() => retryImport(() => import("@/pages/dashboard/ContentDutyPage")));
 const Dashboard2 = lazy(() => retryImport(() => import("@/pages/Dashboard2")));
 const AnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/AnalyticsDashboard")));
 const ArticleEditor = lazy(() => retryImport(() => import("@/pages/ArticleEditor")));
@@ -981,6 +982,7 @@ function Router() {
           )}
         </Route>
         
+        <Route path="/dashboard/content-duty">{() => <LazyRoute component={ContentDutyPage} />}</Route>
         <Route path="/dashboard">{() => <LazyRoute component={Dashboard} />}</Route>
         {/* مركز قيادة سبق التحريري — صفحة موازية لا تمس اللوحة الحالية */}
         <Route path="/dashboard2">{() => <LazyRoute component={Dashboard2} />}</Route>
