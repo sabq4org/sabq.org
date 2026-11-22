@@ -62,6 +62,7 @@ import { getStaffSystemHealth } from "../services/staffSystemHealthService";
 import {
   StaffOpinionDeskError,
   checkOpinionSlotClashes,
+  hasWeeklyGapConflict,
   getStaffOpinionBoard,
   getStaffOpinionItem,
   getStaffOpinionPreview,
@@ -1088,7 +1089,11 @@ subRouter.get(
     try {
       const scheduledAt = new Date(parsed.data.scheduledAt);
       const warnings = await checkOpinionSlotClashes(req.params.id, scheduledAt);
-      res.json({ scheduledAt: scheduledAt.toISOString(), warnings });
+      res.json({
+        scheduledAt: scheduledAt.toISOString(),
+        warnings,
+        weeklyGapConflict: hasWeeklyGapConflict(warnings),
+      });
     } catch (error) {
       handleOpinionError(res, error, "تعذر فحص الموعد");
     }
@@ -1152,12 +1157,15 @@ subRouter.post(
         extraMetadata: {
           mode: "mode" in parsed.data ? parsed.data.mode : "custom",
           warnings: result.warnings.map((w) => w.otherArticleId),
+          overrideWeeklyGap: parsed.data.overrideWeeklyGap === true,
+          overrodeWeeklyGap: result.overrodeWeeklyGap,
         },
       });
       res.json({
         article: result.article,
         scheduledAt: result.scheduledAt,
         warnings: result.warnings,
+        overrodeWeeklyGap: result.overrodeWeeklyGap,
       });
     } catch (error) {
       handleOpinionError(res, error, "تعذرت جدولة المقال");

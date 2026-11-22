@@ -111,6 +111,7 @@ import {
 import {
   StaffOpinionDeskError,
   checkOpinionSlotClashes,
+  hasWeeklyGapConflict,
   getOpinionDraftContent,
   getStaffOpinionBoard,
   getStaffOpinionItem,
@@ -143,6 +144,7 @@ import {
   staffOpinionPrepareSchema,
   staffOpinionReturnSchema,
   staffOpinionScheduleSchema,
+  withDefaultOpinionScheduleMode,
   staffOpinionSlotCheckQuerySchema,
   type StaffOpinionCapabilities,
   type StaffOpinionItem,
@@ -1150,7 +1152,11 @@ router.get(
     try {
       const scheduledAt = new Date(parsed.data.scheduledAt);
       const warnings = await checkOpinionSlotClashes(req.params.id, scheduledAt);
-      res.json({ scheduledAt: scheduledAt.toISOString(), warnings });
+      res.json({
+        scheduledAt: scheduledAt.toISOString(),
+        warnings,
+        weeklyGapConflict: hasWeeklyGapConflict(warnings),
+      });
     } catch (error) {
       handleOpinionError(res, error, "تعذر فحص الموعد");
     }
@@ -1283,13 +1289,13 @@ router.post(
   botDeskWriteLimiter,
   botDeskOpinionActionLimiter,
   async (req: BotDeskRequest, res: Response) => {
-    // جسم فارغ = الموعد الثابت للكاتب (مثل mode=fixed_slot في التطبيق).
-    const rawBody = req.body && Object.keys(req.body).length > 0 ? req.body : { mode: "fixed_slot" };
+    // جسم فارغ (أو overrideWeeklyGap وحده) = الموعد الثابت للكاتب (مثل mode=fixed_slot في التطبيق).
+    const rawBody = withDefaultOpinionScheduleMode(req.body);
     const parsed = staffOpinionScheduleSchema.safeParse(rawBody);
     if (!parsed.success) {
       return sendError(res, 400, {
         code: "validation_error",
-        message: "أرسل جسماً فارغاً أو mode=fixed_slot أو scheduledAt (ISO مع المنطقة الزمنية)",
+        message: "أرسل جسماً فارغاً أو mode=fixed_slot أو scheduledAt (ISO مع المنطقة الزمنية)، واختيارياً overrideWeeklyGap (boolean)",
         details: parsed.error.flatten(),
       });
     }
@@ -1308,12 +1314,15 @@ router.post(
         extraMetadata: {
           mode: "mode" in parsed.data ? parsed.data.mode : "custom",
           warnings: result.warnings.map((w) => w.otherArticleId),
+          overrideWeeklyGap: parsed.data.overrideWeeklyGap === true,
+          overrodeWeeklyGap: result.overrodeWeeklyGap,
         },
       });
       res.json({
         article: result.article,
         scheduledAt: result.scheduledAt,
         warnings: result.warnings,
+        overrodeWeeklyGap: result.overrodeWeeklyGap,
       });
     } catch (error) {
       handleOpinionError(res, error, "تعذرت جدولة المقال");

@@ -22,11 +22,13 @@ import {
   getNextSlotForWriter,
   resendOpinionDraftDeskAlert,
   riyadhDateParts,
+  findWriterGapConflicts,
   scheduleApprovedOpinionArticle,
   type OpinionDraftDeskChannelsResult,
 } from "./opinionWritersService";
 import {
   buildOpinionSlotClashWarnings,
+  buildWriterGapWarnings,
   findOpinionSlotClashes,
   type OpinionSlotCandidate,
 } from "./opinionSlotClash";
@@ -319,7 +321,11 @@ export async function getStaffOpinionPreview(
   return { ...content, publicUrl: opinionPublicUrl(content.status, content.slug) };
 }
 
-/** مقالات رأي مجدولة في الدقيقة نفسها لكتّاب آخرين (تنبيه لا منع). */
+/**
+ * تحذيرات الموعد: writer_gap (مقال آخر للكاتب نفسه داخل الفاصل الأسبوعي —
+ * الجدولة ترفضه 409 إلا مع overrideWeeklyGap) ثم slot_clash (كاتب آخر في
+ * الدقيقة نفسها — تنبيه لا منع).
+ */
 export async function checkOpinionSlotClashes(
   articleId: string,
   scheduledAt: Date,
@@ -354,12 +360,24 @@ export async function checkOpinionSlotClashes(
       writerName: writerName(o),
       scheduledAt: o.scheduledAt as Date,
     }));
-  return buildOpinionSlotClashWarnings(
-    findOpinionSlotClashes({ scheduledAt, articleId, writerId: row.authorId, candidates }),
-  );
+  const gap = buildWriterGapWarnings(await findWriterGapConflicts(articleId, row.authorId, scheduledAt));
+  return [
+    ...gap,
+    ...buildOpinionSlotClashWarnings(
+      findOpinionSlotClashes({ scheduledAt, articleId, writerId: row.authorId, candidates }),
+    ),
+  ];
 }
 
-export type StaffOpinionScheduleRequest = { mode: "fixed_slot" } | { scheduledAt: string };
+/** هل في التحذيرات ما ستُرفض به الجدولة (409) دون overrideWeeklyGap؟ */
+export function hasWeeklyGapConflict(warnings: readonly StaffOpinionWarning[]): boolean {
+  return warnings.some((w) => w.code === "writer_gap");
+}
+
+export type StaffOpinionScheduleRequest = (
+  | { mode: "fixed_slot" }
+  | { scheduledAt: string }
+) & { overrideWeeklyGap?: boolean };
 
 /** «قفل المسودات»: مسودة مقفلة عند زميل لا تُجدول ولا تُنشر ولا تُعاد من المكتب. */
 async function assertNoDraftLock(articleId: string, actorId: string): Promise<void> {
@@ -376,6 +394,7 @@ export async function scheduleOpinionFromDesk(input: {
   previous: { status: string; scheduledAt: string | null; reviewStatus: string | null };
   scheduledAt: string;
   warnings: StaffOpinionWarning[];
+  overrodeWeeklyGap: boolean;
 }> {
   const existing = await loadOpinionArticle(input.articleId);
   await assertNoDraftLock(existing.id, input.actorId);
@@ -393,7 +412,9 @@ export async function scheduleOpinionFromDesk(input: {
     scheduledAt = new Date(input.request.scheduledAt);
   }
 
-  const result = await scheduleApprovedOpinionArticle(existing.id, scheduledAt);
+  const result = await scheduleApprovedOpinionArticle(existing.id, scheduledAt, {
+    overrideWeeklyGap: input.request.overrideWeeklyGap === true,
+  });
   if (!result.ok) {
     throw new StaffOpinionDeskError(
       result.status,
@@ -434,6 +455,7 @@ export async function scheduleOpinionFromDesk(input: {
     },
     scheduledAt: scheduledAt.toISOString(),
     warnings,
+    overrodeWeeklyGap: result.overrodeWeeklyGap,
   };
 }
 
