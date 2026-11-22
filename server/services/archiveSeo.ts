@@ -23,6 +23,61 @@ export const LEGACY_ARTICLE_PREFIXES = new Set([
   "pure", "careers", "infographic", "video", "videographic", "mobile", "shop",
 ]);
 
+/**
+ * Exact archive paths observed as confirmed 404s in the Cloudflare sample.
+ *
+ * These are deliberately keyed by the complete path as requested, rather than
+ * by a title/slug heuristic. The immutable article id is checked at request
+ * time so an editorial withdrawal removes the redirect automatically.
+ */
+const KNOWN_ARCHIVE_CANONICALS: Record<string, { articleId: string; canonicalSlug: string }> = Object.freeze({
+  "/شاهد-حكاية-حمارين-أحدهما-يأكل-التفاح-والآخر-يواجه-قوات-الاحتلال-الإسرائيلي": { articleId: "90d78a39-57e7-4564-b146-d08e78ff9958", canonicalSlug: "_VitNn4" },
+  "//sabq.org/متدربا-ينهون-دورة-في-الغوص-والإنقاذ-المائي-بمدني-جدة": { articleId: "6a010fa7-1d1e-42e4-902c-ca1917201150", canonicalSlug: "7WsDuDo" },
+  "//sabq.org/أمطار-خفيفة-ومتوسطة-على-مناطق-مختلفة-من-عفيف-و-مهد-الذهب": { articleId: "33325916-c7af-4b1f-82d0-e49e3a1a3b80", canonicalSlug: "J192hOt" },
+  "//sabq.org/وفاة-الشاب-العجمة-ابن-مفتش-التعليم-بالطائف-سابقا": { articleId: "abb97b66-161a-4d00-a54e-cb6a3262bac5", canonicalSlug: "oaE7dR8" },
+  "/بالصور-هنا-ستكون-أكبر-مدينة-ثقافية-رياضية-ترفيهية-بالعالم": { articleId: "3a701f84-87c9-445c-b125-56c9cc1f19d4", canonicalSlug: "FKePKNY" },
+  "//sabq.org/صحة-مكة-تكشف-ملابسات-تناثر-أوراق-أحد-المستشفيات": { articleId: "7b0d113f-4cdf-40cd-8395-fb99cdb2aa4b", canonicalSlug: "KozGzZc" },
+  "//sabq.org/فحوصات-وعملية-جراحية-بالمنظار-للأمير-متعب-بن-عبدالله": { articleId: "ac57886f-f8ce-498c-9021-75d748b807a5", canonicalSlug: "mSaPBnz" },
+  "/التدريب-التقني-توجه-متطوعا-متخصصا-لصيانة-مرافق-الجنادرية": { articleId: "24f3dc1f-83e6-441b-bd1a-68ce56cae210", canonicalSlug: "jyGlxDF" },
+  "//sabq.org/تعليم-الليث-يعلق-الدراسة-غدا-بمدارس-حقال-الدثن-والفحو-وبني-يزيد-وجدم": { articleId: "56091274-e4fe-4459-8ad2-e1673b2f994e", canonicalSlug: "7aPUeB6" },
+  "/تدريب-طالب-وطالبة-في-مهرجان-stem-الصيفي-بتعليم-عسير": { articleId: "140b1981-e974-4f1a-94e3-1738c492dbbe", canonicalSlug: "dljONuL" },
+});
+
+const ARCHIVE_CANONICAL_HOST = "sabq.org";
+
+function decodeArchivePath(path: string): string {
+  try {
+    return decodeURIComponent(path).replace(/\/$/, "");
+  } catch {
+    return path.replace(/\/$/, "");
+  }
+}
+
+export function isKnownArchiveCanonicalPath(path: string): boolean {
+  return !!KNOWN_ARCHIVE_CANONICALS[decodeArchivePath(path)];
+}
+
+/**
+ * Resolve only confirmed archive paths on the canonical host. The id + slug
+ * check is intentional: a withdrawn row must return null, never 301 to an old
+ * destination, and a changed canonical slug must be reviewed explicitly.
+ */
+export async function resolveKnownArchiveCanonical(path: string, host: string): Promise<string | null> {
+  if (host.toLowerCase() !== ARCHIVE_CANONICAL_HOST) return null;
+  const match = KNOWN_ARCHIVE_CANONICALS[decodeArchivePath(path)];
+  if (!match) return null;
+  const result = await db.execute(sql`
+    SELECT coalesce(nullif(english_slug, ''), slug) AS slug
+    FROM articles
+    WHERE id = ${match.articleId} AND status = 'published'
+    LIMIT 1
+  `);
+  const slug = result.rows[0]?.slug;
+  return slug === match.canonicalSlug
+    ? `/article/${encodeURIComponent(match.canonicalSlug)}`
+    : null;
+}
+
 export function legacyPathVariants(path: string): string[] {
   const normalized = path.replace(/\/$/, "");
   const parts = normalized.split("/").filter(Boolean);
