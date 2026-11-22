@@ -154,27 +154,79 @@ describe("retryImport", () => {
     await expect(retryImport(importFn, 2, 1)).rejects.toThrow("unrelated");
     expect(calls).toBe(1);
   });
+
+  it("settles without starting a second reload when a confirmed deploy is detected during navigation", async () => {
+    const deployRecovery = await import("@/lib/deployRecovery");
+    expect(deployRecovery.attemptChunkRecoveryReload("vite:preloadError")).toBe(true);
+    expect(globals.location.replace).toHaveBeenCalledTimes(1);
+    vi.stubGlobal("__SABQ_BUILD_ID__", "old-build");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ buildId: "new-build" }),
+      }),
+    );
+
+    const { retryImport } = await import("@/lib/retryImport");
+    await expect(
+      retryImport(
+        async () => {
+          throw new Error("Failed to fetch dynamically imported module");
+        },
+        0,
+        1,
+      ),
+    ).rejects.toThrow("تعذر تحميل الصفحة");
+    expect(globals.location.replace).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("deployRecovery vite:preloadError listener", () => {
-  it("prevents default (swallows the error) only when it actually reloads", async () => {
-    const { installDeployRecovery } = await import("@/lib/deployRecovery");
+  it("coalesces concurrent preload failures into the same real recovery reload", async () => {
+    const { attemptChunkRecoveryReload, installDeployRecovery } = await import(
+      "@/lib/deployRecovery"
+    );
     installDeployRecovery();
     const listener = globals.listeners.get("vite:preloadError")!;
     expect(listener).toBeDefined();
 
-    // Fresh cooldown → reload fires → error swallowed so the reload races no one.
+    // The first failure starts one cache-busting navigation.
     const firstEvent = { preventDefault: vi.fn() };
     listener(firstEvent);
     expect(globals.location.replace).toHaveBeenCalledTimes(1);
     expect(firstEvent.preventDefault).toHaveBeenCalledTimes(1);
 
-    // Within the cooldown → no reload → the error MUST propagate (no
-    // preventDefault), otherwise Vite resolves the failed import with
-    // `undefined` and poisons every lazy chunk for the next 30s.
+    // A sibling modulepreload can fail before location.replace commits. It is
+    // covered by the in-flight navigation, so suppress its duplicate rejection
+    // without starting another reload.
     const secondEvent = { preventDefault: vi.fn() };
     listener(secondEvent);
     expect(globals.location.replace).toHaveBeenCalledTimes(1);
-    expect(secondEvent.preventDefault).not.toHaveBeenCalled();
+    expect(secondEvent.preventDefault).toHaveBeenCalledTimes(1);
+
+    // Promise-based callers must not mistake the pending browser navigation
+    // for a reload they started; they can then reject instead of hanging if
+    // location.replace is delayed or blocked.
+    expect(attemptChunkRecoveryReload("lazy-import")).toBe(false);
+  });
+
+  it("lets a persistent failure surface after the recovery page has reloaded", async () => {
+    const firstModule = await import("@/lib/deployRecovery");
+    firstModule.installDeployRecovery();
+    globals.listeners.get("vite:preloadError")!({ preventDefault: vi.fn() });
+    expect(globals.location.replace).toHaveBeenCalledTimes(1);
+
+    // A browser reload creates a fresh module instance but keeps sessionStorage.
+    // The in-memory in-flight flag is therefore gone while the loop cooldown
+    // remains, so a genuine persistent failure reaches the manual fallback.
+    vi.resetModules();
+    const reloadedModule = await import("@/lib/deployRecovery");
+    reloadedModule.installDeployRecovery();
+    const persistentEvent = { preventDefault: vi.fn() };
+    globals.listeners.get("vite:preloadError")!(persistentEvent);
+
+    expect(globals.location.replace).toHaveBeenCalledTimes(1);
+    expect(persistentEvent.preventDefault).not.toHaveBeenCalled();
   });
 });

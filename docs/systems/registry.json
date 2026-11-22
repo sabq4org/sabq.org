@@ -1148,7 +1148,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-11-18"
+      "lastReviewed": "2026-11-22"
     },
     {
       "id": "seo-ssr",
@@ -1643,8 +1643,12 @@
         "client/src/lib/earlyErrorBuffer.ts",
         "client/src/lib/sentryInit.ts",
         "client/src/lib/sentryNoiseFilter.ts",
+        "client/src/lib/deployRecovery.ts",
+        "client/src/lib/retryImport.ts",
+        "client/src/lib/buildVersion.ts",
         "tests/unit/earlyErrorBuffer.test.ts",
         "tests/unit/sentryNoiseFilter.test.ts",
+        "tests/unit/retryImport.test.ts",
         "shared/schema.ts",
         "Dockerfile",
         ".github/workflows/**",
@@ -1655,7 +1659,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-11-08"
+      "lastReviewed": "2026-11-22"
     },
     {
       "id": "mobile-analytics",

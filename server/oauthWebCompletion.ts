@@ -10,12 +10,15 @@ function safeTokenErrorField(value: unknown, fallback: string): string {
   return sanitized || fallback;
 }
 
-/** Handles only Apple's expired/replayed OAuth grant; all other errors continue. */
+/** Handles expired/replayed OAuth grants; all other errors continue. */
 export function createOAuthTokenErrorHandler(provider: OAuthProvider): ErrorRequestHandler {
   const failure = `/ar/login?error=${provider}_auth_failed`;
   return (error, _req, res, next) => {
     const tokenError = error as { name?: unknown; code?: unknown; status?: unknown } | undefined;
-    if (provider !== "apple" || tokenError?.name !== "TokenError" || tokenError.code !== "invalid_grant") {
+    if (
+      tokenError?.name !== "TokenError" ||
+      tokenError.code !== "invalid_grant"
+    ) {
       return next(error);
     }
     const code = safeTokenErrorField(tokenError.code, "unknown");
