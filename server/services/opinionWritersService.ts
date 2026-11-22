@@ -19,10 +19,9 @@ import {
   resolveMediaLicenseReviewStatus,
 } from "./mediaLicenseService";
 import {
-  collectOccupiedScheduleInstants,
+  findScheduleGapConflicts,
   opinionResubmitReviewPatch,
   resolveWriterScheduleBannerState,
-  scheduleConflictsWith,
 } from "./opinionScheduleRules";
 
 export { opinionResubmitReviewPatch };
@@ -996,13 +995,56 @@ export async function notifyOpinionDraftDeskChannels(input: {
   return { pushSent, emailRecipients: email.recipients, emailSent: email.delivered > 0 };
 }
 
+export type OpinionWriterGapConflict = {
+  articleId: string;
+  title: string | null;
+  status: string;
+  at: Date;
+};
+
+/**
+ * مقالات الكاتب نفسه (عدا المقال نفسه) التي تخرق الفاصل الأسبوعي مع الموعد.
+ * المصدر الوحيد لرفض 409 في الجدولة ولتحذير writer_gap في slot-check.
+ */
+export async function findWriterGapConflicts(
+  articleId: string,
+  authorId: string | null | undefined,
+  scheduledAt: Date,
+): Promise<OpinionWriterGapConflict[]> {
+  if (!authorId) return [];
+  const others = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      status: articles.status,
+      reviewStatus: articles.reviewStatus,
+      publishedAt: articles.publishedAt,
+      scheduledAt: articles.scheduledAt,
+      updatedAt: articles.updatedAt,
+    })
+    .from(articles)
+    .where(and(
+      eq(articles.articleType, "opinion"),
+      eq(articles.authorId, authorId),
+      sql`${articles.id} <> ${articleId}`,
+    ));
+  return findScheduleGapConflicts(scheduledAt, others).map(({ row, at }) => ({
+    articleId: row.id,
+    title: row.title ?? null,
+    status: row.status,
+    at,
+  }));
+}
+
 /**
  * جدولة مقال رأي معتمد لموعد مستقبلي (بديل النشر الفوري).
  * يلتقطه ناشر المجدولات في notificationWorker كل دقيقتين.
+ * overrideWeeklyGap يتخطى فحص الفاصل الأسبوعي فقط؛ بقية الشروط كما هي.
  */
 export async function scheduleApprovedOpinionArticle(
   articleId: string,
   scheduledAt: Date,
+  options: { overrideWeeklyGap?: boolean } = {},
 ): Promise<
   | {
       ok: true;
@@ -1019,6 +1061,8 @@ export async function scheduleApprovedOpinionArticle(
         reporterId: string | null;
         submitterId: string | null;
       };
+      /** true فقط إذا وُجد تعارض فعلي وتخطاه overrideWeeklyGap. */
+      overrodeWeeklyGap: boolean;
     }
   | { ok: false; status: number; message: string }
 > {
@@ -1040,29 +1084,15 @@ export async function scheduleApprovedOpinionArticle(
   if (scheduledAt.getTime() <= Date.now())
     return { ok: false, status: 400, message: "موعد الجدولة يجب أن يكون في المستقبل" };
 
-  if (existing.authorId) {
-    const others = await db
-      .select({
-        status: articles.status,
-        reviewStatus: articles.reviewStatus,
-        publishedAt: articles.publishedAt,
-        scheduledAt: articles.scheduledAt,
-        updatedAt: articles.updatedAt,
-      })
-      .from(articles)
-      .where(and(
-        eq(articles.articleType, "opinion"),
-        eq(articles.authorId, existing.authorId),
-        sql`${articles.id} <> ${articleId}`,
-      ));
-    if (scheduleConflictsWith(scheduledAt, collectOccupiedScheduleInstants(others))) {
-      return {
-        ok: false,
-        status: 409,
-        message: "هذا الموعد قريب من مقال آخر للكاتب نفسه. اختر أسبوعاً مختلفاً.",
-      };
-    }
+  const gapConflicts = await findWriterGapConflicts(articleId, existing.authorId, scheduledAt);
+  if (gapConflicts.length > 0 && options.overrideWeeklyGap !== true) {
+    return {
+      ok: false,
+      status: 409,
+      message: "هذا الموعد قريب من مقال آخر للكاتب نفسه. اختر أسبوعاً مختلفاً.",
+    };
   }
+  const overrodeWeeklyGap = gapConflicts.length > 0;
 
   const [updated] = await db
     .update(articles)
@@ -1087,7 +1117,14 @@ export async function scheduleApprovedOpinionArticle(
       reporterId: articles.reporterId,
       submitterId: articles.submitterId,
     });
-  return { ok: true, article: updated };
+  if (overrodeWeeklyGap) {
+    console.warn("[opinion-schedule] weekly gap overridden", {
+      articleId,
+      scheduledAt: scheduledAt.toISOString(),
+      conflicts: gapConflicts.map((c) => c.articleId),
+    });
+  }
+  return { ok: true, article: updated, overrodeWeeklyGap };
 }
 
 export type WriterScheduleBanner = {
