@@ -397,7 +397,11 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // Keep the established path-only key for every other route so this host
     // guard does not multiply the high-cardinality negative cache.
     const cacheKey = `edge:slug-redirect:${path}${isKnownArchivePath ? `:${host}` : ""}`;
-    const cached = edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
+    // Bypass both cache reads and writes for these editorially withdrawable
+    // exceptions; a prior positive answer must never survive a new request.
+    const cached = isKnownArchivePath
+      ? null
+      : edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
     if (cached !== null) return res.json(cached);
 
     const redirect = await computeSlugRedirect(path, host);
