@@ -16,6 +16,7 @@ import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { canReadEnDashboardStats } from "@shared/enDashboardAccess";
 import {
   addDays,
+  attributeUnclaimedPublishes,
   averageReports,
   buildDeskItems,
   computeShiftReport,
@@ -149,6 +150,7 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
         reviewStatus: articles.reviewStatus,
         reviewedAt: articles.reviewedAt,
         reviewedBy: articles.reviewedBy,
+        publishedAt: articles.publishedAt,
       })
       .from(articles)
       .where(or(
@@ -159,7 +161,6 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
       .limit(5000),
   ]);
 
-  const versionRows = mergePublishEvents(versionRowsRaw, publishEventRows);
 
   const deskIds = deskRows.map((r) => r.id);
   const [deskVersionRows, deskPublishEvents] = deskIds.length === 0 ? [[], []] : await Promise.all([
@@ -182,7 +183,21 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
         lt(articleEvents.createdAt, decisionsUntil),
       )),
   ]);
-  const deskVersions = mergePublishEvents(deskVersionRows, deskPublishEvents);
+  const deskVersionsRecorded = mergePublishEvents(deskVersionRows, deskPublishEvents);
+  // نشر بلا ناشر مسجّل يُنسب لآخر من عمل على المادة قبل نشره (المجدول خاصة).
+  const inferred = attributeUnclaimedPublishes(
+    deskRows.filter((r) => r.status === "published").map((r) => ({
+      id: r.id, ownerId: r.ownerId, publishedAt: r.publishedAt ? new Date(r.publishedAt).getTime() : null,
+    })),
+    deskVersionsRecorded.map((v) => ({ articleId: v.articleId, actorId: v.actorId, action: v.action, at: new Date(v.at).getTime() })),
+  );
+  const inferredRows: VersionRow[] = inferred.map((v) => ({ articleId: v.articleId, actorId: v.actorId, action: v.action, at: new Date(v.at) }));
+  const deskVersions = [...deskVersionsRecorded, ...inferredRows];
+  const idSet = new Set(ids);
+  const versionRows = [
+    ...mergePublishEvents(versionRowsRaw, publishEventRows),
+    ...inferredRows.filter((v) => v.actorId && idSet.has(v.actorId) && new Date(v.at).getTime() >= from && new Date(v.at).getTime() < to),
+  ];
 
   const ownArticleIds = Array.from(new Set(versionRows.filter((v) => v.action === "published").map((v) => v.articleId)));
   const breakingIds = new Set(deskRows.filter((r) => r.newsType === "breaking").map((r) => r.id));

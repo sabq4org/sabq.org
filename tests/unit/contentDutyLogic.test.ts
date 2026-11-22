@@ -12,6 +12,7 @@ import {
   riyadhMidnight,
   riyadhWeekday,
   summarizePresence,
+  attributeUnclaimedPublishes,
   validateShiftInput,
   type ActivityKind,
   type DeskArticle,
@@ -194,5 +195,24 @@ describe("before presence tracking started", () => {
     expect(s.presentPct).toBe(100);
     expect(s.lateStartMin).toBe(0);
     expect(s.longestGap).toBeNull();
+  });
+});
+
+describe("scheduled publishing", () => {
+  it("credits a publish with no recorded publisher to whoever last saved it", () => {
+    const at = riyadhMidnight(THU) + 21 * 60 * MIN;
+    const out = attributeUnclaimedPublishes(
+      [
+        { id: "sched", ownerId: "reporter", publishedAt: at },
+        { id: "known", ownerId: "reporter", publishedAt: at },
+      ],
+      [
+        { articleId: "sched", actorId: "reporter", action: "created", at: at - 60 * MIN },
+        { articleId: "sched", actorId: "amjad", action: "updated", at: at - 20 * MIN },
+        { articleId: "known", actorId: "amjad", action: "updated", at: at - 5 * MIN },
+        { articleId: "known", actorId: "fahad", action: "published", at },
+      ],
+    );
+    expect(out).toEqual([{ articleId: "sched", actorId: "amjad", action: "published", at }]);
   });
 });

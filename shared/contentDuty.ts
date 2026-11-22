@@ -372,6 +372,35 @@ export function buildDeskItems(articles: readonly DeskArticle[], versions: reado
   return items;
 }
 
+/**
+ * نشر لم يُسجَّل ناشره (النشر المجدول، البوت المشترك، أو مسار لا يسجّل الحدث) يُنسب
+ * لآخر من حفظ المادة قبل نشرها: هو من حرّرها أو جدولها واتخذ قرار نشرها.
+ */
+export function attributeUnclaimedPublishes(
+  published: ReadonlyArray<{ id: string; ownerId: string | null; publishedAt: number | null }>,
+  versions: readonly VersionEvent[],
+): VersionEvent[] {
+  const byArticle = new Map<string, VersionEvent[]>();
+  for (const v of versions) {
+    const list = byArticle.get(v.articleId) ?? [];
+    list.push(v);
+    byArticle.set(v.articleId, list);
+  }
+  const out: VersionEvent[] = [];
+  for (const a of published) {
+    if (a.publishedAt === null) continue;
+    const at = a.publishedAt;
+    const events = byArticle.get(a.id) ?? [];
+    const claimed = events.some((e) => e.action === "published" && e.actorId && Math.abs(e.at - at) <= 10 * MINUTE);
+    if (claimed) continue;
+    const handler = events
+      .filter((e) => e.actorId && e.at <= at + MINUTE && e.action !== "published")
+      .sort((x, y) => y.at - x.at)[0];
+    if (handler) out.push({ articleId: a.id, actorId: handler.actorId, action: "published", at });
+  }
+  return out;
+}
+
 export function waitingAt(items: readonly DeskItem[], t: number): DeskItem[] {
   return items.filter((i) => i.waitingSince <= t && (i.decidedAt === null || i.decidedAt > t));
 }
