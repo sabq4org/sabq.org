@@ -419,7 +419,7 @@ describe("/api/v1/staff/opinion routes", () => {
     mocks.checkOpinionSlotClashes.mockResolvedValue([]);
     const res = await call("GET", "/opinion/a1/slot-check?scheduledAt=2026-10-29T09:00:00%2B03:00");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ scheduledAt: "2026-10-29T06:00:00.000Z", warnings: [] });
+    expect(await res.json()).toEqual({ scheduledAt: "2026-10-29T06:00:00.000Z", warnings: [], weeklyGapConflict: false });
     expect(mocks.logActivity).not.toHaveBeenCalled();
   });
 

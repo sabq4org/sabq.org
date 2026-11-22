@@ -324,7 +324,7 @@ describe("bot-desk opinion — reads", () => {
     mocks.checkOpinionSlotClashes.mockResolvedValue([]);
     const res = await bot("GET", "/a1/slot-check?scheduledAt=2026-10-29T09:00:00%2B03:00");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ scheduledAt: "2026-10-29T06:00:00.000Z", warnings: [] });
+    expect(await res.json()).toEqual({ scheduledAt: "2026-10-29T06:00:00.000Z", warnings: [], weeklyGapConflict: false });
     expect(mocks.logActivity).not.toHaveBeenCalled();
   });
 });
@@ -417,6 +417,38 @@ describe("bot-desk opinion — schedule / publish / return", () => {
     expect(mocks.scheduleOpinionFromDesk).toHaveBeenLastCalledWith({
       articleId: "a1", actorId: staffUser.id, request: { mode: "fixed_slot" },
     });
+  });
+
+  it("schedule: overrideWeeklyGap passes through, echoed + audited", async () => {
+    mocks.scheduleOpinionFromDesk.mockResolvedValue({ ...scheduled, overrodeWeeklyGap: true });
+    const res = await bot("POST", "/a1/schedule", { scheduledAt: "2026-11-23T09:45:00+03:00", overrideWeeklyGap: true });
+    expect(res.status).toBe(200);
+    expect((await res.json()).overrodeWeeklyGap).toBe(true);
+    expect(mocks.scheduleOpinionFromDesk).toHaveBeenLastCalledWith({
+      articleId: "a1", actorId: BOT_PRINCIPAL.userId,
+      request: { scheduledAt: "2026-11-23T09:45:00+03:00", overrideWeeklyGap: true },
+    });
+    expect(mocks.logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      action: "opinion_schedule",
+      metadata: expect.objectContaining({ overrideWeeklyGap: true, overrodeWeeklyGap: true }),
+    }));
+    // overrideWeeklyGap وحده = الموعد الثابت مع التجاوز
+    await bot("POST", "/a1/schedule", { overrideWeeklyGap: true });
+    expect(mocks.scheduleOpinionFromDesk).toHaveBeenLastCalledWith({
+      articleId: "a1", actorId: BOT_PRINCIPAL.userId, request: { mode: "fixed_slot", overrideWeeklyGap: true },
+    });
+    expect((await bot("POST", "/a1/schedule", { scheduledAt: "2026-11-23T09:45:00+03:00", overrideWeeklyGap: "yes" })).status).toBe(400);
+  });
+
+  it("slot-check flags weeklyGapConflict when a writer_gap warning exists", async () => {
+    const gap = {
+      code: "writer_gap", message: "قريب", otherArticleId: "cdff", otherTitle: "لا يؤكد المؤكد",
+      otherStatus: "published", otherAt: "2026-11-19T06:00:00.000Z", blocking: true,
+    };
+    mocks.checkOpinionSlotClashes.mockResolvedValue([gap]);
+    const res = await bot("GET", "/a1/slot-check?scheduledAt=2026-11-23T09:45:00%2B03:00");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ scheduledAt: "2026-11-23T06:45:00.000Z", warnings: [gap], weeklyGapConflict: true });
   });
 
   it("schedule: rejects bad bodies and passes 409 through", async () => {
