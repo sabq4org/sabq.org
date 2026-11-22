@@ -10,6 +10,7 @@ import {
   categories,
   staffActivityMinutes,
   users,
+  articleEvents,
 } from "@shared/schema";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { canReadEnDashboardStats } from "@shared/enDashboardAccess";
@@ -87,13 +88,39 @@ interface DutyData {
   lastAction: Map<string, { articleId: string; at: number }>;
 }
 
+interface VersionRow { articleId: string; actorId: string | null; action: string; at: Date | string }
+
+/**
+ * يضم أحداث النشر من article_events إلى نسخ المواد. النشر نفسه قد يُسجَّل في الجدولين،
+ * فيُعدّ نشر المادة نفسها من الشخص نفسه خلال 3 دقائق مرة واحدة.
+ */
+function mergePublishEvents(
+  versions: readonly VersionRow[],
+  events: ReadonlyArray<{ articleId: string; actorId: string | null; at: Date | string }>,
+): VersionRow[] {
+  const out = versions.slice();
+  const publishes = versions.filter((v) => v.action === "published");
+  for (const e of events) {
+    const at = new Date(e.at).getTime();
+    const dup = publishes.some((v) => v.articleId === e.articleId && v.actorId === e.actorId && Math.abs(new Date(v.at).getTime() - at) <= 3 * MINUTE);
+    if (dup) continue;
+    const row = { articleId: e.articleId, actorId: e.actorId, action: "published", at: e.at };
+    out.push(row);
+    publishes.push(row);
+  }
+  return out;
+}
+
 async function loadDutyData(from: number, to: number, userIds: readonly string[], now: number): Promise<DutyData> {
   const ids = Array.from(new Set(userIds));
   const fromDate = new Date(from);
   const toDate = new Date(to);
   const empty = ids.length === 0;
+  // مادة تُركت عند نهاية الوردية قد تُحسم بعدها: نقرأ القرارات حتى يوم بعد النهاية
+  // لنعيد بناء ما كان منتظرًا عندها، لا حالته الآن.
+  const decisionsUntil = new Date(Math.min(now, to + DAY) + MINUTE);
 
-  const [minuteRows, versionRows, reviewRows, deskRows] = await Promise.all([
+  const [minuteRows, versionRowsRaw, publishEventRows, reviewRows, deskRows] = await Promise.all([
     empty ? [] : db
       .select({ userId: staffActivityMinutes.userId, minute: staffActivityMinutes.minute, kind: staffActivityMinutes.kind })
       .from(staffActivityMinutes)
@@ -102,6 +129,11 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
       .select({ articleId: articleVersions.articleId, actorId: articleVersions.actorId, action: articleVersions.action, at: articleVersions.createdAt })
       .from(articleVersions)
       .where(and(inArray(articleVersions.actorId, ids), gte(articleVersions.createdAt, fromDate), lt(articleVersions.createdAt, toDate), inArray(articleVersions.action, OWN_ACTIONS))),
+    // زر النشر السريع و«مكتب سبق» والإنشاء منشورًا تسجّل النشر في article_events دون نسخة.
+    empty ? [] : db
+      .select({ articleId: articleEvents.articleId, actorId: articleEvents.actorId, at: articleEvents.createdAt })
+      .from(articleEvents)
+      .where(and(inArray(articleEvents.actorId, ids), eq(articleEvents.eventType, "published"), gte(articleEvents.createdAt, fromDate), lt(articleEvents.createdAt, toDate))),
     empty ? [] : db
       .select({ reviewedBy: articles.reviewedBy, reviewedAt: articles.reviewedAt })
       .from(articles)
@@ -121,22 +153,36 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
       .from(articles)
       .where(or(
         and(eq(articles.status, "draft"), eq(articles.reviewStatus, "pending_review"), gte(articles.updatedAt, new Date(now - PENDING_STALE_MS))),
-        and(gte(articles.publishedAt, fromDate), lt(articles.publishedAt, toDate)),
-        and(gte(articles.reviewedAt, fromDate), lt(articles.reviewedAt, toDate)),
+        and(gte(articles.publishedAt, fromDate), lt(articles.publishedAt, decisionsUntil), lt(articles.createdAt, toDate)),
+        and(gte(articles.reviewedAt, fromDate), lt(articles.reviewedAt, decisionsUntil), lt(articles.createdAt, toDate)),
       ))
       .limit(5000),
   ]);
 
+  const versionRows = mergePublishEvents(versionRowsRaw, publishEventRows);
+
   const deskIds = deskRows.map((r) => r.id);
-  const deskVersions = deskIds.length === 0 ? [] : await db
-    .select({ articleId: articleVersions.articleId, actorId: articleVersions.actorId, action: articleVersions.action, at: articleVersions.createdAt })
-    .from(articleVersions)
-    .where(and(
-      inArray(articleVersions.articleId, deskIds),
-      gte(articleVersions.createdAt, new Date(from - PENDING_STALE_MS)),
-      lt(articleVersions.createdAt, toDate),
-      notInArray(articleVersions.action, ["autosave", "baseline"]),
-    ));
+  const [deskVersionRows, deskPublishEvents] = deskIds.length === 0 ? [[], []] : await Promise.all([
+    db
+      .select({ articleId: articleVersions.articleId, actorId: articleVersions.actorId, action: articleVersions.action, at: articleVersions.createdAt })
+      .from(articleVersions)
+      .where(and(
+        inArray(articleVersions.articleId, deskIds),
+        gte(articleVersions.createdAt, new Date(from - PENDING_STALE_MS)),
+        lt(articleVersions.createdAt, decisionsUntil),
+        notInArray(articleVersions.action, ["autosave", "baseline"]),
+      )),
+    db
+      .select({ articleId: articleEvents.articleId, actorId: articleEvents.actorId, at: articleEvents.createdAt })
+      .from(articleEvents)
+      .where(and(
+        inArray(articleEvents.articleId, deskIds),
+        eq(articleEvents.eventType, "published"),
+        gte(articleEvents.createdAt, new Date(from - PENDING_STALE_MS)),
+        lt(articleEvents.createdAt, decisionsUntil),
+      )),
+  ]);
+  const deskVersions = mergePublishEvents(deskVersionRows, deskPublishEvents);
 
   const ownArticleIds = Array.from(new Set(versionRows.filter((v) => v.action === "published").map((v) => v.articleId)));
   const breakingIds = new Set(deskRows.filter((r) => r.newsType === "breaking").map((r) => r.id));

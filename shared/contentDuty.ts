@@ -419,7 +419,12 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
   const inWindow = (t: number) => t >= occ.start && t < until;
 
   const own = input.ownVersions.filter((v) => inWindow(v.at));
-  const publishes = own.filter((v) => v.action === "published");
+  // المادة الواحدة تُعدّ مرة في الوردية حتى لو سُجّل نشرها في أكثر من سجل أو أعيد نشرها.
+  const seenPublish = new Set<string>();
+  const publishes = own
+    .filter((v) => v.action === "published")
+    .sort((a, b) => a.at - b.at)
+    .filter((v) => (seenPublish.has(v.articleId) ? false : (seenPublish.add(v.articleId), true)));
   const edits = own.filter((v) => v.action !== "published");
   const reviews = input.ownReviews.filter(inWindow);
 
@@ -429,7 +434,8 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
     const h = Math.floor((t - occ.start) / (60 * MINUTE));
     if (h >= 0 && h < hours && hourly[h] !== null) hourly[h] = (hourly[h] as number) + 1;
   };
-  own.forEach((v) => bump(v.at));
+  publishes.forEach((v) => bump(v.at));
+  edits.forEach((v) => bump(v.at));
   reviews.forEach(bump);
 
   const decided = input.items.filter((i) => i.decidedBy === occ.userId && i.decidedAt !== null && inWindow(i.decidedAt));

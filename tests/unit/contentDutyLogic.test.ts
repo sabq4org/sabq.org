@@ -145,7 +145,11 @@ describe("desk items and shift report", () => {
     const minutes = new Map<number, ActivityKind>([[start + 14 * MIN, "action"]]);
     const report = computeShiftReport({
       occ, now: occ.end + 5 * MIN, minutes,
-      ownVersions: [{ articleId: "a", actorId: "fahad", action: "published", at: start + 14 * MIN }],
+      ownVersions: [
+        { articleId: "a", actorId: "fahad", action: "published", at: start + 14 * MIN },
+        // النشر نفسه مسجّل مرة ثانية في article_events
+        { articleId: "a", actorId: "fahad", action: "published", at: start + 15 * MIN },
+      ],
       ownReviews: [], items, breakingIds: new Set(["a"]), thresholds: DEFAULT_DUTY_THRESHOLDS,
     });
     expect(report.published).toBe(1);
