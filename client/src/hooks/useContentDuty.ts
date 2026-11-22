@@ -1,43 +1,59 @@
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ContentDutyResponse } from "@shared/contentDuty";
+import type {
+  ContentDutyCardResponse,
+  ContentDutyRoomResponse,
+  ContentDutyRosterResponse,
+  ContentDutyTeamResponse,
+} from "@shared/contentDuty";
 import { useAuth } from "@/hooks/useAuth";
-import { riyadhDutyTime } from "@/lib/contentDuty";
 import { apiRequest } from "@/lib/queryClient";
 
-const rosterUrl = "/api/admin/dashboard/content-duty";
+export const DUTY_CARD_URL = "/api/admin/dashboard/content-duty";
+export const DUTY_ROOM_URL = "/api/admin/content-duty/room";
+export const DUTY_TEAM_URL = "/api/admin/content-duty/team";
+export const DUTY_ROSTER_URL = "/api/admin/content-duty/roster";
 
-export function useContentDuty() {
-  const { user, isLoading: authLoading } = useAuth();
-  const [time, setTime] = useState(() => riyadhDutyTime(new Date()));
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    function tick() {
-      clearTimeout(timer);
-      setTime(riyadhDutyTime(new Date()));
-      timer = setTimeout(tick, 60000 - Date.now() % 60000);
-    }
-    tick();
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, []);
-
-  const query = useQuery<ContentDutyResponse>({
-    queryKey: [rosterUrl, user?.id],
-    queryFn: () => apiRequest<ContentDutyResponse>(rosterUrl, { silent: true }),
+export function useContentDutyCard() {
+  const { user } = useAuth();
+  return useQuery<ContentDutyCardResponse>({
+    queryKey: [DUTY_CARD_URL, user?.id],
+    queryFn: () => apiRequest<ContentDutyCardResponse>(DUTY_CARD_URL, { silent: true }),
     enabled: Boolean(user?.id),
     staleTime: 30_000,
     refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    retry: 1,
   });
-  return {
-    ...time,
-    managers: query.isError ? [] : query.data?.managers ?? [],
-    isLoading: authLoading || query.isLoading,
-    isError: query.isError,
-    retry: query.refetch,
-  };
+}
+
+export function useContentDutyRoom(shiftKey: string | null, enabled: boolean) {
+  const { user } = useAuth();
+  const url = shiftKey ? `${DUTY_ROOM_URL}?shift=${encodeURIComponent(shiftKey)}` : DUTY_ROOM_URL;
+  return useQuery<ContentDutyRoomResponse>({
+    queryKey: [DUTY_ROOM_URL, user?.id, shiftKey],
+    queryFn: () => apiRequest<ContentDutyRoomResponse>(url, { silent: true }),
+    enabled: Boolean(user?.id) && enabled,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useContentDutyTeam(enabled: boolean) {
+  const { user } = useAuth();
+  return useQuery<ContentDutyTeamResponse>({
+    queryKey: [DUTY_TEAM_URL, user?.id],
+    queryFn: () => apiRequest<ContentDutyTeamResponse>(DUTY_TEAM_URL, { silent: true }),
+    enabled: Boolean(user?.id) && enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useContentDutyRoster(week: string | null, enabled: boolean) {
+  const { user } = useAuth();
+  const url = week ? `${DUTY_ROSTER_URL}?week=${week}` : DUTY_ROSTER_URL;
+  return useQuery<ContentDutyRosterResponse>({
+    queryKey: [DUTY_ROSTER_URL, user?.id, week],
+    queryFn: () => apiRequest<ContentDutyRosterResponse>(url, { silent: true }),
+    enabled: Boolean(user?.id) && enabled,
+    staleTime: 30_000,
+  });
 }
