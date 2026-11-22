@@ -16150,3 +16150,44 @@ export const botEditorOperations = pgTable("bot_editor_operations", {
   metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [index("idx_bot_editor_operations_created").on(table.createdAt)]);
+
+// ============================================================================
+// مناوبات إدارة المحتوى — «غرفة المناوبة» (docs/systems/editorial/SYSTEM.md)
+// ============================================================================
+
+// وردية أسبوعية متكررة. الأيام من الأحد = 0، والدقائق من منتصف ليل الرياض.
+// end_minute <= start_minute تعني أن الوردية تمتد إلى اليوم التالي.
+export const contentDutyShifts = pgTable("content_duty_shifts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  days: jsonb("days").$type<number[]>().notNull(),
+  startMinute: integer("start_minute").notNull(),
+  endMinute: integer("end_minute").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [index("idx_content_duty_shifts_user").on(table.userId)]);
+
+// استثناء ليوم واحد: إجازة (cover_user_id فارغ) أو تغطية (يعمل cover_user_id بدل user_id).
+export const contentDutyExceptions = pgTable("content_duty_exceptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  dutyDate: date("duty_date").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  coverUserId: varchar("cover_user_id").references(() => users.id, { onDelete: "set null" }),
+  note: text("note"),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  cancelledAt: timestamp("cancelled_at"),
+}, (table) => [index("idx_content_duty_exceptions_date").on(table.dutyDate)]);
+
+// دقيقة نشاط لكل موظف في الجدول: view = طلب قراءة، action = كتابة (حفظ، نشر، مراجعة).
+// يحفظ تاريخ الحضور الذي لا يحفظه users.last_activity_at. يُحذف ما يزيد على 90 يومًا.
+export const staffActivityMinutes = pgTable("staff_activity_minutes", {
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  minute: timestamp("minute").notNull(),
+  kind: text("kind").notNull().default("view"),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.minute] }),
+  index("idx_staff_activity_minutes_minute").on(table.minute),
+]);

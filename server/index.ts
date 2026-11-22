@@ -1075,6 +1075,8 @@ if (!(globalThis as any).__sabqServer) {
     // requirePermission see an unauthenticated request and return 401 Unauthorized
     // (which the dashboard treats as session expiry and kicks the admin out).
     // علامة الحفظ على الحافة لقراءات عامة (قبل كل المسارات، انظر الملف).
+    // «غرفة المناوبة»: دقيقة نشاط لأصحاب الورديات عند انتهاء كل طلب موثّق (ويب و«مكتب سبق»).
+    app.use((await import("./services/contentDuty/staffActivityRecorder")).staffActivityHook);
     const publicEdgeCacheHooks = (await import("./routes/publicEdgeCacheHooks")).default;
     app.use(publicEdgeCacheHooks);
     const mobileApiRoutes = (await import("./routes/mobileApiRoutes")).default;
@@ -1732,6 +1734,8 @@ if (!(globalThis as any).__sabqServer) {
           try {
             const { startArticleEditLocksCleanupJob } = await import("./jobs/articleEditLocksCleanup");
             startArticleEditLocksCleanupJob();
+            const { startStaffActivityCleanupJob } = await import("./jobs/staffActivityCleanup");
+            startStaffActivityCleanupJob();
             const { startDatabaseCleanupJob } = await import("./jobs/databaseCleanupJob");
             startDatabaseCleanupJob();
             const { startBreakingNewsExpiryJob } = await import("./jobs/breakingNewsExpiryJob");

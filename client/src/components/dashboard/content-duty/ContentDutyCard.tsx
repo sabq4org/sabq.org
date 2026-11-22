@@ -1,201 +1,138 @@
 import { Link } from "wouter";
-import { CalendarDays, Clock3, RefreshCw } from "lucide-react";
-import { useContentDuty } from "@/hooks/useContentDuty";
-import { dutyDays, dutySegments, formatDutyHour } from "@/lib/contentDuty";
+import type { ContentDutyCardEntry, ContentDutyCardResponse } from "@shared/contentDuty";
+import { useContentDutyCard } from "@/hooks/useContentDuty";
+import { formatRemaining, statusLabel, statusTone } from "@/lib/contentDuty";
+import { DutyPulseRibbon } from "./DutyPulseRibbon";
 
-const MANAGER_PALETTE = ["#7ed6fa", "#f9c781", "#a2adff", "#75e2c4", "#d6a8ff", "#f7a8c4"];
+const ROOM = "/dashboard/content-duty";
 
-function colorForManager(index: number): string {
-  return MANAGER_PALETTE[index % MANAGER_PALETTE.length] ?? "#b6c6d1";
-}
-
-function hourLabel(hour: number): string {
-  return String(formatDutyHour(hour));
-}
-
-function statusLabel(online: boolean | null): string {
-  if (online === true) return "متصل باللوحة";
-  if (online === false) return "غير متصل باللوحة";
-  return "الحالة غير متاحة";
-}
-
-function statusClass(online: boolean | null): string {
-  if (online === true) return "bg-emerald-400/15 text-emerald-100 ring-emerald-300/30";
-  if (online === false) return "bg-white/10 text-slate-200 ring-white/15";
-  return "bg-amber-300/10 text-amber-100 ring-amber-200/25";
-}
-
-function StatusPill({ online }: { online: boolean | null }) {
+export function DutyRing({ pct, remaining, size = 84, label = "باقٍ" }: { pct: number; remaining: number; size?: number; label?: string }) {
+  const r = 72;
+  const c = 2 * Math.PI * r;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${statusClass(online)}`}
-    >
-      <span
-        aria-hidden="true"
-        className={`h-1.5 w-1.5 rounded-full ${
-          online === true ? "bg-emerald-300" : online === false ? "bg-slate-300" : "bg-amber-200"
-        }`}
-      />
-      {statusLabel(online)}
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox="0 0 168 168" role="img" aria-label={`مضى ${pct}% من الوردية`}>
+        <circle cx="84" cy="84" r={r} fill="none" stroke="#FFFFFF" strokeWidth={16} />
+        <circle
+          cx="84" cy="84" r={r} fill="none" stroke="#1E9BE6" strokeWidth={16} strokeLinecap="round"
+          strokeDasharray={`${(pct / 100) * c} ${c}`} transform="rotate(-90 84 84)"
+        />
+        <circle cx="84" cy="84" r={56} fill="#FFFFFF" />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span dir="ltr" className="font-bold tabular-nums text-[#1E9BE6]" style={{ fontSize: Math.round(size / 4.6) }}>{formatRemaining(remaining)}</span>
+        <span className="text-[10px] text-[#55667A]">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ entry }: { entry: Pick<ContentDutyCardEntry, "status"> }) {
+  const tone = statusTone(entry.status);
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: tone.bg, color: tone.fg }}>
+      <span className="h-[7px] w-[7px] rounded-full" style={{ background: tone.dot }} />
+      {statusLabel(entry.status)}
     </span>
   );
 }
 
-function LoadingCard() {
+function Numbers({ data, entry }: { data: ContentDutyCardResponse; entry: ContentDutyCardEntry }) {
+  if (!data.waiting) return null;
+  const cells: Array<{ label: string; value: number | null; color: string }> = [
+    { label: "نشر", value: entry.published, color: "#1B2B3A" },
+    { label: "تنتظر", value: data.waiting.count, color: "#946000" },
+    { label: "متأخرة", value: data.waiting.overdue, color: data.waiting.overdue > 0 ? "#BF3038" : "#13734E" },
+  ];
   return (
-    <section
-      aria-busy="true"
-      aria-label="جار تحميل جدول المناوبات"
-      className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-900"
-    >
-      <div className="space-y-5 bg-[#112d40] p-5 sm:p-6">
-        <div className="h-4 w-32 animate-pulse rounded bg-white/15" />
-        <div className="h-8 w-64 animate-pulse rounded bg-white/15" />
-        <div className="space-y-3">
-          <div className="h-10 animate-pulse rounded-xl bg-white/10" />
-          <div className="h-10 animate-pulse rounded-xl bg-white/10" />
+    <div className="flex rounded-2xl bg-white/75">
+      {cells.map((c, i) => (
+        <div key={c.label} className={`flex flex-col gap-0.5 px-4 py-2.5 ${i > 0 ? "border-s border-[#EEF2F6]" : ""}`}>
+          <span className="text-xs text-[#55667A]">{c.label}</span>
+          <span dir="ltr" className="text-right text-[22px] font-bold tabular-nums" style={{ color: c.color }}>{c.value ?? "—"}</span>
         </div>
-      </div>
-      <div className="space-y-3 p-5 sm:p-6">
-        <div className="h-5 w-32 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
-        <div className="h-10 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-        <div className="h-10 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-      </div>
-    </section>
-  );
-}
-
-function ErrorCard({ retry }: { retry: () => void }) {
-  return (
-    <section
-      role="alert"
-      className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-900 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100"
-    >
-      <p className="font-semibold">تعذر تحميل جدول المناوبات</p>
-      <p className="mt-1 text-sm text-rose-800/80 dark:text-rose-100/75">تحقق من الاتصال ثم حاول مجددًا.</p>
-      <button
-        type="button"
-        onClick={retry}
-        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100 dark:hover:bg-rose-900/50"
-      >
-        <RefreshCw className="h-4 w-4" aria-hidden="true" />
-        إعادة المحاولة
-      </button>
-    </section>
+      ))}
+    </div>
   );
 }
 
 export default function ContentDutyCard() {
-  const { managers, day, hour, isLoading, isError, retry } = useContentDuty();
+  const { data, isLoading, isError } = useContentDutyCard();
+  // قبل تنفيذ SQL أو عند الخطأ تختفي البطاقة ولا تزعج اللوحة.
+  if (isError) return null;
+  if (isLoading || !data) {
+    return <div className="h-[132px] animate-pulse rounded-[22px] bg-[#EEF4FA] dark:bg-slate-800" aria-busy="true" aria-label="جار تحميل المناوبة" />;
+  }
 
-  if (isLoading) return <LoadingCard />;
-  if (isError) return <ErrorCard retry={retry} />;
+  const shell = "rounded-[22px] border border-white bg-gradient-to-br from-[#E2F2FD] to-[#EEF1FE] p-4 text-[#1B2B3A] shadow-[0_2px_10px_rgba(27,43,58,.05)] sm:p-6";
 
-  const segments = dutySegments(managers, day);
-  const activeManagers = managers.filter((manager) =>
-    segments.some(
-      (segment) =>
-        segment.manager.key === manager.key && hour >= segment.start && hour < Math.min(segment.end, 24),
-    ),
-  );
-  const dayName = dutyDays[day] ?? "اليوم";
-  const hasDuty = segments.length > 0;
-
-  return (
-    <section
-      dir="rtl"
-      data-testid="content-duty-card"
-      className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-900"
-    >
-      <div className="bg-[#112d40] px-5 py-5 text-white sm:px-6 sm:py-6">
-        <div className="flex items-center gap-2 text-xs text-[#c2dce7]">
-          <Clock3 className="h-4 w-4 text-[#81d4ff]" aria-hidden="true" />
-          <span>اليوم · {dayName}</span>
-          <span aria-hidden="true">·</span>
-          <bdi dir="ltr" className="font-semibold text-[#81d4ff]">
-            {hourLabel(hour)}
-          </bdi>
-          <span>بتوقيت الرياض</span>
-        </div>
-        <h2 className="mt-3 text-xl font-bold tracking-tight sm:text-2xl">مديرو المحتوى المناوبون الآن</h2>
-
-        {activeManagers.length > 0 ? (
-          <div className="mt-5 space-y-2.5">
-            {activeManagers.map((manager) => (
-              <div
-                key={manager.key}
-                className="flex flex-wrap items-center justify-between gap-3 border-t border-[#406071] pt-2.5 first:border-t-0 first:pt-0"
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    aria-hidden="true"
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: colorForManager(managers.indexOf(manager)) }}
-                  />
-                  <span className="truncate text-lg font-semibold">{manager.name}</span>
-                </div>
-                <StatusPill online={manager.online} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5 rounded-xl border border-dashed border-[#628090] bg-white/5 px-4 py-3 text-sm text-[#d6e7ed]">
-            لا توجد مناوبة مسجّلة الآن.
-          </div>
-        )}
-      </div>
-
-      <div className="p-5 sm:p-6">
+  if (data.onDuty.length === 0) {
+    return (
+      <section aria-label="المناوبة الآن" className={shell} dir="rtl">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-slate-100">
-              <CalendarDays className="h-4 w-4 text-sky-700 dark:text-sky-300" aria-hidden="true" />
-              جدول {dayName}
-            </h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">الفترات الظاهرة بتوقيت الرياض</p>
+          <div className="flex flex-col gap-1">
+            <span className="text-[13px] text-[#55667A]">المناوب الآن</span>
+            <span className="text-lg font-bold text-[#BF3038]">لا مناوب الآن</span>
+            {data.next ? (
+              <span className="text-[13px] text-[#55667A]">
+                أقرب وردية: {data.next.name} <bdi dir="ltr" className="tabular-nums">{data.next.start}</bdi>
+              </span>
+            ) : null}
           </div>
-          <Link href="/dashboard/content-duty" className="rounded text-sm font-semibold text-sky-700 underline underline-offset-4 focus-visible:ring-2 dark:text-sky-300">
-            عرض الجدول الأسبوعي
+          <Link href={ROOM} className="inline-flex h-11 items-center rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(30,155,230,.3)]">
+            افتح غرفة المناوبة
           </Link>
         </div>
+      </section>
+    );
+  }
 
-        {hasDuty ? (
-          <div className="mt-4 divide-y divide-slate-200/80 border-y border-slate-200/80 dark:divide-slate-700/70 dark:border-slate-700/70">
-            {segments.map((segment) => {
-              const isCurrent = hour >= segment.start && hour < Math.min(segment.end, 24);
-              return (
-                <div
-                  key={`${segment.manager.key}-${segment.start}-${segment.endHour}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
-                >
-                  <b className="min-w-0 truncate text-slate-800 dark:text-slate-200">{segment.manager.name}</b>
-                  <span className="period whitespace-nowrap text-slate-600 dark:text-slate-300">
-                    من <bdi dir="ltr">{hourLabel(segment.start)}</bdi> إلى{" "}
-                    <bdi dir="ltr">{hourLabel(segment.endHour)}</bdi>
-                  </span>
-                  <span
-                    className={`col-span-2 text-xs sm:col-span-1 sm:text-right ${
-                      isCurrent ? "font-semibold text-sky-700 dark:text-sky-300" : "text-slate-500 dark:text-slate-400"
-                    }`}
-                  >
-                    {isCurrent
-                      ? "جارية الآن"
-                      : segment.carry
-                        ? "تتمة من اليوم السابق"
-                        : segment.overnight
-                          ? "تمتد إلى اليوم التالي"
-                          : hour >= segment.end ? "انتهت" : "مجدولة"}
-                  </span>
-                </div>
-              );
-            })}
+  return (
+    <section aria-label="المناوبة الآن" className={`${shell} flex flex-col gap-4`} dir="rtl">
+      {data.onDuty.map((entry, idx) => (
+        <div key={`${entry.name}-${idx}`} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+            <DutyRing pct={entry.elapsedPct} remaining={entry.remainingMin} size={idx === 0 ? 84 : 64} />
+            <div className="flex min-w-[180px] flex-1 flex-col gap-1">
+              <span className="text-[13px] text-[#55667A]">{idx === 0 ? "المناوب الآن" : "يناوب معه"}</span>
+              <span className="flex flex-wrap items-center gap-2.5">
+                <span className="text-xl font-bold">{entry.name}</span>
+                <StatusPill entry={entry} />
+              </span>
+              <span className="text-[13px] text-[#55667A]">
+                <bdi dir="ltr" className="tabular-nums">{entry.start} – {entry.end}</bdi>
+                {entry.coveredName ? <> · بدل {entry.coveredName}</> : null}
+                {idx === 0 && data.next ? <> · يستلم بعده {data.next.name}</> : null}
+              </span>
+            </div>
+            <Numbers data={data} entry={entry} />
+            {idx === 0 ? (
+              <Link href={ROOM} className="inline-flex h-11 items-center rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(30,155,230,.3)]">
+                افتح غرفة المناوبة
+              </Link>
+            ) : null}
           </div>
-        ) : (
-          <p className="mt-4 rounded-xl bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">
-            لا توجد فترات مناوبة لهذا اليوم.
-          </p>
-        )}
-      </div>
+          {entry.cells ? (
+            <DutyPulseRibbon compact cells={entry.cells} startMs={0} endMs={entry.cells.length * 300_000} label={`نبض وردية ${entry.name}`} />
+          ) : null}
+        </div>
+      ))}
+      {data.alert ? (
+        <Link
+          href={`/dashboard/articles/${data.alert.articleId}/edit`}
+          className="flex items-center gap-2.5 rounded-2xl bg-white px-4 py-3 text-sm text-[#1B2B3A] hover:bg-[#F8FBFE]"
+        >
+          <span className="h-2 w-2 shrink-0 rounded-full bg-[#E0393E]" />
+          <span className="min-w-0 flex-1">
+            <strong>
+              {data.alert.breaking ? "عاجل ينتظر" : "مادة تنتظر"} <bdi dir="ltr" className="tabular-nums">{data.alert.waitMin}</bdi> دقيقة
+              {data.alert.opened ? " (مفتوح الآن)" : " ولم يُفتح"}:
+            </strong>{" "}
+            {data.alert.title}
+          </span>
+          <span className="shrink-0 font-semibold text-[#0B6FA8]">افتحه</span>
+        </Link>
+      ) : null}
     </section>
   );
 }
