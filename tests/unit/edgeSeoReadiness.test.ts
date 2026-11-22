@@ -138,16 +138,23 @@ describe('public SEO projections', () => {
   it('passes the request host to exact archive redirects', async () => {
     f.knownPath.mockReturnValue(true);
     f.known.mockImplementation(async (_path: string, host: string) => host === 'sabq.org' ? '/article/_VitNn4' : null);
-    expect((await request('/api/edge/slug-redirect', {}, {path:'/archive-title', host:'sabq.org'})).body.redirect).toBe('/article/_VitNn4');
+    const canonical = await request('/api/edge/slug-redirect', {}, {path:'/archive-title', host:'sabq.org'});
+    expect(canonical.body.redirect).toBe('/article/_VitNn4');
+    expect(canonical.body.noStore).toBe(true);
+    expect(canonical.headers['Cache-Control']).toBe('no-store');
+    expect(canonical.headers['CDN-Cache-Control']).toBe('no-store');
     expect((await request('/api/edge/slug-redirect', {}, {path:'/archive-title', host:'preview.sabq.org'})).body.redirect).toBeNull();
     expect(f.known).toHaveBeenCalledWith('/archive-title', 'sabq.org');
     expect(f.known).toHaveBeenCalledWith('/archive-title', 'preview.sabq.org');
   });
-  it('does not redirect a confirmed archive path after its target is withdrawn', async () => {
+  it('does not retain a confirmed archive redirect after its target is withdrawn', async () => {
     f.knownPath.mockReturnValue(true);
-    f.known.mockResolvedValue(null);
-    expect((await request('/api/edge/slug-redirect', {}, {path:'/archive-title-withdrawn', host:'sabq.org'})).body)
-      .toEqual({ redirect: null, gone: false });
+    f.known.mockResolvedValueOnce('/article/_VitNn4').mockResolvedValueOnce(null);
+    const first = await request('/api/edge/slug-redirect', {}, {path:'/archive-title-withdrawn', host:'sabq.org'});
+    const second = await request('/api/edge/slug-redirect', {}, {path:'/archive-title-withdrawn', host:'sabq.org'});
+    expect(first.body).toEqual({ redirect: '/article/_VitNn4', gone: false, noStore: true });
+    expect(second.body).toEqual({ redirect: null, gone: false, noStore: true });
+    expect(f.known).toHaveBeenCalledTimes(2);
   });
   it('sends old /en/article links of Arabic articles to the translation or the Arabic article', async () => {
     f.rows = [[], [{id:'a1', englishSlug:'1ehZR8x', slug:'s1'}], []];

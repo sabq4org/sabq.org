@@ -51,7 +51,7 @@ describe('Pages metadata budget', () => {
 
   it('redirects every confirmed archive path from Pages for humans and crawlers', async () => {
     fetcher.mockImplementation((target) => String(target).includes('/slug-redirect')
-      ? Promise.resolve(Response.json({ redirect: '/article/_VitNn4', gone: false }))
+      ? Promise.resolve(new Response(JSON.stringify({ redirect: '/article/_VitNn4', gone: false, noStore: true }), { headers: { 'Cache-Control': 'no-store' } }))
       : Promise.resolve(Response.json({ status: 200 })));
     for (const userAgent of ['Mozilla/5.0', 'Claude-SearchBot/1.0']) {
       for (const path of confirmedArchivePaths) {
@@ -63,6 +63,7 @@ describe('Pages metadata budget', () => {
         });
         expect(response.status, `${userAgent} ${path}`).toBe(301);
         expect(response.headers.get('location'), `${userAgent} ${path}`).toBe('https://sabq.org/article/_VitNn4');
+        expect(response.headers.get('cache-control'), `${userAgent} ${path}`).toBe('no-store');
       }
     }
   });
@@ -96,6 +97,13 @@ describe('Pages metadata budget', () => {
     match.mockResolvedValue(Response.json({ title: 'خبر' }));
     expect(await cachedJson('https://api.sabq.org/meta', 300, context)).toEqual({ title: 'خبر' });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('does not persist an origin no-store metadata response', async () => {
+    fetcher.mockResolvedValue(new Response('{"redirect":"/article/x","noStore":true}', {
+      headers: { 'Cache-Control': 'no-store' },
+    }));
+    expect(await cachedJson('https://api.sabq.org/archive-exception', 300, context)).toEqual({ redirect: '/article/x', noStore: true });
+    expect(put).not.toHaveBeenCalled();
   });
   it('returns metadata without waiting for a stalled cache write', async () => {
     put.mockReturnValue(new Promise(() => {}));

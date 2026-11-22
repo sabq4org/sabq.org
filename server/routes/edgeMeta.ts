@@ -377,6 +377,13 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // cap warning). The edge HTTP Cache-Control above still absorbs repeats.
     const host = String(req.query.host || "").toLowerCase();
     const isKnownArchivePath = isKnownArchiveCanonicalPath(safeDecode(path));
+    if (isKnownArchivePath) {
+      // Editorial status is part of the redirect decision for these exact
+      // archive exceptions. Do not let an origin/CDN cache preserve a 301
+      // after the target is withdrawn.
+      res.set("Cache-Control", "no-store");
+      res.set("CDN-Cache-Control", "no-store");
+    }
     if (!isRedirectCandidate(path) && !isKnownArchivePath) {
       return res.json({ redirect: null, gone: false });
     }
@@ -398,7 +405,9 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // edge so the gone flag would never be consulted, and this saves the extra
     // DB lookup on the (Arabic-slug) redirect path.
     const gone = redirect ? false : await computeArticleGone(path);
-    const payload = { redirect, gone };
+    const payload = isKnownArchivePath
+      ? { redirect, gone, noStore: true }
+      : { redirect, gone };
     // Positive results (a real 301 target, or an existing-but-unpublished "gone"
     // article) are stable AND bounded by article/category count → cache LONG.
     // Negative results are dominated by non-existent-slug probes (high
@@ -406,7 +415,7 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // s-maxage) so the periodic sweep reclaims them ~3x faster and they don't
     // pin the bucket at its cap.
     const ttl = redirect || gone ? CACHE_TTL.LONG : CACHE_TTL.MEDIUM;
-    edgeRedirectCache.set(cacheKey, payload, ttl);
+    if (!isKnownArchivePath) edgeRedirectCache.set(cacheKey, payload, ttl);
     return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);
