@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { describeTokenAge } from "../../client/src/components/communications/tokenAge";
+
+// هذه الاختبارات تفترض مستخدمًا في الرياض؛ العرض يتبع منطقة الجهاز (displayTimeZone).
+vi.mock("../../client/src/lib/displayTimeZone", () => ({
+  RIYADH_TIME_ZONE: "Asia/Riyadh",
+  displayTimeZone: () => "Asia/Riyadh",
+}));
 
 const now = new Date("2026-11-16T12:00:00Z");
 const plain = (text: string) => text.replace(/[\u2066\u2069]/g, "");

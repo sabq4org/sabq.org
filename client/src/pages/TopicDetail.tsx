@@ -54,6 +54,7 @@ import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme } from "@/lib/angleTheme";
 import { formatNumber, formatDate } from "@/lib/format";
 import type { Topic, Angle, DisplayComment } from "@shared/schema";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type AngleWriter = {
   id?: string | null;
@@ -1149,13 +1150,13 @@ export default function TopicDetail() {
         day: "numeric",
         month: "long",
         year: "numeric",
-        timeZone: "Asia/Riyadh",
+        timeZone: displayTimeZone(),
       }).format(date),
       time: new Intl.DateTimeFormat(locale, {
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
-        timeZone: "Asia/Riyadh",
+        timeZone: displayTimeZone(),
       }).format(date),
       relative: formatArticleTimestamp(topic.publishedAt, { format: "relative", locale: "ar" }),
     };

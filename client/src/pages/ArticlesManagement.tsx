@@ -73,6 +73,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type Article = {
   id: string;
@@ -265,7 +266,7 @@ function parseArticleDate(value: string | Date | null | undefined) {
 
 function riyadhParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Riyadh",
+    timeZone: displayTimeZone(),
     year: "numeric",
     month: "numeric",
     day: "numeric",

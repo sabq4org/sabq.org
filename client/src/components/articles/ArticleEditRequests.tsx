@@ -23,6 +23,7 @@ import {
   type EditRequestField,
   type EditRequestProposal,
 } from "@shared/articleEditRequests";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 const LIST_KEY = ["/api/article-edit-requests"] as const;
 
@@ -186,7 +187,7 @@ export function EditRequestsFilter({
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-semibold text-foreground">{item.articleTitle}</div>
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {item.requesterName} · {item.articleStatus === "published" ? "منشور" : "مسودة"} · {new Date(item.createdAt).toLocaleString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short", timeZone: "Asia/Riyadh" })}
+                  {item.requesterName} · {item.articleStatus === "published" ? "منشور" : "مسودة"} · {new Date(item.createdAt).toLocaleString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short", timeZone: displayTimeZone() })}
                 </div>
               </div>
               <EditRequestLabel items={[item]} onOpen={onOpen} />
@@ -635,7 +636,7 @@ export function ReviewEditRequestDialog({
               {req.urgent && <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700 dark:bg-red-950/50 dark:text-red-200">عاجل</span>}
               <span className="rounded-full bg-muted px-3 py-1 text-xs">{data.article.status === "published" ? "منشور" : "مسودة"}</span>
               <span className="text-sm text-muted-foreground">
-                {req.requesterName} · {new Date(req.createdAt).toLocaleString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short", timeZone: "Asia/Riyadh" })}
+                {req.requesterName} · {new Date(req.createdAt).toLocaleString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short", timeZone: displayTimeZone() })}
               </span>
               {data.article.status === "published" && (
                 <a href={`/article/${data.article.slug}`} target="_blank" rel="noreferrer" className="mr-auto inline-flex items-center gap-1 text-sm font-semibold text-sky-700 dark:text-sky-300">

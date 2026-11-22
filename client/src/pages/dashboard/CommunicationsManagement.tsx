@@ -15,6 +15,7 @@ import { useFailedEmailLogs, useTrustedSenders } from "@/components/communicatio
 import { describeTokenAge } from "@/components/communications/tokenAge";
 import { flowCounts, fromEmailLog } from "@/components/communications/inboxModel";
 import { PILL_PLAIN, PILL_PRIMARY, SURFACE } from "@/components/communications/commsUi";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 interface WhatsappBadgeStats {
   newMessages: number;
@@ -44,7 +45,7 @@ const LEGACY_ROLES = ["admin", "system_admin", "manager"];
 const EMAIL_PERMISSIONS = ["admin.manage_settings", "communications.manage"];
 
 const todayLabel = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-  timeZone: "Asia/Riyadh",
+  timeZone: displayTimeZone(),
   weekday: "long",
   day: "numeric",
   month: "long",
@@ -193,7 +194,7 @@ export default function CommunicationsManagement() {
           <div className="mx-auto flex max-w-[1440px] flex-col gap-[22px]">
             <header className="flex flex-wrap items-end justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <span className="text-[13px] text-[#55667A]">غرفة الأخبار · {todayLabel.format(new Date())} · توقيت الرياض</span>
+                <span className="text-[13px] text-[#55667A]">غرفة الأخبار · {todayLabel.format(new Date())}</span>
                 <h1 className="text-[28px] font-bold leading-[1.3] text-[#1B2B3A]" data-testid="text-page-title">
                   قنوات الاتصال
                 </h1>

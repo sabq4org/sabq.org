@@ -1,4 +1,5 @@
 import { useLanguage } from "@/contexts/LanguageContext";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 interface AccessibleDateProps {
   date: Date | string | null | undefined;
@@ -49,10 +50,10 @@ export function AccessibleDate({
     );
   }
 
-  // Format date based on language - Always use Riyadh timezone (UTC+3)
+  // User's device timezone (displayTimeZone.ts)
   const getFormattedDate = () => {
     const locale = language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US';
-    const timeZone = 'Asia/Riyadh';
+    const timeZone = displayTimeZone();
     
     if (format === "short") {
       return dateObj.toLocaleDateString(locale, {
@@ -162,7 +163,7 @@ export function AccessibleTime({
   const formattedTime = dateObj.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'Asia/Riyadh'
+    timeZone: displayTimeZone()
   });
 
   const ariaLabel = language === 'ar' ? "الوقت" : "Time";

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatArticleTimestamp } from "../../client/src/lib/formatTime";
 
+// هذه الاختبارات تفترض مستخدمًا في الرياض؛ العرض يتبع منطقة الجهاز (displayTimeZone).
+vi.mock("../../client/src/lib/displayTimeZone", () => ({
+  RIYADH_TIME_ZONE: "Asia/Riyadh",
+  displayTimeZone: () => "Asia/Riyadh",
+}));
+
 afterEach(() => vi.useRealTimers());
 describe("public article time", () => {
   it("uses Arabic singular, dual and plural consistently", () => {

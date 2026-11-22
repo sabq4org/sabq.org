@@ -65,6 +65,7 @@ import ArticleServiceDateLine from "@/components/mawaeed/ArticleServiceDateLine"
 import { serviceLinkForArticle } from "@shared/servicePages/articleLink";
 import { ArticleMobileDock } from "@/components/public/ArticleMobileDock";
 import { readArticleTextScale, writeArticleTextScale } from "@/lib/articleTextScale";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
 const SHOW_TOP_AD = true;
@@ -935,8 +936,8 @@ export default function ArticleDetail({ article, isLoading }: { article: Article
     const locale = "ar-SA-u-ca-gregory-nu-latn";
     return {
       iso: date.toISOString(),
-      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Riyadh" }).format(date),
-      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh" }).format(date),
+      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: displayTimeZone() }).format(date),
+      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: displayTimeZone() }).format(date),
     };
   }, [article?.publishedAt]);
   const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;

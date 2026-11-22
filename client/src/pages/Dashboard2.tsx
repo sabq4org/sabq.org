@@ -77,6 +77,7 @@ import { resolveUserRole } from "@/lib/roleMapping";
 import type { UserRole } from "@/nav/types";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { cn } from "@/lib/utils";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 /* ------------------------------------------------------------------ */
 /* أنواع الاستجابات                                                    */
@@ -243,7 +244,7 @@ function percentChange(current: number, previous: number) {
 function riyadhDateKey(iso?: string | null) {
   if (!iso) return "";
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Riyadh",
+    timeZone: displayTimeZone(),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -272,7 +273,7 @@ function formatTime(iso?: string | null) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-    timeZone: "Asia/Riyadh",
+    timeZone: displayTimeZone(),
   }).format(d);
 }
 

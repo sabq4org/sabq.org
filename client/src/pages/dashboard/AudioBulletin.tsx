@@ -46,6 +46,7 @@ import {
   VolumeX,
   Wand2,
 } from "lucide-react";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 interface BulletinItem {
   id: string;
@@ -165,7 +166,7 @@ function formatDateTime(iso?: string | null): string {
     return new Intl.DateTimeFormat("ar-SA", {
       dateStyle: "medium",
       timeStyle: "short",
-      timeZone: "Asia/Riyadh",
+      timeZone: displayTimeZone(),
     }).format(new Date(iso));
   } catch {
     return iso;
@@ -178,7 +179,7 @@ function formatShortTime(iso?: string | null): string {
     return new Intl.DateTimeFormat("ar-SA", {
       hour: "numeric",
       minute: "2-digit",
-      timeZone: "Asia/Riyadh",
+      timeZone: displayTimeZone(),
     }).format(new Date(iso));
   } catch {
     return iso;

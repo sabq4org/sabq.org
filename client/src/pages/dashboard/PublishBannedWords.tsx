@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ROLE_LABELS_AR } from "@shared/rbac-constants";
 import { BANNED_WORD_MIN_LENGTH } from "@shared/publishBannedWords";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type WordRow = {
   id: string;
@@ -42,8 +43,8 @@ const LIST_QUERY = ["/api/admin/publish-banned-words"];
 const ACTION_LABELS: Record<string, string> = { publish: "محاولة نشر", schedule: "محاولة جدولة", edit: "تعديل منشور" };
 const SURFACE_LABELS: Record<string, string> = { dashboard: "لوحة التحكم", desk: "مكتب سبق", bot: "نشر سبق", email: "البريد الذكي", whatsapp: "واتساب" };
 
-const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
-const timeFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: false });
+const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone(), year: "numeric", month: "2-digit", day: "2-digit" });
+const timeFormat = new Intl.DateTimeFormat("en-GB", { timeZone: displayTimeZone(), hour: "2-digit", minute: "2-digit", hour12: false });
 
 function day(iso: string): string {
   return dateFormat.format(new Date(iso)).replace(/-/g, "/");

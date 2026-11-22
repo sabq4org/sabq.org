@@ -31,6 +31,7 @@ import {
   Wand2
 } from "lucide-react";
 import mascotImage from "@assets/sabq_ai_mascot_1_1_1763712965053.png";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 const contentSchema = z.object({
   topic: z.string().min(10, "الموضوع يجب أن يكون 10 أحرف على الأقل"),
@@ -126,12 +127,12 @@ export default function IFoxContentGenerator() {
     createTaskMutation.mutate(data);
   };
 
-  // Helper function to format date in Riyadh timezone (UTC+3)
+  // Helper: format date in the user's device timezone
   // Uses browser's timezone-aware toLocaleString instead of manual offset math
   const formatRiyadhTime = (utcDate: string) => {
     const date = new Date(utcDate);
     return date.toLocaleString('ar-SA-u-ca-gregory', {
-      timeZone: 'Asia/Riyadh',
+      timeZone: displayTimeZone(),
       year: 'numeric',
       month: 'short',
       day: 'numeric',

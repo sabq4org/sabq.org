@@ -15,14 +15,14 @@
  * The contract:
  *  - All numbers ALWAYS render with Latin digits (1234, not ١٢٣٤).
  *  - All dates ALWAYS render in the Gregorian calendar.
- *  - All times ALWAYS render in Asia/Riyadh.
+ *  - Times render in the user's device timezone (see displayTimeZone.ts).
  *
  * Don't add `toLocaleString("ar-SA")` / `toLocaleDateString("ar-SA")` calls
  * anywhere else in the codebase. Route through this file instead — that's
  * the only way the three contracts above stay enforced.
  */
 
-const RIYADH_TZ = "Asia/Riyadh";
+import { displayTimeZone } from "./displayTimeZone";
 
 // Single locale we use for every formatter. `nu-latn` forces Latin numerals
 // even though the locale is Arabic; `ca-gregory` forces the Gregorian
@@ -94,7 +94,7 @@ function toDate(input: DateInput): Date | null {
 }
 
 /**
- * Date only — Gregorian, Riyadh timezone, long month name in Arabic with
+ * Date only — Gregorian, display timezone, long month name in Arabic with
  * Latin digits.
  *
  * @example formatDate("2026-05-20T08:01:00Z") → "20 مايو 2026"
@@ -103,19 +103,19 @@ export function formatDate(input: DateInput): string {
   const d = toDate(input);
   if (!d) return "—";
   return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
-    timeZone: RIYADH_TZ,
+    timeZone: displayTimeZone(),
     year: "numeric",
     month: "long",
     day: "numeric",
   }).format(d);
 }
 
-/** Compact "20/05/2026" — Gregorian, Riyadh, Latin. */
+/** Compact "20/05/2026" — Gregorian, display timezone, Latin. */
 export function formatDateShort(input: DateInput): string {
   const d = toDate(input);
   if (!d) return "—";
   return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
-    timeZone: RIYADH_TZ,
+    timeZone: displayTimeZone(),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -123,7 +123,7 @@ export function formatDateShort(input: DateInput): string {
 }
 
 /**
- * Time only ("8:05 م"). Riyadh timezone, Latin digits. AM/PM in Arabic
+ * Time only ("8:05 م"). Display timezone, Latin digits. AM/PM in Arabic
  * because that's still what reads naturally in the UI; pass `format24=true`
  * for 24-hour clock if needed.
  */
@@ -131,7 +131,7 @@ export function formatTime(input: DateInput, options: { format24?: boolean } = {
   const d = toDate(input);
   if (!d) return "—";
   return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
-    timeZone: RIYADH_TZ,
+    timeZone: displayTimeZone(),
     hour: "2-digit",
     minute: "2-digit",
     hour12: !options.format24,
@@ -143,7 +143,7 @@ export function formatDateTime(input: DateInput): string {
   const d = toDate(input);
   if (!d) return "—";
   return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
-    timeZone: RIYADH_TZ,
+    timeZone: displayTimeZone(),
     year: "numeric",
     month: "long",
     day: "numeric",

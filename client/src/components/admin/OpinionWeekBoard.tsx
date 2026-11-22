@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, Clock, AlarmClockOff, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsTouchTablet } from "@/hooks/use-touch-tablet";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type Entry = {
   writerId: string;
@@ -23,7 +24,7 @@ const STATE: Record<Entry["state"], { label: string; tone: string; Icon: typeof 
 };
 
 function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("ar-SA-u-nu-latn", { timeZone: displayTimeZone(), hour: "numeric", minute: "2-digit" });
 }
 
 /** شريط أسبوع كتّاب الرأي فوق قائمة المسودات: من المستحق كل يوم وهل وصل مقاله. */

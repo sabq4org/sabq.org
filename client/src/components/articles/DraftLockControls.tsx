@@ -19,6 +19,7 @@ import {
   draftLockState,
   type DraftLockFields,
 } from "@shared/draftLock";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 export type DraftLockArticle = DraftLockFields & { id: string; title?: string | null };
 
@@ -104,7 +105,7 @@ export function DraftLockBadge({ article, userId, testId }: { article: DraftLock
             ? "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-200"
             : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100",
         )}
-        title={state.lockedAt ? new Date(state.lockedAt).toLocaleString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh" }) : undefined}
+        title={state.lockedAt ? new Date(state.lockedAt).toLocaleString("ar-SA-u-nu-latn", { timeZone: displayTimeZone() }) : undefined}
       >
         <Lock className="h-3.5 w-3.5" aria-hidden="true" />
         {state.isOwner ? "مقفلة باسمك" : `مقفلة لدى ${state.lockedBy?.name}`}

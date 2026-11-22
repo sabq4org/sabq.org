@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import "@/styles/focus-reader.css";
 import { X, Share2, Clock, CheckCircle2, Eye, Type, Sun, Moon, MoreHorizontal, ChartNoAxesColumnIncreasing } from "lucide-react";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 export type FocusReaderLanguage = "ar" | "en" | "ur";
 
@@ -360,7 +361,7 @@ export function FocusReader({
   const validPublishedDate = publishedDate && !Number.isNaN(publishedDate.getTime()) ? publishedDate : null;
   const dateLabel = validPublishedDate?.toLocaleDateString(
     language === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : language === "ur" ? "ur-PK-u-ca-gregory-nu-latn" : "en-US",
-    { timeZone: "Asia/Riyadh", year: "numeric", month: "long", day: "numeric" },
+    { timeZone: displayTimeZone(), year: "numeric", month: "long", day: "numeric" },
   );
 
   const overlay = (
