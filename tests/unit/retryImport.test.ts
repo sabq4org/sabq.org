@@ -157,24 +157,53 @@ describe("retryImport", () => {
 });
 
 describe("deployRecovery vite:preloadError listener", () => {
-  it("prevents default (swallows the error) only when it actually reloads", async () => {
+  it("swallows sibling preload failures while the same document is navigating away", async () => {
     const { installDeployRecovery } = await import("@/lib/deployRecovery");
     installDeployRecovery();
     const listener = globals.listeners.get("vite:preloadError")!;
     expect(listener).toBeDefined();
 
-    // Fresh cooldown → reload fires → error swallowed so the reload races no one.
+    // The first failed preload starts the cache-busting navigation.
     const firstEvent = { preventDefault: vi.fn() };
     listener(firstEvent);
     expect(globals.location.replace).toHaveBeenCalledTimes(1);
     expect(firstEvent.preventDefault).toHaveBeenCalledTimes(1);
 
-    // Within the cooldown → no reload → the error MUST propagate (no
-    // preventDefault), otherwise Vite resolves the failed import with
-    // `undefined` and poisons every lazy chunk for the next 30s.
+    // A second chunk can fail before location.replace commits. It belongs to
+    // the same recovery: no second reload, but no unhandled rejection either.
     const secondEvent = { preventDefault: vi.fn() };
     listener(secondEvent);
     expect(globals.location.replace).toHaveBeenCalledTimes(1);
-    expect(secondEvent.preventDefault).not.toHaveBeenCalled();
+    expect(secondEvent.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not swallow a repeated failure on the document loaded by recovery", async () => {
+    // sessionStorage survives a reload while the in-memory pending flag does
+    // not. This represents the new document failing again inside the cooldown.
+    globals.store.set(RELOAD_FLAG, String(Date.now()));
+    const { installDeployRecovery } = await import("@/lib/deployRecovery");
+    installDeployRecovery();
+    const listener = globals.listeners.get("vite:preloadError")!;
+    const event = { preventDefault: vi.fn() };
+
+    listener(event);
+
+    expect(globals.location.replace).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("swallows a preload failure while a forced recovery navigation is pending", async () => {
+    const { installDeployRecovery, forceDeployRecoveryReload } = await import(
+      "@/lib/deployRecovery"
+    );
+    installDeployRecovery();
+    forceDeployRecoveryReload();
+    const listener = globals.listeners.get("vite:preloadError")!;
+    const event = { preventDefault: vi.fn() };
+
+    listener(event);
+
+    expect(globals.location.replace).toHaveBeenCalledTimes(1);
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
   });
 });

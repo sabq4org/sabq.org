@@ -20,6 +20,13 @@ const RELOAD_FLAG = "sabq:deploy-reload-at";
 const RELOAD_COOLDOWN_MS = 30_000;
 const CACHE_BUST_PARAM = "_dr";
 
+// Per-document state. sessionStorage's cooldown survives the recovery reload,
+// but this flag intentionally does not: while the current document is already
+// navigating away, any sibling preload failures are part of the same recovery
+// and must not escape as unhandled rejections. On the newly loaded document the
+// flag resets, so a genuine repeated failure still reaches retry/error UI.
+let recoveryNavigationPending = false;
+
 const DYNAMIC_IMPORT_FAILURE_RE =
   /(dynamically imported module|Importing a module script failed|Failed to fetch dynamically imported|error loading dynamically imported module|Loading chunk \d+ failed|Loading CSS chunk)/i;
 
@@ -63,6 +70,7 @@ export function attemptChunkRecoveryReload(reason: string): boolean {
     return false;
   }
   markReloaded();
+  recoveryNavigationPending = true;
   console.warn(
     `[deployRecovery] Stale build detected (${reason}); reloading to fetch the latest deploy.`,
   );
@@ -85,6 +93,7 @@ function reloadOnce(reason: string): void {
 
 /** User-initiated hard refresh — bypasses the auto-reload cooldown. */
 export function forceDeployRecoveryReload(): void {
+  recoveryNavigationPending = true;
   try {
     const url = new URL(window.location.href);
     url.searchParams.set(CACHE_BUST_PARAM, String(Date.now()));
@@ -115,13 +124,15 @@ export function installDeployRecovery(): void {
   // Vite fires this on the window when a preloaded/lazy chunk fails to load —
   // the canonical "shell points at a rotated hash" signal.
   window.addEventListener("vite:preloadError", (event) => {
-    // Only swallow the error when we actually reload. preventDefault() makes
-    // Vite's preload helper RESOLVE the failed import with `undefined` instead
-    // of rejecting — so calling it while the cooldown blocks the reload poisons
-    // every lazy chunk that fails in the next 30s: the caller gets `undefined`,
-    // WebKit throws the dot-less "undefined is not an object (evaluating
-    // '(await t())[n]')", and retryImport never gets a rejection to retry.
-    if (attemptChunkRecoveryReload("vite:preloadError")) {
+    // Swallow only when this document has started recovery (including a sibling
+    // preload that fails before location.replace commits). A cooldown inherited
+    // by the newly loaded document is not enough: swallowing there would make
+    // Vite resolve the failed import with `undefined`, poisoning the lazy chunk
+    // instead of letting retryImport surface the genuine repeated failure.
+    if (
+      recoveryNavigationPending ||
+      attemptChunkRecoveryReload("vite:preloadError")
+    ) {
       event.preventDefault?.();
     }
   });
