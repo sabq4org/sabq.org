@@ -9,6 +9,7 @@ import {
   useAudioBulletinPlayer,
   type AudioBulletin,
 } from "@/lib/audioBulletinPlayer";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 function minutesLabel(n: number): string {
   if (n === 1) return "دقيقة";
@@ -16,7 +17,8 @@ function minutesLabel(n: number): string {
   return n <= 10 ? `${n} دقائق` : `${n} دقيقة`;
 }
 
-const timeFormat = new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Riyadh" });
+// وقت النشر بتوقيت جهاز القارئ (يُبنى عند العرض لأن المنطقة تتبع الصفحة الحالية)
+const timeFormat = () => new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: displayTimeZone() });
 
 /**
  * شريط «نشرة سَبْق» تحت الهيدر: يظهر في الرئيسية عند وجود نشرة حديثة، ويبقى في
@@ -47,7 +49,7 @@ export function AudioBulletinBar() {
   const position = index > 0 && index <= storyCount ? `${index} من ${storyCount}` : null;
   const progress = duration > 0 ? Math.min(100, (time / duration) * 100) : 0;
   const minutes = Math.max(1, Math.round(bulletin.durationSec / 60));
-  const published = timeFormat.format(new Date(bulletin.publishedAt));
+  const published = timeFormat().format(new Date(bulletin.publishedAt));
 
   const onTrackClick = (event: MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();

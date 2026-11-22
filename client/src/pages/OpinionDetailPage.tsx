@@ -64,6 +64,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { formatArticleTimestamp } from "@/lib/formatTime";
 import { cleanOpinionAuthorBio } from "@/components/public/OpinionCard";
+import { displayTimeZone } from "@/lib/displayTimeZone";
 
 type FontSizeOption = "small" | "medium" | "large" | "xlarge";
 type ReadingSurfaceOption = "default" | "paper" | "calm";
@@ -658,8 +659,8 @@ export default function OpinionDetailPage() {
     const locale = "ar-SA-u-ca-gregory-nu-latn";
     return {
       iso: date.toISOString(),
-      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Riyadh" }).format(date),
-      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh" }).format(date),
+      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: displayTimeZone() }).format(date),
+      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: displayTimeZone() }).format(date),
     };
   })();
   const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;

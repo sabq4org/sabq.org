@@ -1,9 +1,10 @@
 /**
  * Unified time formatting utility for Sabq News Platform
- * All timestamps are stored in UTC and displayed in Riyadh timezone (UTC+3)
+ * All timestamps are stored in UTC. Public pages display them in the reader's
+ * device timezone; staff pages keep Asia/Riyadh (see displayTimeZone.ts).
  */
 
-const RIYADH_TIMEZONE = "Asia/Riyadh";
+import { displayTimeZone, RIYADH_TIME_ZONE as RIYADH_TIMEZONE } from "./displayTimeZone";
 
 /**
  * Format a timestamp for display, converting from UTC to Riyadh timezone
@@ -113,14 +114,14 @@ function arabicUnit(
 }
 
 /**
- * Format absolute time in Riyadh timezone
+ * Format absolute time in the display timezone
  */
 function formatAbsolute(date: Date, locale: "ar" | "en" | "ur"): string {
   try {
     const formatter = new Intl.DateTimeFormat(
       locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : locale === "ur" ? "ur-PK-u-ca-gregory-nu-latn" : "en-US",
       {
-        timeZone: RIYADH_TIMEZONE,
+        timeZone: displayTimeZone(),
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -159,7 +160,7 @@ export function formatTimeOnly(
     const formatter = new Intl.DateTimeFormat(
       locale === "ar" ? "ar-SA" : "en-US",
       {
-        timeZone: RIYADH_TIMEZONE,
+        timeZone: displayTimeZone(),
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
@@ -187,7 +188,7 @@ export function formatDateOnly(
     const formatter = new Intl.DateTimeFormat(
       locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : locale === "ur" ? "ur-PK-u-ca-gregory-nu-latn" : "en-US",
       {
-        timeZone: RIYADH_TIMEZONE,
+        timeZone: displayTimeZone(),
         year: "numeric",
         month: "long",
         day: "numeric",
