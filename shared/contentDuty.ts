@@ -241,7 +241,8 @@ export function summarizePresence(
 ): PresenceSummary {
   const past = cells.filter((c) => c !== "future" && c !== "untracked");
   const untrackedCells = cells.findIndex((c) => c !== "untracked");
-  const trackedStart = occ.start + Math.max(0, untrackedCells) * cellMinutes * MINUTE;
+  // لا خانة متتبعة إطلاقًا (الوردية كلها قبل بدء التسجيل): لا تأخر ولا انقطاع.
+  const trackedStart = untrackedCells < 0 ? occ.end : occ.start + untrackedCells * cellMinutes * MINUTE;
   const present = past.filter((c) => c === "action" || c === "view").length;
   let first: number | null = null;
   let last: number | null = null;

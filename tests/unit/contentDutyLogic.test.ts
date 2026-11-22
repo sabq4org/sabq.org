@@ -196,6 +196,18 @@ describe("before presence tracking started", () => {
     expect(s.lateStartMin).toBe(0);
     expect(s.longestGap).toBeNull();
   });
+
+  it("reports nothing for a shift that ended before tracking started", () => {
+    const start = riyadhMidnight(THU) + 8 * 60 * MIN;
+    const occ = { start, end: start + 60 * MIN };
+    const now = start + 3 * 60 * MIN;
+    const cells = buildPresenceCells(occ, new Map(), now, 5, now - MIN);
+    expect(cells.every((c) => c === "untracked")).toBe(true);
+    const s = summarizePresence(occ, cells, new Map(), now);
+    expect(s.presentPct).toBeNull();
+    expect(s.lateStartMin).toBe(0);
+    expect(s.longestGap).toBeNull();
+  });
 });
 
 describe("scheduled publishing", () => {
