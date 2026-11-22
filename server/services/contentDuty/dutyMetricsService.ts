@@ -16,6 +16,7 @@ import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { canReadEnDashboardStats } from "@shared/enDashboardAccess";
 import {
   addDays,
+  attributeUnclaimedPublishes,
   averageReports,
   buildDeskItems,
   computeShiftReport,
@@ -149,6 +150,7 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
         reviewStatus: articles.reviewStatus,
         reviewedAt: articles.reviewedAt,
         reviewedBy: articles.reviewedBy,
+        publishedAt: articles.publishedAt,
       })
       .from(articles)
       .where(or(
@@ -159,7 +161,6 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
       .limit(5000),
   ]);
 
-  const versionRows = mergePublishEvents(versionRowsRaw, publishEventRows);
 
   const deskIds = deskRows.map((r) => r.id);
   const [deskVersionRows, deskPublishEvents] = deskIds.length === 0 ? [[], []] : await Promise.all([
@@ -182,7 +183,21 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
         lt(articleEvents.createdAt, decisionsUntil),
       )),
   ]);
-  const deskVersions = mergePublishEvents(deskVersionRows, deskPublishEvents);
+  const deskVersionsRecorded = mergePublishEvents(deskVersionRows, deskPublishEvents);
+  // نشر بلا ناشر مسجّل يُنسب لآخر من عمل على المادة قبل نشره (المجدول خاصة).
+  const inferred = attributeUnclaimedPublishes(
+    deskRows.filter((r) => r.status === "published").map((r) => ({
+      id: r.id, ownerId: r.ownerId, publishedAt: r.publishedAt ? new Date(r.publishedAt).getTime() : null,
+    })),
+    deskVersionsRecorded.map((v) => ({ articleId: v.articleId, actorId: v.actorId, action: v.action, at: new Date(v.at).getTime() })),
+  );
+  const inferredRows: VersionRow[] = inferred.map((v) => ({ articleId: v.articleId, actorId: v.actorId, action: v.action, at: new Date(v.at) }));
+  const deskVersions = [...deskVersionsRecorded, ...inferredRows];
+  const idSet = new Set(ids);
+  const versionRows = [
+    ...mergePublishEvents(versionRowsRaw, publishEventRows),
+    ...inferredRows.filter((v) => v.actorId && idSet.has(v.actorId) && new Date(v.at).getTime() >= from && new Date(v.at).getTime() < to),
+  ];
 
   const ownArticleIds = Array.from(new Set(versionRows.filter((v) => v.action === "published").map((v) => v.articleId)));
   const breakingIds = new Set(deskRows.filter((r) => r.newsType === "breaking").map((r) => r.id));
@@ -234,7 +249,7 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
   return { minutes, ownVersions, ownReviews, items, breakingIds, lastAction };
 }
 
-function reportFor(occ: DutyOccurrence, data: DutyData, now: number, thresholds: DutyThresholds): ShiftReport {
+function reportFor(occ: DutyOccurrence, data: DutyData, now: number, thresholds: DutyThresholds, trackedFrom?: number): ShiftReport {
   return computeShiftReport({
     occ,
     now,
@@ -244,6 +259,7 @@ function reportFor(occ: DutyOccurrence, data: DutyData, now: number, thresholds:
     items: data.items,
     breakingIds: data.breakingIds,
     thresholds,
+    trackedFrom,
   });
 }
 
@@ -285,7 +301,7 @@ const elapsedPct = (occ: DutyOccurrence, now: number) =>
 export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardResponse> {
   return withCache(`content-duty:card:${viewer.access}:${viewer.access === "manager" ? viewer.userId : ""}`, 20_000, async () => {
     const now = Date.now();
-    const thresholds = await getThresholds();
+    const [thresholds, since] = await Promise.all([getThresholds(), trackingSince()]);
     const { occurrences } = await loadRoster(now - DAY, now + 7 * DAY);
     const current = occurrences.filter((o) => o.start <= now && now < o.end);
     const upcoming = occurrences.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;
@@ -317,7 +333,7 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
         const name = names.get(occ.userId) ?? "بلا اسم";
         const mine = viewer.access === "lead" || occ.userId === viewer.userId;
         const minutes = data.minutes.get(occ.userId) ?? new Map();
-        const report = seesNumbers && mine ? reportFor(occ, data, now, thresholds) : null;
+        const report = seesNumbers && mine ? reportFor(occ, data, now, thresholds, since) : null;
         return {
           userId: viewer.access === "lead" ? occ.userId : null,
           name,
@@ -371,7 +387,7 @@ export async function getDutyRoom(viewer: DutyViewer, requestedKey: string | nul
       .slice(0, 4);
     const from = Math.min(selected.start, ...previous.map((p) => p.start));
     const data = await loadDutyData(from, Math.min(selected.end, now) + MINUTE, [selected.userId], now);
-    const report = reportFor(selected, data, now, thresholds);
+    const report = reportFor(selected, data, now, thresholds, since);
     const averages = averageReports(previous.map((p) => reportFor(p, data, now, thresholds)));
     const live = selected.start <= now && now < selected.end;
 

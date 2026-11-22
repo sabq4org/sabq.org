@@ -5,6 +5,7 @@ export const DUTY_COLORS = {
   view: "#CFE6F7",
   absent: "#F5C9CC",
   future: "#EEF2F6",
+  untracked: "#EEF2F6",
 } as const satisfies Record<DutyCellState, string>;
 
 /** ألوان الأشخاص في الجدول: فاتحة ومختلفة في الإضاءة لا في اللون فقط. */

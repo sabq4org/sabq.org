@@ -12,6 +12,7 @@ import {
   riyadhMidnight,
   riyadhWeekday,
   summarizePresence,
+  attributeUnclaimedPublishes,
   validateShiftInput,
   type ActivityKind,
   type DeskArticle,
@@ -176,5 +177,54 @@ describe("server helpers", () => {
     expect(activityKindFor("POST", "/api/presence/heartbeat")).toBe("view");
     expect(activityKindFor("PATCH", "/api/admin/articles/1")).toBe("action");
     expect(activityKindFor("OPTIONS", "/api/x")).toBeNull();
+  });
+});
+
+describe("before presence tracking started", () => {
+  it("does not mark the early part of a shift as absent", () => {
+    const start = riyadhMidnight(THU) + 20 * 60 * MIN;
+    const occ = { start, end: start + 6 * 60 * MIN };
+    const trackedFrom = start + 140 * MIN;
+    const minutes = new Map<number, ActivityKind>();
+    for (let m = 140; m < 150; m++) minutes.set(start + m * MIN, "action");
+    const now = start + 150 * MIN;
+    const cells = buildPresenceCells(occ, minutes, now, 5, trackedFrom);
+    expect(cells.slice(0, 28).every((c) => c === "untracked")).toBe(true);
+    expect(cells[28]).toBe("action");
+    const s = summarizePresence(occ, cells, minutes, now);
+    expect(s.presentPct).toBe(100);
+    expect(s.lateStartMin).toBe(0);
+    expect(s.longestGap).toBeNull();
+  });
+
+  it("reports nothing for a shift that ended before tracking started", () => {
+    const start = riyadhMidnight(THU) + 8 * 60 * MIN;
+    const occ = { start, end: start + 60 * MIN };
+    const now = start + 3 * 60 * MIN;
+    const cells = buildPresenceCells(occ, new Map(), now, 5, now - MIN);
+    expect(cells.every((c) => c === "untracked")).toBe(true);
+    const s = summarizePresence(occ, cells, new Map(), now);
+    expect(s.presentPct).toBeNull();
+    expect(s.lateStartMin).toBe(0);
+    expect(s.longestGap).toBeNull();
+  });
+});
+
+describe("scheduled publishing", () => {
+  it("credits a publish with no recorded publisher to whoever last saved it", () => {
+    const at = riyadhMidnight(THU) + 21 * 60 * MIN;
+    const out = attributeUnclaimedPublishes(
+      [
+        { id: "sched", ownerId: "reporter", publishedAt: at },
+        { id: "known", ownerId: "reporter", publishedAt: at },
+      ],
+      [
+        { articleId: "sched", actorId: "reporter", action: "created", at: at - 60 * MIN },
+        { articleId: "sched", actorId: "amjad", action: "updated", at: at - 20 * MIN },
+        { articleId: "known", actorId: "amjad", action: "updated", at: at - 5 * MIN },
+        { articleId: "known", actorId: "fahad", action: "published", at },
+      ],
+    );
+    expect(out).toEqual([{ articleId: "sched", actorId: "amjad", action: "published", at }]);
   });
 });

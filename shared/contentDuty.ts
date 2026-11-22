@@ -184,20 +184,28 @@ export function coverageGaps(occurrences: readonly DutyOccurrence[], weekStart: 
 // ---------- الحضور ----------
 
 export type ActivityKind = "view" | "action";
-export type DutyCellState = "action" | "view" | "absent" | "future";
+export type DutyCellState = "action" | "view" | "absent" | "future" | "untracked";
 
-/** خانة لكل 5 دقائق: action إن كتب فيها، view إن كان متصلًا فقط، absent إن غاب. */
+/**
+ * خانة لكل 5 دقائق: action إن كتب فيها، view إن كان متصلًا فقط، absent إن غاب.
+ * untracked: قبل بدء تسجيل الحضور (trackedFrom)، فلا يُحكم فيها بغياب.
+ */
 export function buildPresenceCells(
   occ: Pick<DutyOccurrence, "start" | "end">,
   minutes: ReadonlyMap<number, ActivityKind>,
   now: number,
   cellMinutes = DUTY_CELL_MINUTES,
+  trackedFrom = Number.NEGATIVE_INFINITY,
 ): DutyCellState[] {
   const cells: DutyCellState[] = [];
   const cellMs = cellMinutes * MINUTE;
   for (let t = occ.start; t < occ.end; t += cellMs) {
     if (t >= now) {
       cells.push("future");
+      continue;
+    }
+    if (t + cellMs <= trackedFrom) {
+      cells.push("untracked");
       continue;
     }
     let state: DutyCellState = "absent";
@@ -231,7 +239,10 @@ export function summarizePresence(
   now: number,
   cellMinutes = DUTY_CELL_MINUTES,
 ): PresenceSummary {
-  const past = cells.filter((c) => c !== "future");
+  const past = cells.filter((c) => c !== "future" && c !== "untracked");
+  const untrackedCells = cells.findIndex((c) => c !== "untracked");
+  // لا خانة متتبعة إطلاقًا (الوردية كلها قبل بدء التسجيل): لا تأخر ولا انقطاع.
+  const trackedStart = untrackedCells < 0 ? occ.end : occ.start + untrackedCells * cellMinutes * MINUTE;
   const present = past.filter((c) => c === "action" || c === "view").length;
   let first: number | null = null;
   let last: number | null = null;
@@ -243,7 +254,9 @@ export function summarizePresence(
     }
   }
   const elapsedMin = Math.max(0, Math.floor((until - occ.start) / MINUTE));
-  const lateStartMin = first === null ? elapsedMin : Math.round((first - occ.start) / MINUTE);
+  // قبل بدء التسجيل لا نعرف متى بدأ، فلا يُحسب تأخر.
+  const lateStartMin = trackedStart > occ.start ? 0
+    : first === null ? elapsedMin : Math.round((first - occ.start) / MINUTE);
 
   let longestGap: PresenceSummary["longestGap"] = null;
   let run = 0;
@@ -255,7 +268,7 @@ export function summarizePresence(
     if (run > 0) {
       const minutesGap = run * cellMinutes;
       if (!longestGap || minutesGap > longestGap.minutes) {
-        const start = occ.start + (i - run) * cellMinutes * MINUTE;
+        const start = trackedStart + (i - run) * cellMinutes * MINUTE;
         longestGap = { start, end: Math.min(start + minutesGap * MINUTE, until), minutes: minutesGap };
       }
       run = 0;
@@ -360,6 +373,35 @@ export function buildDeskItems(articles: readonly DeskArticle[], versions: reado
   return items;
 }
 
+/**
+ * نشر لم يُسجَّل ناشره (النشر المجدول، البوت المشترك، أو مسار لا يسجّل الحدث) يُنسب
+ * لآخر من حفظ المادة قبل نشرها: هو من حرّرها أو جدولها واتخذ قرار نشرها.
+ */
+export function attributeUnclaimedPublishes(
+  published: ReadonlyArray<{ id: string; ownerId: string | null; publishedAt: number | null }>,
+  versions: readonly VersionEvent[],
+): VersionEvent[] {
+  const byArticle = new Map<string, VersionEvent[]>();
+  for (const v of versions) {
+    const list = byArticle.get(v.articleId) ?? [];
+    list.push(v);
+    byArticle.set(v.articleId, list);
+  }
+  const out: VersionEvent[] = [];
+  for (const a of published) {
+    if (a.publishedAt === null) continue;
+    const at = a.publishedAt;
+    const events = byArticle.get(a.id) ?? [];
+    const claimed = events.some((e) => e.action === "published" && e.actorId && Math.abs(e.at - at) <= 10 * MINUTE);
+    if (claimed) continue;
+    const handler = events
+      .filter((e) => e.actorId && e.at <= at + MINUTE && e.action !== "published")
+      .sort((x, y) => y.at - x.at)[0];
+    if (handler) out.push({ articleId: a.id, actorId: handler.actorId, action: "published", at });
+  }
+  return out;
+}
+
 export function waitingAt(items: readonly DeskItem[], t: number): DeskItem[] {
   return items.filter((i) => i.waitingSince <= t && (i.decidedAt === null || i.decidedAt > t));
 }
@@ -409,12 +451,14 @@ export interface ShiftReportInput {
   items: readonly DeskItem[];
   breakingIds: ReadonlySet<string>;
   thresholds: DutyThresholds;
+  /** بداية تسجيل الحضور؛ ما قبلها لا يُعدّ غيابًا */
+  trackedFrom?: number;
 }
 
 export function computeShiftReport(input: ShiftReportInput): ShiftReport {
   const { occ, now, minutes, thresholds } = input;
   const until = Math.min(occ.end, now);
-  const cells = buildPresenceCells(occ, minutes, now);
+  const cells = buildPresenceCells(occ, minutes, now, DUTY_CELL_MINUTES, input.trackedFrom);
   const presence = summarizePresence(occ, cells, minutes, now);
   const inWindow = (t: number) => t >= occ.start && t < until;
 
