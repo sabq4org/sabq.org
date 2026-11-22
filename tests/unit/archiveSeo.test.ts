@@ -6,7 +6,16 @@ vi.mock("../../server/db", () => ({ db: {
   execute: mocks.execute,
   select: () => ({ from: () => ({ where: mocks.where }) }),
 } }));
-import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, legacyPathVariants, resolveLegacyArticlePath, resolveArchiveCanonical, isCanonicalArchiveArticle } from "../../server/services/archiveSeo";
+import {
+  AR_SITEMAP_BUCKETS,
+  archiveSitemapBucketCondition,
+  isCanonicalArchiveArticle,
+  isKnownArchiveCanonicalPath,
+  legacyPathVariants,
+  resolveKnownArchiveCanonical,
+  resolveLegacyArticlePath,
+  resolveArchiveCanonical,
+} from "../../server/services/archiveSeo";
 
 describe("archive canonical and legacy redirects", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -53,6 +62,26 @@ describe("archive canonical and legacy redirects", () => {
     mocks.execute.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ slug: "خبر قديم" }] });
     expect(await resolveArchiveCanonical("independent")).toBeNull();
     expect(await resolveArchiveCanonical("copy")).toBe(`/article/${encodeURIComponent("خبر قديم")}`);
+  });
+
+  it("resolves only exact confirmed archive paths on sabq.org", async () => {
+    const path = "/شاهد-حكاية-حمارين-أحدهما-يأكل-التفاح-والآخر-يواجه-قوات-الاحتلال-الإسرائيلي";
+    expect(isKnownArchiveCanonicalPath(path)).toBe(true);
+    expect(isKnownArchiveCanonicalPath(encodeURI(path))).toBe(true);
+    expect(isKnownArchiveCanonicalPath("/شاهد-حكاية-حمارين-أحدهما-يأكل-التفاح")).toBe(false);
+
+    mocks.execute.mockResolvedValueOnce({ rows: [{ slug: "_VitNn4" }] });
+    expect(await resolveKnownArchiveCanonical(path, "sabq.org")).toBe("/article/_VitNn4");
+    const query = new PgDialect().sqlToQuery(mocks.execute.mock.calls[0][0]);
+    expect(query.sql).toContain("WHERE id = $1 AND status = 'published'");
+    expect(query.params).toEqual(["90d78a39-57e7-4564-b146-d08e78ff9958"]);
+
+    mocks.execute.mockClear();
+    expect(await resolveKnownArchiveCanonical(path, "preview.sabq.org")).toBeNull();
+    expect(mocks.execute).not.toHaveBeenCalled();
+
+    mocks.execute.mockResolvedValueOnce({ rows: [] });
+    expect(await resolveKnownArchiveCanonical(path, "sabq.org")).toBeNull();
   });
 
   it("keeps untrusted slugs parameterized and uses full content, not only legacy IDs", async () => {

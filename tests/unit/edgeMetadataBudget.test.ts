@@ -26,6 +26,19 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Pages metadata budget', () => {
+  const confirmedArchivePaths = [
+    '/شاهد-حكاية-حمارين-أحدهما-يأكل-التفاح-والآخر-يواجه-قوات-الاحتلال-الإسرائيلي',
+    '//sabq.org/متدربا-ينهون-دورة-في-الغوص-والإنقاذ-المائي-بمدني-جدة',
+    '//sabq.org/أمطار-خفيفة-ومتوسطة-على-مناطق-مختلفة-من-عفيف-و-مهد-الذهب',
+    '//sabq.org/وفاة-الشاب-العجمة-ابن-مفتش-التعليم-بالطائف-سابقا',
+    '/بالصور-هنا-ستكون-أكبر-مدينة-ثقافية-رياضية-ترفيهية-بالعالم',
+    '//sabq.org/صحة-مكة-تكشف-ملابسات-تناثر-أوراق-أحد-المستشفيات',
+    '//sabq.org/فحوصات-وعملية-جراحية-بالمنظار-للأمير-متعب-بن-عبدالله',
+    '/التدريب-التقني-توجه-متطوعا-متخصصا-لصيانة-مرافق-الجنادرية',
+    '//sabq.org/تعليم-الليث-يعلق-الدراسة-غدا-بمدارس-حقال-الدثن-والفحو-وبني-يزيد-وجدم',
+    '/تدريب-طالب-وطالبة-في-مهرجان-stem-الصيفي-بتعليم-عسير',
+  ];
+
   it.each([
     ['https://sabq.org/article/story?utm_source=x', '/article/story'],
     ['https://sabq.org/category/saudi?page=2&utm_source=x', '/category/saudi?page=2'],
@@ -33,6 +46,24 @@ describe('Pages metadata budget', () => {
   ])('accepts URL, Request and string inputs for %s', (input, expected) => {
     for (const value of [new URL(input), new Request(input), input]) {
       expect(seoRequestPath(value)).toBe(expected);
+    }
+  });
+
+  it('redirects every confirmed archive path from Pages for humans and crawlers', async () => {
+    fetcher.mockImplementation((target) => String(target).includes('/slug-redirect')
+      ? Promise.resolve(Response.json({ redirect: '/article/_VitNn4', gone: false }))
+      : Promise.resolve(Response.json({ status: 200 })));
+    for (const userAgent of ['Mozilla/5.0', 'Claude-SearchBot/1.0']) {
+      for (const path of confirmedArchivePaths) {
+        const response = await onRequest({
+          ...context,
+          request: new Request(`https://sabq.org${encodeURI(path)}`, { headers: { 'User-Agent': userAgent } }),
+          env: { EDGE_SEO: 'on' },
+          next: vi.fn(async () => new Response('<html><body>shell</body></html>', { headers: { 'Content-Type': 'text/html' } })),
+        });
+        expect(response.status, `${userAgent} ${path}`).toBe(301);
+        expect(response.headers.get('location'), `${userAgent} ${path}`).toBe('https://sabq.org/article/_VitNn4');
+      }
     }
   });
 
@@ -51,6 +82,7 @@ describe('Pages metadata budget', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(html);
     expect(fetcher).toHaveBeenCalledWith(`https://next.sabq.org${path}`, expect.objectContaining({ method: 'GET' }));
+    expect(fetcher.mock.calls.find(([target]) => String(target).includes('/slug-redirect'))?.[0]).toContain('host=sabq.org');
     expect(next).not.toHaveBeenCalled();
   });
 

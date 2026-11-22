@@ -1736,7 +1736,7 @@ async function handleRequest(context) {
     try {
       const seoPath = seoRequestPath(url);
       const slug = await cachedJson(
-        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}`,
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}&host=${encodeURIComponent(url.hostname)}`,
         SLUG_REDIRECT_TTL,
         context,
         request,
@@ -1788,7 +1788,7 @@ async function handleRequest(context) {
     const seoPath = seoRequestPath(url);
     const [slug, shell, meta] = await Promise.all([
       cachedJson(
-        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}`,
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(seoPath)}&host=${encodeURIComponent(url.hostname)}`,
         SLUG_REDIRECT_TTL,
         context,
         request,

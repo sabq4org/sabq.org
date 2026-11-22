@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const f = vi.hoisted(() => ({ rows: [] as unknown[][], limits: [] as number[], offsets: [] as number[], author: vi.fn() }));
+const f = vi.hoisted(() => ({ rows: [] as unknown[][], limits: [] as number[], offsets: [] as number[], author: vi.fn(), knownPath: vi.fn(), known: vi.fn() }));
 vi.mock('../../server/db', () => ({ db: { select: () => {
   const result = f.rows.shift() || [];
   const query: any = { then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve) };
@@ -11,7 +11,13 @@ vi.mock('../../server/db', () => ({ db: { select: () => {
 vi.mock('../../server/services/saudiLeagueService', () => ({ getTeamSeoMeta: vi.fn(), getMatchSeoMeta: vi.fn() }));
 vi.mock('../../server/services/asianCupService', () => ({ getAcMatchDetail: vi.fn(), getAcPlayerCard: vi.fn(), getAcTeamProfile: vi.fn() }));
 vi.mock('../../server/services/meetingsService', () => ({ getMeetingByInviteToken: vi.fn() }));
-vi.mock('../../server/services/archiveSeo', () => ({ LEGACY_ARTICLE_PREFIXES: new Set(), resolveLegacyArticlePath: vi.fn(), resolveArchiveCanonical: vi.fn(async () => null) }));
+vi.mock('../../server/services/archiveSeo', () => ({
+  LEGACY_ARTICLE_PREFIXES: new Set(),
+  isKnownArchiveCanonicalPath: f.knownPath,
+  resolveKnownArchiveCanonical: f.known,
+  resolveLegacyArticlePath: vi.fn(),
+  resolveArchiveCanonical: vi.fn(async () => null),
+}));
 vi.mock('../../server/services/authorProfileService', () => ({ getAuthorPageByName: f.author }));
 import router from '../../server/routes/edgeMeta';
 import { bumpSeoCacheGeneration } from '../../server/services/seoCacheInvalidation';
@@ -23,7 +29,7 @@ async function request(route: string, params: Record<string,string>, query: Reco
   await layer.route.stack.at(-1).handle({ params, query, path: route }, res);
   return { body, status, headers };
 }
-beforeEach(() => { f.rows = []; f.limits = []; f.offsets = []; f.author.mockReset(); bumpSeoCacheGeneration('test'); });
+beforeEach(() => { f.rows = []; f.limits = []; f.offsets = []; f.author.mockReset(); f.knownPath.mockReset(); f.knownPath.mockReturnValue(false); f.known.mockReset(); f.known.mockResolvedValue(null); bumpSeoCacheGeneration('test'); });
 
 describe('public SEO projections', () => {
   it('paginates category rows deterministically and gives page two its own canonical', async () => {
@@ -128,6 +134,20 @@ describe('public SEO projections', () => {
     f.rows = [[{englishSlug:'x2', slug:'s2'}]];
     expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/story/news/k27fxz'})).body.redirect).toBe('/article/x2');
     expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/amp/article/x1'})).body.redirect).toBeNull();
+  });
+  it('passes the request host to exact archive redirects', async () => {
+    f.knownPath.mockReturnValue(true);
+    f.known.mockImplementation(async (_path: string, host: string) => host === 'sabq.org' ? '/article/_VitNn4' : null);
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/archive-title', host:'sabq.org'})).body.redirect).toBe('/article/_VitNn4');
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/archive-title', host:'preview.sabq.org'})).body.redirect).toBeNull();
+    expect(f.known).toHaveBeenCalledWith('/archive-title', 'sabq.org');
+    expect(f.known).toHaveBeenCalledWith('/archive-title', 'preview.sabq.org');
+  });
+  it('does not redirect a confirmed archive path after its target is withdrawn', async () => {
+    f.knownPath.mockReturnValue(true);
+    f.known.mockResolvedValue(null);
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/archive-title-withdrawn', host:'sabq.org'})).body)
+      .toEqual({ redirect: null, gone: false });
   });
   it('sends old /en/article links of Arabic articles to the translation or the Arabic article', async () => {
     f.rows = [[], [{id:'a1', englishSlug:'1ehZR8x', slug:'s1'}], []];
