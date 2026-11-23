@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, integer, bigint, jsonb, index, real, primaryKey, uniqueIndex, serial, date, vector } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, integer, bigint, bigserial, jsonb, index, real, primaryKey, uniqueIndex, serial, date, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { whatsappCtaFieldSchema } from "./whatsappCta";
@@ -16190,4 +16190,24 @@ export const staffActivityMinutes = pgTable("staff_activity_minutes", {
 }, (table) => [
   primaryKey({ columns: [table.userId, table.minute] }),
   index("idx_staff_activity_minutes_minute").on(table.minute),
+]);
+
+// «عين المناوبة»: تنبيهات الورديات (migrations/20261123_content_duty_alerts.sql).
+// يكتبها dutyAlertsEngine بـ ON CONFLICT (dedupe_key) DO NOTHING، وتُرسل عبر DUTY_ALERT_WEBHOOK_URL.
+export const contentDutyAlerts = pgTable("content_duty_alerts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  dedupeKey: text("dedupe_key").notNull().unique("content_duty_alerts_dedupe_key_key"),
+  kind: text("kind").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  occurrenceKey: text("occurrence_key"),
+  payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  deferredUntil: timestamp("deferred_until"),
+  deliveredAt: timestamp("delivered_at"),
+  deliveryAttempts: integer("delivery_attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at"),
+  lastError: text("last_error"),
+}, (table) => [
+  index("idx_content_duty_alerts_occurrence").on(table.occurrenceKey),
+  index("idx_content_duty_alerts_created").on(table.createdAt),
 ]);
