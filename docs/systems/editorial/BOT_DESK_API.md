@@ -310,6 +310,97 @@ curl -sS "https://api.sabq.org/api/internal/bot-desk/meetings/<meetingId>/minute
 
 ---
 
+### هـ) «عين المناوبة» (Duty Monitor): تنبيهات الورديات، منذ 2026-11-23
+
+بوت يبلّغ علي وحده بما يجري في ورديات مديري المحتوى. **القناة الأساسية Webhook دفع**، والمسارات هنا قراءة فقط للاستدراك وللإجابة عن «كيف فلان الحين؟». لا يراسل الزملاء، ولا يعدّل الجدول أو الإعدادات، ولا ينشر.
+
+**الصلاحية:** يجب أن يكون مالك التوكن مسؤولًا (`SUPERUSER_ROLE_NAMES`) أو يملك الصلاحية الضيقة `content_duty.monitor`. بدون ذلك يرجع `403 forbidden` مع `details.required = "superuser_or_content_duty.monitor"`.
+- الصلاحية ليست في أي دور، وتُمنح لحساب بعينه عند الحاجة عبر `user_permission_overrides`.
+- صف الصلاحية يضيفه `migrations/20261123_content_duty_alerts.sql`.
+- البوت يرى الأرقام كاملة كالمسؤول.
+
+**التنبيهات (`kind`)** وقيمها الافتراضية، وتُعدّل من تبويب «الجدول»:
+
+| `kind` | متى | `data` |
+|---|---|---|
+| `started` | أول نشاط من قبل البداية بـ30 دقيقة | `firstAt, startAt, lateMin` (`null` إن بدأت الوردية قبل تسجيل الحضور) |
+| `late` | مضت 15 دقيقة بلا أي نشاط. مرة واحدة | `startAt, waitedMin` |
+| `absent` | 60 دقيقة متصلة بلا أي طلب. حتى 5 جولات، وكل غياب مرة واحدة | `since, minutes` |
+| `returned` | أول نشاط بعد تنبيه الغياب | `since, backAt, gapMin` |
+| `idle` | حاضر الآن، لكن لا حفظ ولا نشر منذ 90 دقيقة. جولة جديدة بعد عمل جديد | `anchor, lastWorkAt, minutes` |
+| `breaking_overdue` | عاجل تجاوز حد الانتظار ولا قفل تحرير عليه. مرة لكل فترة انتظار | `articleId, title, waitingSince, waitMin, onDutyUserIds` |
+| `summary` | خلال 20 دقيقة بعد نهاية الوردية | `startAt, endAt, published, edits, reviews, presentPct, lateStartMin, longestGapMin, earlyLeaveMin, responseMedianMin, breakingFast, peakBacklog, leftAtHandoff` |
+
+الأوقات في `data` بالمللي ثانية UTC.
+
+**قواعد ضد الإزعاج:**
+- لا `late` ولا `absent` ولا `idle` في آخر 15 دقيقة من الوردية.
+- لا شيء خارج أوقات الورديات.
+- الإجازة المسجلة لا تُعدّ غيابًا، والبديل يُتابع بمفتاحه واسمه.
+- **ساعات الهدوء** 02:00–06:00 بتوقيت الرياض، قابلة للتعديل والإيقاف. ما يتولد فيها يُحفظ مع `deferred: true` و`deferredUntil`، ثم يُرسل كملخص واحد `duty_digest` عند نهايتها.
+
+**الدفع (Webhook):**
+- **المتغيرات:** `DUTY_ALERT_WEBHOOK_URL` و`DUTY_ALERT_WEBHOOK_SECRET`. بلا الرابط لا شيء يُرسل، والتنبيهات تبقى في السجل.
+- **المصادقة:**
+  - كما في Webhook الديسك: `Authorization: <السر الخام>`.
+  - توقيع إضافي في `X-Sabq-Duty-Timestamp` (ثوانٍ Unix) و`X-Sabq-Duty-Signature: sha256=<hex>`.
+  - القيمة = `HMAC_SHA256(secret, "<timestamp>.<raw body>")`.
+  - تحقق من التوقيع وارفض الطابع الأقدم من 5 دقائق.
+- **التنبيه الفوري:**
+  ```json
+  { "type": "duty_alert", "id": "123", "kind": "absent", "label": "غاب عن اللوحة",
+    "text": "لا نشاط لـفلان على لوحة التحكم منذ 15:30 (60 دقيقة).",
+    "userId": "…", "userName": "فلان", "occurrenceKey": "<shiftId>:<YYYY-MM-DD>:<userId>",
+    "createdAt": "ISO", "deferred": false, "deferredUntil": null, "deliveredAt": null,
+    "data": { "since": 1764160200000, "minutes": 60 },
+    "url": "https://sabq.org/dashboard/content-duty", "sentAt": "ISO" }
+  ```
+- **ملخص الصباح:**
+  ```json
+  { "type": "duty_digest", "id": "digest:120-131", "count": 4, "text": "ملخص ساعات الهدوء (02:00–06:00 بتوقيت الرياض): 4 تنبيه.\n• 02:05 …",
+    "window": { "startMinute": 120, "endMinute": 360, "timeZone": "Asia/Riyadh" },
+    "alerts": [ { …نفس حقول التنبيه بلا type/url/sentAt } ], "url": "…", "sentAt": "ISO" }
+  ```
+- **الموثوقية:**
+  - كل صف يُحجز ذريًا قبل الإرسال، فهو آمن مع نسختين.
+  - الرد 2xx فقط يضبط `delivered_at`.
+  - المحاولات حتى 5، والتأخير بينها 1، 2، 4، 8 دقائق.
+  - الفوري الأقدم من 60 دقيقة لا يُدفع، وملخص الصباح يُدفع حتى 3 ساعات بعد نهاية الهدوء. ما فات يُقرأ من `/duty/alerts`.
+  - الوصول «مرة على الأقل»، فاعتمد `id` لمنع التكرار عندك.
+
+**المسارات (قراءة فقط):**
+
+| الطريقة | المسار | الوصف |
+|---|---|---|
+| `GET` | `/api/internal/bot-desk/duty/alerts?after=<id>&limit=` | سجل التنبيهات تصاعديًا بـ`id > after`. `limit` من 1 إلى 200، والافتراضي 50. يعيد `{ alerts: [ …شكل التنبيه أعلاه بلا type/url/sentAt ], nextCursor, hasMore }`. خزّن `nextCursor`، وبلا جديد يعود كما أُرسل. |
+| `GET` | `/api/internal/bot-desk/duty/alerts/:id` | `{ alert }`، أو `404`. |
+| `GET` | `/api/internal/bot-desk/duty/now` | بطاقة المناوبة الآن (`getDutyCard` بعين المسؤول): `onDuty[]` (الحالة `active/idle/away`، والمتبقي، والمنشور، والخانات)، و`next`، و`waiting`، و`alert`. |
+| `GET` | `/api/internal/bot-desk/duty/shifts/:key` | تقرير وردية (`getDutyRoom`). `key` = `occurrenceKey` من التنبيه (`<shiftId>:<YYYY-MM-DD>:<userId>`) ضمن آخر 14 يومًا، وإلا `404`. |
+| `GET` | `/api/internal/bot-desk/duty/team` | أداء آخر 7 أيام لكل زميل (`getDutyTeam`). |
+
+قبل تنفيذ الترحيل: `/duty/alerts*` يرجع `503 duty_alerts_not_ready`، وبقية المسارات `503 content_duty_not_ready` إن غابت جداول المناوبة.
+
+**حلقة البوت:**
+1. استقبل الـWebhook وتحقق منه، ثم أرسل `text` لعلي، أو صغ رسالتك من `data`.
+2. عند `duty_digest` أرسل رسالة واحدة.
+3. احتياطًا كل بضع دقائق: `GET /duty/alerts?after=<آخر id رأيته>`، وأرسل ما لم يصلك، متجاهلًا ما `deferred: true` قبل `deferredUntil`.
+
+```bash
+curl -sS "https://api.sabq.org/api/internal/bot-desk/duty/alerts?after=$LAST_ID&limit=50" \
+  -H "Authorization: Bearer $SABQ_DUTY_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (compatible; SabqBotDesk/1.0)"
+```
+
+الملفات:
+- `server/routes/botDeskDuty.ts` (المسارات و`requireDutyMonitor`)
+- `server/services/contentDuty/dutyBotService.ts`
+- المحرك `server/services/contentDuty/dutyAlertsEngine.ts`
+- التوصيل `dutyAlertDelivery.ts`
+- المنطق `shared/contentDutyAlerts.ts`
+- الاختبارات `tests/unit/botDeskDuty.test.ts` و`tests/unit/contentDutyAlerts*.test.ts`
+
+---
+
 ## 4) إعداد مستلمي التنبيهات البريدية (Email Alerts Configuration)
 
 تُرسل التنبيهات عبر `sendEmailNotification` في ثلاث حالات:

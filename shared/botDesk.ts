@@ -208,6 +208,8 @@ export type BotDeskErrorCode =
   | "publish_failed"
   | "social_disabled"
   | "video_unavailable"
+  | "content_duty_not_ready"
+  | "duty_alerts_not_ready"
   | "server_error";
 
 export interface BotDeskErrorBody {
