@@ -13,6 +13,7 @@ import {
   riyadhWeekday,
   summarizePresence,
   attributeUnclaimedPublishes,
+  workCountFrom,
   validateShiftInput,
   type ActivityKind,
   type DeskArticle,
@@ -159,6 +160,35 @@ describe("desk items and shift report", () => {
     expect(report.ticks).toEqual([{ offsetMin: 14, breaking: true }]);
     expect(report.hourly[0]).toBe(1);
     expect(report.leftAtHandoff).toBe(1);
+  });
+});
+
+describe("early start", () => {
+  const start = thuMidnight + 8 * 60 * MIN;
+  const occ = { start, end: start + 6 * 60 * MIN, userId: "abdullah" };
+
+  it("credits work done up to 30 minutes before the shift, but not from an earlier own shift", () => {
+    expect(workCountFrom(occ, [occ])).toBe(start - 30 * MIN);
+    const previous = { userId: "abdullah", start: start - 6 * 60 * MIN, end: start - 10 * MIN };
+    expect(workCountFrom(occ, [previous, occ])).toBe(start - 10 * MIN);
+    const other = { userId: "amjad", start: start - 6 * 60 * MIN, end: start };
+    expect(workCountFrom(occ, [other, occ])).toBe(start - 30 * MIN);
+    const overlapping = { userId: "abdullah", start: start - 6 * 60 * MIN, end: start + 10 * MIN };
+    expect(workCountFrom(occ, [overlapping, occ])).toBe(start);
+  });
+
+  it("counts publishes minutes before the start in the first hour", () => {
+    const publish = (id: string, offsetMin: number) => ({ articleId: id, actorId: "abdullah", action: "published", at: start + offsetMin * MIN });
+    const base = {
+      occ, now: start + 7 * MIN, minutes: new Map<number, ActivityKind>(),
+      ownVersions: [publish("a", -5), publish("b", -1), publish("c", -45)],
+      ownReviews: [], items: [], breakingIds: new Set<string>(), thresholds: DEFAULT_DUTY_THRESHOLDS,
+    };
+    expect(computeShiftReport(base).published).toBe(0);
+    const report = computeShiftReport({ ...base, countFrom: workCountFrom(occ, [occ]) });
+    expect(report.published).toBe(2);
+    expect(report.hourly[0]).toBe(2);
+    expect(report.ticks.map((t) => t.offsetMin)).toEqual([0, 0]);
   });
 });
 

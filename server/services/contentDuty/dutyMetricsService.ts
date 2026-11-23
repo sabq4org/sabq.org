@@ -32,6 +32,8 @@ import {
   rosterBlocks,
   waitingAt,
   weekStartKey,
+  workCountFrom,
+  DUTY_EARLY_WORK_MIN,
   type ActivityKind,
   type ContentDutyCardResponse,
   type ContentDutyRoomResponse,
@@ -249,8 +251,16 @@ async function loadDutyData(from: number, to: number, userIds: readonly string[]
   return { minutes, ownVersions, ownReviews, items, breakingIds, lastAction };
 }
 
-function reportFor(occ: DutyOccurrence, data: DutyData, now: number, thresholds: DutyThresholds, trackedFrom?: number): ShiftReport {
+function reportFor(
+  occ: DutyOccurrence,
+  data: DutyData,
+  now: number,
+  thresholds: DutyThresholds,
+  all: readonly DutyOccurrence[],
+  trackedFrom?: number,
+): ShiftReport {
   return computeShiftReport({
+    countFrom: workCountFrom(occ, all),
     occ,
     now,
     minutes: data.minutes.get(occ.userId) ?? new Map(),
@@ -307,7 +317,7 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
     const upcoming = occurrences.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;
     const ids = [...current.map((o) => o.userId), ...current.flatMap((o) => (o.coveredUserId ? [o.coveredUserId] : [])), ...(upcoming ? [upcoming.userId] : [])];
     const names = await loadNames(ids);
-    const from = Math.min(now - 15 * MINUTE, ...current.map((o) => o.start));
+    const from = Math.min(now - 15 * MINUTE, ...current.map((o) => workCountFrom(o, occurrences)));
     const data = await loadDutyData(from, now + MINUTE, current.map((o) => o.userId), now);
     const seesNumbers = viewer.access !== "staff";
     const pending = waitingAt(data.items, now);
@@ -333,7 +343,7 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
         const name = names.get(occ.userId) ?? "بلا اسم";
         const mine = viewer.access === "lead" || occ.userId === viewer.userId;
         const minutes = data.minutes.get(occ.userId) ?? new Map();
-        const report = seesNumbers && mine ? reportFor(occ, data, now, thresholds, since) : null;
+        const report = seesNumbers && mine ? reportFor(occ, data, now, thresholds, occurrences, since) : null;
         return {
           userId: viewer.access === "lead" ? occ.userId : null,
           name,
@@ -385,10 +395,10 @@ export async function getDutyRoom(viewer: DutyViewer, requestedKey: string | nul
       .filter((o) => o.shiftId === selected.shiftId && o.userId === selected.userId && o.end <= selected.start && o.start >= since)
       .sort((a, b) => b.start - a.start)
       .slice(0, 4);
-    const from = Math.min(selected.start, ...previous.map((p) => p.start));
+    const from = Math.min(workCountFrom(selected, occurrences), ...previous.map((p) => workCountFrom(p, occurrences)));
     const data = await loadDutyData(from, Math.min(selected.end, now) + MINUTE, [selected.userId], now);
-    const report = reportFor(selected, data, now, thresholds, since);
-    const averages = averageReports(previous.map((p) => reportFor(p, data, now, thresholds)));
+    const report = reportFor(selected, data, now, thresholds, occurrences, since);
+    const averages = averageReports(previous.map((p) => reportFor(p, data, now, thresholds, occurrences)));
     const live = selected.start <= now && now < selected.end;
 
     let waiting: WaitingDraft[] = [];
@@ -480,10 +490,12 @@ export async function getDutyTeam(viewer: DutyViewer): Promise<ContentDutyTeamRe
     const now = Date.now();
     const todayKey = riyadhDateKey(now);
     const firstKey = addDays(todayKey, -6);
-    const from = riyadhMidnight(firstKey);
+    const weekFrom = riyadhMidnight(firstKey);
+    // نصف ساعة قبل أول وردية: عمل من بدأ مبكرًا يُحسب لورديته.
+    const from = weekFrom - DUTY_EARLY_WORK_MIN * MINUTE;
     const thresholds = await getThresholds();
     const [{ occurrences }, since] = await Promise.all([loadRoster(from, now), trackingSince()]);
-    const mine = occurrences.filter((o) => o.start >= from && o.start < now && (viewer.access === "lead" || o.userId === viewer.userId));
+    const mine = occurrences.filter((o) => o.start >= weekFrom && o.start < now && (viewer.access === "lead" || o.userId === viewer.userId));
     const userIds = Array.from(new Set(mine.map((o) => o.userId)));
     const [names, data] = await Promise.all([
       loadNames(userIds),
@@ -492,7 +504,7 @@ export async function getDutyTeam(viewer: DutyViewer): Promise<ContentDutyTeamRe
     const rows = userIds.map((userId) => {
       const occs = mine.filter((o) => o.userId === userId);
       const tracked = occs.filter((o) => o.start >= since);
-      const reports = tracked.map((o) => ({ occ: o, report: reportFor(o, data, now, thresholds) }));
+      const reports = tracked.map((o) => ({ occ: o, report: reportFor(o, data, now, thresholds, occurrences) }));
       let present = 0;
       let past = 0;
       for (const { report } of reports) {
@@ -503,7 +515,7 @@ export async function getDutyTeam(viewer: DutyViewer): Promise<ContentDutyTeamRe
         }
       }
       const responses = data.items
-        .filter((i) => i.decidedBy === userId && i.decidedAt !== null && tracked.some((o) => (i.decidedAt as number) >= o.start && (i.decidedAt as number) < o.end))
+        .filter((i) => i.decidedBy === userId && i.decidedAt !== null && tracked.some((o) => (i.decidedAt as number) >= workCountFrom(o, occurrences) && (i.decidedAt as number) < o.end))
         .map((i) => Math.round(((i.decidedAt as number) - i.waitingSince) / MINUTE))
         .sort((a, b) => a - b);
       const mid = Math.floor(responses.length / 2);
