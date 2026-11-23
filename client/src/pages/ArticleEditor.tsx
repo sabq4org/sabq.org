@@ -203,7 +203,8 @@ import { ArticleEditRequestsBanner } from "@/components/articles/ArticleEditRequ
 import { EditorTitleCheckNotice } from "@/components/articles/TitleCheckBadge";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
 import { uploadNewsImage, newsImageUploadLabel, NEWS_IMAGE_MAX_BYTES, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
-import { displayTimeZone } from "@/lib/displayTimeZone";
+import { RIYADH_TIME_ZONE } from "@/lib/displayTimeZone";
+import { pickerDateToWall, RIYADH_NOTE, riyadhNowPickerDate, riyadhWallToIso, toRiyadhWall, wallToPickerDate } from "@/lib/riyadhSchedule";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -732,12 +733,8 @@ export default function ArticleEditor() {
     if (article && article.status !== "draft") return;
     if (publishType === "scheduled" || scheduledAt) return;
     writerSlotPrefillRef.current = opinionAuthorId;
-    const d = new Date(suggestion.nextSlot);
-    const pad = (n: number) => String(n).padStart(2, "0");
     setPublishType("scheduled");
-    setScheduledAt(
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
-    );
+    setScheduledAt(toRiyadhWall(suggestion.nextSlot));
   }, [isOpinionAuthor, canSchedule, articleType, opinionAuthorId, writerSlotData, article, publishType, scheduledAt]);
 
   // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره من حوار في مكانه
@@ -954,13 +951,8 @@ export default function ArticleEditor() {
       const savedPublishType = (article.publishType as any) || "instant";
       setPublishType(article.status === "published" ? "instant" : savedPublishType);
       if (article.scheduledAt && article.status !== "published") {
-        const d = new Date(article.scheduledAt);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        setScheduledAt(`${year}-${month}-${day}T${hours}:${minutes}`);
+        // حقل الجدولة بساعة الرياض دائمًا (مثل التطبيقين)
+        setScheduledAt(toRiyadhWall(article.scheduledAt));
       } else {
         setScheduledAt("");
       }
@@ -1690,7 +1682,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         imageFocalPoint: imageFocalPoint || null,
         articleType,
         publishType: isOpinionAuthor ? "instant" : publishType,
-        scheduledAt: !isOpinionAuthor && publishType === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        scheduledAt: !isOpinionAuthor && publishType === "scheduled" && scheduledAt ? riyadhWallToIso(scheduledAt) : null,
         hideFromHomepage,
         isVideoTemplate,
         videoUrl: isVideoTemplate && normalizedVideoUrl ? normalizedVideoUrl : null,
@@ -1806,7 +1798,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         } else if (publishNow && publishType === "instant") {
           articleData.publishedAt = new Date().toISOString();
         } else if (publishNow && publishType === "scheduled" && scheduledAt) {
-          articleData.publishedAt = new Date(scheduledAt).toISOString();
+          articleData.publishedAt = riyadhWallToIso(scheduledAt) ?? new Date().toISOString();
         }
       } else {
         // For updates, check for admin backdating
@@ -1926,11 +1918,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const isUpdate = !isNewArticle && status === "published";
       const isScheduled = !isOpinionAuthor && variables.publishNow && publishType === "scheduled";
       const scheduledLabel = isScheduled && scheduledAt
-        ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
-            timeZone: displayTimeZone(),
+        ? `${new Date(riyadhWallToIso(scheduledAt) ?? Date.now()).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+            timeZone: RIYADH_TIME_ZONE,
             dateStyle: "medium",
             timeStyle: "short",
-          })
+          })} ${RIYADH_NOTE}`
         : "";
       const successTitle = isScheduled
         ? "تمت الجدولة بنجاح"
@@ -4942,17 +4934,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
                         {publishType === "scheduled" && (
                           <div className="space-y-1.5">
-                            <Label className="text-xs">التاريخ والوقت</Label>
+                            <Label className="text-xs">التاريخ والوقت ({RIYADH_NOTE})</Label>
                             <DatePicker
-                              selected={scheduledAt ? new Date(scheduledAt) : null}
+                              selected={scheduledAt ? wallToPickerDate(scheduledAt) : null}
                               onChange={(date: Date | null) => {
                                 if (date) {
-                                  const year = date.getFullYear();
-                                  const month = String(date.getMonth() + 1).padStart(2, '0');
-                                  const day = String(date.getDate()).padStart(2, '0');
-                                  const hours = String(date.getHours()).padStart(2, '0');
-                                  const minutes = String(date.getMinutes()).padStart(2, '0');
-                                  setScheduledAt(`${year}-${month}-${day}T${hours}:${minutes}`);
+                                  setScheduledAt(pickerDateToWall(date));
                                 } else {
                                   setScheduledAt("");
                                 }
@@ -4963,7 +4950,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                               dateFormat="dd/MM/yyyy - HH:mm"
                               locale="ar"
                               placeholderText="اختر التاريخ والوقت"
-                              minDate={new Date()}
+                              minDate={riyadhNowPickerDate()}
                               className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-right text-sm"
                               calendarClassName="!font-sans"
                               wrapperClassName="w-full"
