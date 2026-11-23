@@ -19,8 +19,11 @@ import {
   type DutyShiftRule,
   type DutyThresholds,
 } from "@shared/contentDuty";
+import { normalizeAlertSettings, type DutyAlertSettings } from "@shared/contentDutyAlerts";
 
 export const DUTY_THRESHOLDS_KEY = "content_duty_thresholds";
+/** إعدادات «عين المناوبة»: مفتاح لكل تنبيه، والمدد، وساعات الهدوء. */
+export const DUTY_ALERT_SETTINGS_KEY = "content_duty_alert_settings";
 const SEED_LOCK_KEY = "content_duty_env_seeded";
 
 export class ContentDutyNotReadyError extends Error {
@@ -245,6 +248,24 @@ export async function saveThresholds(value: unknown): Promise<DutyThresholds> {
   const next = normalizeThresholds(value);
   await db.insert(systemSettings)
     .values({ key: DUTY_THRESHOLDS_KEY, value: next, category: "editorial" })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: next, updatedAt: new Date() } });
+  return next;
+}
+
+export async function getAlertSettings(): Promise<DutyAlertSettings> {
+  try {
+    const [row] = await db.select({ value: systemSettings.value }).from(systemSettings)
+      .where(eq(systemSettings.key, DUTY_ALERT_SETTINGS_KEY)).limit(1);
+    return normalizeAlertSettings(row?.value);
+  } catch {
+    return normalizeAlertSettings(null);
+  }
+}
+
+export async function saveAlertSettings(value: unknown): Promise<DutyAlertSettings> {
+  const next = normalizeAlertSettings(value);
+  await db.insert(systemSettings)
+    .values({ key: DUTY_ALERT_SETTINGS_KEY, value: next, category: "editorial" })
     .onConflictDoUpdate({ target: systemSettings.key, set: { value: next, updatedAt: new Date() } });
   return next;
 }

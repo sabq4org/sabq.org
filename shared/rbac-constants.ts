@@ -215,6 +215,10 @@ export const PERMISSION_CODES = {
   // مزادات إنفاذ — حساب إنفاذ يُدخل ويرسل، ومحرر سبق يعتمد. الأدمن يمر عبر "*".
   INFATH_SUBMIT: "infath.submit",
   INFATH_APPROVE: "infath.approve",
+
+  // «عين المناوبة» — قراءة تنبيهات الورديات وحالتها عبر /api/internal/bot-desk/duty/* فقط.
+  // ليست في أي دور؛ الأدمن يمر عبر "*". (migrations/20261123_content_duty_alerts.sql)
+  CONTENT_DUTY_MONITOR: "content_duty.monitor",
 } as const;
 
 // Role to permissions mapping (for UI display)
@@ -554,6 +558,9 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED]: "تعديل/إلغاء المنشورات المجدولة",
   [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG]: "عرض سجل النشر الاجتماعي",
   [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_ACCOUNTS]: "إدارة حسابات المنصات وربطها",
+
+  // عين المناوبة
+  [PERMISSION_CODES.CONTENT_DUTY_MONITOR]: "متابعة ورديات المناوبة (واجهة البوت، قراءة فقط)",
 };
 
 // Helper function to get all permissions for given roles.

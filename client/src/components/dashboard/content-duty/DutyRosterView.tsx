@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ContentDutyRosterResponse, DutyThresholds, RosterShiftView } from "@shared/contentDuty";
 import { addDays, DUTY_DAY_NAMES, minuteLabel } from "@shared/contentDuty";
+import { DUTY_ALERT_KINDS, DUTY_ALERT_LABELS, type DutyAlertSettings } from "@shared/contentDutyAlerts";
 import { apiRequest } from "@/lib/queryClient";
 import { personColor } from "@/lib/contentDuty";
 import { DUTY_CARD_URL, DUTY_ROOM_URL, DUTY_ROSTER_URL, DUTY_TEAM_URL } from "@/hooks/useContentDuty";
@@ -188,6 +189,70 @@ function ThresholdsEditor({ value }: { value: DutyThresholds }) {
   );
 }
 
+/** «عين المناوبة»: تنبيهات علي (مفتاح لكل نوع، والمدد، وساعات الهدوء). */
+function DutyAlertsEditor({ value, webhookConfigured }: { value: DutyAlertSettings; webhookConfigured: boolean }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const save = useDutyMutation(
+    () => apiRequest("/api/admin/content-duty/alert-settings", { method: "PUT", body: JSON.stringify({ settings: draft }) }),
+    "حُفظت إعدادات التنبيهات",
+  );
+  const durations: Array<{ key: "lateMin" | "absentMin" | "idleMin"; label: string; min: number }> = [
+    { key: "lateMin", label: "«لم يبدأ بعد» بعد", min: 5 },
+    { key: "absentMin", label: "«غاب» بلا أي طلب", min: 15 },
+    { key: "idleMin", label: "«بلا عمل» بلا حفظ أو نشر", min: 30 },
+  ];
+  const numberInput = "h-9 w-20 rounded-full bg-[#F4F7FB] px-3 text-center font-semibold tabular-nums";
+  return (
+    <section aria-labelledby="duty-alerts" className={`${surface} overflow-hidden`}>
+      <div className="px-5 pb-2 pt-[18px]">
+        <h2 id="duty-alerts" className="m-0 text-base font-bold">تنبيهات عين المناوبة</h2>
+        <p className="m-0 mt-1 text-xs text-[#617183]">
+          {webhookConfigured ? "تصل فورًا عبر Webhook البوت." : "رابط Webhook غير مضبوط: التنبيهات تُحفظ ولا تُرسل."}
+        </p>
+      </div>
+      {DUTY_ALERT_KINDS.map((kind) => (
+        <label key={kind} className="flex items-center justify-between gap-2.5 border-t border-[#EEF2F6] px-5 py-2.5 text-sm">
+          {DUTY_ALERT_LABELS[kind]}
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-[#1E9BE6]"
+            checked={draft.enabled[kind]}
+            onChange={(e) => setDraft({ ...draft, enabled: { ...draft.enabled, [kind]: e.target.checked } })}
+          />
+        </label>
+      ))}
+      {durations.map((r) => (
+        <label key={r.key} className="flex items-center justify-between gap-2.5 border-t border-[#EEF2F6] px-5 py-2.5 text-sm">
+          {r.label}
+          <span className="inline-flex items-center gap-1.5">
+            <input type="number" dir="ltr" min={r.min} max={240} className={numberInput} value={draft[r.key]} onChange={(e) => setDraft({ ...draft, [r.key]: Number(e.target.value) })} />
+            د
+          </span>
+        </label>
+      ))}
+      <label className="flex items-center justify-between gap-2.5 border-t border-[#EEF2F6] px-5 py-2.5 text-sm">
+        ساعات الهدوء (ملخص واحد عند نهايتها)
+        <input
+          type="checkbox"
+          className="h-5 w-5 accent-[#1E9BE6]"
+          checked={draft.quietHours.enabled}
+          onChange={(e) => setDraft({ ...draft, quietHours: { ...draft.quietHours, enabled: e.target.checked } })}
+        />
+      </label>
+      <div className="flex items-center justify-between gap-2.5 border-t border-[#EEF2F6] px-5 py-2.5 text-sm">
+        <span>من – إلى (الرياض)</span>
+        <span className="inline-flex items-center gap-1.5" dir="ltr">
+          <input type="time" aria-label="بداية الهدوء" className={`${input} h-9`} disabled={!draft.quietHours.enabled} value={toTime(draft.quietHours.startMinute)} onChange={(e) => setDraft({ ...draft, quietHours: { ...draft.quietHours, startMinute: toMinute(e.target.value) } })} />
+          <span>–</span>
+          <input type="time" aria-label="نهاية الهدوء" className={`${input} h-9`} disabled={!draft.quietHours.enabled} value={toTime(draft.quietHours.endMinute)} onChange={(e) => setDraft({ ...draft, quietHours: { ...draft.quietHours, endMinute: toMinute(e.target.value) } })} />
+        </span>
+      </div>
+      <div className="border-t border-[#EEF2F6] p-4"><button type="button" className={`${soft} w-full`} disabled={save.isPending} onClick={() => save.mutate(undefined)}>حفظ التنبيهات</button></div>
+    </section>
+  );
+}
+
 export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterResponse; onWeek: (week: string) => void }) {
   const [editing, setEditing] = useState<RosterShiftView | null>(null);
   const isLead = roster.access === "lead";
@@ -293,6 +358,7 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
             <ShiftEditor roster={roster} editing={editing} onDone={() => setEditing(null)} />
             <ExceptionEditor roster={roster} />
             <ThresholdsEditor value={roster.thresholds} />
+            {roster.alerts ? <DutyAlertsEditor value={roster.alerts.settings} webhookConfigured={roster.alerts.webhookConfigured} /> : null}
           </aside>
         ) : null}
       </div>

@@ -1,0 +1,114 @@
+{
+ "_note": "Anonymized replay of prod staff_activity_minutes (read-only SELECT on 2026-11-23). People are U1..U4 (dense rank of user id), no names or ids. Activity is minute offsets from 2026-11-22 20:00 Asia/Riyadh with a=action, v=view. Shift rules and leave dates are the real roster shape.",
+ "baseRiyadh": "2026-11-22T20:00",
+ "trackedFromOffset": 143,
+ "shifts": [
+  {
+   "id": "sA",
+   "userId": "U1",
+   "days": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "startMinute": 840,
+   "endMinute": 1200
+  },
+  {
+   "id": "sB",
+   "userId": "U1",
+   "days": [
+    6
+   ],
+   "startMinute": 600,
+   "endMinute": 960
+  },
+  {
+   "id": "sC",
+   "userId": "U2",
+   "days": [
+    0,
+    1,
+    2,
+    3,
+    5,
+    6
+   ],
+   "startMinute": 1200,
+   "endMinute": 120
+  },
+  {
+   "id": "sD",
+   "userId": "U3",
+   "days": [
+    4,
+    5,
+    6
+   ],
+   "startMinute": 1200,
+   "endMinute": 120
+  },
+  {
+   "id": "sE",
+   "userId": "U4",
+   "days": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "startMinute": 480,
+   "endMinute": 840
+  },
+  {
+   "id": "sF",
+   "userId": "U4",
+   "days": [
+    5
+   ],
+   "startMinute": 780,
+   "endMinute": 1140
+  }
+ ],
+ "leave": [
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-23"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-24"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-25"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-26"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-27"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-28"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-29"
+  },
+  {
+   "userId": "U4",
+   "dutyDate": "2026-11-30"
+  }
+ ],
+ "activity": {
+  "U1": "250a,272a,273v,274v,275a,276a,277a,278a,282a,285a",
+  "U2": "143a,144a,145a,146a,147a,148a,149a,150a,151a,152v,154v,155a,156a,157a,158a,159a,160v,161a,162a,163a,166v,168a,169v,170a,171a,172a,173a,174a,175v,176v,177a,178a,179a,180a,181a,182a,184v,185a,186a,187a,188a,190a,191a,192a,193a,194v,195a,196a,197v,198v,199v,200v,201a,206v,207a,208a,209a,210a,211a,212a,213a,214a,215v,216v,217a,218a,219v,220a,221a,222a,223a,224a,225v,226a,227v,228a,229a,230a,231a,232a,233a,234a,235a,236a,237a,238a,239a,240v,242a,243a,244v,245v,246v,247v,248v,249v,250v,251v,252v,253v,254v,255v,256a,257v,258v,259v,260v,267a,268v,269v,270a,271a,272a,273a,274a,275v,276v,277v,278v,279v,280v,281v,282a,284v,285v,286a,287a,288a,289a,290v,291a,292a,293v,294a,295a,296a,297a,298a,299a,300a,301a,304v,305a,306a,307a,308a,309v,310v,311v,312v,313v,314v,315v,316v,317v,318v,319v,320v,321v,322v,326v,330v,331v,333a,334a,335a,336v,337a,338a,339v,340a,341a,342a,343a,344a,360a,361v,370a,401a,402a,403v,404v,444a,457v,609a,610v,611v,612v,613a,614v,702a"
+ }
+}
