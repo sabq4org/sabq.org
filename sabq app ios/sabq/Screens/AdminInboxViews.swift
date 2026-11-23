@@ -16,7 +16,7 @@ struct AdminOpinionTicketRoute: Hashable { let id: String }
 private let adminInboxCorner: CGFloat = SabqRadius.medium
 
 private func adminInboxDate(_ date: Date) -> String {
-    "\(SabqFormatters.arabicDate.string(from: date)) · \(SabqFormatters.riyadhTime.string(from: date))"
+    "\(SabqFormatters.arabicDate.string(from: date)) · \(SabqFormatters.localTime.string(from: date))"
 }
 
 /// Status colours resolved to the design system's status roles.

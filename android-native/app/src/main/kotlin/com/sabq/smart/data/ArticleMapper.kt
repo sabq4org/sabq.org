@@ -1,5 +1,6 @@
 package com.sabq.smart.data
 
+import com.sabq.smart.util.displayZone
 import com.sabq.smart.data.api.ApiArticle
 import com.sabq.smart.ui.components.ImageFocalPoint
 import java.time.Duration
@@ -210,7 +211,7 @@ private fun formatReadingMinutes(minutes: Int?): String? {
  *  Internal لأن شريط الزوايا يعيد استخدامه لتاريخ MuqTopic النسبي. */
 internal fun parseDate(raw: String?): ZonedDateTime? {
     if (raw.isNullOrBlank()) return null
-    return runCatching { OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.of("Asia/Riyadh")) }
+    return runCatching { OffsetDateTime.parse(raw).atZoneSameInstant(displayZone()) }
         .recoverCatching { ZonedDateTime.parse(raw) }
         .recoverCatching {
             ZonedDateTime.parse(
@@ -231,7 +232,7 @@ internal fun parseDate(raw: String?): ZonedDateTime? {
  */
 internal fun formatRelativeDate(date: ZonedDateTime?): String {
     if (date == null) return ""
-    val now = ZonedDateTime.now(ZoneId.of("Asia/Riyadh"))
+    val now = ZonedDateTime.now(displayZone())
     val diff = Duration.between(date, now)
     return when {
         diff.isNegative -> "الآن"

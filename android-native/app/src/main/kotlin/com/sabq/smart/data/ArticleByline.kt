@@ -1,5 +1,6 @@
 package com.sabq.smart.data
 
+import com.sabq.smart.util.displayZone
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -8,10 +9,10 @@ import java.util.Locale
 /**
  * سطر الكاتب في الخبر كما في الويب (#1598) ونظير iOS (`Article.resolveAuthorRole`
  * و`publicationDate/publicationClock/lastUpdatedLabel/readingLabel`).
- * التواريخ بتوقيت الرياض وبأرقام لاتينية (الويب `ar-SA-u-ca-gregory-nu-latn`).
+ * التواريخ بتوقيت جهاز القارئ (displayZone) وبأرقام لاتينية (الويب `ar-SA-u-ca-gregory-nu-latn`).
  */
 object ArticleByline {
-    private val riyadh: ZoneId = ZoneId.of("Asia/Riyadh")
+    private val riyadh: ZoneId get() = displayZone()
     private val saudi: Locale = Locale.forLanguageTag("ar-SA")
     private val dateFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", saudi)
     private val clockFormatter = DateTimeFormatter.ofPattern("hh:mm a", saudi)

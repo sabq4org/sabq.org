@@ -569,7 +569,7 @@ nonisolated enum EditorialText {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "ar_SA@numbers=latn;calendar=gregorian")
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = .autoupdatingCurrent
         f.dateFormat = pattern
         return f.string(from: date)
     }

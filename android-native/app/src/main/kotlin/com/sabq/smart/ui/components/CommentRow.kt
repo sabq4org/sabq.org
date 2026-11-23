@@ -1,5 +1,6 @@
 package com.sabq.smart.ui.components
 
+import com.sabq.smart.util.displayZone
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -52,7 +53,6 @@ import com.sabq.smart.data.Comment
 import com.sabq.smart.ui.theme.SabqTheme
 import java.time.Duration
 import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Locale
 
@@ -459,7 +459,7 @@ private fun ThreadLineOverlay(
  */
 private fun relativeTime(rawIso: String): String {
     val date = parseIso(rawIso) ?: return rawIso
-    val now = ZonedDateTime.now(ZoneId.of("Asia/Riyadh"))
+    val now = ZonedDateTime.now(displayZone())
     val diff = Duration.between(date, now)
     return when {
         diff.isNegative -> "الآن"
@@ -478,7 +478,7 @@ private fun relativeTime(rawIso: String): String {
 
 private fun parseIso(s: String): ZonedDateTime? {
     if (s.isBlank()) return null
-    return runCatching { OffsetDateTime.parse(s).atZoneSameInstant(ZoneId.of("Asia/Riyadh")) }
+    return runCatching { OffsetDateTime.parse(s).atZoneSameInstant(displayZone()) }
         .recoverCatching { ZonedDateTime.parse(s) }
         .getOrNull()
 }

@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.editorial
 
+import com.sabq.smart.util.displayZone
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -558,7 +559,7 @@ object EditorialStates {
 }
 
 object EditorialText {
-    private val riyadh: ZoneId = ZoneId.of("Asia/Riyadh")
+    private val riyadh: ZoneId get() = displayZone()
     private val arabic = Locale.forLanguageTag("ar")
 
     fun https(raw: String?): String? =
@@ -603,10 +604,10 @@ object EditorialText {
     fun dayTime(raw: String?, now: Instant = Instant.now()): String = dayTime(parse(raw), now)
 
     /** «أمس 21:10» أو «31 أكتوبر 08:40» بالأرقام اللاتينية والتقويم الميلادي. */
-    fun dayTime(date: Instant?, now: Instant = Instant.now()): String {
+    fun dayTime(date: Instant?, now: Instant = Instant.now(), zone: ZoneId = riyadh): String {
         date ?: return ""
-        val local = date.atZone(riyadh)
-        val today = now.atZone(riyadh).toLocalDate()
+        val local = date.atZone(zone)
+        val today = now.atZone(zone).toLocalDate()
         val time = format(local, "HH:mm")
         return when (local.toLocalDate()) {
             today -> "اليوم $time"

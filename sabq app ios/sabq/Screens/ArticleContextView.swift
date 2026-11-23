@@ -269,12 +269,12 @@ struct ArticleContextView: View {
         return item.isCurrent ? "\(date)، \(item.article.title)، هذا الخبر" : "\(date)، \(item.article.title)"
     }
 
-    /// «2 سبتمبر» بأرقام لاتينية وبتوقيت الرياض، كبقية تواريخ التطبيق.
+    /// «2 سبتمبر» بأرقام لاتينية وبتوقيت جهاز القارئ، كبقية تواريخ التطبيق.
     private static let dayMonth: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ar-SA-u-ca-gregory-nu-latn")
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = .autoupdatingCurrent
         f.dateFormat = "d MMMM"
         return f
     }()

@@ -66,11 +66,26 @@ nonisolated enum SabqFormatters {
         }
     }
 
+    /// منطقة العرض: منطقة جهاز المستخدم (قارئ في القاهرة يرى وقت القاهرة)، مطابقةً للويب
+    /// (`client/src/lib/displayTimeZone.ts`). `autoupdatingCurrent` يتبع تغيير منطقة الجهاز.
+    /// المنسّقات التي ما زال اسمها `riyadh…` تعرض بتوقيت الجهاز، عدا `riyadhTime`
+    /// و`riyadhWeekdayDate` اللذين يبقيان بتوقيت الرياض لمواعيد التحرير بجوار حقل الجدولة.
+    static let displayTimeZone: TimeZone = .autoupdatingCurrent
+
+    /// «HH:mm» بتوقيت جهاز المستخدم (التغطية الحية، صندوق الرسائل).
+    static let localTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.timeZone = displayTimeZone
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     static let riyadhDayMonth: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "d MMMM"
         return f
     }()
@@ -99,7 +114,7 @@ nonisolated enum SabqFormatters {
     static let riyadhHourMinute: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "h:mm"
         return f
     }()
@@ -108,7 +123,7 @@ nonisolated enum SabqFormatters {
     static let riyadhPeriod: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "a"
         return f
     }()
@@ -118,34 +133,34 @@ nonisolated enum SabqFormatters {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "EEEE d MMMM"
         return f
     }()
 
-    /// تقويم ميلادي بتوقيت الرياض لمقارنة الأيام في الشريط الزمني.
+    /// تقويم ميلادي بتوقيت جهاز القارئ لمقارنة الأيام في الشريط الزمني.
     static let riyadhCalendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
-        c.timeZone = TimeZone(identifier: "Asia/Riyadh") ?? .current
+        c.timeZone = displayTimeZone
         return c
     }()
 
-    /// تاريخ النشر بتوقيت الرياض بأرقام لاتينية — «12 سبتمبر 2026» (سطر الكاتب في الويب).
+    /// تاريخ النشر بتوقيت جهاز القارئ بأرقام لاتينية — «12 سبتمبر 2026» (سطر الكاتب في الويب).
     static let riyadhDate: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "d MMMM yyyy"
         return f
     }()
 
-    /// ساعة النشر 12-ساعة بتوقيت الرياض — «07:23 ص» كما في الويب (`hour12: true`).
+    /// ساعة النشر 12-ساعة بتوقيت جهاز القارئ — «07:23 ص» كما في الويب (`hour12: true`).
     static let riyadhClock12: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "hh:mm a"
         return f
     }()
@@ -155,7 +170,7 @@ nonisolated enum SabqFormatters {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = displayTimeZone
         f.dateFormat = "d MMMM yyyy، hh:mm a"
         return f
     }()
