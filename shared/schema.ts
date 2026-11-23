@@ -16294,6 +16294,36 @@ export const opinionWriterEngagement = pgTable("opinion_writer_engagement", {
 
 export type OpinionWriterEngagement = typeof opinionWriterEngagement.$inferSelect;
 
+// إضافات القارئ على مقال الرأي (shared/opinionReaderExtras.ts): «جملة المقال» التي
+// يختارها الكاتب لبطاقة المشاركة، وتفعيل «أوافق / لا أوافق» في نهاية المقال.
+// الأصوات نفسها في article_polls/poll_options/poll_votes (استطلاع بخيارين يُنشأ عند أول عرض).
+// migrations/20261124_opinion_reader_extras.sql
+export const opinionArticleExtras = pgTable("opinion_article_extras", {
+  articleId: varchar("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  pullQuote: text("pull_quote"),
+  agreeVoteEnabled: boolean("agree_vote_enabled").notNull().default(false),
+  agreePollId: varchar("agree_poll_id").references(() => articlePolls.id, { onDelete: "set null" }),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type OpinionArticleExtras = typeof opinionArticleExtras.$inferSelect;
+
+// تغيير موعد النشر بيد الكاتب: مرة واحدة لكل مقال (المفتاح الأساسي هو المقال).
+// migrations/20261124_opinion_reader_extras.sql
+export const opinionWriterReschedules = pgTable("opinion_writer_reschedules", {
+  articleId: varchar("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  writerId: varchar("writer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fromAt: timestamp("from_at").notNull(),
+  toAt: timestamp("to_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_opinion_writer_reschedules_writer").on(table.writerId),
+]);
+
+export type OpinionWriterReschedule = typeof opinionWriterReschedules.$inferSelect;
+
 // تقرير البحث الأسبوعي من Search Console (shared/seoWeekly.ts): صف لكل أسبوع،
 // والفرص وقراراتها وقياس تجربة الأسبوع السابق داخل payload.
 export const seoWeeklyReports = pgTable("seo_weekly_reports", {

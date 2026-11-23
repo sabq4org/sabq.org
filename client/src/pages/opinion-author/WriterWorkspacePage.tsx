@@ -63,8 +63,11 @@ import {
   Target,
   Users,
   WandSparkles,
+  Quote,
 } from "lucide-react";
 import { OpinionAuthorSocialProposalDialog } from "./OpinionAuthorSocialProposalDialog";
+import { WriterRescheduleAction, useWriterReschedules } from "./WriterReschedule";
+import { OpinionExtrasEditorPanel } from "@/components/opinion/OpinionExtrasEditorPanel";
 import { articleAcceptsEditRequests } from "@shared/articleEditRequests";
 import { EditRequestLabel, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests, type EditRequestListItem } from "@/components/articles/ArticleEditRequests";
 
@@ -187,6 +190,7 @@ export default function WriterWorkspacePage() {
   /** Ideas are AI-generated and slow — only fetch after explicit user action. */
   const [ideasRequested, setIdeasRequested] = useState(false);
 
+  const reschedules = useWriterReschedules();
   const scheduleQuery = useQuery<{
     banner?: ScheduleBannerData | null;
     activeArticle?: {
@@ -602,6 +606,7 @@ export default function WriterWorkspacePage() {
                         reviewPending={reviewMutation.isPending}
                         submitPending={submitReviewMutation.isPending}
                         onSubmit={(id) => submitReviewMutation.mutate(id)}
+                        rescheduleUsed={reschedules.get(article.id)}
                       />
                     ))}
                 {!workspaceQuery.isLoading && trackedArticles.length === 0 && (
@@ -785,8 +790,10 @@ function WriterTrackingCard({
   reviewPending,
   submitPending,
   onSubmit,
+  rescheduleUsed,
 }: {
   article: TrackingArticle;
+  rescheduleUsed?: ReturnType<ReturnType<typeof useWriterReschedules>["get"]>;
   onEdit: () => void;
   onView: () => void;
   onReview: () => void;
@@ -798,6 +805,7 @@ function WriterTrackingCard({
   submitPending: boolean;
   onSubmit: (id: string) => void;
 }) {
+  const [extrasOpen, setExtrasOpen] = useState(false);
   const state = trackingState(article);
   const StateIcon = state.icon;
   const isInvalid = state.tone === "danger";
@@ -851,6 +859,12 @@ function WriterTrackingCard({
             )}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
+            <WriterRescheduleAction article={article} used={rescheduleUsed} />
+            {(article.status === "published" || article.status === "scheduled") && (
+              <Button variant="outline" size="sm" onClick={() => setExtrasOpen(true)} className="gap-1.5" data-testid={`button-opinion-extras-${article.id}`}>
+                <Quote className="h-4 w-4" /> جملة المقال والتصويت
+              </Button>
+            )}
             {(isPlainDraft || needsChanges) && (
               <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5">
                 <Edit3 className="h-4 w-4" /> تعديل المقال
@@ -898,6 +912,15 @@ function WriterTrackingCard({
           </div>
         </div>
         {needsChanges && article.reviewNotes && <EditorialChecklist notes={article.reviewNotes} />}
+        <Dialog open={extrasOpen} onOpenChange={setExtrasOpen}>
+          <DialogContent dir="rtl" className="max-w-lg rounded-[24px] p-0">
+            <DialogHeader className="sr-only">
+              <DialogTitle>جملة المقال والتصويت</DialogTitle>
+              <DialogDescription>{article.title}</DialogDescription>
+            </DialogHeader>
+            {extrasOpen ? <OpinionExtrasEditorPanel articleId={article.id} className="border-0" /> : null}
+          </DialogContent>
+        </Dialog>
         {isInvalid && (
           <div className="rounded-xl border border-destructive/30 bg-background/70 p-3 dark:border-border">
             <p className="text-xs font-semibold text-destructive dark:text-destructive">سبب عدم النشر</p>
