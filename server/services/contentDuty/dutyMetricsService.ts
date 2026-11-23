@@ -48,6 +48,7 @@ import {
 } from "@shared/contentDuty";
 import { getUserRoleNames } from "../../rbac";
 import {
+  getAlertSettings,
   getThresholds,
   listActiveShifts,
   listDutyCandidates,
@@ -80,7 +81,7 @@ export async function resolveDutyViewer(userId: string, rosteredIds: ReadonlySet
 
 // ---------- التحميل ----------
 
-interface DutyData {
+export interface DutyData {
   minutes: Map<string, Map<number, ActivityKind>>;
   ownVersions: Map<string, VersionEvent[]>;
   ownReviews: Map<string, number[]>;
@@ -112,7 +113,7 @@ function mergePublishEvents(
   return out;
 }
 
-async function loadDutyData(from: number, to: number, userIds: readonly string[], now: number): Promise<DutyData> {
+export async function loadDutyData(from: number, to: number, userIds: readonly string[], now: number): Promise<DutyData> {
   const ids = Array.from(new Set(userIds));
   const fromDate = new Date(from);
   const toDate = new Date(to);
@@ -263,7 +264,7 @@ function reportFor(occ: DutyOccurrence, data: DutyData, now: number, thresholds:
   });
 }
 
-async function loadRoster(from: number, to: number) {
+export async function loadRoster(from: number, to: number) {
   const shifts = await listActiveShifts();
   const exceptions = await listExceptions(addDays(riyadhDateKey(from), -1), riyadhDateKey(to));
   const occurrences = expandOccurrences(shifts, exceptions, from, to);
@@ -285,7 +286,7 @@ export async function rosteredIdsNow(): Promise<Set<string>> {
  * أول دقيقة مسجّلة في staff_activity_minutes. الورديات التي بدأت قبلها لا بيانات حضور لها
  * (قبل تشغيل التسجيل)، فلا تدخل في المعدلات ولا «أداء الأسبوع» حتى لا تظهر غيابًا كاذبًا.
  */
-async function trackingSince(): Promise<number> {
+export async function trackingSince(): Promise<number> {
   return withCache("content-duty:tracking-since", 10 * 60_000, async () => {
     const [row] = await db.select({ first: sql<string | Date | null>`min(${staffActivityMinutes.minute})` }).from(staffActivityMinutes);
     return row?.first ? new Date(row.first).getTime() : Date.now();
@@ -544,10 +545,11 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
   const exceptions = await listExceptions(addDays(weekStart, -1), addDays(weekStart, 7));
   const occurrences = expandOccurrences(shifts, exceptions, from, to);
   const people = Array.from(new Set([...shifts.map((s) => s.userId), ...exceptions.flatMap((e) => [e.userId, ...(e.coverUserId ? [e.coverUserId] : [])])]));
-  const [names, thresholds, candidates] = await Promise.all([
+  const [names, thresholds, candidates, alertSettings] = await Promise.all([
     loadNames(people),
     getThresholds(),
     viewer.access === "lead" ? listDutyCandidates() : Promise.resolve([]),
+    viewer.access === "lead" ? getAlertSettings() : Promise.resolve(null),
   ]);
   const gaps = coverageGaps(occurrences, weekStart);
   const order = shifts.map((s) => s.userId).filter((id, i, a) => a.indexOf(id) === i);
@@ -575,6 +577,9 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
     gapMinutes: gaps.reduce((a, g) => a + (g.endMinute - g.startMinute), 0),
     candidates,
     thresholds,
+    alerts: alertSettings
+      ? { settings: alertSettings, webhookConfigured: Boolean((process.env.DUTY_ALERT_WEBHOOK_URL ?? "").trim()) }
+      : null,
   };
 }
 

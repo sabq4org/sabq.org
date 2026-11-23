@@ -659,6 +659,11 @@ export interface ContentDutyRosterResponse {
   gapMinutes: number;
   candidates: Array<{ userId: string; name: string }>;
   thresholds: DutyThresholds;
+  /** «عين المناوبة»: للمسؤول فقط (null لغيره) */
+  alerts?: {
+    settings: import("./contentDutyAlerts").DutyAlertSettings;
+    webhookConfigured: boolean;
+  } | null;
 }
 
 /** يقطع ورديات الأسبوع على أيام الرياض للرسم (الليلية تظهر في يومين). */

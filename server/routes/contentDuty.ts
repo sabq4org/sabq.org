@@ -9,6 +9,7 @@ import {
   cancelException,
   createException,
   createShift,
+  saveAlertSettings,
   saveThresholds,
   updateShift,
 } from "../services/contentDuty/dutyRosterStore";
@@ -179,6 +180,17 @@ router.put("/api/admin/content-duty/settings", isAuthenticated, noStore, async (
     return res.json({ thresholds: await saveThresholds(req.body?.thresholds) });
   } catch (error) {
     return fail(res, error, "settings");
+  }
+});
+
+// «عين المناوبة»: مفاتيح التنبيهات والمدد وساعات الهدوء (system_settings.content_duty_alert_settings).
+router.put("/api/admin/content-duty/alert-settings", isAuthenticated, noStore, async (req, res) => {
+  try {
+    const viewer = await leadOnly(req, res);
+    if (!viewer) return;
+    return res.json({ settings: await saveAlertSettings(req.body?.settings) });
+  } catch (error) {
+    return fail(res, error, "alert settings");
   }
 });
 
