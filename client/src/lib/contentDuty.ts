@@ -1,4 +1,6 @@
 import type { DutyCellState, LiveStatus } from "@shared/contentDuty";
+import { displayTimeZone } from "@/lib/displayTimeZone";
+import { dutyClock } from "@/lib/dutyLocalTime";
 
 export const DUTY_COLORS = {
   action: "#1E9BE6",
@@ -51,4 +53,9 @@ export function dutyErrorMessage(error: unknown): string {
   const text = error instanceof Error ? error.message : "";
   if (text.includes("غير متاح مؤقتاً")) return "جدول المناوبات غير مفعّل بعد أو الخادم مشغول. أعد المحاولة بعد قليل.";
   return text || "تعذر تحميل المناوبات";
+}
+
+/** وقت لحظة بتوقيت جهاز المشاهد، ونص الخادم (الرياض) إن غابت اللحظة. */
+export function viewerClock(ms: number | null | undefined, fallback = ""): string {
+  return typeof ms === "number" && Number.isFinite(ms) ? dutyClock(ms, displayTimeZone()) : fallback;
 }

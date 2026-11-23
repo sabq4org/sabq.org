@@ -546,8 +546,11 @@ export interface DutyPerson {
 
 export interface ContentDutyCardEntry extends DutyPerson {
   status: LiveStatus;
+  /** بتوقيت الرياض؛ الواجهة تعرض startMs/endMs بتوقيت جهاز المشاهد */
   start: string;
   end: string;
+  startMs?: number;
+  endMs?: number;
   remainingMin: number;
   elapsedPct: number;
   coveredName: string | null;
@@ -559,7 +562,7 @@ export interface ContentDutyCardResponse {
   access: DutyAccess;
   generatedAt: string;
   onDuty: ContentDutyCardEntry[];
-  next: { name: string; start: string; startsInMin: number } | null;
+  next: { name: string; start: string; startMs?: number; startsInMin: number } | null;
   waiting: { count: number; overdue: number } | null;
   alert: { articleId: string; title: string; waitMin: number; breaking: boolean; opened: boolean } | null;
 }
@@ -577,8 +580,12 @@ export interface WaitingDraft {
 
 export interface ShiftOption {
   key: string;
+  /** بتوقيت الرياض؛ الواجهة تبني نصها من name/startMs/endMs بتوقيت جهاز المشاهد */
   label: string;
   live: boolean;
+  name?: string;
+  startMs?: number;
+  endMs?: number;
 }
 
 export interface ContentDutyRoomResponse {
@@ -601,8 +608,8 @@ export interface ContentDutyRoomResponse {
     elapsedPct: number;
     report: ShiftReport;
     averages: ShiftAverages;
-    lastAction: { title: string; at: string } | null;
-    next: { name: string; start: string; pendingToHandOver: number } | null;
+    lastAction: { title: string; at: string; atMs?: number } | null;
+    next: { name: string; start: string; startMs?: number; pendingToHandOver: number } | null;
     waiting: WaitingDraft[];
   };
   thresholds: DutyThresholds;

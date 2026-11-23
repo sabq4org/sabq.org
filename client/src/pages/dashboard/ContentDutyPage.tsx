@@ -5,7 +5,18 @@ import { DutyShiftView } from "@/components/dashboard/content-duty/DutyShiftView
 import { DutyTeamView } from "@/components/dashboard/content-duty/DutyTeamView";
 import { DutyRosterView } from "@/components/dashboard/content-duty/DutyRosterView";
 import { useContentDutyRoom, useContentDutyRoster, useContentDutyTeam } from "@/hooks/useContentDuty";
-import { dutyErrorMessage } from "@/lib/contentDuty";
+import { dutyErrorMessage, viewerClock } from "@/lib/contentDuty";
+import { displayTimeZone } from "@/lib/displayTimeZone";
+import { dutyDateKey } from "@/lib/dutyLocalTime";
+import { DUTY_DAY_NAMES, type ShiftOption } from "@shared/contentDuty";
+
+/** نص خيار الوردية بتوقيت جهاز المشاهد، ونص الخادم إن كان من نسخة أقدم. */
+function optionLabel(o: ShiftOption): string {
+  if (!o.name || typeof o.startMs !== "number" || typeof o.endMs !== "number") return o.label;
+  const key = dutyDateKey(o.startMs, displayTimeZone());
+  const day = DUTY_DAY_NAMES[new Date(`${key}T00:00:00Z`).getUTCDay()];
+  return `${o.name} · ${day} ${key.slice(8)}/${key.slice(5, 7)} · ${viewerClock(o.startMs)}–${viewerClock(o.endMs)}`;
+}
 
 type Tab = "shift" | "team" | "roster";
 
@@ -98,7 +109,7 @@ export default function ContentDutyPage() {
                   className="h-10 rounded-full border border-[#DCE5EE] bg-white px-4 text-sm text-[#1B2B3A]"
                 >
                   {options.map((o) => (
-                    <option key={o.key} value={o.key}>{o.live ? `الآن · ${o.label}` : o.label}</option>
+                    <option key={o.key} value={o.key}>{o.live ? `الآن · ${optionLabel(o)}` : optionLabel(o)}</option>
                   ))}
                 </select>
               </label>

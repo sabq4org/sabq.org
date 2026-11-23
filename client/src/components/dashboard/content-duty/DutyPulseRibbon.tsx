@@ -1,6 +1,5 @@
 import type { DutyCellState } from "@shared/contentDuty";
-import { riyadhClock } from "@shared/contentDuty";
-import { DUTY_COLORS } from "@/lib/contentDuty";
+import { DUTY_COLORS, viewerClock } from "@/lib/contentDuty";
 
 interface Props {
   cells: DutyCellState[];
@@ -21,7 +20,7 @@ export function DutyPulseRibbon({ cells, startMs, endMs, nowMs, ticks, backlog, 
   const durationMin = span / 60_000;
   const nowPct = nowMs && nowMs > startMs && nowMs < endMs ? ((nowMs - startMs) / span) * 100 : null;
   const hours: Array<{ pct: number; text: string }> = [];
-  for (let t = startMs; t <= endMs; t += HOUR) hours.push({ pct: ((t - startMs) / span) * 100, text: riyadhClock(t) });
+  for (let t = startMs; t <= endMs; t += HOUR) hours.push({ pct: ((t - startMs) / span) * 100, text: viewerClock(t) });
   if (hours.length > 7) {
     const step = Math.ceil(hours.length / 6);
     for (let i = hours.length - 1; i >= 0; i--) if (i % step !== 0 && i !== hours.length - 1) hours.splice(i, 1);
@@ -67,7 +66,7 @@ export function DutyPulseRibbon({ cells, startMs, endMs, nowMs, ticks, backlog, 
               className="absolute -top-7 rounded-full bg-[#1B2B3A] px-2 py-0.5 text-[11px] tabular-nums text-white"
               style={{ right: `${nowPct}%`, transform: "translateX(50%)" }}
             >
-              {riyadhClock(nowMs as number)}
+              {viewerClock(nowMs as number)}
             </span>
           </>
         ) : null}
