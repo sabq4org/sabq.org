@@ -83,7 +83,7 @@ export function DutyShiftView({ room }: { room: ContentDutyRoomResponse }) {
               ) : null}
             </div>
             <p className="m-0 text-[15px] leading-7 text-[#55667A]">
-              <bdi dir="ltr" className="tabular-nums">{shift.start} – {shift.end}</bdi>
+              <bdi dir="ltr" className="tabular-nums">{shift.start} – {shift.end}</bdi> بتوقيت الرياض
               {shift.coveredName ? <> · يغطي بدل {shift.coveredName}</> : null}
               {shift.lastAction ? <> · آخر عمل <bdi dir="ltr" className="tabular-nums">{shift.lastAction.at}</bdi>: «{shift.lastAction.title}»</> : null}
             </p>

@@ -408,7 +408,7 @@ struct SupervisorNewsPreviewView: View {
     private var scheduleSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                DatePicker("وقت النشر", selection: $scheduleAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                DatePicker("وقت النشر (بتوقيت الرياض)", selection: $scheduleAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.graphical)
                     .environment(\.calendar, Calendar(identifier: .gregorian))
                     .environment(\.locale, Locale(identifier: "ar_SA@numbers=latn;calendar=gregorian"))

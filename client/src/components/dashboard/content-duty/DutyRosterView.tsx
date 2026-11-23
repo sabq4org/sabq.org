@@ -96,6 +96,7 @@ function ShiftEditor({ roster, editing, onDone }: { roster: ContentDutyRosterRes
           <input type="time" dir="ltr" className={input} value={end} onChange={(e) => setEnd(e.target.value)} />
         </label>
       </div>
+      <p className="m-0 text-xs text-[#55667A]">الوقت بتوقيت الرياض، ولو كان الموظف في بلد آخر.</p>
       {overnight ? <p className="m-0 text-xs text-[#0B6FA8]">تمتد إلى صباح اليوم التالي.</p> : null}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={`${primary} flex-1`} disabled={!userId || days.length === 0 || save.isPending} onClick={() => save.mutate(undefined, { onSuccess: onDone })}>حفظ</button>
@@ -220,6 +221,7 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
             ))}
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded" style={hatch} />بلا مناوب</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded border-[1.5px] border-dashed border-[#9FB3C6]" />تغطية</span>
+            <span className="ms-auto font-semibold text-[#0B6FA8]">كل الأوقات بتوقيت الرياض</span>
           </div>
           <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 text-[11px] text-[#617183] sm:grid-cols-[96px_minmax(0,1fr)]">
             <span />
