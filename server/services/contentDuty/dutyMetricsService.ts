@@ -548,8 +548,12 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
   const from = riyadhMidnight(weekStart);
   const to = from + 7 * DAY;
   const shifts = await listActiveShifts();
-  const exceptions = await listExceptions(addDays(weekStart, -1), addDays(weekStart, 7));
+  const exceptions = await listExceptions(addDays(weekStart, -2), addDays(weekStart, 8));
   const occurrences = expandOccurrences(shifts, exceptions, from, to);
+  // يوم قبل الأسبوع ويوم بعده: الواجهة تزيح الأسبوع إلى منطقة جهاز المشاهد فتحتاج أطرافه.
+  const around = expandOccurrences(shifts, exceptions, from - DAY, to + DAY);
+  const dayBefore = addDays(weekStart, -1);
+  const dayAfter = addDays(weekStart, 7);
   const people = Array.from(new Set([...shifts.map((s) => s.userId), ...exceptions.flatMap((e) => [e.userId, ...(e.coverUserId ? [e.coverUserId] : [])])]));
   const [names, thresholds, candidates] = await Promise.all([
     loadNames(people),
@@ -579,6 +583,10 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
     })),
     blocks: rosterBlocks(occurrences, weekStart).map((b) => ({ ...b, userId: opaque(b.userId) })),
     gaps,
+    edge: {
+      blocks: [...rosterBlocks(around, dayBefore, 1), ...rosterBlocks(around, dayAfter, 1)].map((b) => ({ ...b, userId: opaque(b.userId) })),
+      gaps: [...coverageGaps(around, dayBefore, 1), ...coverageGaps(around, dayAfter, 1)],
+    },
     gapMinutes: gaps.reduce((a, g) => a + (g.endMinute - g.startMinute), 0),
     candidates,
     thresholds,

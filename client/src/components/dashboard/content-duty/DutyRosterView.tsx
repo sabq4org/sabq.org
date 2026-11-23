@@ -205,8 +205,14 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
   const nowMs = Date.now();
   const nowDelta = minutesFromRiyadh(tz, nowMs);
   const weekDelta = minutesFromRiyadh(tz, Date.parse(`${roster.weekStart}T12:00:00Z`) + 3 * 86_400_000);
-  const weekBlocks = useMemo(() => shiftWeekPieces(roster.blocks, roster.weekStart, weekDelta), [roster.blocks, roster.weekStart, weekDelta]);
-  const weekGaps = useMemo(() => shiftWeekPieces(roster.gaps, roster.weekStart, weekDelta), [roster.gaps, roster.weekStart, weekDelta]);
+  const weekBlocks = useMemo(
+    () => shiftWeekPieces([...(roster.edge?.blocks ?? []), ...roster.blocks], roster.weekStart, (ms) => minutesFromRiyadh(tz, ms)),
+    [roster.blocks, roster.edge, roster.weekStart, tz],
+  );
+  const weekGaps = useMemo(
+    () => shiftWeekPieces([...(roster.edge?.gaps ?? []), ...roster.gaps], roster.weekStart, (ms) => minutesFromRiyadh(tz, ms)),
+    [roster.gaps, roster.edge, roster.weekStart, tz],
+  );
   const today = nowDelta === 0 ? roster.today : dutyDateKey(nowMs, tz);
   const nowMinute = nowDelta === 0 ? roster.nowMinute : dutyMinuteOfDay(nowMs, tz);
 

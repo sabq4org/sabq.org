@@ -45,4 +45,27 @@ describe("غرفة المناوبة بتوقيت الجهاز", () => {
     ]);
     expect(shiftWeekPieces(pieces, "2026-11-22", 0)).toEqual(pieces);
   });
+
+  it("يملأ أطراف الأسبوع من اليوم المجاور ويسقط ما يبقى في الرياض خارجه", () => {
+    const pieces = [
+      { dutyDate: "2026-11-29", startMinute: 0, endMinute: 120 }, // الأحد التالي بالرياض
+      { dutyDate: "2026-11-21", startMinute: 1380, endMinute: 1440 }, // السبت السابق
+    ];
+    expect(shiftWeekPieces(pieces, "2026-11-22", -60)).toEqual([
+      { dutyDate: "2026-11-28", startMinute: 1380, endMinute: 1440 },
+    ]);
+    expect(shiftWeekPieces(pieces, "2026-11-22", 0)).toEqual([]);
+  });
+
+  it("في أسبوع تغيير التوقيت الصيفي يحسب الفرق عند كل قطعة", () => {
+    // القاهرة: الخميس 2026-04-23 بفرق ‎-60، والسبت 2026-04-25 بفرق 0
+    const pieces = [
+      { dutyDate: "2026-04-23", startMinute: 600, endMinute: 660 },
+      { dutyDate: "2026-04-25", startMinute: 600, endMinute: 660 },
+    ];
+    expect(shiftWeekPieces(pieces, "2026-04-19", (ms) => minutesFromRiyadh(CAIRO, ms))).toEqual([
+      { dutyDate: "2026-04-23", startMinute: 540, endMinute: 600 },
+      { dutyDate: "2026-04-25", startMinute: 600, endMinute: 660 },
+    ]);
+  });
 });

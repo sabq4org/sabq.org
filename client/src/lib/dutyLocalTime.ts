@@ -77,15 +77,21 @@ export interface DutyDayPiece {
 }
 
 /**
- * يعيد توزيع قطع أسبوع الرياض على أيام الجهاز: كل قطعة تُزاح بالفرق ثم تُقسم عند منتصف الليل.
- * ما يخرج عن الأسبوع المعروض يُسقط.
+ * يعيد توزيع قطع أيام الرياض على أيام الجهاز: كل قطعة تُزاح بفرق المنطقة عند لحظة بدايتها
+ * (فيصح أسبوع تغيير التوقيت الصيفي) ثم تُقسم عند منتصف الليل. القطع من اليوم السابق
+ * للأسبوع أو التالي له تملأ أطرافه، وما يخرج عن الأسبوع المعروض يُسقط.
  */
-export function shiftWeekPieces<T extends DutyDayPiece>(pieces: readonly T[], weekStart: string, deltaMin: number): T[] {
-  if (deltaMin === 0) return pieces.slice();
+export function shiftWeekPieces<T extends DutyDayPiece>(
+  pieces: readonly T[],
+  weekStart: string,
+  delta: number | ((riyadhInstantMs: number) => number),
+): T[] {
   const weekStartMs = Date.parse(`${weekStart}T00:00:00Z`);
   const out: T[] = [];
   for (const piece of pieces) {
-    const dayIndex = Math.round((Date.parse(`${piece.dutyDate}T00:00:00Z`) - weekStartMs) / 86_400_000);
+    const dayMs = Date.parse(`${piece.dutyDate}T00:00:00Z`);
+    const deltaMin = typeof delta === "number" ? delta : delta(dayMs - RIYADH_OFFSET_MIN * MINUTE + piece.startMinute * MINUTE);
+    const dayIndex = Math.round((dayMs - weekStartMs) / 86_400_000);
     let a = dayIndex * DAY_MIN + piece.startMinute + deltaMin;
     const b = dayIndex * DAY_MIN + piece.endMinute + deltaMin;
     a = Math.max(a, 0);

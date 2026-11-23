@@ -157,9 +157,9 @@ export function expandOccurrences(
 }
 
 /** ساعات الأسبوع التي لا يغطيها أحد، مقطعة على أيام الرياض. */
-export function coverageGaps(occurrences: readonly DutyOccurrence[], weekStart: string): Array<{ dutyDate: string; startMinute: number; endMinute: number }> {
+export function coverageGaps(occurrences: readonly DutyOccurrence[], weekStart: string, dayCount = 7): Array<{ dutyDate: string; startMinute: number; endMinute: number }> {
   const gaps: Array<{ dutyDate: string; startMinute: number; endMinute: number }> = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < dayCount; i++) {
     const key = addDays(weekStart, i);
     const dayStart = riyadhMidnight(key);
     const covered = new Uint8Array(1440);
@@ -663,15 +663,20 @@ export interface ContentDutyRosterResponse {
   exceptions: RosterExceptionView[];
   blocks: Array<{ dutyDate: string; userId: string; startMinute: number; endMinute: number; covering: boolean; carry: boolean }>;
   gaps: Array<{ dutyDate: string; startMinute: number; endMinute: number }>;
+  /** اليوم السابق للأسبوع والتالي له، ليكتمل الأسبوع حين يُعرض بمنطقة جهاز غير الرياض */
+  edge?: {
+    blocks: ContentDutyRosterResponse["blocks"];
+    gaps: Array<{ dutyDate: string; startMinute: number; endMinute: number }>;
+  };
   gapMinutes: number;
   candidates: Array<{ userId: string; name: string }>;
   thresholds: DutyThresholds;
 }
 
 /** يقطع ورديات الأسبوع على أيام الرياض للرسم (الليلية تظهر في يومين). */
-export function rosterBlocks(occurrences: readonly DutyOccurrence[], weekStart: string): ContentDutyRosterResponse["blocks"] {
+export function rosterBlocks(occurrences: readonly DutyOccurrence[], weekStart: string, dayCount = 7): ContentDutyRosterResponse["blocks"] {
   const blocks: ContentDutyRosterResponse["blocks"] = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < dayCount; i++) {
     const key = addDays(weekStart, i);
     const dayStart = riyadhMidnight(key);
     const dayEnd = dayStart + DAY;
