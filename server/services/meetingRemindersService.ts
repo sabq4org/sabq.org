@@ -10,6 +10,8 @@ import { sendEmailNotification } from "./email";
 
 export const MEETING_REMINDER_LEAD_MS = 30 * 60 * 1000;
 const REMINDER_EVENT = "reminder_30m";
+const REMINDER_FAILED_EVENT = "reminder_30m_failed";
+const MAX_ATTEMPTS = 3;
 // حد MailerSend 120 رسالة/دقيقة؛ نرسل 60 على الأكثر في الدورة والباقي في الدقيقة التالية (نافذة 30 دقيقة تكفي)
 const MAX_SENDS_PER_TICK = 60;
 const SITE_URL = (process.env.MEETINGS_PUBLIC_URL || "https://sabq.org").replace(/\/+$/, "");
@@ -93,29 +95,36 @@ export async function runMeetingRemindersTick(now: Date = new Date()): Promise<v
       if (!recipients.length) continue;
 
       const already = await db
-        .select({ userId: meetingEvents.targetUserId })
+        .select({ userId: meetingEvents.targetUserId, eventType: meetingEvents.eventType })
         .from(meetingEvents)
         .where(
           and(
             eq(meetingEvents.meetingId, m.id),
-            eq(meetingEvents.eventType, REMINDER_EVENT),
+            inArray(meetingEvents.eventType, [REMINDER_EVENT, REMINDER_FAILED_EVENT]),
             inArray(meetingEvents.targetUserId, recipients.map((r) => r.userId)),
           ),
         );
-      const sent = new Set(already.map((a) => a.userId));
+      // أُرسل له، أو فشل ثلاث مرات (لا نعيد المحاولة بلا نهاية)
+      const failures = new Map<string, number>();
+      const sent = new Set<string | null>();
+      for (const a of already) {
+        if (a.eventType === REMINDER_EVENT) sent.add(a.userId);
+        else if (a.userId) failures.set(a.userId, (failures.get(a.userId) ?? 0) + 1);
+      }
+      for (const [uid, n] of Array.from(failures)) if (n >= MAX_ATTEMPTS) sent.add(uid);
       const url = `${SITE_URL}/dashboard/meetings/${m.id}`;
       const pending = recipients.filter((r) => !sent.has(r.userId) && r.email).slice(0, budget);
       budget -= pending.length;
       if (!pending.length) continue;
 
+      let delivered = 0;
+      let failed = 0;
       for (const r of pending) {
-        // نسجّل أولاً: تذكير مفقود أهون من تذكير مكرر لعشرات المدعوين
-        await db.insert(meetingEvents).values({
-          meetingId: m.id,
-          targetUserId: r.userId,
-          eventType: REMINDER_EVENT,
-          detail: { channel: "email" },
-        });
+        // نحجز أولاً (يمنع التكرار لو تداخلت دورتان)، ونحوّل الحجز إلى «فشل» إن لم يصل البريد
+        const [claim] = await db
+          .insert(meetingEvents)
+          .values({ meetingId: m.id, targetUserId: r.userId, eventType: REMINDER_EVENT, detail: { channel: "email" } })
+          .returning({ id: meetingEvents.id });
         const name = [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || "زميلنا";
         const mail = buildMeetingReminderEmail({
           name,
@@ -124,9 +133,18 @@ export async function runMeetingRemindersTick(now: Date = new Date()): Promise<v
           durationMinutes: m.durationMinutes,
           url,
         });
-        await sendEmailNotification({ to: r.email!, ...mail });
+        const result = await sendEmailNotification({ to: r.email!, ...mail });
+        if (result.success) {
+          delivered += 1;
+        } else {
+          failed += 1;
+          await db
+            .update(meetingEvents)
+            .set({ eventType: REMINDER_FAILED_EVENT, detail: { channel: "email", error: result.error ?? "unknown" } })
+            .where(eq(meetingEvents.id, claim.id));
+        }
       }
-      console.log(`[MeetingReminders] meeting ${m.id}: ${pending.length} reminder(s)`);
+      console.log(`[MeetingReminders] meeting ${m.id}: ${delivered} sent, ${failed} failed`);
     }
   } catch (error) {
     console.error("[MeetingReminders] tick failed:", error instanceof Error ? error.message : error);
