@@ -16231,3 +16231,20 @@ export const opinionWriterFiles = pgTable("opinion_writer_files", {
 
 export type OpinionWriterFile = typeof opinionWriterFiles.$inferSelect;
 export type InsertOpinionWriterFile = typeof opinionWriterFiles.$inferInsert;
+
+// استبيان كتّاب الرأي: الاهتمامات (اختيار متعدد) والمقترحات — صف واحد لكل كاتب يحدّثه متى شاء.
+// migrations/20261123_opinion_writer_feedback.sql
+export const opinionWriterFeedback = pgTable("opinion_writer_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  interests: text("interests").array().notNull().default(sql`'{}'::text[]`),
+  otherInterest: text("other_interest"),
+  suggestions: text("suggestions"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_opinion_writer_feedback_user").on(table.userId),
+  index("idx_opinion_writer_feedback_updated").on(table.updatedAt),
+]);
+
+export type OpinionWriterFeedback = typeof opinionWriterFeedback.$inferSelect;

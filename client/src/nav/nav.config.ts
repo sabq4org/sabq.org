@@ -74,6 +74,7 @@ import {
   Radio,
   Gavel,
   PenTool,
+  MessageSquareHeart,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -180,6 +181,14 @@ export const navConfig: NavItem[] = [
     labelAr: "ملفاتي",
     path: "/dashboard/opinion-author/files",
     icon: FolderOpen,
+    roles: ["opinion_author"],
+  },
+  {
+    id: "opinion_author_feedback",
+    labelKey: "nav.writer_feedback",
+    labelAr: "اهتماماتي ومقترحاتي",
+    path: "/dashboard/opinion-author/feedback",
+    icon: MessageSquareHeart,
     roles: ["opinion_author"],
   },
 
@@ -545,6 +554,15 @@ export const navConfig: NavItem[] = [
     labelAr: "ملفات كتّاب الرأي",
     path: "/dashboard/opinion-writer-files",
     icon: FolderOpen,
+    roles: ["admin", "editor", "system_admin"],
+    permissions: ["opinion.review"],
+  },
+  {
+    id: "opinion_writer_feedback",
+    labelKey: "nav.opinion_writer_feedback",
+    labelAr: "اهتمامات كتّاب الرأي",
+    path: "/dashboard/opinion-writer-feedback",
+    icon: MessageSquareHeart,
     roles: ["admin", "editor", "system_admin"],
     permissions: ["opinion.review"],
   },

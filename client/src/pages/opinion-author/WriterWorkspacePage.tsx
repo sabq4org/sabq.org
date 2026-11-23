@@ -25,6 +25,7 @@ import {
 } from "./WriterPriorityRail";
 import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
 import { UpcomingMeetingNotice } from "@/components/meetings/UpcomingMeetingNotice";
+import { WriterFeedbackInvite } from "./WriterFeedbackInvite";
 import {
   ContributorStatsRow,
   PerformanceChart,
@@ -384,6 +385,7 @@ export default function WriterWorkspacePage() {
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
           <MyServicesHomeLink />
           <UpcomingMeetingNotice />
+          <WriterFeedbackInvite />
           <WriterPriorityRail
             notifications={unreadNotifications}
             onOpenNotification={openEditorialNotification}
