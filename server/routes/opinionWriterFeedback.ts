@@ -43,7 +43,7 @@ router.put("/api/opinion-writer-feedback/me", requireAuth, async (req: Request, 
     }
     const parsed = validateOpinionWriterFeedback(req.body);
     if (!parsed.ok) {
-      return res.status(400).json({ message: parsed.message });
+      return res.status(400).json({ code: parsed.code, message: parsed.message });
     }
     const feedback = await saveMyOpinionWriterFeedback(userId, parsed.value);
     await logActivity({

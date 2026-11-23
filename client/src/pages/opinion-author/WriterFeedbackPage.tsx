@@ -61,7 +61,11 @@ export default function WriterFeedbackPage() {
     mutationFn: () =>
       apiRequest("/api/opinion-writer-feedback/me", {
         method: "PUT",
-        body: JSON.stringify({ interests, otherInterest, suggestions }),
+        body: JSON.stringify({
+          interests,
+          otherInterest: interests.includes("other") ? otherInterest : null,
+          suggestions,
+        }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MY_WRITER_FEEDBACK_KEY });

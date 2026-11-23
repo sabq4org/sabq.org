@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_SUGGESTIONS_CHARS,
   countInterests,
+  neutralizeSpreadsheetCell,
   validateOpinionWriterFeedback,
 } from "../../shared/opinionWriterFeedback";
 
@@ -12,17 +13,31 @@ describe("validateOpinionWriterFeedback", () => {
     expect(validateOpinionWriterFeedback(null).ok).toBe(false);
   });
 
-  it("drops unknown ids and duplicates, and orders by the list", () => {
-    const r = validateOpinionWriterFeedback({ interests: ["local", "economy", "local", "x"] });
+  it("dedupes and orders by the list", () => {
+    const r = validateOpinionWriterFeedback({ interests: ["local", "economy", "local"] });
     expect(r).toEqual({ ok: true, value: { interests: ["economy", "local"], otherInterest: null, suggestions: null } });
+  });
+
+  it("rejects instead of silently dropping (REVIEW.md A4)", () => {
+    const code = (body: unknown) => {
+      const r = validateOpinionWriterFeedback(body);
+      return r.ok ? "ok" : r.code;
+    };
+    expect(code({ interests: ["local", "x"] })).toBe("INVALID_INTEREST");
+    expect(code({ interests: ["local"], role: "admin" })).toBe("UNKNOWN_FIELD");
+    expect(code({ interests: ["local"], suggestions: 5 })).toBe("INVALID_FIELD_TYPE");
+    expect(code({ interests: "local" })).toBe("INVALID_INTEREST");
+    expect(code([])).toBe("INVALID_BODY");
   });
 
   it("needs text when «أخرى» is picked, and ignores it otherwise", () => {
     expect(validateOpinionWriterFeedback({ interests: ["other"], otherInterest: "  " }).ok).toBe(false);
     const withOther = validateOpinionWriterFeedback({ interests: ["other"], otherInterest: " البيئة " });
     expect(withOther.ok && withOther.value.otherInterest).toBe("البيئة");
-    const ignored = validateOpinionWriterFeedback({ interests: ["social"], otherInterest: "البيئة" });
-    expect(ignored.ok && ignored.value.otherInterest).toBeNull();
+    const stray = validateOpinionWriterFeedback({ interests: ["social"], otherInterest: "البيئة" });
+    expect(!stray.ok && stray.code).toBe("OTHER_INTEREST_WITHOUT_OTHER");
+    const nullOther = validateOpinionWriterFeedback({ interests: ["social"], otherInterest: null });
+    expect(nullOther.ok && nullOther.value.otherInterest).toBeNull();
   });
 
   it("trims and caps suggestions", () => {
@@ -44,5 +59,14 @@ describe("countInterests", () => {
     expect(counts.local).toBe(1);
     expect(counts.psychology).toBe(0);
     expect("bogus" in counts).toBe(false);
+  });
+});
+
+describe("neutralizeSpreadsheetCell", () => {
+  it("prefixes formula starters and leaves normal text", () => {
+    expect(neutralizeSpreadsheetCell("=HYPERLINK(1)")).toBe("'=HYPERLINK(1)");
+    expect(neutralizeSpreadsheetCell("+966")).toBe("'+966");
+    expect(neutralizeSpreadsheetCell("@x")).toBe("'@x");
+    expect(neutralizeSpreadsheetCell("ورشة")).toBe("ورشة");
   });
 });

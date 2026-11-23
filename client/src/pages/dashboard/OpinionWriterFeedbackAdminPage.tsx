@@ -12,7 +12,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { OPINION_WRITER_INTERESTS, opinionWriterInterestLabel } from "@shared/opinionWriterFeedback";
+import {
+  OPINION_WRITER_INTERESTS,
+  neutralizeSpreadsheetCell,
+  opinionWriterInterestLabel,
+} from "@shared/opinionWriterFeedback";
 
 type FeedbackRow = {
   id: string;
@@ -42,7 +46,7 @@ function formatDate(iso: string): string {
 }
 
 function csvCell(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
+  return `"${neutralizeSpreadsheetCell(value).replace(/"/g, '""')}"`;
 }
 
 export default function OpinionWriterFeedbackAdminPage() {
