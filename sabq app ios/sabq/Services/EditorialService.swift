@@ -554,22 +554,24 @@ nonisolated enum EditorialText {
     }
 
     /// «أمس 21:10» أو «31 أكتوبر 08:40» بالأرقام اللاتينية والتقويم الميلادي.
-    static func dayTime(_ date: Date?) -> String {
+    /// بتوقيت الجهاز افتراضيًا؛ تأكيد الجدولة يمرّر الرياض لأن منتقي الموعد مثبّت عليها.
+    static func dayTime(_ date: Date?, timeZone: TimeZone = .autoupdatingCurrent) -> String {
         guard let date else { return "" }
-        let calendar = Calendar(identifier: .gregorian)
-        let time = format(date, "HH:mm")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let time = format(date, "HH:mm", timeZone: timeZone)
         if calendar.isDateInToday(date) { return "اليوم \(time)" }
         if calendar.isDateInYesterday(date) { return "أمس \(time)" }
-        return "\(format(date, "d MMMM")) \(time)"
+        return "\(format(date, "d MMMM", timeZone: timeZone)) \(time)"
     }
 
     static func todayLine() -> String { format(Date(), "EEEE d MMMM") }
 
-    private static func format(_ date: Date, _ pattern: String) -> String {
+    private static func format(_ date: Date, _ pattern: String, timeZone: TimeZone = .autoupdatingCurrent) -> String {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "ar_SA@numbers=latn;calendar=gregorian")
-        f.timeZone = .autoupdatingCurrent
+        f.timeZone = timeZone
         f.dateFormat = pattern
         return f.string(from: date)
     }

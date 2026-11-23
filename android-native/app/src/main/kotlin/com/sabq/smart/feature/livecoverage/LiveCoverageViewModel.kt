@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.livecoverage
 
+import com.sabq.smart.util.displayZone
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.LiveCoverage
@@ -84,9 +85,14 @@ class LiveCoverageViewModel @Inject constructor(
     private fun groupByDate(events: List<LiveEvent>): List<DateGroup> {
         val groups = linkedMapOf<String, MutableList<LiveEvent>>()
         for (event in events) {
+            // يوم المجموعة بمنطقة الجهاز نفسها التي تُعرض بها أوقات الأحداث.
             val key = event.publishedAt
-                .takeIf { it.isNotBlank() && it.length >= 10 }
-                ?.substring(0, 10) // "yyyy-MM-dd"
+                .takeIf { it.isNotBlank() }
+                ?.let { raw ->
+                    runCatching {
+                        java.time.OffsetDateTime.parse(raw).atZoneSameInstant(displayZone()).toLocalDate().toString()
+                    }.getOrNull() ?: raw.takeIf { it.length >= 10 }?.substring(0, 10) // "yyyy-MM-dd"
+                }
                 ?: "unknown"
             groups.getOrPut(key) { mutableListOf() }.add(event)
         }
