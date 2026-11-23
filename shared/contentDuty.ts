@@ -451,8 +451,25 @@ export interface ShiftReportInput {
   items: readonly DeskItem[];
   breakingIds: ReadonlySet<string>;
   thresholds: DutyThresholds;
+  /** بداية احتساب الإنتاج (workCountFrom)؛ الافتراضي بداية الوردية */
+  countFrom?: number;
   /** بداية تسجيل الحضور؛ ما قبلها لا يُعدّ غيابًا */
   trackedFrom?: number;
+}
+
+/** العمل قبل بداية الوردية بهذه المدة يُحسب لها (من يبدأ مبكرًا لا يخسر ما أنجزه). */
+export const DUTY_EARLY_WORK_MIN = 30;
+
+/** بداية احتساب إنتاج الوردية: قبلها بنصف ساعة، ولا ترجع إلى وردية سابقة للشخص نفسه. */
+export function workCountFrom(
+  occ: Pick<DutyOccurrence, "userId" | "start">,
+  occurrences: ReadonlyArray<Pick<DutyOccurrence, "userId" | "start" | "end">>,
+): number {
+  let from = occ.start - DUTY_EARLY_WORK_MIN * MINUTE;
+  for (const o of occurrences) {
+    if (o.userId === occ.userId && o.start < occ.start && o.end <= occ.start && o.end > from) from = o.end;
+  }
+  return from;
 }
 
 export function computeShiftReport(input: ShiftReportInput): ShiftReport {
@@ -460,7 +477,8 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
   const until = Math.min(occ.end, now);
   const cells = buildPresenceCells(occ, minutes, now, DUTY_CELL_MINUTES, input.trackedFrom);
   const presence = summarizePresence(occ, cells, minutes, now);
-  const inWindow = (t: number) => t >= occ.start && t < until;
+  const countFrom = Math.min(occ.start, input.countFrom ?? occ.start);
+  const inWindow = (t: number) => t >= countFrom && t < until;
 
   const own = input.ownVersions.filter((v) => inWindow(v.at));
   // المادة الواحدة تُعدّ مرة في الوردية حتى لو سُجّل نشرها في أكثر من سجل أو أعيد نشرها.
@@ -475,8 +493,9 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
   const hours = Math.ceil((occ.end - occ.start) / (60 * MINUTE));
   const hourly: Array<number | null> = Array.from({ length: hours }, (_, h) => (occ.start + h * 60 * MINUTE >= now ? null : 0));
   const bump = (t: number) => {
-    const h = Math.floor((t - occ.start) / (60 * MINUTE));
-    if (h >= 0 && h < hours && hourly[h] !== null) hourly[h] = (hourly[h] as number) + 1;
+    // ما سبق البداية يُضاف إلى الساعة الأولى.
+    const h = Math.max(0, Math.floor((t - occ.start) / (60 * MINUTE)));
+    if (h < hours && hourly[h] !== null) hourly[h] = (hourly[h] as number) + 1;
   };
   publishes.forEach((v) => bump(v.at));
   edits.forEach((v) => bump(v.at));
@@ -501,7 +520,7 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
     edits: edits.length,
     reviews: reviews.length,
     responseMedianMin,
-    ticks: publishes.map((v) => ({ offsetMin: Math.round((v.at - occ.start) / MINUTE), breaking: input.breakingIds.has(v.articleId) })),
+    ticks: publishes.map((v) => ({ offsetMin: Math.max(0, Math.round((v.at - occ.start) / MINUTE)), breaking: input.breakingIds.has(v.articleId) })),
     hourly,
     backlog,
     peakBacklog: backlog.reduce((a, b) => Math.max(a, b), 0),
