@@ -356,6 +356,7 @@ const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/Qu
 
 // === LAZY IMPORTS (Dashboard Tools) ===
 const PublishBannedWords = lazy(() => retryImport(() => import("@/pages/dashboard/PublishBannedWords")));
+const SeoWeeklyReport = lazy(() => retryImport(() => import("@/pages/dashboard/SeoWeeklyReport")));
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
 const MawaeedManagement = lazy(() => retryImport(() => import("@/pages/dashboard/MawaeedManagement")));
@@ -1380,6 +1381,16 @@ function Router() {
             <ProtectedRoute requireStaff={true}>
               <Suspense fallback={<PageLoader />}>
                 <GulfEventsEditor />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
+        {/* تقرير البحث الأسبوعي (Search Console) — للمسؤول ومدير النظام ("*") فقط */}
+        <Route path="/dashboard/seo-weekly">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["seo_weekly.view"]}>
+              <Suspense fallback={<PageLoader />}>
+                <SeoWeeklyReport />
               </Suspense>
             </ProtectedRoute>
           )}

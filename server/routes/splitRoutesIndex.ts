@@ -144,6 +144,7 @@ import infographicStudioRouter from "./infographicStudio";
 import videoResolverRouter from "./videoResolver";
 import mawaeedRouter from "./mawaeed";
 import publishBannedWordsRouter from "./publishBannedWords";
+import seoWeeklyRouter from "./seoWeekly";
 import infathRouter from "./infath";
 import servicePagesRouter from "./servicePages";
 import contentDutyRouter from "./contentDuty";
@@ -317,6 +318,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(videoResolverRouter);
   app.use(mawaeedRouter);
   app.use(publishBannedWordsRouter);
+  app.use(seoWeeklyRouter);
   app.use(infathRouter);
   app.use(servicePagesRouter);
   app.use(contentDutyRouter);

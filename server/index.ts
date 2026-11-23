@@ -1740,6 +1740,8 @@ if (!(globalThis as any).__sabqServer) {
             startDutyAlertsJob();
             const { startMeetingRemindersJob } = await import("./jobs/meetingRemindersJob");
             startMeetingRemindersJob();
+            const { startSeoWeeklyJob } = await import("./jobs/seoWeeklyJob");
+            startSeoWeeklyJob();
             const { startDatabaseCleanupJob } = await import("./jobs/databaseCleanupJob");
             startDatabaseCleanupJob();
             const { startBreakingNewsExpiryJob } = await import("./jobs/breakingNewsExpiryJob");
