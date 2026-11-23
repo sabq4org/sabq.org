@@ -1736,6 +1736,8 @@ if (!(globalThis as any).__sabqServer) {
             startArticleEditLocksCleanupJob();
             const { startStaffActivityCleanupJob } = await import("./jobs/staffActivityCleanup");
             startStaffActivityCleanupJob();
+            const { startDutyAlertsJob } = await import("./jobs/dutyAlertsJob");
+            startDutyAlertsJob();
             const { startDatabaseCleanupJob } = await import("./jobs/databaseCleanupJob");
             startDatabaseCleanupJob();
             const { startBreakingNewsExpiryJob } = await import("./jobs/breakingNewsExpiryJob");
