@@ -9,11 +9,11 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import multer from "multer";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import {
-  getUserPermissions,
   logActivity,
   requireAuth,
   requirePermission,
   userHasAnyRole,
+  userHasPermission,
 } from "../rbac";
 import {
   MAX_OPINION_WRITER_FILE_BYTES,
@@ -35,12 +35,11 @@ const uploadPdf = multer({
 const requestUserId = (req: Request) => (req.user as { id: string }).id;
 
 async function canReadOpinionWriterFiles(userId: string): Promise<boolean> {
-  const [isWriter, perms] = await Promise.all([
+  const [canManage, isWriter] = await Promise.all([
+    userHasPermission(userId, PERMISSION_CODES.OPINION_REVIEW),
     userHasAnyRole(userId, ["opinion_author"]),
-    getUserPermissions(userId),
   ]);
-  if (isWriter) return true;
-  return perms.includes("*") || perms.includes(PERMISSION_CODES.OPINION_REVIEW);
+  return canManage || isWriter;
 }
 
 function handleSinglePdfUpload(req: Request, res: Response, next: NextFunction) {
