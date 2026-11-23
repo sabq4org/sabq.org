@@ -204,7 +204,7 @@ import { EditorTitleCheckNotice } from "@/components/articles/TitleCheckBadge";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
 import { uploadNewsImage, newsImageUploadLabel, NEWS_IMAGE_MAX_BYTES, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 import { RIYADH_TIME_ZONE } from "@/lib/displayTimeZone";
-import { pickerDateToWall, RIYADH_NOTE, riyadhNowPickerDate, riyadhWallToIso, toRiyadhWall, wallToPickerDate } from "@/lib/riyadhSchedule";
+import { DRAFT_SCHEDULE_ZONE, draftScheduledAtToRiyadh, pickerDateToWall, RIYADH_NOTE, riyadhNowPickerDate, riyadhWallToIso, toRiyadhWall, wallToPickerDate } from "@/lib/riyadhSchedule";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -1029,6 +1029,7 @@ export default function ArticleEditor() {
       isReading,
       publishType,
       scheduledAt,
+      scheduledAtZone: DRAFT_SCHEDULE_ZONE,
       hideFromHomepage,
       isVideoTemplate,
       videoUrl,
@@ -1083,7 +1084,7 @@ export default function ArticleEditor() {
     if (draft.isFeatured !== undefined) setIsFeatured(draft.isFeatured);
     if (draft.isReading !== undefined) setIsReading(draft.isReading);
     if (draft.publishType !== undefined) setPublishType(draft.publishType);
-    if (draft.scheduledAt !== undefined) setScheduledAt(draft.scheduledAt);
+    if (draft.scheduledAt !== undefined) setScheduledAt(draftScheduledAtToRiyadh(draft.scheduledAt, draft.scheduledAtZone));
     if (draft.hideFromHomepage !== undefined) setHideFromHomepage(draft.hideFromHomepage);
     if (draft.isVideoTemplate !== undefined) setIsVideoTemplate(draft.isVideoTemplate);
     if (draft.videoUrl !== undefined) setVideoUrl(draft.videoUrl);

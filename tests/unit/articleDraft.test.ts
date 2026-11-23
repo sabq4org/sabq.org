@@ -21,4 +21,15 @@ describe("editor draft recovery", () => {
     const newer = { ...older, savedAt: "2026-10-17T12:04:00.000Z" };
     expect(draftDiffersFromArticle(newer, server, draftCompareIgnoredKeys(newer.savedAt, server.updatedAt))).toBe(true);
   });
+
+  it("يقارن موعد الجدولة بساعة الرياض، ويرحّل مسودة قديمة حُفظت بساعة الجهاز", () => {
+    const server = { status: "scheduled", publishType: "scheduled", scheduledAt: "2026-11-23T19:00:00.000Z" };
+    const base = { publishType: "scheduled", isFeatured: false, isReading: false, hideFromHomepage: false, isVideoTemplate: false };
+    expect(draftDiffersFromArticle({ ...base, scheduledAt: "2026-11-23T22:00", scheduledAtZone: "Asia/Riyadh" }, server)).toBe(false);
+    const d = new Date("2026-11-23T19:00:00.000Z");
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const deviceWall = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    expect(draftDiffersFromArticle({ ...base, scheduledAt: deviceWall }, server)).toBe(false);
+    expect(draftDiffersFromArticle({ ...base, scheduledAt: "2026-11-23T23:00", scheduledAtZone: "Asia/Riyadh" }, server)).toBe(true);
+  });
 });

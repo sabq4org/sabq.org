@@ -23,3 +23,13 @@ describe("حقل الجدولة بتوقيت الرياض", () => {
     expect(deviceDiffersFromRiyadh(winter, "Asia/Kuwait")).toBe(false);
   });
 });
+
+describe("مسودات محلية قديمة", () => {
+  it("يرحّل موعد مسودة حُفظت بساعة الجهاز، ويترك المسودة الجديدة كما هي", async () => {
+    const { draftScheduledAtToRiyadh } = await import("../../client/src/lib/riyadhSchedule");
+    expect(draftScheduledAtToRiyadh("2026-11-23T22:00", "Asia/Riyadh")).toBe("2026-11-23T22:00");
+    const legacy = draftScheduledAtToRiyadh("2026-11-23T22:00", undefined);
+    expect(legacy).toBe(new Date(new Date("2026-11-23T22:00").getTime() + 3 * 3600_000).toISOString().slice(0, 16));
+    expect(draftScheduledAtToRiyadh("", undefined)).toBe("");
+  });
+});

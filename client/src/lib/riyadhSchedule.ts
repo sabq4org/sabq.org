@@ -49,6 +49,20 @@ export function riyadhNowPickerDate(now = Date.now()): Date {
   return wallToPickerDate(toRiyadhWall(now)) ?? new Date(now);
 }
 
+/** وسم المسودات المحلية التي حُفظ موعدها بساعة الرياض. */
+export const DRAFT_SCHEDULE_ZONE = RIYADH_TIME_ZONE;
+
+/**
+ * موعد مسودة محلية بساعة الرياض. المسودات الأقدم (بلا وسم scheduledAtZone) حفظت الموعد
+ * بساعة الجهاز، فنقرؤه كوقت محلي ونحوّله؛ وإلا يُنشر قبل موعده بساعة عند زميل في القاهرة.
+ */
+export function draftScheduledAtToRiyadh(scheduledAt: unknown, zone: unknown): string {
+  if (typeof scheduledAt !== "string" || !scheduledAt) return "";
+  if (zone === DRAFT_SCHEDULE_ZONE || !WALL_RE.test(scheduledAt)) return scheduledAt;
+  const local = new Date(scheduledAt); // بلا منطقة = وقت الجهاز
+  return Number.isFinite(local.getTime()) ? toRiyadhWall(local) : scheduledAt;
+}
+
 /** هل يختلف جهاز المستخدم الآن عن الرياض؟ يُظهر التنويه في القوائم عندها فقط. */
 export function deviceDiffersFromRiyadh(at = Date.now(), timeZone = displayTimeZone()): boolean {
   if (timeZone === RIYADH_TIME_ZONE) return false;
