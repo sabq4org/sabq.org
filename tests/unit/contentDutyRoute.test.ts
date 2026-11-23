@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   createException: vi.fn(),
   cancelException: vi.fn(),
   saveThresholds: vi.fn(),
+  saveAlertSettings: vi.fn(),
 }));
 
 vi.mock("../../server/auth", () => ({
@@ -45,6 +46,7 @@ vi.mock("../../server/services/contentDuty/dutyRosterStore", () => {
     createException: mocks.createException,
     cancelException: mocks.cancelException,
     saveThresholds: mocks.saveThresholds,
+    saveAlertSettings: mocks.saveAlertSettings,
   };
 });
 
@@ -158,5 +160,21 @@ describe("content duty edits", () => {
     expect((await send("POST", "/api/admin/content-duty/exceptions/e1/cancel", {})).status).toBe(200);
     mocks.cancelException.mockResolvedValue(false);
     expect((await send("POST", "/api/admin/content-duty/exceptions/nope/cancel", {})).status).toBe(404);
+  });
+});
+
+describe("«عين المناوبة» alert settings", () => {
+  it("saves alert settings for the lead only", async () => {
+    as("manager");
+    let res = await send("PUT", "/api/admin/content-duty/alert-settings", { settings: { absentMin: 45 } });
+    expect(res.status).toBe(403);
+    expect(mocks.saveAlertSettings).not.toHaveBeenCalled();
+
+    as("lead");
+    mocks.saveAlertSettings.mockResolvedValue({ absentMin: 45 });
+    res = await send("PUT", "/api/admin/content-duty/alert-settings", { settings: { absentMin: 45 } });
+    expect(res.status).toBe(200);
+    expect(mocks.saveAlertSettings).toHaveBeenCalledWith({ absentMin: 45 });
+    expect(await res.json()).toEqual({ settings: { absentMin: 45 } });
   });
 });
