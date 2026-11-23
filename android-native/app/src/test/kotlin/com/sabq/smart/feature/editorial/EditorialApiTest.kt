@@ -63,7 +63,24 @@ class EditorialApiTest {
     }
 
     @Test
+    fun dayTimeFollowsTheDeviceZone() {
+        val saved = java.util.TimeZone.getDefault()
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Africa/Cairo"))
+            val now = Instant.parse("2026-10-31T18:00:00Z") // 20:00 القاهرة
+            assertEquals("اليوم 19:00", EditorialText.dayTime(now.minusSeconds(3600), now))
+            // تأكيد الجدولة يبقى بتوقيت الرياض لأن حقل الإدخال بتوقيت الرياض
+            assertEquals("اليوم 20:00", EditorialText.dayTime(now.minusSeconds(3600), now, java.time.ZoneId.of("Asia/Riyadh")))
+        } finally {
+            java.util.TimeZone.setDefault(saved)
+        }
+    }
+
+    @Test
     fun relativeAndDayTimeUseLatinDigitsAndRiyadhTime() {
+        val saved = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Riyadh"))
+        try {
         val now = Instant.parse("2026-10-31T18:00:00Z") // 21:00 Riyadh
         assertEquals("الآن", EditorialText.relative(now, now))
         assertEquals("منذ 5 د", EditorialText.relative(now.minusSeconds(300), now))
@@ -73,5 +90,8 @@ class EditorialApiTest {
         assertEquals("2026-10-31T18:00:00Z", EditorialText.isoUtc(now))
         assertEquals("اعتمد وطبّق (2 من 3)", EditRequestReview.approveTitle(2, 3))
         assertEquals("اعتمد وطبّق", EditRequestReview.approveTitle(3, 3))
+        } finally {
+            java.util.TimeZone.setDefault(saved)
+        }
     }
 }

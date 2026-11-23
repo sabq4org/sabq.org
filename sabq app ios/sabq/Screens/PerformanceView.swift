@@ -598,7 +598,7 @@ struct PerformanceView: View {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ar")
         f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.timeZone = .autoupdatingCurrent
         f.dateFormat = Calendar.current.isDateInToday(date) ? "'اليوم' h:mm" : "d MMMM"
         return Self.latinDigits(f.string(from: date))
     }

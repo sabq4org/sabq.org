@@ -3,7 +3,7 @@ import Testing
 @testable import sabq
 
 // نقل تعديلات الويب — الدفعة الثالثة: سطر الكاتب في الخبر (#1598):
-// الصورة والصفة والتوثيق و«آخر تحديث» والتاريخ/الوقت بتوقيت الرياض.
+// الصورة والصفة والتوثيق و«آخر تحديث» والتاريخ/الوقت بتوقيت جهاز القارئ.
 struct WebParityBatch3Tests {
 
     private func article(_ json: String) throws -> Article {
@@ -66,16 +66,20 @@ struct WebParityBatch3Tests {
         #expect(Article.resolveAuthorRole(name: "أحمد", authorId: nil, reporterId: nil, staffTitle: nil) == "كاتب الخبر")
     }
 
-    // MARK: - التاريخ والوقت بتوقيت الرياض بأرقام لاتينية
+    // MARK: - التاريخ والوقت بتوقيت جهاز القارئ بأرقام لاتينية
 
-    @Test func publicationDateAndClockUseRiyadhAndLatinDigits() throws {
+    @Test func publicationDateAndClockUseDeviceZoneAndLatinDigits() throws {
         let a = try article("""
         {"id":"b4","title":"خبر","body":"نص","publishedAt":"2026-09-12T04:23:25.698Z"}
         """)
-        // 04:23 UTC = 07:23 بتوقيت الرياض
-        #expect(a.publicationDate == "12 سبتمبر 2026")
-        #expect(a.publicationClock.hasPrefix("07:23"))
-        #expect(a.publicationClock.contains("ص"))
+        // العرض بتوقيت جهاز القارئ: 04:23 UTC = 07:23 في الرياض و06:23 في القاهرة.
+        let instant = try #require(SabqFormatters.parseISO8601("2026-09-12T04:23:25.698Z"))
+        let expectedClock = DateFormatter()
+        expectedClock.locale = Locale(identifier: "en_US_POSIX")
+        expectedClock.timeZone = .autoupdatingCurrent
+        expectedClock.dateFormat = "hh:mm"
+        #expect(a.publicationDate.hasSuffix("2026"))
+        #expect(a.publicationClock.hasPrefix(expectedClock.string(from: instant)))
         // لا أرقام عربية-هندية (U+0660…U+0669) في أي موضع — مقارنة بالرموز لا بالنص.
         #expect(a.publicationClock.unicodeScalars.allSatisfy { !(0x660...0x669).contains($0.value) })
         #expect(a.publicationDate.unicodeScalars.allSatisfy { !(0x660...0x669).contains($0.value) })

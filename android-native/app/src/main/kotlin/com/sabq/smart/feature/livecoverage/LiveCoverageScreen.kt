@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.livecoverage
 
+import com.sabq.smart.util.displayZone
 import android.content.Intent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -639,7 +640,7 @@ private fun severityColor(severity: String): Color = when (severity) {
     else -> SabqTheme.colors.tertiaryInk
 }
 
-private val RIYADH_ZONE: ZoneId = ZoneId.of("Asia/Riyadh")
+private val RIYADH_ZONE: ZoneId get() = displayZone() // منطقة الجهاز
 private val TIME_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH:mm", Locale("ar"))
 private val ARABIC_FULL_DATE: DateTimeFormatter =

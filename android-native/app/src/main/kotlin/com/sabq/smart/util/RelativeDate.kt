@@ -2,7 +2,6 @@ package com.sabq.smart.util
 
 import java.time.Duration
 import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -18,11 +17,11 @@ import java.util.Locale
  */
 fun formatRelativeDateAr(iso: String?): String {
     if (iso.isNullOrBlank()) return ""
-    val riyadh = ZoneId.of("Asia/Riyadh")
-    val zoned = runCatching { OffsetDateTime.parse(iso).toInstant().atZone(riyadh) }.getOrNull()
-        ?: runCatching { ZonedDateTime.parse(iso).withZoneSameInstant(riyadh) }.getOrNull()
+    val zone = displayZone()
+    val zoned = runCatching { OffsetDateTime.parse(iso).toInstant().atZone(zone) }.getOrNull()
+        ?: runCatching { ZonedDateTime.parse(iso).withZoneSameInstant(zone) }.getOrNull()
         ?: return iso
-    val now = ZonedDateTime.now(ZoneId.of("Asia/Riyadh"))
+    val now = ZonedDateTime.now(zone)
     val diff = Duration.between(zoned, now)
     return when {
         diff.isNegative -> "الآن"

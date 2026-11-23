@@ -1,10 +1,10 @@
 package com.sabq.smart.data
 
+import com.sabq.smart.util.displayZone
 import com.sabq.smart.data.api.ApiLiveUpdate
 import com.sabq.smart.ui.components.ImageFocalPoint
 import java.time.Duration
 import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -53,7 +53,7 @@ fun ApiLiveUpdate.toArticleShell(webOrigin: String = "https://sabq.org"): Articl
 private fun formatLiveRelative(iso: String): String {
     if (iso.isBlank()) return ""
     val date = parseIso(iso) ?: return iso
-    val now = ZonedDateTime.now(ZoneId.of("Asia/Riyadh"))
+    val now = ZonedDateTime.now(displayZone())
     val diff = Duration.between(date, now)
     return when {
         diff.isNegative -> "الآن"
@@ -68,7 +68,7 @@ private fun formatLiveRelative(iso: String): String {
 
 private fun parseIso(s: String): ZonedDateTime? {
     if (s.isBlank()) return null
-    return runCatching { OffsetDateTime.parse(s).atZoneSameInstant(ZoneId.of("Asia/Riyadh")) }
+    return runCatching { OffsetDateTime.parse(s).atZoneSameInstant(displayZone()) }
         .recoverCatching { ZonedDateTime.parse(s) }
         .getOrNull()
 }

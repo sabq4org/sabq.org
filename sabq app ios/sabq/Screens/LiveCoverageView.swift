@@ -333,7 +333,7 @@ struct LiveCoverageView: View {
 
     private func formatEventTime(_ isoString: String) -> String {
         guard let date = SabqFormatters.parseISO8601(isoString) else { return "" }
-        return SabqFormatters.riyadhTime.string(from: date)
+        return SabqFormatters.localTime.string(from: date)
     }
 
     private func formatDateHeader(_ dateString: String) -> String {
