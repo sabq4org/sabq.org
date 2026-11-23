@@ -10,6 +10,8 @@ import { sendEmailNotification } from "./email";
 
 export const MEETING_REMINDER_LEAD_MS = 30 * 60 * 1000;
 const REMINDER_EVENT = "reminder_30m";
+// حد MailerSend 120 رسالة/دقيقة؛ نرسل 60 على الأكثر في الدورة والباقي في الدقيقة التالية (نافذة 30 دقيقة تكفي)
+const MAX_SENDS_PER_TICK = 60;
 const SITE_URL = (process.env.MEETINGS_PUBLIC_URL || "https://sabq.org").replace(/\/+$/, "");
 
 function escapeHtml(s: string): string {
@@ -73,8 +75,10 @@ export async function runMeetingRemindersTick(now: Date = new Date()): Promise<v
         ),
       );
     if (!due.length) return;
+    let budget = MAX_SENDS_PER_TICK;
 
     for (const m of due) {
+      if (budget <= 0) break;
       const recipients = await db
         .select({ userId: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
         .from(meetingParticipants)
@@ -100,7 +104,8 @@ export async function runMeetingRemindersTick(now: Date = new Date()): Promise<v
         );
       const sent = new Set(already.map((a) => a.userId));
       const url = `${SITE_URL}/dashboard/meetings/${m.id}`;
-      const pending = recipients.filter((r) => !sent.has(r.userId) && r.email);
+      const pending = recipients.filter((r) => !sent.has(r.userId) && r.email).slice(0, budget);
+      budget -= pending.length;
       if (!pending.length) continue;
 
       for (const r of pending) {
