@@ -372,7 +372,7 @@ class SupervisorNewsPreviewViewModel @Inject constructor(
     fun schedule(at: Instant) {
         val s = _state.value
         val article = s.article ?: return
-        act("جُدول للنشر ${EditorialText.dayTime(at)}") {
+        act("جُدول للنشر ${EditorialText.dayTime(at, zone = ZoneId.of("Asia/Riyadh"))} بتوقيت الرياض") {
             api.schedule(id, ScheduleBody(EditorialText.isoUtc(at), article.updatedAt, s.chosenCategory))
         }
     }
