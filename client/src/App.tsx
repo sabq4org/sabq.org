@@ -347,6 +347,7 @@ const ShortsEditor = lazy(() => retryImport(() => import("@/pages/ShortsEditor")
 // === LAZY IMPORTS (Opinion) ===
 const OpinionManagement = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionManagement")));
 const OpinionWritersPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWritersPage")));
+const OpinionWriterFilesAdminPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWriterFilesAdminPage")));
 const ReportersPage = lazy(() => retryImport(() => import("@/pages/dashboard/ReportersPage")));
 const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/QuizManagement")));
 
@@ -470,6 +471,7 @@ const PublisherRegister = lazy(() => retryImport(() => import("@/pages/publisher
 const AdminPublisherApplications = lazy(() => retryImport(() => import("@/pages/admin/publishers/AdminPublisherApplications")));
 const OpinionAuthorDashboard = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorDashboard")));
 const WriterGuidePage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterGuidePage")));
+const WriterFilesPage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterFilesPage")));
 const ReporterMyArticlesPage = lazy(() => retryImport(() => import("@/pages/reporter/ReporterMyArticlesPage")));
 const OpinionTicketsList = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketsList")));
 const OpinionTicketDetail = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketDetail")));
@@ -1020,6 +1022,7 @@ function Router() {
         <Route path="/dashboard/quizzes">{() => <LazyRoute component={QuizManagement} />}</Route>
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
+        <Route path="/dashboard/opinion-writer-files">{() => <LazyRoute component={OpinionWriterFilesAdminPage} />}</Route>
         {/* إدارة المراسلين — مسؤول النظام فقط */}
         <Route path="/dashboard/reporters">
           {() => (
@@ -1157,6 +1160,7 @@ function Router() {
         <Route path="/dashboard/reporter/articles">{() => <LazyRoute component={ReporterMyArticlesPage} />}</Route>
         <Route path="/dashboard/opinion-author">{() => <LazyRoute component={OpinionAuthorDashboard} />}</Route>
         <Route path="/dashboard/opinion-author/guide">{() => <LazyRoute component={WriterGuidePage} />}</Route>
+        <Route path="/dashboard/opinion-author/files">{() => <LazyRoute component={WriterFilesPage} />}</Route>
         <Route path="/dashboard/opinion-author/tickets/:id">{() => <LazyRoute component={OpinionTicketDetail} />}</Route>
         <Route path="/dashboard/opinion-author/tickets">{() => <LazyRoute component={OpinionTicketsList} />}</Route>
         <Route path="/dashboard/opinion-tickets/:id">{() => <LazyRoute component={OpinionTicketAdminDetail} />}</Route>

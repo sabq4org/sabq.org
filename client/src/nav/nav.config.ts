@@ -174,6 +174,14 @@ export const navConfig: NavItem[] = [
     icon: Briefcase,
     roles: ["opinion_author"],
   },
+  {
+    id: "opinion_author_files",
+    labelKey: "nav.writer_files",
+    labelAr: "ملفاتي",
+    path: "/dashboard/opinion-author/files",
+    icon: FolderOpen,
+    roles: ["opinion_author"],
+  },
 
   // ===== كاتب الزاوية / Angle Writer (مُقترب) =====
   // قائمة مبسّطة: "زاويتي" فقط. permission-first يُظهرها لمن يملك muqtarab.own.view،
@@ -528,6 +536,15 @@ export const navConfig: NavItem[] = [
     labelAr: "كتّاب الرأي",
     path: "/dashboard/opinion-writers",
     icon: CalendarClock,
+    roles: ["admin", "editor", "system_admin"],
+    permissions: ["opinion.review"],
+  },
+  {
+    id: "opinion_writer_files",
+    labelKey: "nav.opinion_writer_files",
+    labelAr: "ملفات كتّاب الرأي",
+    path: "/dashboard/opinion-writer-files",
+    icon: FolderOpen,
     roles: ["admin", "editor", "system_admin"],
     permissions: ["opinion.review"],
   },

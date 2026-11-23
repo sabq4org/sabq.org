@@ -16211,3 +16211,23 @@ export const contentDutyAlerts = pgTable("content_duty_alerts", {
   index("idx_content_duty_alerts_occurrence").on(table.occurrenceKey),
   index("idx_content_duty_alerts_created").on(table.createdAt),
 ]);
+
+// ملفات ومستندات كتّاب الرأي (PDF مثل محاضر الاجتماعات والتعاميم) — يرفعها فريق التحرير وتظهر للكتّاب للتحميل.
+// migrations/20261123_opinion_writer_files.sql
+export const opinionWriterFiles = pgTable("opinion_writer_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  storageKey: text("storage_key").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  mimeType: varchar("mime_type", { length: 120 }).notNull().default("application/pdf"),
+  fileSizeBytes: integer("file_size_bytes").notNull(),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_opinion_writer_files_created").on(table.createdAt),
+]);
+
+export type OpinionWriterFile = typeof opinionWriterFiles.$inferSelect;
+export type InsertOpinionWriterFile = typeof opinionWriterFiles.$inferInsert;
