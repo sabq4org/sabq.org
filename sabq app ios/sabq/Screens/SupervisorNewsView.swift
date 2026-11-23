@@ -408,10 +408,11 @@ struct SupervisorNewsPreviewView: View {
     private var scheduleSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                DatePicker("وقت النشر", selection: $scheduleAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                DatePicker("وقت النشر (بتوقيت الرياض)", selection: $scheduleAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.graphical)
                     .environment(\.calendar, Calendar(identifier: .gregorian))
                     .environment(\.locale, Locale(identifier: "ar_SA@numbers=latn;calendar=gregorian"))
+                    .environment(\.timeZone, TimeZone(identifier: "Asia/Riyadh") ?? .current)
                 EditorialActionButton(title: "جدول النشر", busy: busy) {
                     Task { await schedule() }
                 }
@@ -496,7 +497,7 @@ struct SupervisorNewsPreviewView: View {
             _ = try await EditorialAPI.schedule(id: id, at: scheduleAt, expectedUpdatedAt: article.updatedAt, categoryId: chosenCategory)
             actionError = nil
             showSchedule = false
-            doneMessage = "جُدول للنشر \(EditorialText.dayTime(scheduleAt))"
+            doneMessage = "جُدول للنشر \(EditorialText.dayTime(scheduleAt, timeZone: TimeZone(identifier: "Asia/Riyadh") ?? .current)) بتوقيت الرياض"
         } catch {
             actionError = error.localizedDescription
             showSchedule = false

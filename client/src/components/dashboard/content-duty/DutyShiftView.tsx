@@ -1,8 +1,7 @@
 import { Link } from "wouter";
 import type { ContentDutyRoomResponse } from "@shared/contentDuty";
-import { minutesText, statusLabel, statusTone, viewerClock } from "@/lib/contentDuty";
-import { displayTimeZone } from "@/lib/displayTimeZone";
-import { dutyMinuteOfDay } from "@/lib/dutyLocalTime";
+import { riyadhClock } from "@shared/contentDuty";
+import { minutesText, statusLabel, statusTone } from "@/lib/contentDuty";
 import { DutyRing } from "./ContentDutyCard";
 import { DutyLegend, DutyPulseRibbon } from "./DutyPulseRibbon";
 
@@ -30,10 +29,10 @@ function Chips({ shift, thresholds }: { shift: Shift; thresholds: ContentDutyRoo
   const p = shift.report.presence;
   const chips: Array<{ text: string; tone: "bad" | "warn" | "info" }> = [];
   if (p.lateStartMin > thresholds.lateStartMin) {
-    chips.push({ text: p.firstActivityAt ? `بدأ متأخرًا ${p.lateStartMin} د (أول حركة ${viewerClock(p.firstActivityAt)})` : `لا حركة منذ بداية الوردية (${p.lateStartMin} د)`, tone: "bad" });
+    chips.push({ text: p.firstActivityAt ? `بدأ متأخرًا ${p.lateStartMin} د (أول حركة ${riyadhClock(p.firstActivityAt)})` : `لا حركة منذ بداية الوردية (${p.lateStartMin} د)`, tone: "bad" });
   }
   if (p.longestGap && p.longestGap.minutes >= thresholds.gapMin && p.firstActivityAt && p.longestGap.start > p.firstActivityAt) {
-    chips.push({ text: `أطول انقطاع ${p.longestGap.minutes} د (${viewerClock(p.longestGap.start)} – ${viewerClock(p.longestGap.end)})`, tone: "bad" });
+    chips.push({ text: `أطول انقطاع ${p.longestGap.minutes} د (${riyadhClock(p.longestGap.start)} – ${riyadhClock(p.longestGap.end)})`, tone: "bad" });
   }
   if (p.earlyLeaveMin !== null && p.earlyLeaveMin > thresholds.lateStartMin) chips.push({ text: `غادر قبل النهاية بـ ${p.earlyLeaveMin} د`, tone: "bad" });
   if (shift.report.leftAtHandoff) chips.push({ text: `سلّم ${shift.report.leftAtHandoff} مواد متأخرة للوردية التالية`, tone: "warn" });
@@ -55,7 +54,7 @@ export function DutyShiftView({ room }: { room: ContentDutyRoomResponse }) {
   const tone = statusTone(shift.status);
   const overdue = shift.waiting.filter((w) => w.overdue).length;
   const maxHour = Math.max(1, ...r.hourly.map((h) => h ?? 0));
-  const startHour = Math.floor(dutyMinuteOfDay(shift.startMs, displayTimeZone()) / 60);
+  const startHour = Number(shift.start.slice(0, 2));
 
   const compareRows: Array<{ label: string; now: string; avg: string; trend: "good" | "bad" | "muted"; word: string }> = [
     { label: "الحضور المتصل", now: r.presence.presentPct === null ? "—" : `${r.presence.presentPct}%`, avg: avg.presentPct === null ? "—" : `${avg.presentPct}%`, trend: compareTone(r.presence.presentPct, avg.presentPct, true), word: "" },
@@ -84,13 +83,13 @@ export function DutyShiftView({ room }: { room: ContentDutyRoomResponse }) {
               ) : null}
             </div>
             <p className="m-0 text-[15px] leading-7 text-[#55667A]">
-              <bdi dir="ltr" className="tabular-nums">{viewerClock(shift.startMs, shift.start)} – {viewerClock(shift.endMs, shift.end)}</bdi>
+              <bdi dir="ltr" className="tabular-nums">{shift.start} – {shift.end}</bdi> بتوقيت الرياض
               {shift.coveredName ? <> · يغطي بدل {shift.coveredName}</> : null}
-              {shift.lastAction ? <> · آخر عمل <bdi dir="ltr" className="tabular-nums">{viewerClock(shift.lastAction.atMs, shift.lastAction.at)}</bdi>: «{shift.lastAction.title}»</> : null}
+              {shift.lastAction ? <> · آخر عمل <bdi dir="ltr" className="tabular-nums">{shift.lastAction.at}</bdi>: «{shift.lastAction.title}»</> : null}
             </p>
             {shift.next ? (
               <p className="m-0 text-[13px] text-[#55667A]">
-                التالي: <strong className="text-[#1B2B3A]">{shift.next.name}</strong> <bdi dir="ltr" className="tabular-nums">{viewerClock(shift.next.startMs, shift.next.start)}</bdi>
+                التالي: <strong className="text-[#1B2B3A]">{shift.next.name}</strong> <bdi dir="ltr" className="tabular-nums">{shift.next.start}</bdi>
                 {shift.next.pendingToHandOver > 0 ? <> · {shift.live ? "سيُسلَّم له الآن" : "سُلّم له"} <strong className="text-[#946000]">{shift.next.pendingToHandOver} مواد</strong></> : null}
               </p>
             ) : null}

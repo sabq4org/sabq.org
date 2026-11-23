@@ -69,8 +69,7 @@ nonisolated enum SabqFormatters {
     /// منطقة العرض: منطقة جهاز المستخدم (قارئ في القاهرة يرى وقت القاهرة)، مطابقةً للويب
     /// (`client/src/lib/displayTimeZone.ts`). `autoupdatingCurrent` يتبع تغيير منطقة الجهاز.
     /// المنسّقات التي ما زال اسمها `riyadh…` تعرض بتوقيت الجهاز، عدا `riyadhTime`
-    /// و`riyadhWeekdayDate` اللذين يبقيان بتوقيت الرياض لمن يحتاج الرياض صراحة
-    /// (الجدولة تستخدم `localWeekdayDate` و`localTime`).
+    /// و`riyadhWeekdayDate` اللذين يبقيان بتوقيت الرياض لمواعيد التحرير بجوار حقل الجدولة.
     static let displayTimeZone: TimeZone = .autoupdatingCurrent
 
     /// «HH:mm» بتوقيت جهاز المستخدم (التغطية الحية، صندوق الرسائل).
@@ -79,16 +78,6 @@ nonisolated enum SabqFormatters {
         f.locale = saudiArabicLatinDigits
         f.timeZone = displayTimeZone
         f.dateFormat = "HH:mm"
-        return f
-    }()
-
-    /// «الثلاثاء 23 سبتمبر 2026» بتوقيت الجهاز — مواعيد الجدولة (مثل الويب).
-    static let localWeekdayDate: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = saudiArabicLatinDigits
-        f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = displayTimeZone
-        f.dateFormat = "EEEE d MMMM yyyy"
         return f
     }()
 

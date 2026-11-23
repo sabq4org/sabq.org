@@ -341,8 +341,6 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
           status: liveStatus(minutes, now),
           start: riyadhClock(occ.start),
           end: riyadhClock(occ.end),
-          startMs: occ.start,
-          endMs: occ.end,
           remainingMin: remainingMin(occ, now),
           elapsedPct: elapsedPct(occ, now),
           coveredName: occ.coveredUserId ? names.get(occ.coveredUserId) ?? null : null,
@@ -353,7 +351,6 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
       next: upcoming ? {
         name: names.get(upcoming.userId) ?? "بلا اسم",
         start: riyadhClock(upcoming.start),
-        startMs: upcoming.start,
         startsInMin: Math.max(0, Math.round((upcoming.start - now) / MINUTE)),
       } : null,
       waiting: seesNumbers ? { count: pending.length, overdue: overdue.length } : null,
@@ -375,9 +372,6 @@ export async function getDutyRoom(viewer: DutyViewer, requestedKey: string | nul
     key: `${o.key}:${o.userId}`,
     label: `${names.get(o.userId) ?? "بلا اسم"} · ${DUTY_DAY_NAMES[new Date(`${o.dutyDate}T00:00:00Z`).getUTCDay()]} ${o.dutyDate.slice(8)}/${o.dutyDate.slice(5, 7)} · ${riyadhClock(o.start)}–${riyadhClock(o.end)}`,
     live: o.start <= now && now < o.end,
-    name: names.get(o.userId) ?? "بلا اسم",
-    startMs: o.start,
-    endMs: o.end,
   }));
   const selected = (requestedKey ? recent.find((o) => `${o.key}:${o.userId}` === requestedKey) : null)
     ?? recent.find((o) => now < o.end) ?? recent[0] ?? null;
@@ -440,10 +434,10 @@ export async function getDutyRoom(viewer: DutyViewer, requestedKey: string | nul
       .sort((a, b) => a.start - b.start)[0];
     const nextNames = nextOcc && !names.has(nextOcc.userId) ? await loadNames([nextOcc.userId]) : names;
     const last = data.lastAction.get(selected.userId);
-    let lastAction: { title: string; at: string; atMs: number } | null = null;
+    let lastAction: { title: string; at: string } | null = null;
     if (last && last.at >= selected.start) {
       const [row] = await db.select({ title: articles.title }).from(articles).where(eq(articles.id, last.articleId)).limit(1);
-      if (row) lastAction = { title: row.title, at: riyadhClock(last.at), atMs: last.at };
+      if (row) lastAction = { title: row.title, at: riyadhClock(last.at) };
     }
     const name = names.get(selected.userId) ?? "بلا اسم";
     return {
@@ -471,7 +465,6 @@ export async function getDutyRoom(viewer: DutyViewer, requestedKey: string | nul
         next: nextOcc ? {
           name: nextNames.get(nextOcc.userId) ?? "بلا اسم",
           start: riyadhClock(nextOcc.start),
-          startMs: nextOcc.start,
           pendingToHandOver: live ? waiting.length : waitingAt(data.items, selected.end).length,
         } : null,
         waiting,
@@ -548,12 +541,8 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
   const from = riyadhMidnight(weekStart);
   const to = from + 7 * DAY;
   const shifts = await listActiveShifts();
-  const exceptions = await listExceptions(addDays(weekStart, -2), addDays(weekStart, 8));
+  const exceptions = await listExceptions(addDays(weekStart, -1), addDays(weekStart, 7));
   const occurrences = expandOccurrences(shifts, exceptions, from, to);
-  // يوم قبل الأسبوع ويوم بعده: الواجهة تزيح الأسبوع إلى منطقة جهاز المشاهد فتحتاج أطرافه.
-  const around = expandOccurrences(shifts, exceptions, from - DAY, to + DAY);
-  const dayBefore = addDays(weekStart, -1);
-  const dayAfter = addDays(weekStart, 7);
   const people = Array.from(new Set([...shifts.map((s) => s.userId), ...exceptions.flatMap((e) => [e.userId, ...(e.coverUserId ? [e.coverUserId] : [])])]));
   const [names, thresholds, candidates] = await Promise.all([
     loadNames(people),
@@ -583,10 +572,6 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
     })),
     blocks: rosterBlocks(occurrences, weekStart).map((b) => ({ ...b, userId: opaque(b.userId) })),
     gaps,
-    edge: {
-      blocks: [...rosterBlocks(around, dayBefore, 1), ...rosterBlocks(around, dayAfter, 1)].map((b) => ({ ...b, userId: opaque(b.userId) })),
-      gaps: [...coverageGaps(around, dayBefore, 1), ...coverageGaps(around, dayAfter, 1)],
-    },
     gapMinutes: gaps.reduce((a, g) => a + (g.endMinute - g.startMinute), 0),
     candidates,
     thresholds,

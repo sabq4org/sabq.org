@@ -585,7 +585,7 @@ struct AdminArticleEditorView: View {
             if vm.isPublishNowAction {
                 Text("سيُنشر المقال فورًا. هل تريد المتابعة؟")
             } else {
-                Text("سيُنشر المقال تلقائيًا في الموعد الظاهر بتوقيت جهازك.")
+                Text("سيُنشر المقال تلقائيًا في الموعد الظاهر بتوقيت الرياض.")
             }
         }
         .alert("تعذّر الحفظ", isPresented: Binding(
@@ -1360,8 +1360,9 @@ struct AdminPublishingOptions: View {
                     .tint(SabqTheme.primary)
                     .environment(\.locale, Locale(identifier: "ar"))
                     .environment(\.calendar, Calendar(identifier: .gregorian))
+                    .environment(\.timeZone, TimeZone(identifier: "Asia/Riyadh")!)
                 if let overdue = vm.overdueSavedSchedule {
-                    Text("الموعد المحفوظ السابق فات: \(SabqFormatters.localWeekdayDate.string(from: overdue)) · \(SabqFormatters.localTime.string(from: overdue)). تم اختيار الموعد القادم حسب جدول الكاتب ويمكنك تعديله.")
+                    Text("الموعد المحفوظ السابق فات: \(SabqFormatters.riyadhWeekdayDate.string(from: overdue)) · \(SabqFormatters.riyadhTime.string(from: overdue)). تم اختيار الموعد القادم حسب جدول الكاتب ويمكنك تعديله.")
                         .sabqText(SabqType.meta)
                         .foregroundStyle(SabqTheme.danger)
                         .fixedSize(horizontal: false, vertical: true)

@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import type { ContentDutyCardEntry, ContentDutyCardResponse } from "@shared/contentDuty";
 import { useContentDutyCard } from "@/hooks/useContentDuty";
-import { formatRemaining, statusLabel, statusTone, viewerClock } from "@/lib/contentDuty";
+import { formatRemaining, statusLabel, statusTone } from "@/lib/contentDuty";
 import { DutyPulseRibbon } from "./DutyPulseRibbon";
 
 const ROOM = "/dashboard/content-duty";
@@ -75,7 +75,7 @@ export default function ContentDutyCard() {
             <span className="text-lg font-bold text-[#BF3038]">لا مناوب الآن</span>
             {data.next ? (
               <span className="text-[13px] text-[#55667A]">
-                أقرب وردية: {data.next.name} <bdi dir="ltr" className="tabular-nums">{viewerClock(data.next.startMs, data.next.start)}</bdi>
+                أقرب وردية: {data.next.name} <bdi dir="ltr" className="tabular-nums">{data.next.start}</bdi> بتوقيت الرياض
               </span>
             ) : null}
           </div>
@@ -100,7 +100,7 @@ export default function ContentDutyCard() {
                 <StatusPill entry={entry} />
               </span>
               <span className="text-[13px] text-[#55667A]">
-                <bdi dir="ltr" className="tabular-nums">{viewerClock(entry.startMs, entry.start)} – {viewerClock(entry.endMs, entry.end)}</bdi>
+                <bdi dir="ltr" className="tabular-nums">{entry.start} – {entry.end}</bdi> بتوقيت الرياض
                 {entry.coveredName ? <> · بدل {entry.coveredName}</> : null}
                 {idx === 0 && data.next ? <> · يستلم بعده {data.next.name}</> : null}
               </span>

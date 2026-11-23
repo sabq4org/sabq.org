@@ -4,8 +4,6 @@ import type { ContentDutyRosterResponse, DutyThresholds, RosterShiftView } from 
 import { addDays, DUTY_DAY_NAMES, minuteLabel } from "@shared/contentDuty";
 import { apiRequest } from "@/lib/queryClient";
 import { personColor } from "@/lib/contentDuty";
-import { displayTimeZone } from "@/lib/displayTimeZone";
-import { dutyDateKey, dutyMinuteOfDay, minutesFromRiyadh, shiftRule, shiftWeekPieces } from "@/lib/dutyLocalTime";
 import { DUTY_CARD_URL, DUTY_ROOM_URL, DUTY_ROSTER_URL, DUTY_TEAM_URL } from "@/hooks/useContentDuty";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,26 +32,22 @@ function useDutyMutation<T>(fn: (body: T) => Promise<unknown>, done: string) {
   });
 }
 
-function ShiftEditor({ roster, editing, delta, onDone }: { roster: ContentDutyRosterResponse; editing: RosterShiftView | null; delta: number; onDone: () => void }) {
-  // الحقول بتوقيت الجهاز؛ الحفظ يحوّلها للرياض كما يخزنها الخادم.
-  const local = editing ? shiftRule(editing, delta) : null;
+function ShiftEditor({ roster, editing, onDone }: { roster: ContentDutyRosterResponse; editing: RosterShiftView | null; onDone: () => void }) {
   const [userId, setUserId] = useState(editing?.userId ?? "");
-  const [days, setDays] = useState<number[]>(local?.days ?? [0, 1, 2, 3, 4]);
-  const [start, setStart] = useState(toTime(local?.startMinute ?? 960));
-  const [end, setEnd] = useState(toTime(local?.endMinute ?? 1440));
+  const [days, setDays] = useState<number[]>(editing?.days ?? [0, 1, 2, 3, 4]);
+  const [start, setStart] = useState(toTime(editing?.startMinute ?? 960));
+  const [end, setEnd] = useState(toTime(editing?.endMinute ?? 1440));
   useEffect(() => {
-    const l = editing ? shiftRule(editing, delta) : null;
     setUserId(editing?.userId ?? "");
-    setDays(l?.days ?? [0, 1, 2, 3, 4]);
-    setStart(toTime(l?.startMinute ?? 960));
-    setEnd(toTime(l?.endMinute ?? 1440));
-  }, [editing, delta]);
+    setDays(editing?.days ?? [0, 1, 2, 3, 4]);
+    setStart(toTime(editing?.startMinute ?? 960));
+    setEnd(toTime(editing?.endMinute ?? 1440));
+  }, [editing]);
   const body = () => {
     const s = toMinute(start);
     let e = toMinute(end);
     if (e === 0) e = 1440;
-    const riyadh = shiftRule({ days, startMinute: s, endMinute: e }, -delta);
-    return { userId, ...riyadh };
+    return { userId, days, startMinute: s, endMinute: e };
   };
   const save = useDutyMutation(
     () => editing
@@ -102,6 +96,7 @@ function ShiftEditor({ roster, editing, delta, onDone }: { roster: ContentDutyRo
           <input type="time" dir="ltr" className={input} value={end} onChange={(e) => setEnd(e.target.value)} />
         </label>
       </div>
+      <p className="m-0 text-xs text-[#55667A]">الوقت بتوقيت الرياض، ولو كان الموظف في بلد آخر.</p>
       {overnight ? <p className="m-0 text-xs text-[#0B6FA8]">تمتد إلى صباح اليوم التالي.</p> : null}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={`${primary} flex-1`} disabled={!userId || days.length === 0 || save.isPending} onClick={() => save.mutate(undefined, { onSuccess: onDone })}>حفظ</button>
@@ -200,21 +195,6 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
   const nameOf = useMemo(() => new Map(roster.people.map((p) => [p.userId, p.name])), [roster.people]);
   const gapHours = Math.round(roster.gapMinutes / 60);
   const days = Array.from({ length: 7 }, (_, i) => addDays(roster.weekStart, i));
-  // الجدول يصل بأيام الرياض ودقائقها؛ نعرضه بأيام جهاز المشاهد وساعاته.
-  const tz = displayTimeZone();
-  const nowMs = Date.now();
-  const nowDelta = minutesFromRiyadh(tz, nowMs);
-  const weekDelta = minutesFromRiyadh(tz, Date.parse(`${roster.weekStart}T12:00:00Z`) + 3 * 86_400_000);
-  const weekBlocks = useMemo(
-    () => shiftWeekPieces([...(roster.edge?.blocks ?? []), ...roster.blocks], roster.weekStart, (ms) => minutesFromRiyadh(tz, ms)),
-    [roster.blocks, roster.edge, roster.weekStart, tz],
-  );
-  const weekGaps = useMemo(
-    () => shiftWeekPieces([...(roster.edge?.gaps ?? []), ...roster.gaps], roster.weekStart, (ms) => minutesFromRiyadh(tz, ms)),
-    [roster.gaps, roster.edge, roster.weekStart, tz],
-  );
-  const today = nowDelta === 0 ? roster.today : dutyDateKey(nowMs, tz);
-  const nowMinute = nowDelta === 0 ? roster.nowMinute : dutyMinuteOfDay(nowMs, tz);
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -241,7 +221,7 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
             ))}
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded" style={hatch} />بلا مناوب</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded border-[1.5px] border-dashed border-[#9FB3C6]" />تغطية</span>
-            {weekDelta !== 0 ? <span className="ms-auto">الأوقات بتوقيت جهازك</span> : null}
+            <span className="ms-auto font-semibold text-[#0B6FA8]">كل الأوقات بتوقيت الرياض</span>
           </div>
           <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 text-[11px] text-[#617183] sm:grid-cols-[96px_minmax(0,1fr)]">
             <span />
@@ -252,9 +232,9 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
             </div>
           </div>
           {days.map((key) => {
-            const isToday = key === today;
-            const blocks = weekBlocks.filter((b) => b.dutyDate === key);
-            const gaps = weekGaps.filter((g) => g.dutyDate === key);
+            const isToday = key === roster.today;
+            const blocks = roster.blocks.filter((b) => b.dutyDate === key);
+            const gaps = roster.gaps.filter((g) => g.dutyDate === key);
             return (
               <div key={key} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3 border-t border-[#EEF2F6] py-2 sm:grid-cols-[96px_minmax(0,1fr)]">
                 <span className="flex flex-col">
@@ -288,7 +268,7 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
                       </div>
                     );
                   })}
-                  {isToday ? <div className="absolute -bottom-1.5 -top-1.5 w-0.5 rounded bg-[#1B2B3A]" style={{ right: `${(nowMinute / 1440) * 100}%` }} aria-hidden="true" /> : null}
+                  {isToday ? <div className="absolute -bottom-1.5 -top-1.5 w-0.5 rounded bg-[#1B2B3A]" style={{ right: `${(roster.nowMinute / 1440) * 100}%` }} aria-hidden="true" /> : null}
                 </div>
               </div>
             );
@@ -296,10 +276,10 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
           {isLead ? (
             <div className="mt-3 flex flex-col">
               <span className="pb-1 text-[13px] text-[#55667A]">الورديات المتكررة · اضغط للتعديل</span>
-              {roster.shifts.map((s) => ({ s, l: shiftRule(s, nowDelta) })).map(({ s, l }) => (
+              {roster.shifts.map((s) => (
                 <button key={s.id} type="button" onClick={() => setEditing(s)} className="flex items-center justify-between gap-3 border-t border-[#EEF2F6] py-2.5 text-start text-sm hover:bg-[#F8FBFE]">
                   <span className="font-semibold">{s.name}</span>
-                  <span className="text-[13px] text-[#55667A]">{l.days.map((d) => DUTY_DAY_NAMES[d]).join("، ")} · <bdi dir="ltr" className="tabular-nums">{minuteLabel(l.startMinute)}–{minuteLabel(l.endMinute)}</bdi></span>
+                  <span className="text-[13px] text-[#55667A]">{s.days.map((d) => DUTY_DAY_NAMES[d]).join("، ")} · <bdi dir="ltr" className="tabular-nums">{minuteLabel(s.startMinute)}–{minuteLabel(s.endMinute)}</bdi></span>
                 </button>
               ))}
             </div>
@@ -310,7 +290,7 @@ export function DutyRosterView({ roster, onWeek }: { roster: ContentDutyRosterRe
 
         {isLead ? (
           <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-[22px]">
-            <ShiftEditor roster={roster} editing={editing} delta={nowDelta} onDone={() => setEditing(null)} />
+            <ShiftEditor roster={roster} editing={editing} onDone={() => setEditing(null)} />
             <ExceptionEditor roster={roster} />
             <ThresholdsEditor value={roster.thresholds} />
           </aside>

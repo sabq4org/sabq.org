@@ -157,9 +157,9 @@ export function expandOccurrences(
 }
 
 /** ساعات الأسبوع التي لا يغطيها أحد، مقطعة على أيام الرياض. */
-export function coverageGaps(occurrences: readonly DutyOccurrence[], weekStart: string, dayCount = 7): Array<{ dutyDate: string; startMinute: number; endMinute: number }> {
+export function coverageGaps(occurrences: readonly DutyOccurrence[], weekStart: string): Array<{ dutyDate: string; startMinute: number; endMinute: number }> {
   const gaps: Array<{ dutyDate: string; startMinute: number; endMinute: number }> = [];
-  for (let i = 0; i < dayCount; i++) {
+  for (let i = 0; i < 7; i++) {
     const key = addDays(weekStart, i);
     const dayStart = riyadhMidnight(key);
     const covered = new Uint8Array(1440);
@@ -546,11 +546,8 @@ export interface DutyPerson {
 
 export interface ContentDutyCardEntry extends DutyPerson {
   status: LiveStatus;
-  /** بتوقيت الرياض؛ الواجهة تعرض startMs/endMs بتوقيت جهاز المشاهد */
   start: string;
   end: string;
-  startMs?: number;
-  endMs?: number;
   remainingMin: number;
   elapsedPct: number;
   coveredName: string | null;
@@ -562,7 +559,7 @@ export interface ContentDutyCardResponse {
   access: DutyAccess;
   generatedAt: string;
   onDuty: ContentDutyCardEntry[];
-  next: { name: string; start: string; startMs?: number; startsInMin: number } | null;
+  next: { name: string; start: string; startsInMin: number } | null;
   waiting: { count: number; overdue: number } | null;
   alert: { articleId: string; title: string; waitMin: number; breaking: boolean; opened: boolean } | null;
 }
@@ -580,12 +577,8 @@ export interface WaitingDraft {
 
 export interface ShiftOption {
   key: string;
-  /** بتوقيت الرياض؛ الواجهة تبني نصها من name/startMs/endMs بتوقيت جهاز المشاهد */
   label: string;
   live: boolean;
-  name?: string;
-  startMs?: number;
-  endMs?: number;
 }
 
 export interface ContentDutyRoomResponse {
@@ -608,8 +601,8 @@ export interface ContentDutyRoomResponse {
     elapsedPct: number;
     report: ShiftReport;
     averages: ShiftAverages;
-    lastAction: { title: string; at: string; atMs?: number } | null;
-    next: { name: string; start: string; startMs?: number; pendingToHandOver: number } | null;
+    lastAction: { title: string; at: string } | null;
+    next: { name: string; start: string; pendingToHandOver: number } | null;
     waiting: WaitingDraft[];
   };
   thresholds: DutyThresholds;
@@ -663,20 +656,15 @@ export interface ContentDutyRosterResponse {
   exceptions: RosterExceptionView[];
   blocks: Array<{ dutyDate: string; userId: string; startMinute: number; endMinute: number; covering: boolean; carry: boolean }>;
   gaps: Array<{ dutyDate: string; startMinute: number; endMinute: number }>;
-  /** اليوم السابق للأسبوع والتالي له، ليكتمل الأسبوع حين يُعرض بمنطقة جهاز غير الرياض */
-  edge?: {
-    blocks: ContentDutyRosterResponse["blocks"];
-    gaps: Array<{ dutyDate: string; startMinute: number; endMinute: number }>;
-  };
   gapMinutes: number;
   candidates: Array<{ userId: string; name: string }>;
   thresholds: DutyThresholds;
 }
 
 /** يقطع ورديات الأسبوع على أيام الرياض للرسم (الليلية تظهر في يومين). */
-export function rosterBlocks(occurrences: readonly DutyOccurrence[], weekStart: string, dayCount = 7): ContentDutyRosterResponse["blocks"] {
+export function rosterBlocks(occurrences: readonly DutyOccurrence[], weekStart: string): ContentDutyRosterResponse["blocks"] {
   const blocks: ContentDutyRosterResponse["blocks"] = [];
-  for (let i = 0; i < dayCount; i++) {
+  for (let i = 0; i < 7; i++) {
     const key = addDays(weekStart, i);
     const dayStart = riyadhMidnight(key);
     const dayEnd = dayStart + DAY;
