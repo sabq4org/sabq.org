@@ -46,6 +46,7 @@ import {
   type DutyThresholds,
   type ShiftReport,
   type VersionEvent,
+  respondedAtOf,
   type WaitingDraft,
 } from "@shared/contentDuty";
 import { getUserRoleNames } from "../../rbac";
@@ -516,8 +517,11 @@ export async function getDutyTeam(viewer: DutyViewer): Promise<ContentDutyTeamRe
         }
       }
       const responses = data.items
-        .filter((i) => i.decidedBy === userId && i.decidedAt !== null && tracked.some((o) => (i.decidedAt as number) >= workCountFrom(o, occurrences) && (i.decidedAt as number) < o.end))
-        .map((i) => Math.round(((i.decidedAt as number) - i.waitingSince) / MINUTE))
+        .filter((i) => {
+          const at = respondedAtOf(i);
+          return i.decidedBy === userId && at !== null && tracked.some((o) => at >= workCountFrom(o, occurrences) && at < o.end);
+        })
+        .map((i) => Math.max(0, Math.round(((respondedAtOf(i) as number) - i.waitingSince) / MINUTE)))
         .sort((a, b) => a - b);
       const mid = Math.floor(responses.length / 2);
       const days = Array.from({ length: 7 }, (_, d) => {
