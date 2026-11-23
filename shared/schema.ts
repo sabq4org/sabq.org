@@ -16293,3 +16293,18 @@ export const opinionWriterEngagement = pgTable("opinion_writer_engagement", {
 ]);
 
 export type OpinionWriterEngagement = typeof opinionWriterEngagement.$inferSelect;
+
+// تقرير البحث الأسبوعي من Search Console (shared/seoWeekly.ts): صف لكل أسبوع،
+// والفرص وقراراتها وقياس تجربة الأسبوع السابق داخل payload.
+export const seoWeeklyReports = pgTable("seo_weekly_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodStart: text("period_start").notNull(), // YYYY-MM-DD
+  periodEnd: text("period_end").notNull().unique(), // YYYY-MM-DD
+  payload: jsonb("payload").notNull(),
+  createdBy: varchar("created_by"), // null = المهمة الأسبوعية
+  emailedAt: timestamp("emailed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SeoWeeklyReportRow = typeof seoWeeklyReports.$inferSelect;

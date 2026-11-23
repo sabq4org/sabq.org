@@ -392,6 +392,15 @@ export const navConfig: NavItem[] = [
         roles: ["admin", "editor", "content_manager"],
       },
       {
+        id: "seo_weekly",
+        labelKey: "nav.seo_weekly",
+        labelAr: "تقرير البحث الأسبوعي",
+        path: "/dashboard/seo-weekly",
+        icon: TrendingUp,
+        roles: ["admin", "system_admin"],
+        permissions: ["seo_weekly.view"],
+      },
+      {
         id: "publish_banned_words",
         labelKey: "nav.publish_banned_words",
         labelAr: "كلمات محظورة من النشر",
