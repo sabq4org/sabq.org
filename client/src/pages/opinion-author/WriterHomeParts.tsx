@@ -52,7 +52,6 @@ export function WriterHomeHeader({
   startTitle,
   onStartWriting,
   onOpenGuide,
-  onOpenFiles,
 }: {
   greeting: string;
   name: string;
@@ -61,7 +60,6 @@ export function WriterHomeHeader({
   startTitle?: string;
   onStartWriting: () => void;
   onOpenGuide: () => void;
-  onOpenFiles: () => void;
 }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4" dir="rtl" data-testid="writer-home-header">
@@ -85,9 +83,6 @@ export function WriterHomeHeader({
           دليل الكاتب
         </button>
         <WriterInquiriesButton className="h-11 shrink-0 whitespace-nowrap rounded-full border-0 bg-white px-4 shadow-[0_1px_3px_rgba(27,43,58,0.06)]" />
-        <button type="button" className={LINK_PILL} onClick={onOpenFiles}>
-          ملفاتي
-        </button>
         <button
           type="button"
           disabled={createBlocked}

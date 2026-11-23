@@ -391,7 +391,6 @@ export default function WriterWorkspacePage() {
     <DashboardLayout>
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
-          <MyServicesHomeLink />
           <WriterHomeHeader
             greeting={greeting()}
             name={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || firstName}
@@ -400,16 +399,8 @@ export default function WriterWorkspacePage() {
             startTitle={createBlocked ? createBlockedReason : pipelineBlockReason || undefined}
             onStartWriting={startWriting}
             onOpenGuide={() => navigate("/dashboard/opinion-author/guide")}
-            onOpenFiles={() => navigate("/dashboard/opinion-author/files")}
           />
           <WriterAnnouncementsBoard />
-          <WriterPriorityRail
-            notifications={unreadNotifications}
-            onOpenNotification={openEditorialNotification}
-            onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
-            markingAll={markAllNotificationsReadMutation.isPending}
-            onStartWriting={startWriting}
-          />
           {activePipelineArticle && (
             <WriterArticleNowStrip
               article={activePipelineArticle}
@@ -424,6 +415,14 @@ export default function WriterWorkspacePage() {
               }}
             />
           )}
+
+          <WriterPriorityRail
+            notifications={unreadNotifications}
+            onOpenNotification={openEditorialNotification}
+            onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
+            markingAll={markAllNotificationsReadMutation.isPending}
+            onStartWriting={startWriting}
+          />
 
           <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
             <WriterTabPills
@@ -661,6 +660,8 @@ export default function WriterWorkspacePage() {
               </div>
             </TabsContent>
           </Tabs>
+
+          <MyServicesHomeLink />
         </div>
       </div>
 

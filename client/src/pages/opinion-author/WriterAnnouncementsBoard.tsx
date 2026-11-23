@@ -391,7 +391,7 @@ export function WriterAnnouncementsBoard() {
         </div>
         <span className="hidden text-xs text-[#55667A] sm:inline">من إدارة مقالات الرأي</span>
       </div>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         <MeetingCard />
         {announcements.map((a) =>
           a.kind === "file" ? (
