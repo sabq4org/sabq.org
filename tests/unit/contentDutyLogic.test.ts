@@ -135,6 +135,27 @@ describe("desk items and shift report", () => {
     expect(items.find((i) => i.articleId === "p")?.decidedAt).toBeNull();
   });
 
+  it("measures response to the manager's first touch, not to a scheduled publish", () => {
+    const items = buildDeskItems(
+      [article("s")],
+      [
+        { articleId: "s", actorId: "reporter", action: "updated", at: start + 5 * MIN },
+        // المناوب حفظه وجدوله بعد 3 دقائق، والنشر المجدول بعد ساعتين
+        { articleId: "s", actorId: "fahad", action: "updated", at: start + 8 * MIN },
+        { articleId: "s", actorId: "fahad", action: "published", at: start + 125 * MIN },
+      ],
+    );
+    const s = items[0];
+    expect(s.decidedAt).toBe(start + 125 * MIN);
+    expect(s.respondedAt).toBe(start + 8 * MIN);
+    const occ = { start, end: start + 6 * 60 * MIN, userId: "fahad" };
+    const report = computeShiftReport({
+      occ, now: occ.end, minutes: new Map<number, ActivityKind>(),
+      ownVersions: [], ownReviews: [], items, breakingIds: new Set<string>(), thresholds: DEFAULT_DUTY_THRESHOLDS,
+    });
+    expect(report.responseMedianMin).toBe(3);
+  });
+
   it("counts output, response time and what was left at handoff", () => {
     const occ = { start, end: start + 6 * 60 * MIN, userId: "fahad" };
     const items = buildDeskItems(

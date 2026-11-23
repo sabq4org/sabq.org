@@ -329,7 +329,15 @@ export interface DeskItem {
   waitingSince: number;
   decidedAt: number | null;
   decidedBy: string | null;
+  /**
+   * أول إجراء لصاحب القرار على المادة بعد بدء انتظارها (حفظ أو جدولة أو نشر أو مراجعة).
+   * زمن الاستجابة يُقاس إليه لا إلى لحظة النشر، فلا يُحسب تأخير الجدولة انتظارًا.
+   */
+  respondedAt?: number | null;
 }
+
+/** لحظة الاستجابة: أول إجراء لصاحب القرار، وإلا لحظة القرار. */
+export const respondedAtOf = (i: Pick<DeskItem, "decidedAt" | "respondedAt">): number | null => i.respondedAt ?? i.decidedAt;
 
 /**
  * مادة تنتظر قرارًا = مسودة مرسلة للمراجعة، أو مادة نشرها أو راجعها غير صاحبها.
@@ -368,7 +376,13 @@ export function buildDeskItems(articles: readonly DeskArticle[], versions: reado
       if (article.ownerId && e.actorId === article.ownerId && e.action !== "published") waitingSince = e.at;
     }
     if (decidedAt !== null && waitingSince > decidedAt) waitingSince = decidedAt;
-    items.push({ articleId: article.id, title: article.title, breaking: article.breaking, waitingSince, decidedAt, decidedBy });
+    let respondedAt: number | null = decidedAt;
+    if (decidedAt !== null && decidedBy) {
+      // بداية الانتظار = آخر حفظ لصاحب المادة (وإرسالها للمراجعة حفظ منه)، ونهايته = أول ما لمسها المناوب بعدها.
+      const touch = events.find((e) => e.actorId === decidedBy && e.at >= waitingSince && e.at <= decidedAt);
+      if (touch) respondedAt = touch.at;
+    }
+    items.push({ articleId: article.id, title: article.title, breaking: article.breaking, waitingSince, decidedAt, decidedBy, respondedAt });
   }
   return items;
 }
@@ -510,9 +524,13 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
   edits.forEach((v) => bump(v.at));
   reviews.forEach(bump);
 
-  const decided = input.items.filter((i) => i.decidedBy === occ.userId && i.decidedAt !== null && inWindow(i.decidedAt));
-  const responseMedianMin = median(decided.map((i) => Math.max(0, Math.round(((i.decidedAt as number) - i.waitingSince) / MINUTE))));
-  const breakingFast = decided.filter((i) => i.breaking && (i.decidedAt as number) - i.waitingSince <= thresholds.breakingWaitMin * MINUTE).length;
+  const decided = input.items.filter((i) => {
+    const at = respondedAtOf(i);
+    return i.decidedBy === occ.userId && at !== null && inWindow(at);
+  });
+  const responseMs = (i: DeskItem) => (respondedAtOf(i) as number) - i.waitingSince;
+  const responseMedianMin = median(decided.map((i) => Math.max(0, Math.round(responseMs(i) / MINUTE))));
+  const breakingFast = decided.filter((i) => i.breaking && responseMs(i) <= thresholds.breakingWaitMin * MINUTE).length;
 
   const backlog: number[] = [];
   for (let t = occ.start; t <= until; t += 10 * MINUTE) backlog.push(waitingAt(input.items, t).length);
