@@ -83,8 +83,6 @@ router.get(
 
       res.setHeader("Cache-Control", "private, no-store");
       res.setHeader("X-Content-Type-Options", "nosniff");
-      // متابعة «من حمّل الملف» بالاسم — لا تؤخر التنزيل ولا تُفشله
-      void recordFileDownload(userId, result.id);
 
       if (req.query.download === "1") {
         const upstream = await fetch(result.signedUrl, {
@@ -94,6 +92,8 @@ router.get(
           return res.status(502).json({ message: "تعذر تنزيل الملف من التخزين" });
         }
         const buffer = Buffer.from(await upstream.arrayBuffer());
+        // متابعة «من حمّل الملف» بالاسم بعد نجاح الجلب فقط — لا تؤخر التنزيل ولا تُفشله
+        void recordFileDownload(userId, result.id);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
@@ -102,6 +102,7 @@ router.get(
         return res.send(buffer);
       }
 
+      void recordFileDownload(userId, result.id);
       return res.redirect(result.signedUrl);
     } catch (error) {
       console.error("[opinion-writer-files] download failed:", error);

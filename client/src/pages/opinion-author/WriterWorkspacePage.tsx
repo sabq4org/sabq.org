@@ -364,6 +364,8 @@ export default function WriterWorkspacePage() {
       return;
     }
     setActiveTab("articles");
+    // الفرز الافتراضي قد يخفي المقال المقصود (منشور أو مرفوض) — نعرض الكل قبل الانتقال إليه
+    setArticleFilter("all");
     if (notification.articleId) {
       window.setTimeout(() => {
         document.getElementById(`writer-article-${notification.articleId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -413,6 +415,7 @@ export default function WriterWorkspacePage() {
               article={activePipelineArticle}
               onOpen={() => {
                 setActiveTab("articles");
+                setArticleFilter("all");
                 window.setTimeout(() => {
                   document
                     .getElementById(`writer-article-${activePipelineArticle.id}`)
