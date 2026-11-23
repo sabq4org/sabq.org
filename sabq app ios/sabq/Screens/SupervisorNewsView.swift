@@ -496,7 +496,7 @@ struct SupervisorNewsPreviewView: View {
             _ = try await EditorialAPI.schedule(id: id, at: scheduleAt, expectedUpdatedAt: article.updatedAt, categoryId: chosenCategory)
             actionError = nil
             showSchedule = false
-            doneMessage = "جُدول للنشر \(EditorialText.dayTime(scheduleAt, timeZone: TimeZone(identifier: "Asia/Riyadh") ?? .current)) بتوقيت الرياض"
+            doneMessage = "جُدول للنشر \(EditorialText.dayTime(scheduleAt))"
         } catch {
             actionError = error.localizedDescription
             showSchedule = false

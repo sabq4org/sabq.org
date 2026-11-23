@@ -64,7 +64,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneId
 import java.time.ZoneOffset
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -372,7 +371,7 @@ class SupervisorNewsPreviewViewModel @Inject constructor(
     fun schedule(at: Instant) {
         val s = _state.value
         val article = s.article ?: return
-        act("جُدول للنشر ${EditorialText.dayTime(at, zone = ZoneId.of("Asia/Riyadh"))} بتوقيت الرياض") {
+        act("جُدول للنشر ${EditorialText.dayTime(at)}") {
             api.schedule(id, ScheduleBody(EditorialText.isoUtc(at), article.updatedAt, s.chosenCategory))
         }
     }
