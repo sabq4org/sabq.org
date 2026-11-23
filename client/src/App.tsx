@@ -349,6 +349,8 @@ const OpinionManagement = lazy(() => retryImport(() => import("@/pages/dashboard
 const OpinionWritersPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWritersPage")));
 const OpinionWriterFilesAdminPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWriterFilesAdminPage")));
 const OpinionWriterFeedbackAdminPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWriterFeedbackAdminPage")));
+const OpinionWriterAnnouncementsAdminPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWriterAnnouncementsAdminPage")));
+const OpinionWriterAnnouncementTrackingPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWriterAnnouncementTrackingPage")));
 const ReportersPage = lazy(() => retryImport(() => import("@/pages/dashboard/ReportersPage")));
 const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/QuizManagement")));
 
@@ -1026,6 +1028,8 @@ function Router() {
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
         <Route path="/dashboard/opinion-writer-files">{() => <LazyRoute component={OpinionWriterFilesAdminPage} />}</Route>
         <Route path="/dashboard/opinion-writer-feedback">{() => <LazyRoute component={OpinionWriterFeedbackAdminPage} />}</Route>
+        <Route path="/dashboard/opinion-writer-announcements">{() => <LazyRoute component={OpinionWriterAnnouncementsAdminPage} />}</Route>
+        <Route path="/dashboard/opinion-writer-announcements/:id">{() => <LazyRoute component={OpinionWriterAnnouncementTrackingPage} />}</Route>
         {/* إدارة المراسلين — مسؤول النظام فقط */}
         <Route path="/dashboard/reporters">
           {() => (

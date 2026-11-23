@@ -558,6 +558,15 @@ export const navConfig: NavItem[] = [
     permissions: ["opinion.review"],
   },
   {
+    id: "opinion_writer_announcements",
+    labelKey: "nav.opinion_writer_announcements",
+    labelAr: "إعلانات كتّاب الرأي",
+    path: "/dashboard/opinion-writer-announcements",
+    icon: Megaphone,
+    roles: ["admin", "editor", "system_admin"],
+    permissions: ["opinion.review"],
+  },
+  {
     id: "opinion_writer_feedback",
     labelKey: "nav.opinion_writer_feedback",
     labelAr: "اهتمامات كتّاب الرأي",

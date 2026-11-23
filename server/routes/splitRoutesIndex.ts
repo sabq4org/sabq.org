@@ -40,6 +40,7 @@ import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
 import opinionWritersRouter from "./opinionWriters";
 import opinionWriterFilesRouter from "./opinionWriterFiles";
 import opinionWriterFeedbackRouter from "./opinionWriterFeedback";
+import opinionWriterAnnouncementsRouter from "./opinionWriterAnnouncements";
 import authorsPublicRouter from "./authorsPublic";
 import reporterMediaLicenseRouter from "./reporterMediaLicense";
 import reporterArticleListRouter from "./reporterArticleList";
@@ -198,6 +199,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(opinionWritersRouter);
   app.use(opinionWriterFilesRouter);
   app.use(opinionWriterFeedbackRouter);
+  app.use(opinionWriterAnnouncementsRouter);
   app.use(authorsPublicRouter);
   app.use(reporterMediaLicenseRouter);
   app.use(reporterArticleListRouter);

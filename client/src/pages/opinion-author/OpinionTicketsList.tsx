@@ -86,9 +86,11 @@ export default function OpinionTicketsList() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [openDialog, setOpenDialog] = useState(false);
-  const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
+  // ?new=schedule يفتح طلب «تغيير موعد النشر الأسبوعي» جاهزاً من تبويب «مقالاتي»
+  const scheduleRequest = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "schedule";
+  const [openDialog, setOpenDialog] = useState(scheduleRequest);
+  const [title, setTitle] = useState(scheduleRequest ? "طلب تغيير موعد النشر الأسبوعي" : "");
+  const [message, setMessage] = useState(scheduleRequest ? "أرغب في تغيير موعدي الأسبوعي إلى يوم: " : "");
 
   const { data, isLoading } = useQuery<ListResponse>({
     queryKey: ["/api/opinion-tickets"],
