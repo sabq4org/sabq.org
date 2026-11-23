@@ -26,6 +26,8 @@ import {
   type GscMetrics,
   type GscPageRow,
   type OpportunityStatus,
+  type SeoExperimentReview,
+  type SeoOpportunity,
   type SeoWeeklyPayload,
 } from "@shared/seoWeekly";
 import { normalizePrivateKey } from "./googleIndexingService";
@@ -184,6 +186,23 @@ async function resolveTitles(paths: string[]): Promise<Map<string, string>> {
   return out;
 }
 
+function extendedAsOpportunity(r: SeoExperimentReview): SeoOpportunity {
+  return {
+    key: r.key,
+    lane: r.lane,
+    url: r.url,
+    path: r.path,
+    title: r.title,
+    metrics: r.baseline,
+    previous: null,
+    why: "",
+    test: r.test,
+    targetCtr: null,
+    expectedGain: 0,
+    status: "approved",
+  };
+}
+
 export function reportPayload(row: SeoWeeklyReportRow): SeoWeeklyPayload {
   return row.payload as SeoWeeklyPayload;
 }
@@ -227,7 +246,12 @@ export async function generateSeoWeeklyReport(opts: { force?: boolean; actorId?:
     .where(lt(seoWeeklyReports.periodEnd, p.end))
     .orderBy(desc(seoWeeklyReports.periodEnd))
     .limit(1);
-  const approved = prevReport ? reportPayload(prevReport).opportunities.filter((o) => o.status === "approved") : [];
+  // المعتمدة في التقرير السابق، والممدّدة («نمدّد أسبوعًا») تُقاس ثانية على خط أساسها الأصلي
+  const prevPayload = prevReport ? reportPayload(prevReport) : null;
+  const approved: SeoOpportunity[] = [
+    ...(prevPayload?.opportunities.filter((o) => o.status === "approved") ?? []),
+    ...(prevPayload?.reviews.filter((r) => r.verdict === "extend").map(extendedAsOpportunity) ?? []),
+  ];
   const reviews = [];
   for (const opp of approved) {
     reviews.push(buildReview(prevReport!.id, opp, await pageMetrics(opp.url, p.start, p.end)));
