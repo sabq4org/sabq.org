@@ -110,12 +110,12 @@ nonisolated struct AdminSchedulePresentation: Hashable {
 
     var dateLabel: String? {
         guard let date else { return nil }
-        return SabqFormatters.riyadhWeekdayDate.string(from: date)
+        return SabqFormatters.localWeekdayDate.string(from: date)
     }
 
     var timeLabel: String? {
         guard let date else { return nil }
-        return SabqFormatters.riyadhTime.string(from: date)
+        return SabqFormatters.localTime.string(from: date)
     }
 
     var fullLabel: String? {
@@ -172,7 +172,7 @@ nonisolated struct AdminSchedulePresentation: Hashable {
     }
 
     private static func format(_ date: Date) -> String {
-        "\(SabqFormatters.riyadhWeekdayDate.string(from: date)) · \(SabqFormatters.riyadhTime.string(from: date))"
+        "\(SabqFormatters.localWeekdayDate.string(from: date)) · \(SabqFormatters.localTime.string(from: date))"
     }
 }
 

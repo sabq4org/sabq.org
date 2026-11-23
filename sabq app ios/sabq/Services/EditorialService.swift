@@ -554,7 +554,7 @@ nonisolated enum EditorialText {
     }
 
     /// «أمس 21:10» أو «31 أكتوبر 08:40» بالأرقام اللاتينية والتقويم الميلادي.
-    /// بتوقيت الجهاز افتراضيًا؛ تأكيد الجدولة يمرّر الرياض لأن منتقي الموعد مثبّت عليها.
+    /// بتوقيت الجهاز افتراضيًا، ومثله منتقي موعد الجدولة.
     static func dayTime(_ date: Date?, timeZone: TimeZone = .autoupdatingCurrent) -> String {
         guard let date else { return "" }
         var calendar = Calendar(identifier: .gregorian)

@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.editorial
 
+import com.sabq.smart.util.displayZone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -371,7 +372,7 @@ class SupervisorNewsPreviewViewModel @Inject constructor(
     fun schedule(at: Instant) {
         val s = _state.value
         val article = s.article ?: return
-        act("جُدول للنشر ${EditorialText.dayTime(at, zone = ZoneId.of("Asia/Riyadh"))} بتوقيت الرياض") {
+        act("جُدول للنشر ${EditorialText.dayTime(at)}") {
             api.schedule(id, ScheduleBody(EditorialText.isoUtc(at), article.updatedAt, s.chosenCategory))
         }
     }
@@ -455,7 +456,7 @@ fun SupervisorNewsPreviewScreen(
     }
 
     if (pickDate) {
-        val riyadh = ZoneId.of("Asia/Riyadh")
+        val riyadh = displayZone() // منطقة الجهاز، مثل منتقي الموعد في الويب
         val today = LocalDate.now(riyadh)
         val dateState = rememberDatePickerState(
             initialSelectedDateMillis = today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
@@ -477,12 +478,12 @@ fun SupervisorNewsPreviewScreen(
     }
 
     pickedDate?.let { date ->
-        val riyadh = ZoneId.of("Asia/Riyadh")
+        val riyadh = displayZone() // منطقة الجهاز، مثل منتقي الموعد في الويب
         val next = LocalTime.now(riyadh).plusHours(1)
         val timeState = rememberTimePickerState(initialHour = next.hour, initialMinute = next.minute, is24Hour = true)
         AlertDialog(
             onDismissRequest = { pickedDate = null },
-            title = { Text("وقت النشر (بتوقيت الرياض)") },
+            title = { Text("وقت النشر") },
             text = { TimePicker(state = timeState) },
             confirmButton = {
                 TextButton(onClick = {
