@@ -467,7 +467,8 @@ export function workCountFrom(
 ): number {
   let from = occ.start - DUTY_EARLY_WORK_MIN * MINUTE;
   for (const o of occurrences) {
-    if (o.userId === occ.userId && o.start < occ.start && o.end <= occ.start && o.end > from) from = o.end;
+    // وردية سابقة له (حتى لو امتدت بعد بداية هذه) تملك ما قبل نهايتها: لا يُحسب العمل مرتين.
+    if (o.userId === occ.userId && o.start < occ.start && o.end > from) from = Math.min(o.end, occ.start);
   }
   return from;
 }

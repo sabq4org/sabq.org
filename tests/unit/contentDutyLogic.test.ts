@@ -173,6 +173,8 @@ describe("early start", () => {
     expect(workCountFrom(occ, [previous, occ])).toBe(start - 10 * MIN);
     const other = { userId: "amjad", start: start - 6 * 60 * MIN, end: start };
     expect(workCountFrom(occ, [other, occ])).toBe(start - 30 * MIN);
+    const overlapping = { userId: "abdullah", start: start - 6 * 60 * MIN, end: start + 10 * MIN };
+    expect(workCountFrom(occ, [overlapping, occ])).toBe(start);
   });
 
   it("counts publishes minutes before the start in the first hour", () => {

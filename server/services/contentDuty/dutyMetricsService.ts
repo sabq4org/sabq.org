@@ -515,7 +515,7 @@ export async function getDutyTeam(viewer: DutyViewer): Promise<ContentDutyTeamRe
         }
       }
       const responses = data.items
-        .filter((i) => i.decidedBy === userId && i.decidedAt !== null && tracked.some((o) => (i.decidedAt as number) >= o.start && (i.decidedAt as number) < o.end))
+        .filter((i) => i.decidedBy === userId && i.decidedAt !== null && tracked.some((o) => (i.decidedAt as number) >= workCountFrom(o, occurrences) && (i.decidedAt as number) < o.end))
         .map((i) => Math.round(((i.decidedAt as number) - i.waitingSince) / MINUTE))
         .sort((a, b) => a - b);
       const mid = Math.floor(responses.length / 2);
