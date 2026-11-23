@@ -21,9 +21,16 @@ const row = (page: string, clicks: number, impressions: number, position: number
 });
 
 describe("reportPeriod", () => {
-  it("ends three days before today and compares with the 7 days before", () => {
-    const p = reportPeriod(new Date("2026-11-29T06:00:00Z"));
-    expect(p).toEqual({ start: "2026-11-20", end: "2026-11-26", prevStart: "2026-11-13", prevEnd: "2026-11-19" });
+  const sundayReport = { start: "2026-11-20", end: "2026-11-26", prevStart: "2026-11-13", prevEnd: "2026-11-19" };
+  it("anchors on the Sunday report: 7 days ending 3 days before it", () => {
+    expect(reportPeriod(new Date("2026-11-29T06:00:00Z"))).toEqual(sundayReport); // الأحد 9:00 الرياض
+  });
+  it("returns the same week for a manual refresh later in the week", () => {
+    expect(reportPeriod(new Date("2026-12-02T12:00:00Z"))).toEqual(sundayReport); // الأربعاء
+    expect(reportPeriod(new Date("2026-12-05T20:00:00Z"))).toEqual(sundayReport); // السبت 23:00 الرياض
+  });
+  it("moves to the next week on Sunday in Riyadh even before midnight UTC", () => {
+    expect(reportPeriod(new Date("2026-12-05T21:30:00Z")).end).toBe("2026-12-03"); // الأحد 00:30 الرياض
   });
 });
 

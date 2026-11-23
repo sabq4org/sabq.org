@@ -292,7 +292,7 @@ export default function SeoWeeklyReport() {
 
 
   const payload = report?.payload;
-  const nextReportLabel = report ? (() => { const [, m, d] = addDays(report.periodEnd, 7).split("-").map(Number); return `${d} ${MONTHS[m - 1]}`; })() : "";
+  const nextReportLabel = report ? (() => { const [, m, d] = addDays(report.periodEnd, 10).split("-").map(Number); return `${d} ${MONTHS[m - 1]}`; })() : "";
 
   return (
     <DashboardLayout>

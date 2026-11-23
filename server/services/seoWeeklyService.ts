@@ -3,7 +3,7 @@
 // التكلفة: Search Console API مجاني، والترتيب بقواعد ثابتة في shared/seoWeekly.ts (بلا ذكاء اصطناعي).
 // لا ينفّذ أي تعديل على الموقع ولا يطلب فهرسة: الفرص تنتظر قرار المسؤول.
 
-import { desc, eq, inArray, lt, or } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { google } from "googleapis";
 import { db } from "../db";
 import { articles, categories, enArticles, enCategories, seoWeeklyReports, type SeoWeeklyReportRow } from "@shared/schema";
@@ -239,12 +239,11 @@ export async function generateSeoWeeklyReport(opts: { force?: boolean; actorId?:
     pages(p.prevStart, p.prevEnd),
   ]);
 
-  // تجارب الأسبوع السابق المعتمدة: تُقاس الآن ولا تُقترح ثانية
+  // تجارب تقرير الأسبوع السابق نفسه (فترته تنتهي حيث تبدأ المقارنة): تُقاس الآن ولا تُقترح ثانية
   const [prevReport] = await db
     .select()
     .from(seoWeeklyReports)
-    .where(lt(seoWeeklyReports.periodEnd, p.end))
-    .orderBy(desc(seoWeeklyReports.periodEnd))
+    .where(eq(seoWeeklyReports.periodEnd, p.prevEnd))
     .limit(1);
   // المعتمدة في التقرير السابق، والممدّدة («نمدّد أسبوعًا») تُقاس ثانية على خط أساسها الأصلي
   const prevPayload = prevReport ? reportPayload(prevReport) : null;

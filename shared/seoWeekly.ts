@@ -77,11 +77,15 @@ function isoDay(d: Date): string {
 }
 
 /**
- * فترة التقرير: سبعة أيام مكتملة تنتهي قبل 3 أيام (بيانات Search Console تتأخر يومين إلى ثلاثة)،
- * والأيام السبعة التي قبلها للمقارنة.
+ * فترة التقرير مثبتة على أحد التقرير الأسبوعي (آخر أحد بتوقيت الرياض حتى اليوم): سبعة أيام
+ * تنتهي قبل الأحد بثلاثة أيام (بيانات Search Console تتأخر يومين إلى ثلاثة)، والسبعة التي قبلها
+ * للمقارنة. التحديث اليدوي في أي يوم من الأسبوع يعيد الفترة نفسها، فلا تتداخل التقارير.
  */
 export function reportPeriod(now: Date = new Date()) {
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 3 * DAY_MS);
+  const riyadh = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+  const today = Date.UTC(riyadh.getUTCFullYear(), riyadh.getUTCMonth(), riyadh.getUTCDate());
+  const sunday = today - riyadh.getUTCDay() * DAY_MS;
+  const end = new Date(sunday - 3 * DAY_MS);
   const start = new Date(end.getTime() - 6 * DAY_MS);
   const prevEnd = new Date(start.getTime() - DAY_MS);
   const prevStart = new Date(prevEnd.getTime() - 6 * DAY_MS);
