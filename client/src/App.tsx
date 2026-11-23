@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation, useParams, Redirect } from "wouter";
+import { LiveMeetingBanner } from "@/components/meetings/LiveMeetingBanner";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { ArticleWithDetails } from "@shared/schema";
@@ -1455,6 +1456,7 @@ function App() {
                   <NameCompletionGuard />
                   <CapacitorDeepLinks />
                   <WebMCPProvider />
+                  <LiveMeetingBanner />
                   <ErrorBoundary>
                     <div id="main-content" tabIndex={-1}>
                       <Router />
