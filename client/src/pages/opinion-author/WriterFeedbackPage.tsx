@@ -3,7 +3,8 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Loader2, Mail, MessageSquareHeart, User } from "lucide-react";
+import { useLocation } from "wouter";
+import { Check, CheckCircle2, Loader2, Mail, MessageSquareHeart, User } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
@@ -34,8 +35,15 @@ export type MyWriterFeedbackResponse = {
 
 export const MY_WRITER_FEEDBACK_KEY = ["/api/opinion-writer-feedback/me"];
 
+const WRITER_HOME_PATH = "/dashboard/opinion-author";
+const RETURN_HOME_SECONDS = 4;
+
 export default function WriterFeedbackPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  // بعد الحفظ تظهر شاشة شكر، ثم يعود الكاتب إلى صفحته الرئيسية تلقائياً
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(RETURN_HOME_SECONDS);
   const { data, isLoading, isError } = useQuery<MyWriterFeedbackResponse | null>({
     queryKey: MY_WRITER_FEEDBACK_KEY,
     staleTime: 30_000,
@@ -57,6 +65,17 @@ export default function WriterFeedbackPage() {
     setHydrated(true);
   }, [data, hydrated]);
 
+  useEffect(() => {
+    if (sentAt === null) return;
+    setSecondsLeft(RETURN_HOME_SECONDS);
+    const tick = window.setInterval(() => setSecondsLeft((n) => Math.max(0, n - 1)), 1000);
+    const go = window.setTimeout(() => navigate(WRITER_HOME_PATH), RETURN_HOME_SECONDS * 1000);
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(go);
+    };
+  }, [sentAt, navigate]);
+
   const save = useMutation({
     mutationFn: () =>
       apiRequest("/api/opinion-writer-feedback/me", {
@@ -69,7 +88,7 @@ export default function WriterFeedbackPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MY_WRITER_FEEDBACK_KEY });
-      toast({ title: "شكراً لك، وصلنا ردك", description: "يمكنك تعديله متى شئت من هذه الصفحة." });
+      setSentAt(Date.now());
     },
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "";
@@ -115,6 +134,40 @@ export default function WriterFeedbackPage() {
                 هذا النموذج مخصص لكتّاب الرأي.
               </CardContent>
             </Card>
+          ) : sentAt !== null ? (
+            <section
+              className="flex flex-col items-center gap-3 rounded-[22px] bg-white px-6 py-12 text-center shadow-[0_1px_3px_rgba(27,43,58,0.06)]"
+              role="status"
+              data-testid="feedback-sent"
+            >
+              <span className="grid h-16 w-16 place-items-center rounded-full bg-[#E6F4FD]">
+                <CheckCircle2 className="h-9 w-9 text-[#1E9BE6]" aria-hidden="true" />
+              </span>
+              <h2 className="m-0 text-2xl font-bold text-[#1B2B3A]">شكراً لك، وصلنا ردك</h2>
+              <p className="m-0 max-w-md text-[15px] leading-7 text-[#55667A]">
+                سنتواصل معك حسب اهتماماتك، ونأخذ مقترحاتك في الحسبان. يمكنك تعديل ردك متى شئت من القائمة الجانبية.
+              </p>
+              <p className="m-0 text-[13px] text-[#55667A]">نعيدك إلى صفحتك الرئيسية خلال {secondsLeft} ثوانٍ…</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                <Button
+                  type="button"
+                  className="h-11 rounded-full bg-[#1E9BE6] px-6 font-bold text-white hover:bg-[#1789CE]"
+                  onClick={() => navigate(WRITER_HOME_PATH)}
+                  data-testid="button-feedback-home"
+                >
+                  العودة إلى الرئيسية الآن
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-11 rounded-full px-5 text-[#0B6FA8]"
+                  onClick={() => setSentAt(null)}
+                  data-testid="button-feedback-edit"
+                >
+                  تعديل ردي
+                </Button>
+              </div>
+            </section>
           ) : (
             <form
               className="space-y-6"
