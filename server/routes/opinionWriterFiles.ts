@@ -24,6 +24,7 @@ import {
   listOpinionWriterFiles,
   softDeleteOpinionWriterFile,
 } from "../services/opinionWriterFilesService";
+import { recordFileDownload } from "../services/opinionWriterAnnouncementsService";
 
 const router = Router();
 
@@ -82,6 +83,8 @@ router.get(
 
       res.setHeader("Cache-Control", "private, no-store");
       res.setHeader("X-Content-Type-Options", "nosniff");
+      // متابعة «من حمّل الملف» بالاسم — لا تؤخر التنزيل ولا تُفشله
+      void recordFileDownload(userId, result.id);
 
       if (req.query.download === "1") {
         const upstream = await fetch(result.signedUrl, {

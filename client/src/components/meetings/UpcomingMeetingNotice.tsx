@@ -17,7 +17,7 @@ import {
   getMeetingTimingInfo,
 } from "./meetingNoticeTiming";
 
-type NoticeMeeting = {
+export type NoticeMeeting = {
   id: string;
   title: string;
   status: "scheduled" | "live" | string;
@@ -33,9 +33,8 @@ const WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 // اجتماع مجدول تأخر بدؤه يبقى ظاهراً ساعتين، وما بعدها فائت لا يحجب الدعوات القادمة
 const GRACE_MS = 2 * 60 * 60 * 1000;
 
-export function UpcomingMeetingNotice() {
-  const [, setLocation] = useLocation();
-  const { user } = useAuth();
+/** أقرب اجتماع مباشر أو مجدول خلال 14 يوماً مع زر الرد — مشترك بين التنبيه ولوحة إعلانات الكاتب */
+export function useUpcomingMeeting() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -49,7 +48,7 @@ export function UpcomingMeetingNotice() {
   const upcoming = Array.isArray(data?.upcoming) ? data!.upcoming! : [];
 
   const now = Date.now();
-  const meeting =
+  const meeting: NoticeMeeting | undefined =
     live[0] ??
     upcoming
       .filter((m) => {
@@ -73,10 +72,17 @@ export function UpcomingMeetingNotice() {
     onError: () => toast({ title: "تعذر حفظ ردك", variant: "destructive" }),
   });
 
+  return { meeting, rsvp, now, otherCount: live.length + upcoming.length - 1 };
+}
+
+export function UpcomingMeetingNotice() {
+  const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const { meeting, rsvp, now, otherCount } = useUpcomingMeeting();
+
   if (!meeting) return null;
   const isLive = meeting.status === "live";
   const isHost = meeting.hostUserId === user?.id;
-  const otherCount = live.length + upcoming.length - 1;
   const timing = isLive ? null : getMeetingTimingInfo(meeting.scheduledAt, now);
   const isToday = Boolean(timing?.isToday);
 

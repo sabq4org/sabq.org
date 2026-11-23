@@ -16248,3 +16248,48 @@ export const opinionWriterFeedback = pgTable("opinion_writer_feedback", {
 ]);
 
 export type OpinionWriterFeedback = typeof opinionWriterFeedback.$inferSelect;
+
+// إعلانات كتّاب الرأي (ملف، استطلاع، رابط، ملاحظة) تظهر أعلى مساحة الكاتب حتى تاريخ انتهائها.
+// migrations/20261124_opinion_writer_announcements.sql
+export const opinionWriterAnnouncements = pgTable("opinion_writer_announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  kind: varchar("kind", { length: 16 }).notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  fileId: varchar("file_id").references(() => opinionWriterFiles.id, { onDelete: "set null" }),
+  linkUrl: text("link_url"),
+  pollOptions: text("poll_options").array().notNull().default(sql`'{}'::text[]`),
+  expiresAt: timestamp("expires_at").notNull(),
+  emailRequested: boolean("email_requested").notNull().default(false),
+  emailedAt: timestamp("emailed_at"),
+  lastRemindedAt: timestamp("last_reminded_at"),
+  reminderCount: integer("reminder_count").notNull().default(0),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  archivedAt: timestamp("archived_at"),
+}, (table) => [
+  index("idx_opinion_writer_announcements_expires").on(table.expiresAt),
+]);
+
+export type OpinionWriterAnnouncement = typeof opinionWriterAnnouncements.$inferSelect;
+
+// متابعة تفاعل الكتّاب بالأسماء: صف لكل (موضوع، كاتب، فعل). الموضوع إعلان أو ملف من ملفات الكتّاب.
+// action: seen (ظهر له في لوحته) | acted (حمّل/صوّت/فتح/قرأ). option_index لصوت الاستطلاع.
+// migrations/20261124_opinion_writer_announcements.sql
+export const opinionWriterEngagement = pgTable("opinion_writer_engagement", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subjectType: varchar("subject_type", { length: 24 }).notNull(),
+  subjectId: varchar("subject_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  action: varchar("action", { length: 16 }).notNull(),
+  optionIndex: integer("option_index"),
+  count: integer("count").notNull().default(1),
+  firstAt: timestamp("first_at").defaultNow().notNull(),
+  lastAt: timestamp("last_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_opinion_writer_engagement").on(table.subjectType, table.subjectId, table.userId, table.action),
+  index("idx_opinion_writer_engagement_subject").on(table.subjectType, table.subjectId),
+]);
+
+export type OpinionWriterEngagement = typeof opinionWriterEngagement.$inferSelect;

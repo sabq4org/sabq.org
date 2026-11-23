@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -21,11 +21,11 @@ import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import {
   WriterPriorityRail,
   editorialNotificationStyle,
-  useIsWriterRail,
+  type ScheduleBannerData,
 } from "./WriterPriorityRail";
 import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
-import { UpcomingMeetingNotice } from "@/components/meetings/UpcomingMeetingNotice";
-import { WriterFeedbackInvite } from "./WriterFeedbackInvite";
+import { WriterAnnouncementsBoard } from "./WriterAnnouncementsBoard";
+import { WriterHomeHeader, WriterArticleNowStrip, WriterWeeklySlotCard, WriterTabPills, ArticleStatusChips, filterTrackedArticles, type ArticleStatusFilter } from "./WriterHomeParts";
 import {
   ContributorStatsRow,
   PerformanceChart,
@@ -173,9 +173,8 @@ export default function WriterWorkspacePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
-  // شريط الأولويات للجوال — تطبيق iOS أولاً (أو ?writerRail=1 للاختبار)
-  const railMode = useIsWriterRail();
   const [activeTab, setActiveTab] = useState("today");
+  const [articleFilter, setArticleFilter] = useState<ArticleStatusFilter>("active");
   const [ideaInput, setIdeaInput] = useState("");
   const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
@@ -189,6 +188,7 @@ export default function WriterWorkspacePage() {
   const [ideasRequested, setIdeasRequested] = useState(false);
 
   const scheduleQuery = useQuery<{
+    banner?: ScheduleBannerData | null;
     activeArticle?: {
       id: string;
       title: string;
@@ -372,20 +372,35 @@ export default function WriterWorkspacePage() {
   };
 
   const trackingCounts = useMemo(() => ({
+    all: trackedArticles.length,
+    active: filterTrackedArticles(trackedArticles, "active").length,
+    drafts: filterTrackedArticles(trackedArticles, "drafts").length,
     pending: trackedArticles.filter((article) => isOpenInPipeline(article) && article.reviewStatus === "pending_review").length,
     action: needsChanges.length,
     scheduled: trackedArticles.filter((article) => article.status === "scheduled").length,
     declined: trackedArticles.filter((article) => article.reviewStatus === "rejected" || article.status === "rejected").length,
     completed: trackedArticles.filter((article) => article.status === "published").length,
   }), [trackedArticles, needsChanges]);
+  // «الجارية» افتراضياً، و«الكل» إن لم تكن لدى الكاتب مقالة جارية
+  const effectiveArticleFilter: ArticleStatusFilter =
+    articleFilter === "active" && trackingCounts.active === 0 ? "all" : articleFilter;
 
   return (
     <DashboardLayout>
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
           <MyServicesHomeLink />
-          <UpcomingMeetingNotice />
-          <WriterFeedbackInvite />
+          <WriterHomeHeader
+            greeting={greeting()}
+            name={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || firstName}
+            profileImageUrl={user?.profileImageUrl ?? null}
+            createBlocked={createBlocked}
+            startTitle={createBlocked ? createBlockedReason : pipelineBlockReason || undefined}
+            onStartWriting={startWriting}
+            onOpenGuide={() => navigate("/dashboard/opinion-author/guide")}
+            onOpenFiles={() => navigate("/dashboard/opinion-author/files")}
+          />
+          <WriterAnnouncementsBoard />
           <WriterPriorityRail
             notifications={unreadNotifications}
             onOpenNotification={openEditorialNotification}
@@ -394,199 +409,85 @@ export default function WriterWorkspacePage() {
             onStartWriting={startWriting}
           />
           {activePipelineArticle && (
-            <div
-              className="flex flex-col gap-2 rounded-xl border border-amber-300/70 bg-amber-50/90 p-3 dark:border-amber-700/50 dark:bg-amber-950/25 sm:flex-row sm:items-center sm:justify-between"
-              dir="rtl"
-              data-testid="writer-active-pipeline-notice"
-            >
-              <div className="flex items-start gap-2.5">
-                {activePipelineArticle.stage === "scheduled" ? (
-                  <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                ) : (
-                  <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-                )}
-                <div>
-                  <p className="text-sm font-bold">
-                    {activePipelineArticle.stage === "scheduled"
-                      ? `مقالتك «${activePipelineArticle.title}» مجدولة للنشر`
-                      : `مقالتك «${activePipelineArticle.title}» في انتظار مراجعة هيئة التحرير والجدولة`}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {activePipelineArticle.stage === "scheduled"
-                      ? `تمت جدولة المقالة من قِبل هيئة التحرير${activePipelineArticle.scheduledAt ? ` ليوم ${format(new Date(activePipelineArticle.scheduledAt), "EEEE d MMMM — h:mm a", { locale: ar })}` : ""}. يمكنك حفظ مسودة جديدة، لكن لا يمكن إرسالها حتى تُنشر المقالة الحالية.`
-                      : "وصلت مقالتك إلى هيئة التحرير، وسيصلك إشعار فور اعتماد جدولتها. يمكنك حفظ مسودة جديدة، لكن لا يمكن إرسالها حالياً."}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => {
-                  setActiveTab("articles");
-                  window.setTimeout(() => {
-                    document
-                      .getElementById(`writer-article-${activePipelineArticle.id}`)
-                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  }, 120);
-                }}
-                data-testid="button-view-active-pipeline-article"
-              >
-                متابعة حالة المقالة
-              </Button>
-            </div>
-          )}
-          {railMode ? (
-            <section className="rounded-xl border border-border bg-card p-3" dir="rtl">
-              <div className="flex items-center justify-between gap-2">
-                <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">
-                  {greeting()} يا {firstName}
-                </h1>
-                <Button
-                  size="sm"
-                  disabled={createBlocked}
-                  className={`shrink-0 gap-1.5${createBlocked ? " opacity-60" : ""}`}
-                  title={createBlocked ? createBlockedReason : pipelineBlockReason || undefined}
-                  onClick={startWriting}
-                  data-testid="button-writer-start-writing"
-                >
-                  <PenLine className="h-4 w-4" />
-                  ابدأ الكتابة
-                </Button>
-              </div>
-              <div className="-mx-1 mt-2.5 flex gap-2 overflow-x-auto px-1 pb-0.5">
-                <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => navigate("/dashboard/opinion-author/guide")}>
-                  <BookOpen className="h-4 w-4 text-primary" /> دليل الكاتب
-                </Button>
-                <WriterInquiriesButton className="shrink-0 justify-center" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-1.5"
-                  onClick={() => {
-                    setActiveTab("ideas");
-                    requestIdeas();
-                  }}
-                >
-                  <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
-                </Button>
-              </div>
-            </section>
-          ) : (
-          <section className="rounded-xl border border-border bg-card p-3 sm:rounded-2xl sm:p-5 md:p-6" dir="rtl">
-            <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-2 sm:space-y-3">
-                <Badge variant="outline" className="gap-1.5 border-primary/30 px-2.5 py-0.5 text-primary">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  مساحة الكاتب الذكية
-                </Badge>
-                <div>
-                  <h1 className="text-xl font-bold tracking-tight sm:text-3xl">
-                    {greeting()} يا {firstName}
-                  </h1>
-                  <p className="mt-1 hidden max-w-2xl text-sm text-muted-foreground sm:mt-2 sm:block">
-                    فكرتك أولًا، والذكاء يساعدك على تطويرها ويحافظ على صوتك.
-                  </p>
-                </div>
-                {workspace?.desk?.[0] && (
-                  <p className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground/80 sm:text-sm">
-                    <Clock3 className="h-3.5 w-3.5 shrink-0 text-primary sm:h-4 sm:w-4" />
-                    <span className="line-clamp-1">أقرب خطوة: {workspace.desk[0].nextAction} في «{workspace.desk[0].title}»</span>
-                  </p>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:pb-1">
-                <Button variant="outline" size="sm" className="justify-center gap-1.5" onClick={() => navigate("/dashboard/opinion-author/guide")}>
-                  <BookOpen className="h-4 w-4 text-primary" /> دليل الكاتب
-                </Button>
-                <WriterInquiriesButton className="justify-center" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-center gap-1.5"
-                  onClick={() => {
-                    setActiveTab("ideas");
-                    requestIdeas();
-                  }}
-                >
-                  <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={createBlocked}
-                  className={`justify-center gap-1.5${createBlocked ? " opacity-60" : ""}`}
-                  title={createBlocked ? createBlockedReason : pipelineBlockReason || undefined}
-                  onClick={startWriting}
-                  data-testid="button-writer-start-writing-desktop"
-                >
-                  <PenLine className="h-4 w-4" />
-                  ابدأ الكتابة
-                </Button>
-              </div>
-            </div>
-          </section>
+            <WriterArticleNowStrip
+              article={activePipelineArticle}
+              onOpen={() => {
+                setActiveTab("articles");
+                window.setTimeout(() => {
+                  document
+                    .getElementById(`writer-article-${activePipelineArticle.id}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 120);
+              }}
+            />
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-            <TabsList dir="rtl" className="grid h-auto w-full grid-cols-4 gap-0.5 rounded-lg border border-border bg-muted/50 p-1 md:w-fit md:min-w-[480px]">
-              <TabsTrigger value="today" className="px-1 text-[11px] data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:px-3 sm:text-sm">اليوم</TabsTrigger>
-              <TabsTrigger value="ideas" className="px-1 text-[11px] data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:px-3 sm:text-sm">أفكاري</TabsTrigger>
-              <TabsTrigger value="articles" className="px-1 text-[11px] data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:px-3 sm:text-sm">
-                <span className="flex items-center justify-center gap-1">
-                  مقالاتي
-                  {unreadNotificationsCount > 0 && (
-                    <span className="flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 py-0.5 text-[9px] font-bold leading-none text-destructive-foreground sm:min-w-5 sm:text-[10px]">
-                      {unreadNotificationsCount > 99 ? "+99" : unreadNotificationsCount}
-                    </span>
-                  )}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="performance" className="px-1 text-[11px] data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:px-3 sm:text-sm">أدائي</TabsTrigger>
-            </TabsList>
+            <WriterTabPills
+              value={activeTab}
+              onChange={setActiveTab}
+              articlesBadge={unreadNotificationsCount}
+            />
 
-            <TabsContent value="today" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
+            <TabsContent value="today" className="mt-3 space-y-3 sm:mt-5 sm:space-y-4">
+              <div className="flex flex-wrap gap-4">
+                <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-3 rounded-[22px] bg-white p-5 shadow-[0_1px_3px_rgba(27,43,58,0.06)]">
+                  <h2 className="m-0 text-[17px] font-bold">ما الذي يشغلك اليوم؟</h2>
+                  <label htmlFor="writer-idea-seed" className="text-[13px] text-[#55667A]">اكتب بذرة الفكرة، ونساعدك بالأسئلة دون أن نكتب عنك</label>
+                  <Textarea id="writer-idea-seed" value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} placeholder="مثال: أفكر في الكتابة عن أثر العمل عن بعد على الأحياء السكنية…" className="min-h-24 resize-none rounded-2xl border-[#EEF2F6] bg-[#F9FBFD] text-[15px]" />
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={ideaInput.trim().length < 12 || coachMutation.isPending} onClick={() => coachMutation.mutate()} className="h-11 gap-2 rounded-full px-5 font-bold">
+                      {coachMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
+                      تحدّث مع فكرتك
+                    </Button>
+                    <Button variant="ghost" className="h-11 gap-1.5 rounded-full bg-[#F4F7FB] px-4 text-[#1B2B3A] hover:bg-[#EAF0F6]" onClick={() => { setActiveTab("ideas"); requestIdeas(); }}>
+                      <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
+                    </Button>
+                  </div>
+                  {coachResult && <CoachResultView result={coachResult} compact onStartWriting={startWriting} writingDisabled={false} />}
+                </section>
+
+                <section className="flex-[1_1_300px] rounded-[22px] bg-white py-1.5 shadow-[0_1px_3px_rgba(27,43,58,0.06)]">
+                  <h2 className="mx-5 mb-1.5 mt-3.5 text-[13px] font-medium text-[#55667A]">موجزك هذا الشهر</h2>
+                  <div className="flex items-center justify-between border-b border-[#EEF2F6] px-5 py-3">
+                    <span className="text-sm">قراءات مقالاتك</span>
+                    <span className="text-2xl font-bold tabular-nums text-[#1E9BE6]">{(workspace?.monthlyBrief?.views ?? 0).toLocaleString("en-US")}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-[#EEF2F6] px-5 py-3">
+                    <span className="text-sm">مقالات منشورة</span>
+                    <span className="text-[17px] font-semibold tabular-nums">{workspace?.monthlyBrief?.publishedCount ?? 0}</span>
+                  </div>
+                  {workspace?.monthlyBrief?.message ? (
+                    <p className="m-0 border-b border-[#EEF2F6] px-5 py-3 text-[13px] leading-6 text-[#55667A]">{workspace.monthlyBrief.message}</p>
+                  ) : null}
+                  <button type="button" onClick={() => navigate("/dashboard/opinion-author/files")} className="flex w-full items-center justify-between px-5 py-3 text-sm">
+                    <span>ملفاتي</span>
+                    <span className="flex items-center gap-1 text-[13px] text-[#0B6FA8]">الملفات والمحاضر <ArrowLeft className="h-4 w-4" /></span>
+                  </button>
+                </section>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="ideas" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
               <div className="grid gap-3 sm:gap-5 lg:grid-cols-3">
                 <Card className="border-border shadow-none lg:col-span-2">
-                  <CardHeader className="space-y-1 p-3 sm:p-6">
-                    <div className="flex items-center gap-2.5 sm:gap-3">
-                      <div className="rounded-lg bg-primary/10 p-1.5 text-primary"><BrainCircuit className="h-4 w-4" /></div>
-                      <div>
-                        <CardTitle className="text-base sm:text-lg">ما الذي يشغلك اليوم؟</CardTitle>
-                        <CardDescription className="hidden sm:block">اكتب بذرة الفكرة، وسنساعدك بالأسئلة والخريطة دون كتابة المقال بدلًا عنك.</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 p-3 pt-0 sm:p-6 sm:pt-0">
-                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} placeholder="مثال: أفكر في الكتابة عن أثر التقنية على علاقتنا بالوقت…" className="min-h-20 resize-none sm:min-h-28" />
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" disabled={ideaInput.trim().length < 12 || coachMutation.isPending} onClick={() => coachMutation.mutate()} className="gap-2">
-                        {coachMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
-                        تحدث مع فكرتك
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setActiveTab("ideas")}>افتح استوديو الأفكار <ArrowLeft className="mr-1 h-4 w-4" /></Button>
-                    </div>
-                    {coachResult && <CoachResultView result={coachResult} compact onStartWriting={startWriting} writingDisabled={false} />}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border shadow-none">
                   <CardHeader className="p-3 sm:p-6">
                     <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                      <BookOpen className="h-4 w-4 text-primary" /> موجزك هذا الشهر
+                      <span className="rounded-md bg-primary/10 p-1"><BrainCircuit className="h-4 w-4 text-primary" /></span>
+                      استوديو الفكرة
                     </CardTitle>
+                    <CardDescription className="hidden sm:block">فكّر بصوت مرتفع. المساعد يسأل ويرتب، وأنت صاحب الموقف والنص.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3 p-3 pt-0 sm:space-y-4 sm:p-6 sm:pt-0">
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                      <Metric value={workspace?.monthlyBrief?.publishedCount ?? 0} label="مقال منشور" />
-                      <Metric value={(workspace?.monthlyBrief?.views ?? 0).toLocaleString()} label="قراءة" />
-                    </div>
-                    <p className="rounded-lg border border-border bg-muted/30 p-2.5 text-xs leading-6 text-muted-foreground sm:p-3 sm:text-sm sm:leading-7">
-                      {workspace?.monthlyBrief?.message || "نجهز موجزك الإبداعي…"}
-                    </p>
+                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} className="min-h-24 sm:min-h-36" placeholder="اكتب الفكرة أو السؤال أو الموقف الذي تريد اختباره…" />
+                    <Button size="sm" onClick={() => coachMutation.mutate()} disabled={ideaInput.trim().length < 12 || coachMutation.isPending} className="gap-2">
+                      <WandSparkles className="h-4 w-4" /> ابنِ خريطة الفكرة
+                    </Button>
+                    {coachResult && <CoachResultView result={coachResult} onStartWriting={startWriting} writingDisabled={false} />}
                   </CardContent>
                 </Card>
+                <StyleProfileCard profile={styleQuery.data} loading={styleQuery.isLoading} />
               </div>
-
               <section className="space-y-2 rounded-xl border border-border bg-card p-3 sm:space-y-3 sm:rounded-2xl sm:p-5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -624,62 +525,6 @@ export default function WriterWorkspacePage() {
                   )}
                 </div>
               </section>
-
-              <div className="grid gap-3 sm:gap-5 lg:grid-cols-2">
-                <Card className="border-border shadow-none">
-                  <CardHeader className="p-3 sm:p-6">
-                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                      <span className="rounded-md bg-primary/10 p-1"><Feather className="h-4 w-4 text-primary" /></span>
-                      على مكتبك الآن
-                    </CardTitle>
-                    <CardDescription className="hidden sm:block">الأهم أولًا، بلا ازدحام.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 p-3 pt-0 sm:space-y-3 sm:p-6 sm:pt-0">
-                    {workspaceQuery.isLoading ? (
-                      <div className="h-20 animate-pulse rounded-xl bg-muted" />
-                    ) : workspace?.desk?.length ? (
-                      workspace.desk.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => navigate(`/dashboard/articles/${item.id}/edit`)}
-                          className="flex w-full items-start justify-between gap-3 rounded-lg border border-border/70 bg-background p-2.5 text-right transition-colors hover:border-primary/40 hover:bg-primary/5 sm:rounded-xl sm:p-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="line-clamp-1 text-sm font-medium">{item.title}</p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground sm:mt-1 sm:text-xs">{item.nextAction}</p>
-                          </div>
-                          <ArrowLeft className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
-                        </button>
-                      ))
-                    ) : (
-                      <EmptyState icon={CheckCircle2} title="مكتبك مرتب" text="لا توجد مسودات أو ملاحظات تنتظر إجراءك." />
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border shadow-none">
-                  <CardHeader className="p-3 sm:p-6">
-                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                      <span className="rounded-md bg-primary/10 p-1"><Users className="h-4 w-4 text-primary" /></span>
-                      نبض قرائك
-                    </CardTitle>
-                    <CardDescription className="line-clamp-2 text-xs sm:text-sm">{workspace?.readerPulse?.message}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3 p-3 pt-0 sm:space-y-4 sm:p-6 sm:pt-0">
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                      <Metric value={workspace?.readerPulse?.commentsCount ?? 0} label="تعليق حديث" />
-                      <Metric value={`${workspace?.readerPulse?.positiveShare ?? 0}%`} label="نبض إيجابي" />
-                    </div>
-                    {workspace?.readerPulse?.highlightedComment && (
-                      <blockquote className="rounded-lg border-r-4 border-primary bg-muted/30 p-3 text-sm leading-6 sm:rounded-xl sm:p-4 sm:leading-7">
-                        <p>«{workspace.readerPulse.highlightedComment.content}»</p>
-                        <footer className="mt-2 text-xs text-muted-foreground">حول: {workspace.readerPulse.highlightedComment.articleTitle}</footer>
-                      </blockquote>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
               <div className="grid gap-3 sm:gap-5 lg:grid-cols-2">
                 <Card className="border-border shadow-none">
                   <CardHeader className="p-3 sm:p-6">
@@ -723,61 +568,13 @@ export default function WriterWorkspacePage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="ideas" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
-              <div className="grid gap-3 sm:gap-5 lg:grid-cols-3">
-                <Card className="border-border shadow-none lg:col-span-2">
-                  <CardHeader className="p-3 sm:p-6">
-                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                      <span className="rounded-md bg-primary/10 p-1"><BrainCircuit className="h-4 w-4 text-primary" /></span>
-                      استوديو الفكرة
-                    </CardTitle>
-                    <CardDescription className="hidden sm:block">فكّر بصوت مرتفع. المساعد يسأل ويرتب، وأنت صاحب الموقف والنص.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3 p-3 pt-0 sm:space-y-4 sm:p-6 sm:pt-0">
-                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} className="min-h-24 sm:min-h-36" placeholder="اكتب الفكرة أو السؤال أو الموقف الذي تريد اختباره…" />
-                    <Button size="sm" onClick={() => coachMutation.mutate()} disabled={ideaInput.trim().length < 12 || coachMutation.isPending} className="gap-2">
-                      <WandSparkles className="h-4 w-4" /> ابنِ خريطة الفكرة
-                    </Button>
-                    {coachResult && <CoachResultView result={coachResult} onStartWriting={startWriting} writingDisabled={false} />}
-                  </CardContent>
-                </Card>
-                <StyleProfileCard profile={styleQuery.data} loading={styleQuery.isLoading} />
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                {!ideasRequested ? (
-                  <div className="md:col-span-3">
-                    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
-                      <Lightbulb className="h-5 w-5 text-primary" />
-                      <div>
-                        <p className="text-sm font-medium">لم تُطلب أفكار بعد</p>
-                        <p className="mt-1 text-xs text-muted-foreground sm:text-sm">اضغط الزر لتوليد ثلاث فرص مخصّصة لك.</p>
-                      </div>
-                      <Button size="sm" className="gap-2" onClick={requestIdeas}>
-                        <Sparkles className="h-4 w-4" /> اقترح 3 أفكار
-                      </Button>
-                    </div>
-                  </div>
-                ) : ideasQuery.isLoading || ideasQuery.isFetching ? (
-                  [0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-muted sm:h-40" />)
-                ) : (
-                  ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)
-                )}
-              </div>
-            </TabsContent>
-
             <TabsContent value="articles" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
               {unreadNotifications.length > 0 && <EditorialAlertsPanel notifications={unreadNotifications} onOpen={openEditorialNotification} onMarkAll={() => markAllNotificationsReadMutation.mutate()} markingAll={markAllNotificationsReadMutation.isPending} />}
-              <div className="rounded-xl border border-border bg-card p-3 sm:rounded-2xl sm:p-5">
-                <h2 className="text-lg font-bold sm:text-2xl">متابعة مقالاتي</h2>
-                <p className="mt-1 hidden text-sm text-muted-foreground sm:block">كل قرار تحريري وسببه وموعده في مكان واحد. تتحدث اللوحة تلقائيًا.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 sm:gap-3">
-                <TrackingMetric icon={Clock3} label="بانتظار المراجعة والجدولة" value={trackingCounts.pending} />
-                <TrackingMetric icon={Edit3} label="تحتاج إجراءك" value={trackingCounts.action} tone="warning" />
-                <TrackingMetric icon={CalendarClock} label="مجدولة" value={trackingCounts.scheduled} tone="info" />
-                <TrackingMetric icon={CircleX} label="غير صالحة للنشر" value={trackingCounts.declined} tone="danger" />
-                <TrackingMetric icon={CheckCircle2} label="منشورة" value={trackingCounts.completed} tone="success" />
-              </div>
+              <WriterWeeklySlotCard
+                banner={scheduleQuery.data?.banner ?? null}
+                onRequestChange={() => navigate("/dashboard/opinion-author/tickets?new=schedule")}
+              />
+              <ArticleStatusChips value={effectiveArticleFilter} onChange={setArticleFilter} counts={trackingCounts} />
               {needsChanges.length > 0 && (
                 <Card className="border-warning/40 bg-warning/10 shadow-none">
                   <CardHeader className="p-3 sm:p-6">
@@ -789,7 +586,7 @@ export default function WriterWorkspacePage() {
               <div className="space-y-3">
                 {workspaceQuery.isLoading
                   ? [0, 1, 2].map((item) => <div key={item} className="h-24 animate-pulse rounded-xl bg-muted sm:h-36" />)
-                  : trackedArticles.map((article) => (
+                  : filterTrackedArticles(trackedArticles, effectiveArticleFilter).map((article) => (
                       <WriterTrackingCard
                         key={article.id}
                         article={article}
@@ -808,6 +605,9 @@ export default function WriterWorkspacePage() {
                 {!workspaceQuery.isLoading && trackedArticles.length === 0 && (
                   <EmptyState icon={Feather} title="هنا تبدأ الحكاية" text="أنشئ مقالك الأول، وسنرافقك من الفكرة حتى النشر." />
                 )}
+                {!workspaceQuery.isLoading && trackedArticles.length > 0 && filterTrackedArticles(trackedArticles, effectiveArticleFilter).length === 0 && (
+                  <EmptyState icon={CheckCircle2} title="لا مقالات في هذا الفرز" text="اختر فرزاً آخر من الأعلى." />
+                )}
               </div>
             </TabsContent>
 
@@ -815,6 +615,29 @@ export default function WriterWorkspacePage() {
               <div className="rounded-xl border border-border bg-card p-3 sm:rounded-2xl sm:p-5">
                 <h2 className="text-lg font-bold sm:text-2xl">أثر كتابتك</h2>
                 <p className="mt-1 hidden text-sm text-muted-foreground sm:block">أرقام مفهومة تساعدك على القرار، لا مجرد لوحة مؤشرات.</p>
+              </div>
+              <div className="grid gap-3 sm:gap-5 lg:grid-cols-2">
+                <Card className="border-border shadow-none">
+                  <CardHeader className="p-3 sm:p-6">
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                      <span className="rounded-md bg-primary/10 p-1"><Users className="h-4 w-4 text-primary" /></span>
+                      نبض قرائك
+                    </CardTitle>
+                    <CardDescription className="line-clamp-2 text-xs sm:text-sm">{workspace?.readerPulse?.message}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 p-3 pt-0 sm:space-y-4 sm:p-6 sm:pt-0">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <Metric value={workspace?.readerPulse?.commentsCount ?? 0} label="تعليق حديث" />
+                      <Metric value={`${workspace?.readerPulse?.positiveShare ?? 0}%`} label="نبض إيجابي" />
+                    </div>
+                    {workspace?.readerPulse?.highlightedComment && (
+                      <blockquote className="rounded-lg border-r-4 border-primary bg-muted/30 p-3 text-sm leading-6 sm:rounded-xl sm:p-4 sm:leading-7">
+                        <p>«{workspace.readerPulse.highlightedComment.content}»</p>
+                        <footer className="mt-2 text-xs text-muted-foreground">حول: {workspace.readerPulse.highlightedComment.articleTitle}</footer>
+                      </blockquote>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
               <ContributorStatsRow totalViews={analytics?.totalViews ?? 0} totalLikes={analytics?.totalLikes ?? 0} totalComments={analytics?.totalComments ?? 0} totalBookmarks={analytics?.totalBookmarks ?? 0} comparison={analytics?.comparison} loading={analyticsQuery.isLoading} />
               <div className="grid gap-3 md:grid-cols-3 sm:gap-4">
@@ -876,32 +699,6 @@ function EmptyState({ icon: Icon, title, text }: { icon: typeof Feather; title: 
       <Icon className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
       <p className="text-sm font-medium sm:text-base">{title}</p>
       <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{text}</p>
-    </div>
-  );
-}
-
-function TrackingMetric({ icon: Icon, label, value, tone = "default" }: { icon: typeof Feather; label: string; value: number; tone?: "default" | "warning" | "info" | "success" | "danger" }) {
-  const tones = {
-    default: "border-border bg-card text-foreground",
-    warning: "border-border bg-card text-foreground",
-    info: "border-border bg-card text-foreground",
-    success: "border-border bg-card text-foreground",
-    danger: "border-border bg-card text-foreground",
-  };
-  const valueTone = {
-    default: "text-foreground",
-    warning: "text-warning",
-    info: "text-primary",
-    success: "text-success",
-    danger: "text-destructive",
-  };
-  return (
-    <div className={`rounded-lg border p-2.5 sm:rounded-xl sm:p-3 ${tones[tone]}`}>
-      <div className="flex items-center justify-between gap-2">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className={`text-lg font-bold tabular-nums sm:text-2xl ${valueTone[tone]}`}>{value}</span>
-      </div>
-      <p className="mt-1.5 text-[11px] font-medium text-muted-foreground sm:mt-2 sm:text-xs">{label}</p>
     </div>
   );
 }
