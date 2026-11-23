@@ -38,6 +38,7 @@
 //   GET   /api/internal/bot-desk/meetings/:id                (التفاصيل والحضور)
 //   GET   /api/internal/bot-desk/meetings/:id/transcript     (تفريغ أمين المحضر بمؤشر — للمضيف/المدير)
 //   GET   /api/internal/bot-desk/meetings/:id/minutes        (المحضر وحالة اعتماده)
+//   GET   /api/internal/bot-desk/duty/*                      («عين المناوبة» — في botDeskDuty.ts، قراءة فقط)
 //
 // مسارات الاجتماعات تشترط قدرة meetingsRead (meetings.view أو meetings.manage)
 // وتطبق قواعد الظهور نفسها في meetingsService؛ لا كتابة ولا سجل activity_logs
@@ -170,7 +171,7 @@ router.use(
   }),
 );
 
-async function requireBotDeskAuth(req: BotDeskRequest, res: Response, next: NextFunction) {
+export async function requireBotDeskAuth(req: BotDeskRequest, res: Response, next: NextFunction) {
   res.setHeader("Cache-Control", "private, no-store");
   try {
     const authHeader = req.headers.authorization?.trim() ?? "";

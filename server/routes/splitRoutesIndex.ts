@@ -52,6 +52,7 @@ import enBotDraftsRouter from "./enBotDrafts";
 import enSearchRouter from "./enSearch";
 import enDashboardStatsRouter from "./enDashboardStats";
 import botDeskRouter from "./botDesk";
+import botDeskDutyRouter from "./botDeskDuty";
 import staffAppMobileRouter from "./staffAppMobile";
 import mobileEditorialRouter from "./mobileEditorial";
 import botPublisherTokensRouter from "./botPublisherTokens";
@@ -211,6 +212,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(botDraftsRouter);
   // بوت الديسك (استفسارات المساهمين + مقترحات النشر الاجتماعي) — /api/internal/bot-desk، Bearer botpub_*
   app.use(botDeskRouter);
+  // «عين المناوبة» — /api/internal/bot-desk/duty/*، قراءة فقط، superuser أو content_duty.monitor
+  app.use(botDeskDutyRouter);
   // تطبيق الديسك للمنسوبين (Sabq Desk iOS — com.sabq.desk) — /api/v1/staff، Bearer جلسة عضو + 2FA إلزامي
   app.use("/api/v1/staff", staffAppMobileRouter);
   // لوحة المراسل والمشرف في تطبيق «سبق» (iOS) — /api/v1/editorial، Bearer جلسة عضو + 2FA إلزامي
