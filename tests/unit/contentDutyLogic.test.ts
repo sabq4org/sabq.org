@@ -190,6 +190,19 @@ describe("early start", () => {
     expect(report.hourly[0]).toBe(2);
     expect(report.ticks.map((t) => t.offsetMin)).toEqual([0, 0]);
   });
+
+  it("keeps publishes per hour separate from saves and reviews", () => {
+    const v = (id: string, action: string, offsetMin: number) => ({ articleId: id, actorId: "abdullah", action, at: start + offsetMin * MIN });
+    const report = computeShiftReport({
+      occ, now: start + 90 * MIN, minutes: new Map<number, ActivityKind>(),
+      ownVersions: [v("a", "edited", 5), v("a", "edited", 8), v("a", "published", 10), v("b", "edited", 20), v("b", "published", 70)],
+      ownReviews: [start + 30 * MIN], items: [], breakingIds: new Set<string>(), thresholds: DEFAULT_DUTY_THRESHOLDS,
+    });
+    expect(report.published).toBe(2);
+    expect(report.hourly.slice(0, 2)).toEqual([5, 1]);
+    expect(report.hourlyPublished.slice(0, 2)).toEqual([1, 1]);
+    expect(report.hourlyPublished.filter((h): h is number => h !== null).reduce((a, b) => a + b, 0)).toBe(report.published);
+  });
 });
 
 describe("server helpers", () => {

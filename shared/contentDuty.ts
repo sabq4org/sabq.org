@@ -431,7 +431,10 @@ export interface ShiftReport {
   /** النقاط فوق الشريط: دقائق من بداية الوردية */
   ticks: Array<{ offsetMin: number; breaking: boolean }>;
   /** نشر + تعديل + مراجعة في كل ساعة؛ null للساعات القادمة */
+  /** كل العمل في الساعة: نشر + تعديل (كل حفظ) + مراجعة */
   hourly: Array<number | null>;
+  /** المنشور في الساعة فقط (مجموعه = published) */
+  hourlyPublished: Array<number | null>;
   /** عدد المنتظر كل 10 دقائق من بداية الوردية حتى الآن أو نهايتها */
   backlog: number[];
   peakBacklog: number;
@@ -493,12 +496,17 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
 
   const hours = Math.ceil((occ.end - occ.start) / (60 * MINUTE));
   const hourly: Array<number | null> = Array.from({ length: hours }, (_, h) => (occ.start + h * 60 * MINUTE >= now ? null : 0));
-  const bump = (t: number) => {
+  const hourlyPublished: Array<number | null> = hourly.slice();
+  const bumpIn = (arr: Array<number | null>, t: number) => {
     // ما سبق البداية يُضاف إلى الساعة الأولى.
     const h = Math.max(0, Math.floor((t - occ.start) / (60 * MINUTE)));
-    if (h < hours && hourly[h] !== null) hourly[h] = (hourly[h] as number) + 1;
+    if (h < hours && arr[h] !== null) arr[h] = (arr[h] as number) + 1;
   };
-  publishes.forEach((v) => bump(v.at));
+  const bump = (t: number) => bumpIn(hourly, t);
+  publishes.forEach((v) => {
+    bump(v.at);
+    bumpIn(hourlyPublished, v.at);
+  });
   edits.forEach((v) => bump(v.at));
   reviews.forEach(bump);
 
@@ -523,6 +531,7 @@ export function computeShiftReport(input: ShiftReportInput): ShiftReport {
     responseMedianMin,
     ticks: publishes.map((v) => ({ offsetMin: Math.max(0, Math.round((v.at - occ.start) / MINUTE)), breaking: input.breakingIds.has(v.articleId) })),
     hourly,
+    hourlyPublished,
     backlog,
     peakBacklog: backlog.reduce((a, b) => Math.max(a, b), 0),
     leftAtHandoff,

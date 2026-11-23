@@ -53,7 +53,9 @@ export function DutyShiftView({ room }: { room: ContentDutyRoomResponse }) {
   const avg = shift.averages;
   const tone = statusTone(shift.status);
   const overdue = shift.waiting.filter((w) => w.overdue).length;
-  const maxHour = Math.max(1, ...r.hourly.map((h) => h ?? 0));
+  // الأعمدة = المنشور فقط حتى تطابق سطر «المنشور»؛ التعديل والمراجعة يظهران رقمًا تحت الرسم.
+  const hourlyPublished = r.hourlyPublished ?? r.hourly;
+  const maxHour = Math.max(1, ...hourlyPublished.map((h) => h ?? 0));
   const startHour = Number(shift.start.slice(0, 2));
 
   const compareRows: Array<{ label: string; now: string; avg: string; trend: "good" | "bad" | "muted"; word: string }> = [
@@ -182,17 +184,24 @@ export function DutyShiftView({ room }: { room: ContentDutyRoomResponse }) {
           <section aria-labelledby="duty-hours" className={`${surface} flex flex-col gap-3.5 p-5`}>
             <div className="flex items-baseline justify-between">
               <h2 id="duty-hours" className="m-0 text-base font-bold">الإنتاج ساعة بساعة</h2>
-              <span className="text-xs text-[#55667A]">نشر · تعديل · مراجعة</span>
+              <span className="text-xs text-[#55667A]">المنشور في كل ساعة</span>
             </div>
             <div className="flex h-[130px] items-end gap-2 pt-2" role="img" aria-label="الإنتاج في كل ساعة من الوردية">
-              {r.hourly.map((v, i) => (
+              {hourlyPublished.map((v, i) => {
+                // وردي فقط إن لم يعمل شيئًا في الساعة؛ ساعة بلا نشر لكن فيها تعديل أو مراجعة رمادية.
+                const anyWork = (r.hourly[i] ?? 0) > 0;
+                return (
                 <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
                   <span dir="ltr" className="text-xs font-semibold tabular-nums">{v === null ? "" : v}</span>
-                  <div className="w-full max-w-[26px] rounded-[8px_8px_4px_4px]" style={{ height: v === null ? 6 : Math.max(6, (v / maxHour) * 90), background: v === null ? "#EEF2F6" : v === 0 ? "#F5C9CC" : "#1E9BE6" }} />
+                  <div className="w-full max-w-[26px] rounded-[8px_8px_4px_4px]" style={{ height: v === null ? 6 : Math.max(6, (v / maxHour) * 90), background: v === null ? "#EEF2F6" : v > 0 ? "#1E9BE6" : anyWork ? "#D5DEE8" : "#F5C9CC" }} />
                   <span dir="ltr" className="text-[11px] tabular-nums text-[#617183]">{(startHour + i) % 24}</span>
                 </div>
-              ))}
+                );
+              })}
             </div>
+            <p className="m-0 text-xs text-[#55667A]">
+              وفي الوردية أيضًا: تعديل <span dir="ltr" className="tabular-nums">{r.edits}</span> · مراجعة <span dir="ltr" className="tabular-nums">{r.reviews}</span>
+            </p>
           </section>
 
           <section aria-labelledby="duty-compare" className={`${surface} overflow-hidden`}>
