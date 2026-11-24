@@ -19,12 +19,13 @@ import { articles, categories, users } from "@shared/schema";
 import { articleCardSelect } from "../selectHelpers";
 import { withCache } from "../memoryCache";
 import { getRedisClient } from "../redis";
+import { getWriterPageExtras, type WriterPageExtras } from "./writerPageService";
 
 const reporterUsers = aliasedTable(users, "reporter_user");
 
 const MEMORY_TTL_MS = 2 * 60 * 1000;
 const REDIS_TTL_SECONDS = 5 * 60;
-const REDIS_PREFIX = "mobile:author:v2:";
+const REDIS_PREFIX = "mobile:author:v3:";
 
 type AuthorRow = {
   id: string;
@@ -59,6 +60,8 @@ export type MobileAuthorPage = {
   stats: { articleCount: number; totalViews: number; earliestPublish: string | null };
   topCategories: Array<{ id: string; nameAr: string; color: string | null; icon: string | null; count: number }>;
   recentArticles: unknown[];
+  /** كاتب الرأي: يوم الكتابة، موعده القادم، كتّاب اليوم نفسه (null للمراسلين). */
+  writer: WriterPageExtras | null;
 };
 
 function rowsOf<T>(result: unknown): T[] {
@@ -70,7 +73,13 @@ function rowsOf<T>(result: unknown): T[] {
 function isoOrNull(value: unknown): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
-  return String(value);
+  // timestamp بلا منطقة من db.execute يصل «2026-01-07 13:30:57.827» (UTC): نحوّله إلى ISO كي تقرأه التطبيقات.
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) {
+    const parsed = new Date(`${raw.replace(" ", "T")}Z`);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return raw;
 }
 
 /**
@@ -167,6 +176,13 @@ async function computeAuthorPage(
 
   const fullName = [author.first_name, author.last_name].filter(Boolean).join(" ").trim();
   const avatar = author.profile_image_url ? String(author.profile_image_url) : null;
+  const absolute = (url: string | null) =>
+    url ? (url.startsWith("http") ? url : `${baseUrl}${url.startsWith("/") ? "" : "/"}${url}`) : null;
+  const extras = await getWriterPageExtras(author.id).catch((err) => {
+    console.error("[MobileAuthorPage] writer extras error:", err);
+    return null;
+  });
+  const writer = extras ? { ...extras, peers: extras.peers.map((p) => ({ ...p, avatarUrl: absolute(p.avatarUrl) })) } : null;
 
   return {
     author: {
@@ -188,6 +204,7 @@ async function computeAuthorPage(
     },
     topCategories,
     recentArticles: (recent as unknown as MobileAuthorArticleRow[]).map(formatArticle),
+    writer,
   };
 }
 

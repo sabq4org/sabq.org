@@ -1,41 +1,53 @@
 import SwiftUI
 
-/// "جميع المقالات" — the full opinion-articles landing screen.
-/// Top: a "الأكثر قراءة" highlight section (horizontal scroll of medium
-/// cards, fed by `sort=views`).
-/// Bottom: a list of latest opinions in the same compact-row style the
-/// homepage uses for "آخر الأخبار".
+/// «المقالات» — صفحة الرأي العادلة، مطابقة للويب (/opinion، #2256):
+///  1. شريط أيام الأسبوع (السبت → الجمعة) واليوم مختار.
+///  2. مقالات اليوم المختار بحجم واحد، وترتيب اليوم يتناوب كل ساعة (من الخادم).
+///  3. «يقرؤونه الآن»: الأسرع قراءة في آخر 72 ساعة، مقال واحد لكل كاتب.
+///  4. «تعرّف على كاتب»: كاتب من الأقل ظهورًا يتغيّر يوميًا.
+///  5. «كتّاب سبق»: كل الكتّاب أبجديًا.
+/// بلا أعداد مشاهدات. البيانات من GET /api/opinion-front.
 struct OpinionsView: View {
-    @Environment(BookmarksStore.self) private var bookmarksStore
-    @State private var mostViewed: [OpinionArticle] = []
-    @State private var latest: [OpinionArticle] = []
+    @State private var front: APIOpinionFront?
+    @State private var selectedDay: String?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showAllWriters = false
+
+    /// أزرق التحديد في سبق (#1E9BE6) بنص أبيض.
+    private static let selectBlue = Color(red: 30 / 255, green: 155 / 255, blue: 230 / 255)
+
+    private var dayKey: String? {
+        selectedDay ?? front.map { f in
+            (f.articlesByDay[f.today]?.isEmpty == false ? f.today : f.latestDay) ?? f.today
+        }
+    }
+
+    private var dayArticles: [APIOpinionFrontArticle] {
+        guard let front, let dayKey else { return [] }
+        return front.articlesByDay[dayKey] ?? []
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: SabqLayout.space24) {
-                SabqPageIntro("أكثر مقالات الرأي قراءةً، وأحدث ما نشر")
-
-                if isLoading && latest.isEmpty && mostViewed.isEmpty {
+                if isLoading && front == nil {
                     loadingSection
-                } else if let errorMessage, latest.isEmpty && mostViewed.isEmpty {
-                    errorSection(message: errorMessage)
-                } else if latest.isEmpty && mostViewed.isEmpty {
+                } else if let errorMessage, front == nil {
                     EmptyStateView(
-                        icon: "newspaper",
-                        tint: SabqTheme.textSecondary,
-                        title: "لا توجد مقالات رأي الآن",
-                        subtitle: "سنُظهر أحدث المقالات المنشورة هنا فور توفرها"
+                        icon: "exclamationmark.triangle",
+                        tint: SabqTheme.danger,
+                        title: "تعذر تحميل المقالات",
+                        subtitle: errorMessage,
+                        action: { Task { await load() } },
+                        actionTitle: "إعادة المحاولة"
                     )
-                } else {
-                    if !mostViewed.isEmpty {
-                        mostViewedSection
-                    }
-
-                    if !latest.isEmpty {
-                        latestSection
-                    }
+                } else if let front {
+                    weekStrip(front)
+                    daySection(front)
+                    if !front.hot.isEmpty { hotSection(front.hot) }
+                    if let spotlight = front.spotlight { spotlightSection(spotlight) }
+                    if !front.roster.isEmpty { rosterSection(front) }
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
@@ -43,275 +55,368 @@ struct OpinionsView: View {
             .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .refreshable {
-            await loadAll(isRefresh: true)
-        }
+        .refreshable { await load() }
         .navigationTitle("المقالات")
         .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
         .sabqRTL()
         .task {
-            guard latest.isEmpty && mostViewed.isEmpty else { return }
-            await loadAll()
+            guard front == nil else { return }
+            await load()
         }
     }
 
-    // MARK: - Trending (top)
+    // MARK: - Week strip
 
-    private var mostViewedSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            DiscoverySectionHeading(title: "ترند المقالات", subtitle: "الأكثر تفاعلاً خلال آخر 48 ساعة")
-
+    private func weekStrip(_ front: APIOpinionFront) -> some View {
+        ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: SabqLayout.space16) {
-                    ForEach(Array(mostViewed.prefix(8).enumerated()), id: \.element.id) { index, opinion in
-                        NavigationLink(value: opinion) {
-                            mostViewedCard(rank: index + 1, opinion: opinion)
-                        }
-                        .buttonStyle(.plain)
+                HStack(spacing: SabqLayout.space8) {
+                    ForEach(front.days, id: \.key) { day in
+                        dayChip(day)
+                            .id(day.key)
                     }
                 }
-                .padding(.bottom, SabqLayout.space4)
+                .padding(.vertical, SabqLayout.space4)
+            }
+            .onAppear {
+                if let key = dayKey { proxy.scrollTo(key, anchor: .center) }
             }
         }
     }
 
-    /// بطاقة بعرض 240: صورة 16:9، ورقم الترتيب في مربع هادئ، ثم العنوان والكاتب.
-    private func mostViewedCard(rank: Int, opinion: OpinionArticle) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            ZStack(alignment: .topLeading) {
-                Group {
+    private func dayChip(_ day: APIOpinionFrontDay) -> some View {
+        let selected = day.key == dayKey
+        let disabled = day.isFuture || day.count == 0
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { selectedDay = day.key }
+        } label: {
+            VStack(spacing: 2) {
+                Text(OpinionText.weekdayName(day.key))
+                    .font(SabqType.metaEmphasis.font)
+                Text(OpinionText.dayNumber(day.key))
+                    .font(SabqFonts.app(size: 22, weight: .bold))
+                    .monospacedDigit()
+                Text(day.isFuture ? "قريبًا" : OpinionText.count(day.count))
+                    .font(SabqType.timestamp.font)
+                    .opacity(selected ? 0.9 : 1)
+            }
+            .foregroundStyle(selected ? Color.white : (disabled ? SabqTheme.textTertiary : SabqTheme.textPrimary))
+            .frame(width: 76, height: 84)
+            .background(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(selected ? Self.selectBlue : SabqTheme.surface)
+                    .shadow(color: selected ? Self.selectBlue.opacity(0.3) : .clear, radius: 8, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .strokeBorder(selected ? Color.clear : SabqTheme.cardBorder, lineWidth: 0.75)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .accessibilityLabel("\(OpinionText.weekdayName(day.key)) \(OpinionText.dayNumber(day.key))، \(OpinionText.count(day.count))")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    // MARK: - Day articles
+
+    private func daySection(_ front: APIOpinionFront) -> some View {
+        let isToday = dayKey == front.today
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                Text(isToday ? "مقالات اليوم" : "مقالات \(OpinionText.dayLabel(dayKey ?? ""))")
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                if isToday && dayArticles.count > 1 {
+                    Label("الترتيب يتناوب كل ساعة، فيأخذ كل مقال دوره في الأعلى", systemImage: "arrow.triangle.2.circlepath")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                }
+            }
+
+            if dayArticles.isEmpty {
+                Text("لا مقالات منشورة في هذا اليوم")
+                    .font(SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, SabqLayout.space32)
+                    .sabqNewsSurface()
+            } else {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(dayArticles.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { SidebarRowDivider() }
+                        dayRow(item)
+                    }
+                }
+                .sabqNewsSurface()
+            }
+        }
+    }
+
+    private func dayRow(_ item: APIOpinionFrontArticle) -> some View {
+        let opinion = OpinionArticle.from(item.opinion)
+        let role = OpinionText.role(bio: item.authorBio, name: opinion.authorName, gender: opinion.authorGender)
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space12) {
+                NavigationLink(value: AuthorRoute(name: opinion.authorName, avatarURL: opinion.authorImageURL, role: role)) {
+                    HStack(spacing: SabqLayout.space12) {
+                        OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 42)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(opinion.authorName)
+                                .font(SabqFonts.app(size: 15, weight: .semibold))
+                                .foregroundStyle(SabqTheme.textPrimary)
+                                .lineLimit(1)
+                            Text(role)
+                                .font(SabqType.meta.font)
+                                .foregroundStyle(SabqTheme.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+
+                Text(SabqFormatters.riyadhClock12.string(from: opinion.publishDate))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .monospacedDigit()
+            }
+
+            NavigationLink(value: opinion) {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
                     if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                        FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
+                        FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint, maxPixelSize: 900) {
                             SabqImagePlaceholder()
                         }
-                    } else {
-                        SabqImagePlaceholder()
-                            .environment(\.sabqImageLoadFailed, true)
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                     }
+
+                    Text(opinion.title)
+                        .font(SabqFonts.app(size: 19, weight: .bold))
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .lineSpacing(3)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !opinion.excerpt.isEmpty {
+                        Text(opinion.excerpt)
+                            .sabqText(SabqType.excerpt)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    HStack(spacing: SabqLayout.space16) {
+                        if item.readMinutes > 0 {
+                            Text(OpinionText.readTime(item.readMinutes))
+                                .foregroundStyle(SabqTheme.textTertiary)
+                        }
+                        Text("اقرأ المقال")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(SabqTheme.primary)
+                    }
+                    .font(SabqType.meta.font)
                 }
-                .frame(width: 240, height: 135)
-                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-
-                // رقم الترتيب بنمط الرئيسية (28 نقطة، نص أساسي). فوق الصورة يحتاج
-                // سطحًا أبيض بدل التعبئة الشفافة كي يبقى مقروءًا.
-                Text("\(rank)")
-                    .font(SabqType.metaEmphasis.font)
-                    .monospacedDigit()
-                    .foregroundStyle(SabqTheme.primary)
-                    .frame(width: 28, height: 28)
-                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                            .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-                    )
-                    .padding(SabqLayout.space8)
-                    .accessibilityLabel("المرتبة \(rank)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-
-            Text(opinion.title)
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .frame(width: 240, alignment: .leading)
-
-            HStack(spacing: SabqLayout.space8) {
-                OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 24)
-                Text(opinion.authorName)
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundStyle(SabqTheme.primary)
-                    .lineLimit(1)
-            }
-            .frame(width: 240, alignment: .leading)
+            .buttonStyle(.plain)
         }
-        .frame(width: 240, alignment: .leading)
+        .padding(SabqLayout.space16)
     }
 
-    // MARK: - Latest (bottom)
+    // MARK: - Hot
 
-    private var latestSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            DiscoverySectionHeading(title: "أحدث المقالات", subtitle: "كل ما نُشر مرتباً زمنياً")
+    private func hotSection(_ hot: [APIOpinionFrontArticle]) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            DiscoverySectionHeading(title: "يقرؤونه الآن", subtitle: "الأسرع قراءة في آخر 72 ساعة، مقال واحد لكل كاتب")
 
-            // صفوف بفواصل رفيعة على سطح أبيض واحد، كما في الرئيسية.
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(latest.enumerated()), id: \.element.id) { index, opinion in
-                    if index > 0 {
-                        SidebarRowDivider()
-                    }
-
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(hot.enumerated()), id: \.element.id) { index, item in
+                    let opinion = OpinionArticle.from(item.opinion)
+                    if index > 0 { SidebarRowDivider() }
                     NavigationLink(value: opinion) {
-                        opinionRow(opinion)
+                        HStack(alignment: .top, spacing: SabqLayout.space12) {
+                            Text("\(index + 1)")
+                                .font(SabqFonts.app(size: 20, weight: .bold))
+                                .foregroundStyle(SabqTheme.primary)
+                                .monospacedDigit()
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                                Text(opinion.title)
+                                    .sabqText(SabqType.rowTitle)
+                                    .foregroundStyle(SabqTheme.textPrimary)
+                                    .lineLimit(3)
+                                    .multilineTextAlignment(.leading)
+                                Text("\(opinion.authorName) · \(opinion.relativeDate)")
+                                    .font(SabqType.meta.font)
+                                    .foregroundStyle(SabqTheme.textTertiary)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, SabqLayout.space12)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, SabqLayout.space12)
+            .padding(.horizontal, SabqLayout.space16)
             .sabqNewsSurface()
         }
     }
 
-    /// صف بشكل `CompactArticleRow`: العنوان وسطر البيانات، والمصغّرة 112×63 في طرف السطر.
-    private func opinionRow(_ opinion: OpinionArticle) -> some View {
-        HStack(alignment: .top, spacing: SabqLayout.space12) {
-            VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                Text(opinion.title)
-                    .sabqText(SabqType.rowTitle)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
+    // MARK: - Spotlight
 
-                HStack(spacing: SabqLayout.space4) {
-                    Text("رأي")
-                        .font(SabqType.metaEmphasis.font)
-                        .foregroundStyle(SabqTheme.primary)
-                    Text("·")
-                        .font(SabqType.meta.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
-                    Text(opinion.relativeDate)
-                        .font(SabqType.timestamp.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
-                        .lineLimit(1)
-                }
+    private func spotlightSection(_ spotlight: APIOpinionFrontSpotlight) -> some View {
+        let w = spotlight.writer
+        let role = OpinionText.role(bio: w.bio, name: w.name, gender: w.gender)
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            DiscoverySectionHeading(title: "تعرّف على كاتب")
 
-                authorPill(opinion)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Group {
-                if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                    FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint, maxPixelSize: 360) {
-                        SabqImagePlaceholder()
-                    }
-                } else {
-                    SabqImagePlaceholder()
-                        .environment(\.sabqImageLoadFailed, true)
-                }
-            }
-            .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
-            .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-                    .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
-            )
-        }
-        .padding(.vertical, SabqLayout.rowPadding)
-        .contentShape(Rectangle())
-    }
-
-    private func authorPill(_ opinion: OpinionArticle) -> some View {
-        HStack(spacing: SabqLayout.space8) {
-            OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 24)
-
-            Text(opinion.authorName)
-                .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(SabqTheme.primary)
-                .lineLimit(1)
-
-            Spacer(minLength: 0)
-
-            // عدد المشاهدات في طرف الصف بدل «اقرأ المقال» — بطاقة أرشيف الرأي في الويب (#1605)
-            HStack(spacing: SabqLayout.space4) {
-                Image(systemName: "eye")
-                    .font(SabqType.tag.font)
-                Text(opinion.viewsLabel)
-                    .monospacedDigit()
-            }
-            .font(SabqType.meta.font)
-            .foregroundStyle(SabqTheme.textTertiary)
-            .lineLimit(1)
-        }
-    }
-
-    // MARK: - Loading / Error
-
-    @ViewBuilder
-    private var loadingSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space16) {
-            SkeletonBox(width: 140, height: 18, radius: SabqRadius.small)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: SabqLayout.space16) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                            SkeletonBox(width: 240, height: 135, radius: SabqRadius.medium)
-                            SkeletonBox(width: 220, height: 14, radius: SabqRadius.small)
-                            SkeletonBox(width: 140, height: 12, radius: SabqRadius.small)
-                        }
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                HStack(spacing: SabqLayout.space12) {
+                    OpinionAuthorAvatar(name: w.name, imageURL: w.profileImageUrl, size: 56)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(w.name)
+                            .font(SabqFonts.app(size: 17, weight: .bold))
+                            .foregroundStyle(SabqTheme.textPrimary)
+                        Text(role)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
+                            .lineLimit(2)
                     }
                 }
-            }
 
-            VStack(spacing: 0) {
-                ForEach(0..<4, id: \.self) { index in
-                    if index > 0 { SidebarRowDivider() }
-                    HStack(alignment: .top, spacing: SabqLayout.space12) {
-                        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                            SkeletonBox(height: 16)
-                            SkeletonBox(width: 180, height: 14)
-                            SkeletonBox(width: 100, height: 12)
+                if let article = spotlight.article {
+                    let opinion = OpinionArticle.from(article.opinion)
+                    NavigationLink(value: opinion) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                            Text("آخر ما كتب")
+                                .font(SabqType.tag.font)
+                                .foregroundStyle(SabqTheme.primary)
+                            Text(opinion.title)
+                                .sabqText(SabqType.rowTitle)
+                                .foregroundStyle(SabqTheme.textPrimary)
+                                .multilineTextAlignment(.leading)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        SkeletonBox(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight, radius: SabqRadius.small)
+                        .padding(SabqLayout.space12)
+                        .background(SabqTheme.skyTint, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     }
-                    .padding(.vertical, SabqLayout.rowPadding)
+                    .buttonStyle(.plain)
                 }
+
+                NavigationLink(value: AuthorRoute(name: w.name, avatarURL: w.profileImageUrl, role: role)) {
+                    Text("صفحة الكاتب")
+                        .font(SabqType.button.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Capsule(style: .continuous).strokeBorder(SabqTheme.skyOutline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, SabqLayout.space12)
-            .sabqNewsSurface()
+            .padding(SabqLayout.space16)
+            .background(
+                LinearGradient(colors: [Color(red: 234 / 255, green: 246 / 255, blue: 1), SabqTheme.surface], startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75)
+            )
         }
     }
 
-    private func errorSection(message: String) -> some View {
-        EmptyStateView(
-            icon: "exclamationmark.triangle",
-            tint: SabqTheme.danger,
-            title: "تعذر تحميل المقالات",
-            subtitle: message,
-            action: { Task { await loadAll() } },
-            actionTitle: "إعادة المحاولة"
-        )
+    // MARK: - Roster
+
+    private func rosterSection(_ front: APIOpinionFront) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .firstTextBaseline) {
+                DiscoverySectionHeading(title: "كتّاب سبق", subtitle: "\(front.rosterTotal) كاتبًا، مرتبون أبجديًا")
+                Button(showAllWriters ? "أقل" : "الكل") {
+                    withAnimation(.easeInOut(duration: 0.2)) { showAllWriters.toggle() }
+                }
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(minHeight: 44)
+            }
+
+            if showAllWriters {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: SabqLayout.space8), count: 4), spacing: SabqLayout.space16) {
+                    ForEach(front.roster) { writer in writerTile(writer) }
+                }
+                .padding(SabqLayout.space12)
+                .sabqNewsSurface()
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: SabqLayout.space12) {
+                        ForEach(front.roster) { writer in writerTile(writer) }
+                    }
+                    .padding(SabqLayout.space12)
+                }
+                .sabqNewsSurface()
+            }
+        }
+    }
+
+    private func writerTile(_ writer: APIOpinionFrontWriter) -> some View {
+        NavigationLink(value: AuthorRoute(name: writer.name, avatarURL: writer.profileImageUrl, role: nil)) {
+            VStack(spacing: SabqLayout.space8) {
+                OpinionAuthorAvatar(name: writer.name, imageURL: writer.profileImageUrl, size: 56)
+                Text(writer.name)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(width: 72, alignment: .top)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Loading
+
+    private var loadingSection: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            HStack(spacing: SabqLayout.space8) {
+                ForEach(0..<5, id: \.self) { _ in
+                    SkeletonBox(width: 76, height: 84, radius: SabqRadius.medium)
+                }
+            }
+            SkeletonBox(width: 140, height: 20, radius: SabqRadius.small)
+            ForEach(0..<2, id: \.self) { _ in
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    HStack(spacing: SabqLayout.space12) {
+                        SkeletonBox(width: 42, height: 42, radius: 21)
+                        SkeletonBox(width: 140, height: 14, radius: SabqRadius.small)
+                    }
+                    SkeletonBox(height: 180, radius: SabqRadius.medium)
+                    SkeletonBox(height: 18, radius: SabqRadius.small)
+                }
+                .padding(SabqLayout.space16)
+                .sabqNewsSurface()
+            }
+        }
     }
 
     // MARK: - Data
 
     @MainActor
-    private func loadAll(isRefresh: Bool = false) async {
+    private func load() async {
         isLoading = true
         errorMessage = nil
-
-        let priorLatest = latest
-        let priorMostViewed = mostViewed
-
-        // Two parallel fetches: trending (24h window, by views) and latest
-        // (default ordering). Either one can return empty without breaking
-        // the other section. Switched from `sort=views` (all-time) to
-        // `sort=trending` (last 24h) so the top section actually shows
-        // different articles from the latest list below.
-        async let viewsTask = NewsService.fetchOpinions(sort: "trending")
-        async let latestTask = NewsService.fetchOpinions(sort: nil)
-
-        let viewsResult = await viewsTask
-        let latestResult = await latestTask
-
-        if !viewsResult.isEmpty {
-            mostViewed = viewsResult
-        } else if isRefresh {
-            mostViewed = priorMostViewed
-        } else {
-            mostViewed = []
+        defer { isLoading = false }
+        do {
+            front = try await APIClient.shared.fetchOpinionFront()
+        } catch {
+            if front == nil { errorMessage = "تحقق من الاتصال ثم أعد المحاولة" }
         }
-
-        if !latestResult.isEmpty {
-            latest = latestResult
-        } else if isRefresh {
-            latest = priorLatest
-            errorMessage = "تعذر تحديث المقالات الآن"
-        } else {
-            latest = []
-        }
-
-        isLoading = false
     }
 }
 

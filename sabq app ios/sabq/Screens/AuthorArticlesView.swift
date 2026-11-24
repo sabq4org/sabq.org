@@ -1,16 +1,12 @@
 import SwiftUI
 
-// Redesigned "writer page" — fetches a full author profile from
-// `/api/v1/authors/by-name` (avatar, role, bio, lifetime stats, top
-// categories, recent articles) and lays it out as:
-//
-//   1. Unboxed header — avatar + name + role tag + bio.
-//   2. Stats strip — articles count / total reads / time on sabq.
-//   3. Top-categories chip row — the 3 areas the author writes in most.
-//   4. Articles list — the latest 30 publications, classic compact rows.
-//
-// Falls back to the legacy in-memory filter if the API call fails (no
-// network / unknown name) so the page still renders something useful.
+// صفحة الكاتب — مطابقة للويب (/author/:name، #2257 و#2258):
+//   1. رأس سماوي هادئ: الصورة والاسم والصفة، وشرائح «يكتب كل <يوم>» و
+//      «N مقالًا منذ <شهر>» و«يكتب غالبًا في»، ومشاركة، والنبذة كاملة.
+//   2. «أحدث مقال» بارزًا، ثم بقية المقالات مجمّعة بالشهر بأيقونة تقويم.
+//   3. «كتّاب <اليوم>» و«موعده القادم» لكتّاب الرأي.
+// بلا أعداد مشاهدات. البيانات من /api/v1/authors/by-name (الحقل `writer`).
+// إن فشل الطلب نعرض المحفوظ على الجهاز أو ما في `articlesStore`.
 struct AuthorArticlesView: View {
     let authorName: String
     /// من سطر الكاتب في الخبر: يظهر بهما الرأس فورًا قبل رد الخادم.
@@ -18,11 +14,15 @@ struct AuthorArticlesView: View {
     var initialRole: String? = nil
 
     @Environment(ArticlesStore.self) private var articlesStore
-    @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var page: APIAuthorPage? = nil
     @State private var isLoading = true
     @State private var hasFetched = false
+
+    private static let selectBlue = Color(red: 30 / 255, green: 155 / 255, blue: 230 / 255)
+    private static let heroTop = Color(red: 234 / 255, green: 246 / 255, blue: 1)
+    private static let monthInk = Color(red: 11 / 255, green: 111 / 255, blue: 168 / 255)
+    private static let monthTint = Color(red: 230 / 255, green: 244 / 255, blue: 253 / 255)
 
     init(authorName: String, initialAvatarURL: String? = nil, initialRole: String? = nil) {
         self.authorName = authorName
@@ -33,9 +33,6 @@ struct AuthorArticlesView: View {
         _isLoading = State(initialValue: AuthorPageStore.cached(authorName) == nil)
     }
 
-    /// Articles fed into the list. Prefers the server payload; falls back
-    /// to whatever's been loaded in `articlesStore` so the screen has
-    /// content even before the network round-trip resolves.
     private var articles: [Article] {
         if let recent = page?.recentArticles, !recent.isEmpty {
             return recent.map { Article.from($0) }
@@ -45,29 +42,78 @@ struct AuthorArticlesView: View {
             .sorted { $0.publishDate > $1.publishDate }
     }
 
+    private var writer: APIWriterExtras? { page?.writer }
+    private var displayName: String { page?.author.name ?? authorName }
+    private var isOpinionWriter: Bool { writer != nil || articles.contains { $0.articleType == "opinion" } }
+
+    private var weekdayName: String? {
+        guard let d = writer?.weekday, (0..<7).contains(d) else { return nil }
+        return OpinionText.weekdays[d]
+    }
+
+    private var role: String? {
+        let r = page?.author.role ?? initialRole
+        guard let r, !r.isEmpty, r != "كاتب في سبق" else { return nil }
+        return r
+    }
+
+    private struct MonthGroup: Identifiable {
+        let id: String
+        let label: String
+        var items: [Article]
+    }
+
+    private var months: [MonthGroup] {
+        var groups: [MonthGroup] = []
+        for article in articles.dropFirst() {
+            let key = OpinionText.monthKey(article.publishDate)
+            if let i = groups.firstIndex(where: { $0.id == key }) {
+                groups[i].items.append(article)
+            } else {
+                groups.append(MonthGroup(id: key, label: OpinionText.monthYear(article.publishDate), items: [article]))
+            }
+        }
+        return groups
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: SabqLayout.space24) {
-                heroCard
+            VStack(alignment: .leading, spacing: 0) {
+                hero
 
-                if !isLoading || page != nil {
-                    statsStrip
+                VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                    if isLoading && articles.isEmpty {
+                        DiscoveryListSkeleton(count: 3)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .sabqNewsSurface()
+                    } else if articles.isEmpty {
+                        EmptyStateView(
+                            icon: "person.crop.circle.badge.questionmark",
+                            tint: SabqTheme.tertiaryInk,
+                            title: "لا توجد مقالات بعد",
+                            subtitle: "لم نجد أي محتوى منشور لهذا الكاتب حالياً."
+                        )
+                    } else {
+                        if let first = articles.first { featured(first) }
+                        ForEach(months) { month in monthSection(month) }
+                    }
+
+                    if let writer, let weekdayName, !writer.peers.isEmpty {
+                        peersSection(writer.peers, weekdayName: weekdayName)
+                    }
+                    if let key = writer?.nextDayKey {
+                        nextDayCard(key)
+                    }
                 }
-
-                if let cats = page?.topCategories, !cats.isEmpty {
-                    topCategoriesRow(cats)
-                }
-
-                articlesSection
+                .padding(.horizontal, SabqLayout.pageMargin)
+                .padding(.top, SabqLayout.space8)
             }
-            .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.top, SabqLayout.space16)
             .padding(.bottom, SabqLayout.tabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle(authorName)
+        .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard !hasFetched else { return }
@@ -78,31 +124,116 @@ struct AuthorArticlesView: View {
 
     // MARK: - Hero
 
-    private var heroCard: some View {
-        VStack(spacing: SabqLayout.space12) {
+    private var hero: some View {
+        VStack(spacing: SabqLayout.space8) {
             avatar
+                .padding(.bottom, SabqLayout.space4)
 
-            VStack(spacing: SabqLayout.space8) {
-                Text(page?.author.name ?? authorName)
-                    .sabqText(SabqType.leadTitle)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .multilineTextAlignment(.center)
-
-                if let role = page?.author.role ?? initialRole, !role.isEmpty {
-                    StatusChip(title: role, tint: SabqTheme.primary)
-                }
+            if isOpinionWriter {
+                Text("من كتّاب الرأي في سبق")
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(Self.monthInk)
             }
+
+            Text(displayName)
+                .font(SabqFonts.app(size: 26, weight: .bold))
+                .foregroundStyle(SabqTheme.textPrimary)
+                .multilineTextAlignment(.center)
+
+            if let role {
+                Text(role)
+                    .font(SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            chips
+                .padding(.top, SabqLayout.space4)
 
             if let bio = page?.author.bio, !bio.isEmpty {
                 Text(bio)
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, SabqLayout.space8)
             }
+
+            ShareLink(item: shareURL) {
+                Label("مشاركة صفحة الكاتب", systemImage: "square.and.arrow.up")
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .padding(.horizontal, SabqLayout.space16)
+                    .frame(minHeight: 44)
+                    .background(Capsule(style: .continuous).fill(SabqTheme.surface))
+                    .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
+            }
+            .padding(.top, SabqLayout.space8)
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space24)
+        .background(LinearGradient(colors: [Self.heroTop, SabqTheme.background], startPoint: .top, endPoint: .bottom))
+    }
+
+    private var shareURL: URL {
+        let encoded = displayName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? displayName
+        return URL(string: "\(URLConstants.webOrigin)/author/\(encoded)") ?? URL(string: URLConstants.webOrigin)!
+    }
+
+    @ViewBuilder
+    private var chips: some View {
+        let count = page?.stats.articleCount ?? 0
+        let since = (page?.stats.earliestPublish).flatMap { Self.parseServerDate($0) }
+        let content = Group {
+            if let weekdayName {
+                HStack(spacing: SabqLayout.space4) {
+                    Image(systemName: "calendar")
+                    Text("يكتب كل \(weekdayName)")
+                }
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(Capsule(style: .continuous).fill(Self.selectBlue))
+            }
+            if count > 0 {
+                chip(OpinionText.count(count) + (since.map { " منذ \(OpinionText.monthYear($0))" } ?? ""))
+            }
+            if let cats = writer?.usualCategories, !cats.isEmpty {
+                chip("يكتب غالبًا في: " + cats.joined(separator: " · "))
+            }
+        }
+        // سطر واحد في الوسط إن اتسع، وإلا شريحة تحت شريحة في الوسط.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: SabqLayout.space8) { content }
+            VStack(spacing: SabqLayout.space8) { content }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// الخادم يرسل أحيانًا «2026-01-07 13:30:57.827» (مسافة بدل T وبلا منطقة = UTC).
+    static func parseServerDate(_ raw: String) -> Date? {
+        if let d = SabqFormatters.parseISO8601(raw) { return d }
+        var s = raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "T")
+        if !s.hasSuffix("Z") && !s.contains("+") { s += "Z" }
+        if let d = SabqFormatters.parseISO8601(s) { return d }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f.date(from: String(raw.prefix(19)))
+    }
+
+    private func chip(_ text: String) -> some View {
+        Text(text)
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.textPrimary)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(Capsule(style: .continuous).fill(SabqTheme.surface))
+            .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
     }
 
     private var avatar: some View {
@@ -110,172 +241,205 @@ struct AuthorArticlesView: View {
             .flatMap { $0.isEmpty ? nil : URL(string: $0) }
 
         return CachedAsyncImage(url: avatarURL, contentMode: .fill) {
-            avatarInitial
+            ZStack {
+                Circle().fill(SabqTheme.surface)
+                Text(String(displayName.replacingOccurrences(of: "د.", with: "").trimmingCharacters(in: .whitespaces).prefix(1)))
+                    .font(SabqFonts.app(size: 34, weight: .bold))
+                    .foregroundStyle(Self.monthInk)
+            }
         }
-        .frame(width: 88, height: 88)
+        .frame(width: 96, height: 96)
         .clipShape(Circle())
+        .overlay(Circle().strokeBorder(Color.white, lineWidth: 4))
+        .shadow(color: SabqTheme.shadow, radius: 12, y: 6)
         // Re-load when the profile payload arrives (page starts nil).
         .id(avatarURL?.absoluteString ?? "author-avatar-\(authorName)")
     }
 
-    private var avatarInitial: some View {
-        ZStack {
-            Circle()
-                .fill(SabqTheme.surface)
-                .frame(width: 88, height: 88)
-                .overlay(Circle().strokeBorder(SabqTheme.separator, lineWidth: 0.75))
-            Text(String((page?.author.name ?? authorName).prefix(1)))
-                .font(SabqType.articleTitle.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-        }
-    }
-
-    // MARK: - Stats
-
-    private var statsStrip: some View {
-        HStack(spacing: SabqLayout.space8) {
-            statTile(
-                value: SabqFormatters.compactViewCount(page?.stats.articleCount ?? articles.count),
-                label: "مقال",
-                icon: "doc.text.fill",
-                tint: SabqTheme.primary
-            )
-            statTile(
-                value: SabqFormatters.compactViewCount(page?.stats.totalViews ?? 0),
-                label: "قراءة",
-                icon: "eye.fill",
-                tint: SabqTheme.primary
-            )
-            statTile(
-                value: timeOnSabq(),
-                label: "مع سبق",
-                icon: "calendar",
-                tint: SabqTheme.primary
-            )
-        }
-    }
-
-    private func statTile(value: String, label: String, icon: String, tint: Color) -> some View {
-        VStack(spacing: SabqLayout.space4) {
-            Text(value)
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-
-            HStack(spacing: SabqLayout.space4) {
-                Image(systemName: icon)
-                    .foregroundStyle(tint)
-                    .accessibilityHidden(true)
-                Text(label)
-                    .foregroundStyle(SabqTheme.textSecondary)
-            }
-            .font(SabqType.meta.font)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, SabqLayout.space12)
-        .sabqBlockSurface()
-        .accessibilityElement(children: .combine)
-    }
-
-    /// Years/months since the author's earliest publish. Falls back to
-    /// `joinedAt` (createdAt on the user row) when the publish data
-    /// hasn't loaded yet.
-    private func timeOnSabq() -> String {
-        let iso = page?.stats.earliestPublish ?? page?.author.joinedAt
-        guard let iso, let date = SabqFormatters.parseISO8601(iso) else {
-            return "—"
-        }
-        let cal = Calendar(identifier: .gregorian)
-        let comps = cal.dateComponents([.year, .month], from: date, to: Date())
-        let years = comps.year ?? 0
-        let months = comps.month ?? 0
-        if years >= 1 {
-            return years == 1 ? "سنة" : "\(years) سنوات"
-        }
-        if months >= 1 {
-            return months == 1 ? "شهر" : "\(months) أشهر"
-        }
-        return "حديثاً"
-    }
-
-    // MARK: - Categories
-
-    private func topCategoriesRow(_ cats: [APIAuthorCategory]) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            DiscoverySectionHeading(title: "التصنيفات الأبرز")
-
-            FlowLayout(spacing: SabqLayout.space8) {
-                ForEach(cats, id: \.id) { cat in
-                    categoryChip(cat)
-                }
-            }
-        }
-    }
-
-    /// ألوان التصنيفات لا تلوّن النص ولا الخلفية؛ شريحة بيضاء بحدّ رفيع على الخلفية الرمادية.
-    private func categoryChip(_ cat: APIAuthorCategory) -> some View {
-        HStack(spacing: SabqLayout.space4) {
-            Image(systemName: cat.icon ?? "circle.fill")
-                .foregroundStyle(SabqTheme.textSecondary)
-                .accessibilityHidden(true)
-            Text(cat.nameAr)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Text("\(cat.count)")
-                .foregroundStyle(SabqTheme.textSecondary)
-                .monospacedDigit()
-        }
-        .font(SabqType.tag.font)
-        .padding(.horizontal, SabqLayout.space12)
-        .frame(minHeight: 36)
-        .background(Capsule(style: .continuous).fill(SabqTheme.chipFill))
-        .accessibilityElement(children: .combine)
-    }
-
     // MARK: - Articles
 
-    private var articlesSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            HStack(alignment: .center, spacing: SabqLayout.space8) {
-                DiscoverySectionHeading(title: "أحدث المنشورات")
-                if !articles.isEmpty {
-                    Text("\(articles.count)")
-                        .font(SabqType.meta.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
-                        .monospacedDigit()
+    @ViewBuilder
+    private func articleLink<Content: View>(_ article: Article, @ViewBuilder label: () -> Content) -> some View {
+        if article.articleType == "opinion", let slug = article.slug, !slug.isEmpty {
+            NavigationLink(value: OpinionArticle.placeholder(slug: slug)) { label() }
+                .buttonStyle(.plain)
+        } else {
+            NavigationLink(value: article) { label() }
+                .buttonStyle(.plain)
+        }
+    }
+
+    private func metaLine(_ article: Article) -> String {
+        [OpinionText.publishDay(article.publishDate), article.categoryTitle]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    private func thumbnail(_ article: Article, maxPixel: CGFloat) -> some View {
+        Group {
+            if let urlString = article.imageURL, let url = URL(string: urlString) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: maxPixel) {
+                    SabqImagePlaceholder()
                 }
+            } else {
+                SabqImagePlaceholder()
+                    .environment(\.sabqImageLoadFailed, true)
+            }
+        }
+    }
+
+    private func featured(_ article: Article) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            Text("أحدث مقال")
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+
+            articleLink(article) {
+                VStack(alignment: .leading, spacing: 0) {
+                    thumbnail(article, maxPixel: 900)
+                        .aspectRatio(16 / 9, contentMode: .fill)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+
+                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                        Text(metaLine(article))
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
+                        Text(article.title)
+                            .font(SabqFonts.app(size: 20, weight: .bold))
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .lineSpacing(3)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if !article.excerpt.isEmpty {
+                            Text(article.excerpt)
+                                .sabqText(SabqType.excerpt)
+                                .foregroundStyle(SabqTheme.textSecondary)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Text("اقرأ المقال")
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .padding(.top, SabqLayout.space4)
+                    }
+                    .padding(SabqLayout.space16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .sabqNewsSurface()
+            }
+        }
+    }
+
+    private func monthSection(_ month: MonthGroup) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Self.selectBlue)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(Self.monthTint))
+                    .accessibilityHidden(true)
+                Text(month.label)
+                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .foregroundStyle(Self.monthInk)
+                    .accessibilityAddTraits(.isHeader)
+                Text("·")
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                Text(OpinionText.count(month.items.count))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
 
-            if isLoading && articles.isEmpty {
-                DiscoveryListSkeleton(count: 3)
-                    .padding(.horizontal, SabqLayout.space12)
-                    .sabqNewsSurface()
-            } else if articles.isEmpty {
-                EmptyStateView(
-                    icon: "person.crop.circle.badge.questionmark",
-                    tint: SabqTheme.tertiaryInk,
-                    title: "لا توجد مقالات بعد",
-                    subtitle: "لم نجد أي محتوى منشور لهذا الكاتب حالياً."
-                )
-            } else {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
-                        if index > 0 { SidebarRowDivider() }
-                        NavigationLink(value: article) {
-                            CompactArticleRow(
-                                article: article,
-                                onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                isBookmarked: bookmarksStore.isBookmarked(article.id)
-                            )
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(month.items.enumerated()), id: \.element.id) { index, article in
+                    if index > 0 { SidebarRowDivider() }
+                    articleLink(article) {
+                        HStack(alignment: .center, spacing: SabqLayout.space12) {
+                            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                                Text(metaLine(article))
+                                    .font(SabqType.timestamp.font)
+                                    .foregroundStyle(SabqTheme.textTertiary)
+                                    .lineLimit(1)
+                                Text(article.title)
+                                    .sabqText(SabqType.rowTitle)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(SabqTheme.textPrimary)
+                                    .lineLimit(3)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            thumbnail(article, maxPixel: 300)
+                                .frame(width: 96, height: 72)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .padding(.vertical, 14)
+                        .contentShape(Rectangle())
+                    }
+                }
+            }
+            .padding(.horizontal, SabqLayout.space16)
+            .sabqNewsSurface()
+        }
+    }
+
+    // MARK: - Peers + next date
+
+    private func peersSection(_ peers: [APIWriterPeer], weekdayName: String) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Text("كتّاب \(weekdayName)")
+                .font(SabqFonts.app(size: 18, weight: .bold))
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text("اقرأ لمن يكتب معه في اليوم نفسه.")
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(peers) { peer in
+                        NavigationLink(value: AuthorRoute(name: peer.name, avatarURL: peer.avatarUrl)) {
+                            VStack(spacing: 6) {
+                                OpinionAuthorAvatar(name: peer.name, imageURL: peer.avatarUrl, size: 52)
+                                Text(peer.name)
+                                    .font(SabqType.timestamp.font)
+                                    .foregroundStyle(SabqTheme.textPrimary)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                                    .frame(width: 72)
+                            }
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, SabqLayout.space12)
-                .sabqNewsSurface()
+                .padding(.top, SabqLayout.space4)
             }
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqNewsSurface()
+    }
+
+    private func nextDayCard(_ key: String) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            Text("موعده القادم")
+                .font(SabqType.tag.font)
+                .foregroundStyle(Self.monthInk)
+            Text(OpinionText.dayLabel(key))
+                .font(SabqFonts.app(size: 18, weight: .bold))
+                .foregroundStyle(SabqTheme.textPrimary)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Self.heroTop, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color(red: 214 / 255, green: 236 / 255, blue: 251 / 255), lineWidth: 1)
+        )
     }
 
     // MARK: - Loader
