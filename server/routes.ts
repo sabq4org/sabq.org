@@ -24624,13 +24624,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
-      // Trending window: published within the last 7 days AND at least
+      // Trending window: published within the last 72 hours AND at least
       // 3 hours ago. The lower bound is what fixes "a brand-new article
       // with 50 views ranking #1 just because the rate per hour is
       // technically the highest" — every new opinion gets a 3-hour
       // grace period to gather actual reader signal before competing
       // in the trending list.
-      const trendingMaxAge = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days back
+      const trendingMaxAge = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // 72h back (fair window, shared/opinionFront.ts)
       const trendingMinAge = new Date(Date.now() - 3 * 60 * 60 * 1000);      // 3 hours back
 
       const baseConditions = [
@@ -24677,8 +24677,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // platforms (web + iOS). The 3h floor + 7d ceiling still
       // filters the candidate pool to prevent fresh-article gaming.
       // Within that pool, rank by:
-      //   raw views (cross-platform: iOS bumps articles.views via
-      //     /api/v1/articles/:id/view, same shape as web)
+      //   views per hour since publish (velocity, age floor 6h) so old
+      //     pieces stop winning on accumulated totals (2026-11-24)
       //   + likes ×3  (reactions table, last 48h)
       //   + comments ×5 (approved only, last 48h)
       //   + reads ×2 (reading_history rows w/ completion >= 70%,
@@ -24687,7 +24687,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // articles that gain late traction (12–36h after publish is
       // the typical opinion-piece peak per analytics).
       const trendingOrder = sql`(
-        COALESCE(${articles.views}, 0)
+        COALESCE(${articles.views}, 0) / GREATEST(EXTRACT(EPOCH FROM (NOW() - ${articles.publishedAt})) / 3600.0, 6)
         + (SELECT COUNT(*) FROM reactions WHERE reactions.article_id = articles.id AND reactions.type = 'like' AND reactions.created_at >= NOW() - INTERVAL '48 hours') * 3
         + (SELECT COUNT(*) FROM comments WHERE comments.article_id = articles.id AND comments.status = 'approved' AND comments.created_at >= NOW() - INTERVAL '48 hours') * 5
         + (SELECT COUNT(*) FROM reading_history WHERE reading_history.article_id = articles.id AND reading_history.completion_rate >= 70 AND reading_history.read_at >= NOW() - INTERVAL '48 hours') * 2
