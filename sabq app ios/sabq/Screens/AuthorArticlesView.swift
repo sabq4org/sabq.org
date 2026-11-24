@@ -1,8 +1,8 @@
 import SwiftUI
 
 // صفحة الكاتب — مطابقة للويب (/author/:name، #2257 و#2258):
-//   1. رأس سماوي هادئ: الصورة والاسم والصفة، وشرائح «يكتب كل <يوم>» و
-//      «N مقالًا منذ <شهر>» و«يكتب غالبًا في»، ومشاركة، والنبذة كاملة.
+//   1. رأس سماوي هادئ: الصورة، الاسم، المسمى تحته، وسطر «N مقالًا منذ <شهر>»
+//      نصًا بلا كبسولات (طلب المالك 2026-11-24).
 //   2. «أحدث مقال» بارزًا، ثم بقية المقالات مجمّعة بالشهر بأيقونة تقويم.
 //   3. «كتّاب <اليوم>» و«موعده القادم» لكتّاب الرأي.
 // بلا أعداد مشاهدات. البيانات من /api/v1/authors/by-name (الحقل `writer`).
@@ -124,51 +124,29 @@ struct AuthorArticlesView: View {
 
     // MARK: - Hero
 
+    /// رأس صفحة الكاتب (طلب المالك 2026-11-24): الصورة، الاسم، المسمى تحته
+    /// مباشرة، ثم سطر يوم الكتابة وعدد المقالات. بلا «من كتّاب الرأي في سبق»،
+    /// ولا «يكتب غالبًا في»، ولا زر مشاركة.
     private var hero: some View {
         VStack(spacing: SabqLayout.space8) {
             avatar
                 .padding(.bottom, SabqLayout.space4)
-
-            if isOpinionWriter {
-                Text("من كتّاب الرأي في سبق")
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(Self.monthInk)
-            }
 
             Text(displayName)
                 .font(SabqFonts.app(size: 26, weight: .bold))
                 .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.center)
 
-            if let role {
-                Text(role)
-                    .font(SabqType.excerpt.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            chips
-                .padding(.top, SabqLayout.space4)
-
-            if let bio = page?.author.bio, !bio.isEmpty {
-                Text(bio)
+            if let title = role ?? page?.author.bio, !title.isEmpty {
+                Text(title)
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, SabqLayout.space8)
             }
 
-            ShareLink(item: shareURL) {
-                Label("مشاركة صفحة الكاتب", systemImage: "square.and.arrow.up")
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundStyle(SabqTheme.primary)
-                    .padding(.horizontal, SabqLayout.space16)
-                    .frame(minHeight: 44)
-                    .background(Capsule(style: .continuous).fill(SabqTheme.surface))
-                    .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
-            }
-            .padding(.top, SabqLayout.space8)
+            chips
+                .padding(.top, SabqLayout.space4)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, SabqLayout.pageMargin)
@@ -177,40 +155,22 @@ struct AuthorArticlesView: View {
         .background(LinearGradient(colors: [Self.heroTop, SabqTheme.background], startPoint: .top, endPoint: .bottom))
     }
 
-    private var shareURL: URL {
-        let encoded = displayName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? displayName
-        return URL(string: "\(URLConstants.webOrigin)/author/\(encoded)") ?? URL(string: URLConstants.webOrigin)!
-    }
-
+    /// عدد المقالات منذ أول نشر. لا «يكتب كل <يوم>» في الرأس: اليوم مستنتج من
+    /// أغلب أيام آخر 8 مقالات لا جدول معتمد (رفض المالك 2026-11-24).
     @ViewBuilder
     private var chips: some View {
         let count = page?.stats.articleCount ?? 0
         let since = (page?.stats.earliestPublish).flatMap { Self.parseServerDate($0) }
-        let content = Group {
-            if let weekdayName {
-                HStack(spacing: SabqLayout.space4) {
-                    Image(systemName: "calendar")
-                    Text("يكتب كل \(weekdayName)")
-                }
-                .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 14)
-                .frame(height: 34)
-                .background(Capsule(style: .continuous).fill(Self.selectBlue))
-            }
-            if count > 0 {
-                chip(OpinionText.count(count) + (since.map { " منذ \(OpinionText.monthYear($0))" } ?? ""))
-            }
-            if let cats = writer?.usualCategories, !cats.isEmpty {
-                chip("يكتب غالبًا في: " + cats.joined(separator: " · "))
-            }
+        let countText = count > 0
+            ? OpinionText.count(count) + (since.map { " منذ \(OpinionText.monthYear($0))" } ?? "")
+            : nil
+        if let countText {
+            Text(countText)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
-        // سطر واحد في الوسط إن اتسع، وإلا شريحة تحت شريحة في الوسط.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: SabqLayout.space8) { content }
-            VStack(spacing: SabqLayout.space8) { content }
-        }
-        .frame(maxWidth: .infinity)
     }
 
     /// الخادم يرسل أحيانًا «2026-01-07 13:30:57.827» (مسافة بدل T وبلا منطقة = UTC).
@@ -224,16 +184,6 @@ struct AuthorArticlesView: View {
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return f.date(from: String(raw.prefix(19)))
-    }
-
-    private func chip(_ text: String) -> some View {
-        Text(text)
-            .font(SabqType.meta.font)
-            .foregroundStyle(SabqTheme.textPrimary)
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .background(Capsule(style: .continuous).fill(SabqTheme.surface))
-            .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
     }
 
     private var avatar: some View {
