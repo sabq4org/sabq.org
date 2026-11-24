@@ -1,8 +1,8 @@
 import SwiftUI
 
 // صفحة الكاتب — مطابقة للويب (/author/:name، #2257 و#2258):
-//   1. رأس سماوي هادئ: الصورة والاسم والصفة، وشرائح «يكتب كل <يوم>» و
-//      «N مقالًا منذ <شهر>» و«يكتب غالبًا في»، ومشاركة، والنبذة كاملة.
+//   1. رأس سماوي هادئ: الصورة والاسم والصفة، وسطر «يكتب كل <يوم> · N مقالًا
+//      منذ <شهر>» وسطر «يكتب غالبًا في» نصًا بلا كبسولات، ومشاركة، والنبذة كاملة.
 //   2. «أحدث مقال» بارزًا، ثم بقية المقالات مجمّعة بالشهر بأيقونة تقويم.
 //   3. «كتّاب <اليوم>» و«موعده القادم» لكتّاب الرأي.
 // بلا أعداد مشاهدات. البيانات من /api/v1/authors/by-name (الحقل `writer`).
@@ -182,33 +182,35 @@ struct AuthorArticlesView: View {
         return URL(string: "\(URLConstants.webOrigin)/author/\(encoded)") ?? URL(string: URLConstants.webOrigin)!
     }
 
+    /// بيانات الكاتب سطران نصيان هادئان بلا كبسولات (طلب المالك 2026-11-24:
+    /// الشرائح الثلاث تحت الصورة مزعجة): يوم الكتابة بالأزرق وعدد المقالات،
+    /// ثم الأقسام المعتادة.
     @ViewBuilder
     private var chips: some View {
         let count = page?.stats.articleCount ?? 0
         let since = (page?.stats.earliestPublish).flatMap { Self.parseServerDate($0) }
-        let content = Group {
-            if let weekdayName {
-                HStack(spacing: SabqLayout.space4) {
-                    Image(systemName: "calendar")
-                    Text("يكتب كل \(weekdayName)")
-                }
-                .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 14)
-                .frame(height: 34)
-                .background(Capsule(style: .continuous).fill(Self.selectBlue))
-            }
-            if count > 0 {
-                chip(OpinionText.count(count) + (since.map { " منذ \(OpinionText.monthYear($0))" } ?? ""))
+        let countText = count > 0
+            ? OpinionText.count(count) + (since.map { " منذ \(OpinionText.monthYear($0))" } ?? "")
+            : nil
+        VStack(spacing: SabqLayout.space4) {
+            if weekdayName != nil || countText != nil {
+                (Text(weekdayName.map { "يكتب كل \($0)" } ?? "")
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundColor(SabqTheme.primary)
+                 + Text(weekdayName != nil && countText != nil ? "  ·  " : "")
+                    .font(SabqType.meta.font)
+                    .foregroundColor(SabqTheme.textTertiary)
+                 + Text(countText ?? "")
+                    .font(SabqType.meta.font)
+                    .foregroundColor(SabqTheme.textSecondary))
+                    .multilineTextAlignment(.center)
             }
             if let cats = writer?.usualCategories, !cats.isEmpty {
-                chip("يكتب غالبًا في: " + cats.joined(separator: " · "))
+                Text("يكتب غالبًا في " + cats.joined(separator: " · "))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .multilineTextAlignment(.center)
             }
-        }
-        // سطر واحد في الوسط إن اتسع، وإلا شريحة تحت شريحة في الوسط.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: SabqLayout.space8) { content }
-            VStack(spacing: SabqLayout.space8) { content }
         }
         .frame(maxWidth: .infinity)
     }
@@ -224,16 +226,6 @@ struct AuthorArticlesView: View {
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return f.date(from: String(raw.prefix(19)))
-    }
-
-    private func chip(_ text: String) -> some View {
-        Text(text)
-            .font(SabqType.meta.font)
-            .foregroundStyle(SabqTheme.textPrimary)
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .background(Capsule(style: .continuous).fill(SabqTheme.surface))
-            .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
     }
 
     private var avatar: some View {
