@@ -90,6 +90,73 @@ interface RichTextEditorProps {
   imageUploadPurpose?: string;
 }
 
+/** الجدول الذي يقف فيه المؤشر (أقرب عقدة table فوق التحديد) */
+function currentTableNode(editor: Editor) {
+  const { $from } = editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const node = $from.node(depth);
+    if (node.type.name === "table") return node;
+  }
+  return null;
+}
+
+function tableHasHeaderRow(editor: Editor): boolean {
+  const table = currentTableNode(editor);
+  const firstRow = table?.firstChild;
+  if (!firstRow || firstRow.childCount === 0) return false;
+  let allHeaders = true;
+  firstRow.forEach((cell) => {
+    if (cell.type.name !== "tableHeader") allHeaders = false;
+  });
+  return allHeaders;
+}
+
+function tableHasHeaderColumn(editor: Editor): boolean {
+  const table = currentTableNode(editor);
+  if (!table || table.childCount === 0) return false;
+  let allHeaders = true;
+  table.forEach((row) => {
+    if (row.firstChild?.type.name !== "tableHeader") allHeaders = false;
+  });
+  return allHeaders;
+}
+
+function TableBarButton({
+  onClick,
+  children,
+  testId,
+  title,
+  active = false,
+  disabled = false,
+  destructive = false,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+  testId: string;
+  title?: string;
+  active?: boolean;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-pressed={active || undefined}
+      className={`no-min-touch-size h-7 px-2 text-xs ${
+        active ? "bg-primary/10 text-primary hover:bg-primary/15" : ""
+      } ${destructive ? "text-destructive hover:text-destructive" : ""}`}
+      data-testid={testId}
+    >
+      {children}
+    </Button>
+  );
+}
+
 function ToolbarButton({
   onClick,
   isActive = false,
@@ -210,6 +277,11 @@ export function RichTextEditor({
     selector: (ctx) => ({
       inTable: ctx.editor ? ctx.editor.isActive("table") : false,
       cardStyle: ctx.editor ? ctx.editor.getAttributes("table").cardStyle === true : false,
+      canMergeOrSplit: ctx.editor ? ctx.editor.can().mergeOrSplit() : false,
+      canSplit: ctx.editor ? ctx.editor.can().splitCell() : false,
+      headerRow: ctx.editor ? tableHasHeaderRow(ctx.editor) : false,
+      headerColumn: ctx.editor ? tableHasHeaderColumn(ctx.editor) : false,
+      hasColumnWidths: ctx.editor ? ctx.editor.can().resetTableColumnWidths() : false,
     }),
   });
 
@@ -488,6 +560,9 @@ export function RichTextEditor({
       data-editor-shell
       data-testid="rich-text-editor"
     >
+      {/* الشريط اللاصق: أدوات المحرر + أدوات الجدول معًا، حتى لا تختفي أدوات
+          الجدول خارج الشاشة حين يكون الجدول في منتصف خبر طويل. */}
+      <div className="rich-text-editor__chrome">
       {/* Toolbar */}
       <div className="rich-text-editor__toolbar flex flex-wrap items-center gap-0.5 sm:gap-1 px-2 py-1.5 border-b bg-muted/30 backdrop-blur-sm">
         <ToolbarButton
@@ -804,41 +879,48 @@ export function RichTextEditor({
       {/* أدوات الجدول — تظهر فقط والمؤشر داخل جدول */}
       {tableState?.inTable && (
         <div
-          className="flex flex-wrap items-center gap-1 p-1.5 border-b bg-muted/50"
+          className="rich-text-editor__table-bar flex flex-wrap items-center gap-1 px-2 py-1.5 border-b"
           data-testid="table-controls"
         >
-          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
-            onClick={() => editor.chain().focus().addRowAfter().run()} data-testid="button-table-add-row">
-            صف +
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
-            onClick={() => editor.chain().focus().addColumnAfter().run()} data-testid="button-table-add-column">
-            عمود +
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
-            onClick={() => editor.chain().focus().deleteRow().run()} data-testid="button-table-delete-row">
-            حذف الصف
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
-            onClick={() => editor.chain().focus().deleteColumn().run()} data-testid="button-table-delete-column">
-            حذف العمود
-          </Button>
-          <Separator orientation="vertical" className="h-5 mx-1" />
-          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
-            onClick={() => editor.chain().focus().toggleHeaderRow().run()} data-testid="button-table-header-row">
-            صف عناوين
-          </Button>
-          <Button type="button" variant={tableState.cardStyle ? "default" : "ghost"} size="sm" className="no-min-touch-size h-7 px-2 text-xs"
-            onClick={() => editor.chain().focus().toggleTableCardStyle().run()} data-testid="button-table-card-style">
-            مظهر بطاقة
-          </Button>
-          <Separator orientation="vertical" className="h-5 mx-1" />
-          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs text-destructive"
-            onClick={() => editor.chain().focus().deleteTable().run()} data-testid="button-table-delete">
-            حذف الجدول
-          </Button>
+          <span className="flex items-center gap-1 text-xs font-semibold text-primary ms-1 me-1">
+            <TableIcon className="h-3.5 w-3.5" />
+            الجدول
+          </span>
+          <TableBarButton onClick={() => editor.chain().focus().addRowBefore().run()} testId="button-table-add-row-before" title="إضافة صف فوق الصف الحالي">صف فوق</TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().addRowAfter().run()} testId="button-table-add-row" title="إضافة صف تحت الصف الحالي">صف تحت</TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().addColumnBefore().run()} testId="button-table-add-column-before" title="إضافة عمود قبل العمود الحالي (يمينه)">عمود يمين</TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().addColumnAfter().run()} testId="button-table-add-column" title="إضافة عمود بعد العمود الحالي (يساره)">عمود يسار</TableBarButton>
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
+          <TableBarButton onClick={() => editor.chain().focus().deleteRow().run()} testId="button-table-delete-row">حذف الصف</TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().deleteColumn().run()} testId="button-table-delete-column">حذف العمود</TableBarButton>
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
+          <TableBarButton
+            onClick={() => editor.chain().focus().mergeOrSplit().run()}
+            disabled={!tableState.canMergeOrSplit}
+            testId="button-table-merge"
+            title="حدّد عدة خلايا بالسحب ثم ادمجها، أو قسّم خلية مدموجة"
+          >
+            {tableState.canSplit ? "تقسيم الخلية" : "دمج الخلايا"}
+          </TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().toggleHeaderRow().run()} active={tableState.headerRow} testId="button-table-header-row">صف عناوين</TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().toggleHeaderColumn().run()} active={tableState.headerColumn} testId="button-table-header-column">عمود عناوين</TableBarButton>
+          <TableBarButton onClick={() => editor.chain().focus().toggleTableCardStyle().run()} active={tableState.cardStyle} testId="button-table-card-style">مظهر بطاقة</TableBarButton>
+          <TableBarButton
+            onClick={() => editor.chain().focus().resetTableColumnWidths().run()}
+            disabled={!tableState.hasColumnWidths}
+            testId="button-table-reset-widths"
+            title="إلغاء عروض الأعمدة المسحوبة أو الملصوقة لتتساوى تلقائيًا"
+          >
+            توزيع الأعمدة تلقائيًا
+          </TableBarButton>
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
+          <TableBarButton onClick={() => editor.chain().focus().deleteTable().run()} testId="button-table-delete" destructive>حذف الجدول</TableBarButton>
+          <span className="hidden lg:inline text-[11px] text-muted-foreground ms-auto me-1">
+            اسحب الحد بين عمودين لتغيير عرضه · الجدول يملأ عرض الخبر دائمًا
+          </span>
         </div>
       )}
+      </div>
 
       {/* Editor */}
       <EditorContent editor={editor} className="rich-text-editor__surface" />
