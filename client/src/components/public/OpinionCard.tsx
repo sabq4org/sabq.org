@@ -74,7 +74,8 @@ export function cleanOpinionAuthorBio(bio?: string | null, authorName?: string):
   }
   const firstClause = firstSentence(cleaned);
   if (firstClause.length < 3) return "كاتب رأي";
-  return firstClause.length > 68 ? `${firstClause.slice(0, 65).trim()}…` : firstClause;
+  // جملة طويلة مقطوعة تبدو خطأ تحت الاسم: نعرض الصفة العامة بدلها (النبذة كاملة في صفحة الكاتب).
+  return firstClause.length > 68 ? "كاتب رأي" : firstClause;
 }
 
 function validDate(value?: string | null): Date | null {

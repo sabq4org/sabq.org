@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { NewBadge, NewDot } from "@/components/writer/NewBadge";
+import { useNewFeatureNav } from "@/hooks/useNewFeatures";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -214,6 +216,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   } = useMediaLicenseGate();
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
+  // شارة «جديد» على أقسام القائمة التي فيها خدمة جديدة (قبل أي return مبكر).
+  const newFeatureNav = useNewFeatureNav(flat.map((navItem) => navItem.path));
+
   if (isLoading || !user) {
     return (
       <DashboardThemeProvider>
@@ -336,6 +341,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             {ChildIcon && <ChildIcon className="h-4 w-4 shrink-0" />}
                             <span className="truncate">{child.labelAr || child.labelKey}</span>
                           </span>
+                          {newFeatureNav.hasNew(child.path) && <NewBadge className="ms-auto" />}
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
@@ -369,6 +375,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 {Icon && <Icon className="h-4 w-4 shrink-0" />}
                 <span className="truncate">{item.labelAr || item.labelKey}</span>
               </span>
+              {newFeatureNav.hasNew(item.path) && <NewBadge />}
               {badgeCount > 0 && (
                 <Badge
                   variant="secondary"
@@ -676,7 +683,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         <SidebarInset className="flex flex-col flex-1 w-full min-w-0 min-h-0 overflow-hidden">
           <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 border-b px-3 md:px-6">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <span className="relative inline-flex">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              {newFeatureNav.anyNew && <NewDot className="pointer-events-none absolute left-1 top-1 md:hidden" />}
+            </span>
             <div className="flex-1" />
             <Button
               variant="outline"

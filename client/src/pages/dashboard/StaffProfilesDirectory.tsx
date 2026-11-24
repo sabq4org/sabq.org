@@ -8,6 +8,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { StaffProfileForm } from "@/components/staff/StaffProfileForm";
+import { PublicBylineReviewQueue } from "@/components/staff/PublicBylineReviewQueue";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -274,6 +275,8 @@ export default function StaffProfilesDirectory() {
           description="طابور اعتماد بيانات الكتّاب والمراسلين قبل إصدار شهادة التعريف — افتح الملف، صحّح إن لزم، ثم اعتمد"
           titleTestId="text-staff-profiles-title"
         />
+
+        <PublicBylineReviewQueue />
 
         {stats.pendingReview > 0 && reviewFilter !== "pending_review" && (
           <button
