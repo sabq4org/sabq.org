@@ -147,23 +147,33 @@ export default function OpinionPage() {
   const { data: front, isLoading, isError, refetch } = useQuery<FrontPayload>({
     queryKey: ["/api/opinion-front"],
     staleTime: 60 * 1000,
+    // التناوب كل ساعة ومقالات اليوم الجديدة تصل دون إعادة تحميل الصفحة.
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [searchPage, setSearchPage] = useState(1);
   const [showAllWriters, setShowAllWriters] = useState(false);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setSearch(searchInput.trim()), 300);
+    const t = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setSearchPage(1);
+    }, 300);
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
-  const { data: searchData, isLoading: searchLoading } = useQuery<{ articles: FrontArticle[] }>({
-    queryKey: [`/api/opinion?page=1&limit=20&search=${encodeURIComponent(search)}`],
+  const { data: searchData, isLoading: searchLoading } = useQuery<{
+    articles: FrontArticle[];
+    pagination?: { page: number; totalPages: number; total: number };
+  }>({
+    queryKey: [`/api/opinion?page=${searchPage}&limit=20&search=${encodeURIComponent(search)}`],
     enabled: search.length >= 2,
   });
   const searchResults = Array.isArray(searchData?.articles) ? searchData!.articles : [];
+  const searchTotalPages = searchData?.pagination?.totalPages ?? 1;
 
   const today = front?.today ?? null;
   const days = Array.isArray(front?.days) ? front!.days : [];
@@ -256,6 +266,31 @@ export default function OpinionPage() {
               </div>
             ) : (
               <p className="text-muted-foreground">لا توجد مقالات تطابق البحث.</p>
+            )}
+            {searchTotalPages > 1 && (
+              <nav aria-label="صفحات نتائج البحث" className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={searchPage <= 1}
+                  onClick={() => setSearchPage((p) => Math.max(1, p - 1))}
+                  className="h-11 px-5 rounded-full border border-border bg-card font-semibold disabled:opacity-40"
+                  data-testid="button-opinion-search-prev"
+                >
+                  السابق
+                </button>
+                <span className="text-sm text-muted-foreground">
+                  {searchPage} من {searchTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={searchPage >= searchTotalPages}
+                  onClick={() => setSearchPage((p) => Math.min(searchTotalPages, p + 1))}
+                  className="h-11 px-5 rounded-full border border-border bg-card font-semibold disabled:opacity-40"
+                  data-testid="button-opinion-search-next"
+                >
+                  التالي
+                </button>
+              </nav>
             )}
           </section>
         ) : (

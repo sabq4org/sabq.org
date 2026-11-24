@@ -101,7 +101,8 @@ async function loadRecentArticles(since: Date): Promise<(OpinionFrontArticle & {
       ),
     )
     .orderBy(desc(articles.publishedAt))
-    .limit(300);
+    // سقف أمان فقط: نحو 5 مقالات يوميًا = قرابة 300 في 60 يومًا، فلا تُقتطع إحصاءات الكتّاب.
+    .limit(2000);
 
   return rows
     .filter((r) => r.publishedAt)
