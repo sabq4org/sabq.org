@@ -3,7 +3,7 @@
 // الإدارة ولا إحصاءات المضيف. البيانات من واجهات الاجتماعات نفسها.
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Loader2, Mail, Radio } from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import { useToast } from "@/hooks/use-toast";
@@ -186,15 +186,23 @@ export default function WriterMeetingsPage() {
   const upcoming = Array.isArray(data?.upcoming) ? data.upcoming : [];
   const configured = data?.configured !== false;
 
-  const { data: archiveRaw } = useQuery({
+  // الأرشيف كاملًا بترقيم «الأقدم» (nextBefore) كما في مركز الاجتماعات.
+  const archive = useInfiniteQuery({
     queryKey: ["/api/meetings-archive", "writer"],
-    queryFn: () => apiRequest<{ items: ArchiveItem[] }>("/api/meetings-archive"),
+    initialPageParam: "",
+    queryFn: ({ pageParam }) =>
+      apiRequest<{ items: ArchiveItem[]; nextBefore: string | null }>(
+        `/api/meetings-archive${pageParam ? `?before=${encodeURIComponent(String(pageParam))}` : ""}`,
+      ),
+    getNextPageParam: (last) => last?.nextBefore || undefined,
     staleTime: 60_000,
   });
-  const minutes = (Array.isArray(archiveRaw?.items) ? archiveRaw.items : []).slice(0, 8);
+  const archivePages = Array.isArray(archive.data?.pages) ? archive.data.pages : [];
+  const minutes = archivePages.flatMap((page) => (Array.isArray(page?.items) ? page.items : []));
 
   const hero = live[0] ?? upcoming[0] ?? null;
   const heroIsLive = Boolean(live[0]);
+  const liveIds = new Set(live.map((m) => m.id));
   const rest = [...live.slice(1), ...upcoming].filter((m) => m.id !== hero?.id);
 
   return (
@@ -224,13 +232,26 @@ export default function WriterMeetingsPage() {
               const at = m.scheduledAt ? new Date(m.scheduledAt) : null;
               return (
                 <div key={m.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center" data-testid={`row-writer-meeting-${m.id}`}>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold text-[#1B2B3A] dark:text-foreground">{m.title}</p>
+                  <Link href={`/dashboard/meetings/${m.id}`} className="min-w-0 flex-1 hover:text-[#0B6FA8]">
+                    <p className="truncate text-[15px] font-semibold text-[#1B2B3A] dark:text-foreground">
+                      {liveIds.has(m.id) ? <span className="me-2 text-xs font-bold text-[#E5484D]">مباشر</span> : null}
+                      {m.title}
+                    </p>
                     <p className="text-xs text-[#55667A] dark:text-muted-foreground">
                       {at ? `${DAY_LONG.format(at)}، ${RIYADH_TIME.format(at)}` : "بلا موعد محدد"}
                     </p>
-                  </div>
-                  <RsvpChoice meeting={m} size="sm" />
+                  </Link>
+                  {configured && canJoinWriterMeeting({ isLive: liveIds.has(m.id), scheduledAt: m.scheduledAt, now }) ? (
+                    <Link
+                      href={`/dashboard/meetings/room/${m.id}`}
+                      className="inline-flex h-9 items-center rounded-full bg-[#1E9BE6] px-4 text-sm font-semibold text-white hover:bg-[#178BD0]"
+                      data-testid={`button-join-${m.id}`}
+                    >
+                      انضم
+                    </Link>
+                  ) : liveIds.has(m.id) ? null : (
+                    <RsvpChoice meeting={m} size="sm" />
+                  )}
                 </div>
               );
             })}
@@ -268,6 +289,20 @@ export default function WriterMeetingsPage() {
                 </Link>
               );
             })}
+            {archive.hasNextPage ? (
+              <div className="px-5 py-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => archive.fetchNextPage()}
+                  disabled={archive.isFetchingNextPage}
+                  className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm text-[#0B6FA8] hover:bg-[#EEF4FA] disabled:opacity-60"
+                  data-testid="button-writer-minutes-older"
+                >
+                  {archive.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  المحاضر الأقدم
+                </button>
+              </div>
+            ) : null}
           </WriterSurface>
         )}
       </section>
