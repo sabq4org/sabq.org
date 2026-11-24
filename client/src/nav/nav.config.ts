@@ -1023,7 +1023,7 @@ export const navConfig: NavItem[] = [
       {
         id: "publishers_applications",
         labelKey: "nav.publishers_applications",
-        labelAr: "طلبات التسجيل",
+        labelAr: "طلبات تسجيل الناشرين",
         path: "/dashboard/admin/publisher-applications",
         icon: Inbox,
         roles: ["admin"],
@@ -1032,7 +1032,7 @@ export const navConfig: NavItem[] = [
       {
         id: "publishers_articles",
         labelKey: "nav.publishers_articles",
-        labelAr: "مراجعة المقالات",
+        labelAr: "مراجعة مقالات الناشرين",
         path: "/dashboard/admin/publisher-articles",
         icon: FileCheck,
         roles: ["admin"],
@@ -1043,7 +1043,7 @@ export const navConfig: NavItem[] = [
       {
         id: "publishers_analytics",
         labelKey: "nav.publishers_analytics",
-        labelAr: "التحليلات والإحصائيات",
+        labelAr: "تحليلات الناشرين",
         path: "/dashboard/admin/publisher-analytics",
         icon: BarChart,
         roles: ["admin"],

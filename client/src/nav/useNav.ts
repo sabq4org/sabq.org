@@ -3,35 +3,103 @@ import { useLocation } from "wouter";
 import {
   BarChart3,
   Bot,
+  Boxes,
   BriefcaseBusiness,
   Contact,
   Newspaper,
+  PenTool,
   Settings,
   Users,
   PanelsTopLeft,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { NavItem, NavContext, NavState, UserRole } from "./types";
 import { navConfig } from "./nav.config";
 import { isRoleExcluded } from "@shared/effectiveRoles";
 
-const STAFF_NAV_SECTION_DEFINITIONS = [
+export interface StaffNavSubsection {
+  /** عنوان فرعي رمادي صغير داخل المجموعة؛ null = بلا عنوان */
+  label: string | null;
+  itemIds: readonly string[];
+}
+
+export interface StaffNavSectionDefinition {
+  id: string;
+  labelAr: string;
+  labelKey: string;
+  icon: LucideIcon;
+  subsections: readonly StaffNavSubsection[];
+}
+
+/**
+ * توزيع القائمة حسب مجال العمل (اعتُمد 2026-11-24).
+ * لا يوجد «المزيد»: كل عنصر في nav.config.ts له مكان هنا أو في
+ * STAFF_NAV_PRIORITY_IDS، واختبار tests/unit/navSections.test.ts يفشل
+ * إن أُضيف عنصر بلا مجموعة.
+ *
+ * قاعدة الخدمة الجديدة (أول جواب يصدق):
+ *  تكتب الخبر أو تنشره أو توزعه → التحرير والنشر
+ *  تخص كتّاب الرأي أو زوايا مُقترب → مقالات الرأي
+ *  منتج مستقل له صفحته العامة (مواعيدك، إنفاذ، بطولة) → منصات سبق
+ *  تغيّر شكل الصفحة الرئيسية أو التطبيق → واجهة الموقع
+ *  أداة ذكاء اصطناعي عامة أو مختبر → الأدوات الذكية
+ *  القرّاء وتعليقاتهم ورسائلهم → الجمهور والتواصل
+ *  معلن أو ناشر أو وكالة أو مدفوعات → الأعمال والشراكات
+ *  أرقام وتقارير للقراءة → التحليلات والتقارير
+ *  المنسوبون وصلاحياتهم ومراسلتهم → الفريق والصلاحيات
+ *  إعداد أو مفتاح أو مصدر بيانات أو سجل → النظام والتكاملات
+ */
+export const STAFF_NAV_SECTION_DEFINITIONS: readonly StaffNavSectionDefinition[] = [
   {
     id: "workspace_editorial",
     labelAr: "التحرير والنشر",
     labelKey: "nav.workspace_editorial",
     icon: Newspaper,
-    itemIds: [
-      "articles",
-      "smart_radar",
-      "breaking_ticker",
-      "gulf_events",
-      "muqtarab",
-      "muqtarab_review",
-      "audio_newsletters",
-      "audio_briefs",
-      "calendar",
-      "world_days",
-      "media_library",
+    subsections: [
+      {
+        label: null,
+        itemIds: [
+          "articles",
+          "breaking_ticker",
+          "gulf_events",
+          "smart_radar",
+          "calendar",
+          "world_days",
+          "media_library",
+          "publish_banned_words",
+        ],
+      },
+      { label: "التوزيع", itemIds: ["social_publishing", "audio_bulletin", "push_notifications"] },
+    ],
+  },
+  {
+    id: "workspace_opinion",
+    labelAr: "مقالات الرأي",
+    labelKey: "nav.workspace_opinion",
+    icon: PenTool,
+    subsections: [
+      {
+        label: "كتّاب الرأي",
+        itemIds: [
+          "opinion_writers",
+          "opinion_writer_files",
+          "opinion_writer_announcements",
+          "opinion_writer_feedback",
+          "opinion_tickets",
+          "opinion-authors",
+        ],
+      },
+      { label: "زوايا مُقترب", itemIds: ["muqtarab", "muqtarab_review"] },
+    ],
+  },
+  {
+    id: "workspace_platforms",
+    labelAr: "منصات سبق",
+    labelKey: "nav.workspace_platforms",
+    icon: Boxes,
+    subsections: [
+      { label: "خدمات", itemIds: ["mawaeed", "infath"] },
+      { label: "الرياضة", itemIds: ["sports_tournaments", "wc_2026_numbers_report", "sportmonks_news"] },
     ],
   },
   {
@@ -39,17 +107,13 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "واجهة الموقع",
     labelKey: "nav.workspace_site",
     icon: PanelsTopLeft,
-    itemIds: [
-      "categories",
-      "tags",
-      "smart_links",
-      "smart_blocks",
-      "quad_categories_block",
-      "themes",
-      "templates",
-      "hajj_block",
-      "national_day_block",
-      "sahraa_tv_block",
+    subsections: [
+      { label: "التصنيف والروابط", itemIds: ["categories", "tags", "smart_links"] },
+      {
+        label: "البلوكات",
+        itemIds: ["smart_blocks", "quad_categories_block", "hajj_block", "national_day_block", "sahraa_tv_block"],
+      },
+      { label: "الشكل", itemIds: ["themes", "templates", "ios_national_day_theme"] },
     ],
   },
   {
@@ -57,13 +121,13 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "الأدوات الذكية",
     labelKey: "nav.workspace_ai",
     icon: Bot,
-    itemIds: [
-      "deep_analysis_manage",
-      "deep_analysis_create",
-      "deep_analysis_public",
-      "prompt_studio",
-      "voice_management",
-      "auto_image_settings",
+    subsections: [
+      { label: "عُمق", itemIds: ["deep_analysis_manage", "deep_analysis_create", "deep_analysis_public"] },
+      { label: "المساعدون", itemIds: ["ai_staff", "ops_room", "ai_summaries", "ai_headlines"] },
+      {
+        label: "المختبرات والإعدادات",
+        itemIds: ["prompt_studio", "deepseek_lab", "voice_management", "auto_image_settings", "ai_hub"],
+      },
     ],
   },
   {
@@ -71,16 +135,19 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "الجمهور والتواصل",
     labelKey: "nav.workspace_audience",
     icon: Contact,
-    itemIds: [
-      "ai_moderation",
-      "push_notifications",
-      "contact_messages",
-      "opinion_tickets",
-      "surveys",
-      "announcements",
-      "communications",
-      "editor_alerts",
-      "loyalty_admin",
+    subsections: [
+      {
+        label: null,
+        itemIds: [
+          "contact_messages",
+          "communications",
+          "ai_moderation",
+          "sentiment_insights",
+          "surveys",
+          "users_mgmt",
+          "loyalty_admin",
+        ],
+      },
     ],
   },
   {
@@ -88,18 +155,22 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "الأعمال والشراكات",
     labelKey: "nav.workspace_business",
     icon: BriefcaseBusiness,
-    itemIds: [
-      "media_store_orders",
-      "native_ads",
-      "payment-analytics",
-      "ad_campaigns",
-      "ad_creatives",
-      "inventory_slots",
-      "ad_account",
-      "ad_analytics",
-      "publishers_list",
-      "publishers_articles",
-      "publishers_analytics",
+    subsections: [
+      { label: "المتجر الإعلامي", itemIds: ["media_store_orders", "native_ads", "payment-analytics"] },
+      {
+        label: "الإعلانات",
+        itemIds: ["ad_campaigns", "ad_creatives", "inventory_slots", "ad_account", "ad_analytics"],
+      },
+      {
+        label: "الناشرون والوكالات",
+        itemIds: [
+          "publishers_list",
+          "publishers_applications",
+          "publishers_articles",
+          "publishers_analytics",
+          "publishers_guide",
+        ],
+      },
     ],
   },
   {
@@ -107,12 +178,11 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "التحليلات والتقارير",
     labelKey: "nav.workspace_analytics",
     icon: BarChart3,
-    itemIds: [
-      "dashboards",
-      "trending",
-      "behavior",
-      "article-analytics",
-      "deep_analysis_stats",
+    subsections: [
+      {
+        label: null,
+        itemIds: ["dashboards", "trending", "behavior", "article-analytics", "deep_analysis_stats", "seo_weekly"],
+      },
     ],
   },
   {
@@ -120,16 +190,13 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "الفريق والصلاحيات",
     labelKey: "nav.workspace_people",
     icon: Users,
-    itemIds: [
-      "staff",
-      "users_mgmt",
-      "roles",
-      "permissions",
-      "correspondents",
-      "opinion-authors",
-      "staff-communications",
-      "staff-productivity",
-      "email-templates",
+    subsections: [
+      {
+        label: "المنسوبون",
+        itemIds: ["staff", "reporters", "correspondents", "staff_profiles", "official_letters", "staff-productivity"],
+      },
+      { label: "التواصل الداخلي", itemIds: ["staff-communications", "announcements", "email-templates"] },
+      { label: "الصلاحيات", itemIds: ["roles", "permissions"] },
     ],
   },
   {
@@ -137,23 +204,15 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelAr: "النظام والتكاملات",
     labelKey: "nav.workspace_system",
     icon: Settings,
-    itemIds: [
-      "rss_feeds",
-      "sportmonks_news",
-      "integrations",
-      "storage",
-      "audits",
-      "system_settings",
-      "sports_tournaments",
-      "wc_2026_numbers_report",
-      "admin_tools",
-      "systems_catalog",
-      "ai_hub",
+    subsections: [
+      { label: "الإعدادات", itemIds: ["system_settings", "editor_alerts", "dashboard-appearance", "publisher_tokens"] },
+      { label: "المصادر والتكاملات", itemIds: ["rss_feeds", "integrations", "storage"] },
+      { label: "المراقبة والأدوات", itemIds: ["audits", "admin_tools", "systems_catalog"] },
     ],
   },
-] as const;
+];
 
-const STAFF_NAV_PRIORITY_IDS = ["dashboard", "tasks", "new_article"] as const;
+export const STAFF_NAV_PRIORITY_IDS = ["dashboard", "tasks", "new_article", "meetings"] as const;
 const COMPACT_NAV_ROLES = new Set<UserRole>([
   "reporter",
   "opinion_author",
@@ -167,7 +226,7 @@ const COMPACT_NAV_ROLES = new Set<UserRole>([
  * Reorganize the already-authorized navigation leaves by staff workflow.
  * Access is intentionally filtered first; this layer changes presentation only.
  */
-function organizeStaffNavigation(items: NavItem[], role: UserRole): NavItem[] {
+export function organizeStaffNavigation(items: NavItem[], role: UserRole): NavItem[] {
   if (COMPACT_NAV_ROLES.has(role)) return items;
 
   const leaves = flattenNavTree(items).filter((item) => item.path);
@@ -193,14 +252,32 @@ function organizeStaffNavigation(items: NavItem[], role: UserRole): NavItem[] {
   });
 
   const sections: NavItem[] = STAFF_NAV_SECTION_DEFINITIONS.flatMap((section) => {
-    const children = section.itemIds.flatMap((id) => {
-      const item = leavesById.get(id);
-      if (!item || usedIds.has(id)) return [];
-      usedIds.add(id);
-      return [item];
-    });
+    const subsections = section.subsections
+      .map((sub) => ({
+        label: sub.label,
+        items: sub.itemIds.flatMap((id) => {
+          const item = leavesById.get(id);
+          if (!item || usedIds.has(id)) return [];
+          usedIds.add(id);
+          return [item];
+        }),
+      }))
+      .filter((sub) => sub.items.length > 0);
 
-    if (children.length === 0) return [];
+    const total = subsections.reduce((sum, sub) => sum + sub.items.length, 0);
+    if (total === 0) return [];
+
+    // مجموعة فيها صفحة واحدة لهذا المستخدم: رابط مباشر بلا فتح.
+    if (total === 1) return [subsections[0].items[0]];
+
+    // العناوين الفرعية تظهر فقط إن بقي أكثر من قسم فرعي.
+    const showSubLabels = subsections.length > 1;
+    const children = subsections.flatMap((sub) =>
+      sub.items.map((item) => ({
+        ...item,
+        sectionLabel: showSubLabels && sub.label ? sub.label : undefined,
+      })),
+    );
 
     return [{
       id: section.id,
@@ -212,6 +289,7 @@ function organizeStaffNavigation(items: NavItem[], role: UserRole): NavItem[] {
     } satisfies NavItem];
   });
 
+  // شبكة أمان فقط: الاختبار يمنع وصول أي عنصر إلى هنا.
   const remaining = Array.from(leavesById.values()).filter((item) => !usedIds.has(item.id));
   if (remaining.length > 0) {
     sections.push({

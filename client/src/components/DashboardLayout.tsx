@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
+import { Fragment, ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth, getHighestRole, hasPermission, hasRole } from "@/hooks/useAuth";
@@ -307,12 +307,23 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
-                {item.children?.map((child) => {
+                {item.children?.map((child, childIndex) => {
                   const ChildIcon = child.icon;
                   const isChildActive = activeItem?.id === child.id;
+                  const previousLabel = childIndex > 0 ? item.children?.[childIndex - 1]?.sectionLabel : undefined;
+                  const showSectionLabel = Boolean(child.sectionLabel) && child.sectionLabel !== previousLabel;
 
                   return (
-                    <SidebarMenuSubItem key={child.id}>
+                    <Fragment key={child.id}>
+                    {showSectionLabel && (
+                      <li
+                        className="px-2 pb-0.5 pt-2 text-[11px] font-medium text-muted-foreground first:pt-0.5"
+                        data-testid={`sidebar-section-label-${item.id}-${childIndex}`}
+                      >
+                        {child.sectionLabel}
+                      </li>
+                    )}
+                    <SidebarMenuSubItem>
                       <SidebarMenuSubButton
                         asChild
                         isActive={isChildActive}
@@ -328,6 +339,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
+                    </Fragment>
                   );
                 })}
               </SidebarMenuSub>
