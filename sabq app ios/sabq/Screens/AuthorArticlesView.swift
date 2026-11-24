@@ -1,8 +1,8 @@
 import SwiftUI
 
 // صفحة الكاتب — مطابقة للويب (/author/:name، #2257 و#2258):
-//   1. رأس سماوي هادئ: الصورة والاسم والصفة، وسطر «يكتب كل <يوم> · N مقالًا
-//      منذ <شهر>» وسطر «يكتب غالبًا في» نصًا بلا كبسولات، ومشاركة، والنبذة كاملة.
+//   1. رأس سماوي هادئ: الصورة، الاسم، المسمى تحته، وسطر «يكتب كل <يوم> · N مقالًا
+//      منذ <شهر>» نصًا بلا كبسولات (طلب المالك 2026-11-24).
 //   2. «أحدث مقال» بارزًا، ثم بقية المقالات مجمّعة بالشهر بأيقونة تقويم.
 //   3. «كتّاب <اليوم>» و«موعده القادم» لكتّاب الرأي.
 // بلا أعداد مشاهدات. البيانات من /api/v1/authors/by-name (الحقل `writer`).
@@ -124,51 +124,29 @@ struct AuthorArticlesView: View {
 
     // MARK: - Hero
 
+    /// رأس صفحة الكاتب (طلب المالك 2026-11-24): الصورة، الاسم، المسمى تحته
+    /// مباشرة، ثم سطر يوم الكتابة وعدد المقالات. بلا «من كتّاب الرأي في سبق»،
+    /// ولا «يكتب غالبًا في»، ولا زر مشاركة.
     private var hero: some View {
         VStack(spacing: SabqLayout.space8) {
             avatar
                 .padding(.bottom, SabqLayout.space4)
-
-            if isOpinionWriter {
-                Text("من كتّاب الرأي في سبق")
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(Self.monthInk)
-            }
 
             Text(displayName)
                 .font(SabqFonts.app(size: 26, weight: .bold))
                 .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.center)
 
-            if let role {
-                Text(role)
-                    .font(SabqType.excerpt.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            chips
-                .padding(.top, SabqLayout.space4)
-
-            if let bio = page?.author.bio, !bio.isEmpty {
-                Text(bio)
+            if let title = role ?? page?.author.bio, !title.isEmpty {
+                Text(title)
                     .sabqText(SabqType.excerpt)
                     .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, SabqLayout.space8)
             }
 
-            ShareLink(item: shareURL) {
-                Label("مشاركة صفحة الكاتب", systemImage: "square.and.arrow.up")
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundStyle(SabqTheme.primary)
-                    .padding(.horizontal, SabqLayout.space16)
-                    .frame(minHeight: 44)
-                    .background(Capsule(style: .continuous).fill(SabqTheme.surface))
-                    .overlay(Capsule(style: .continuous).strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
-            }
-            .padding(.top, SabqLayout.space8)
+            chips
+                .padding(.top, SabqLayout.space4)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, SabqLayout.pageMargin)
@@ -177,14 +155,7 @@ struct AuthorArticlesView: View {
         .background(LinearGradient(colors: [Self.heroTop, SabqTheme.background], startPoint: .top, endPoint: .bottom))
     }
 
-    private var shareURL: URL {
-        let encoded = displayName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? displayName
-        return URL(string: "\(URLConstants.webOrigin)/author/\(encoded)") ?? URL(string: URLConstants.webOrigin)!
-    }
-
-    /// بيانات الكاتب سطران نصيان هادئان بلا كبسولات (طلب المالك 2026-11-24:
-    /// الشرائح الثلاث تحت الصورة مزعجة): يوم الكتابة بالأزرق وعدد المقالات،
-    /// ثم الأقسام المعتادة.
+    /// سطر نصي واحد بلا كبسولات: يوم الكتابة بالأزرق ثم عدد المقالات.
     @ViewBuilder
     private var chips: some View {
         let count = page?.stats.articleCount ?? 0
@@ -203,12 +174,6 @@ struct AuthorArticlesView: View {
                  + Text(countText ?? "")
                     .font(SabqType.meta.font)
                     .foregroundColor(SabqTheme.textSecondary))
-                    .multilineTextAlignment(.center)
-            }
-            if let cats = writer?.usualCategories, !cats.isEmpty {
-                Text("يكتب غالبًا في " + cats.joined(separator: " · "))
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
                     .multilineTextAlignment(.center)
             }
         }
