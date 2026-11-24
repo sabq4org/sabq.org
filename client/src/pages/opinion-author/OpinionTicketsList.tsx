@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowRight, Inbox, Loader2, PlusCircle } from "lucide-react";
+import {
+  ArrowRight,
+  Inbox,
+  Loader2,
+  PlusCircle,
+  MessageSquare,
+} from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import {
   TICKET_STATUS_CHIP,
@@ -155,6 +161,7 @@ export default function OpinionTicketsList({ selectedId }: { selectedId?: string
 
   return (
     <WriterPageFrame
+      icon={MessageSquare}
       title="استفساراتي"
       description="تواصل مع إدارة التحرير. الرد يصلك هنا وفي الإشعارات."
       titleTestId="text-page-title"

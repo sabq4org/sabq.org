@@ -4,7 +4,13 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Loader2, Mail, Radio } from "lucide-react";
+import {
+  ChevronLeft,
+  Loader2,
+  Mail,
+  Radio,
+  Headphones,
+} from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -207,6 +213,7 @@ export default function WriterMeetingsPage() {
 
   return (
     <WriterPageFrame
+      icon={Headphones}
       title="الاجتماعات"
       description="اجتماعات كتّاب الرأي مع هيئة التحرير: أكّد حضورك، وانضم في موعده، وارجع إلى محاضرها."
       titleTestId="text-writer-meetings-title"

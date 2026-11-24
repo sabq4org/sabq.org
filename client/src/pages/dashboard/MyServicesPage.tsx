@@ -4,7 +4,10 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+import {
+  ChevronDown,
+  Briefcase,
+} from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import { NewBadge } from "@/components/writer/NewBadge";
 import { PublicBylineEditor, PUBLIC_BYLINE_QUERY, type MyPublicByline } from "@/components/writer/PublicBylineEditor";
@@ -147,6 +150,7 @@ export default function MyServicesPage() {
 
   return (
     <WriterPageFrame
+      icon={Briefcase}
       title="ملفي وخدماتي"
       description="كل ما يخصك في مكان واحد: حسابك، وكيف يراك القارئ، وأوراقك الرسمية."
       titleTestId="text-my-services-title"

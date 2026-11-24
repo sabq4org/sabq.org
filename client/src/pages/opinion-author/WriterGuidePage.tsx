@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  BookOpen,
 } from "lucide-react";
 
 const GUIDE_READ_PREF = "sabq-writer-guide-read-v1";
@@ -161,6 +162,7 @@ export default function WriterGuidePage() {
 
   return (
     <WriterPageFrame
+      icon={BookOpen}
       title="دليل الكاتب"
       description="من الفكرة الأولى إلى المقال المنشور، وكيف تستفيد من أدوات سبق دون أن تفقد صوتك."
       actions={

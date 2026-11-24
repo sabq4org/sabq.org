@@ -4,7 +4,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Check, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Loader2,
+  MessageSquareHeart,
+} from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -108,6 +113,7 @@ export default function WriterFeedbackPage() {
 
   return (
     <WriterPageFrame
+      icon={MessageSquareHeart}
       title="اهتماماتي ومقترحاتي"
       description="دقيقة واحدة تساعدنا على التواصل معك حسب تخصصك، وعلى تطوير تجربة الكتابة في سبق."
       titleTestId="text-writer-feedback-title"

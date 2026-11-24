@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { Loader2 } from "lucide-react";
+import {
+  Loader2,
+  Bell,
+} from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import { WriterNotificationRow } from "@/components/writer/WriterNotificationRow";
 import { useWriterNotifications } from "@/components/writer/WriterNotificationBell";
@@ -37,6 +40,7 @@ export default function WriterNotificationsPage() {
 
   return (
     <WriterPageFrame
+      icon={Bell}
       title="إشعاراتي"
       description="قرارات المراجعة وردود الإدارة والملفات الجديدة والاجتماعات."
       titleTestId="text-writer-notifications-title"
