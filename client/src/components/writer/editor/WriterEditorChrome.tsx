@@ -1,4 +1,4 @@
-// محرر كاتب الرأي (المرحلة 4 من خطة لوحة الكاتب): شريط علوي رفيع، وشريط
+// محرر كاتب الرأي (المرحلة 4 من خطة لوحة الكاتب): رأس صفحة مثل بقية صفحات الكاتب، وشريط
 // «قبل الإرسال» الجانبي، وشريط الجاهزية السفلي في الجوال، وبطاقة ملاحظة المحرر.
 // المكونات عرضية فقط: كل الأفعال (حفظ، إرسال، اختيار اليوم) تأتي من المحرر.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -16,6 +16,7 @@ import {
   Eye,
   Loader2,
   MessageSquareText,
+  PenLine,
   Send,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -23,6 +24,7 @@ import { WriterEditorialNoticesList } from "@/components/WriterEditorialNotices"
 import { cn } from "@/lib/utils";
 import {
   normalizeForMatch,
+  WRITER_TITLE_APP_LIMIT,
   summarizeWriterReadiness,
   type WriterReadinessItem,
 } from "@/lib/writerSubmitReadiness";
@@ -31,9 +33,10 @@ export const WRITER_HOME_PATH = "/dashboard/opinion-author";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-// ── الشريط العلوي ──
+// ── رأس الصفحة (الخيار «أ» المعتمد 2026-11-24): مثل بقية صفحات الكاتب ──
 
 export function WriterEditorTopBar({
+  heading,
   statusLabel,
   saveState,
   lastSavedAt,
@@ -45,6 +48,7 @@ export function WriterEditorTopBar({
   isResubmit,
   saveLabel,
 }: {
+  heading: string;
   statusLabel: string;
   saveState: SaveState;
   lastSavedAt: Date | null;
@@ -57,33 +61,42 @@ export function WriterEditorTopBar({
   saveLabel: string;
 }) {
   return (
-    <div
-      className="sticky top-0 z-30 -mx-3 mb-6 border-b border-[#E6ECF2] bg-white/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-white/85 dark:border-border dark:bg-card/95 md:-mx-6 md:px-6"
-      data-testid="writer-editor-topbar"
-    >
-      <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-3">
-        <Link
-          href={WRITER_HOME_PATH}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2 text-sm text-[#55667A] hover:bg-[#EEF4FA] dark:text-muted-foreground dark:hover:bg-muted"
-          data-testid="button-back"
-        >
-          <ArrowRight className="h-4 w-4" />
-          <span className="hidden sm:inline">لوحة الكاتب</span>
-        </Link>
-        <span className="hidden h-5 w-px bg-[#E6ECF2] dark:bg-border sm:block" aria-hidden />
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-[15px] font-bold text-[#1B2B3A] dark:text-foreground">مقالي</span>
-          <span className="shrink-0 rounded-full bg-[#F1F5F9] px-2.5 py-0.5 text-xs text-[#55667A] dark:bg-muted dark:text-muted-foreground">
-            {statusLabel}
+    <header className="mx-auto mb-7 max-w-[1120px] space-y-3 pt-6 sm:pt-8" data-testid="writer-editor-topbar">
+      <Link
+        href={WRITER_HOME_PATH}
+        className="inline-flex items-center gap-1.5 text-sm text-[#0B6FA8] hover:underline dark:text-primary"
+        data-testid="button-back"
+      >
+        <ArrowRight className="h-4 w-4" />
+        لوحة الكاتب
+      </Link>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#EAF5FD] text-[#1E9BE6] dark:bg-primary/10 dark:text-primary sm:h-[52px] sm:w-[52px] sm:rounded-2xl"
+            aria-hidden
+          >
+            <PenLine className="h-5 w-5 sm:h-[22px] sm:w-[22px]" strokeWidth={1.8} />
           </span>
-          <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold leading-snug text-[#1B2B3A] dark:text-foreground sm:text-[28px]">{heading}</h1>
+              <span className="shrink-0 rounded-full bg-[#EEF2F6] px-3 py-0.5 text-xs text-[#55667A] dark:bg-muted dark:text-muted-foreground">
+                {statusLabel}
+              </span>
+              <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
+            </div>
+            <p className="text-[13px] leading-6 text-[#55667A] dark:text-muted-foreground sm:text-sm">
+              اكتب العنوان والنص، وراجع «قبل الإرسال»، ثم أرسله للمراجعة. يُحفظ تلقائيًا.
+            </p>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="hidden shrink-0 items-center gap-2 sm:flex">
           {onPreview ? (
             <button
               type="button"
               onClick={onPreview}
-              className="hidden h-9 items-center gap-1.5 rounded-full px-3.5 text-sm text-[#0B6FA8] hover:bg-[#EEF4FA] dark:text-primary dark:hover:bg-muted sm:inline-flex"
+              className="inline-flex h-11 items-center gap-1.5 rounded-full px-4 text-[15px] text-[#0B6FA8] hover:bg-[#EAF5FD] dark:text-primary dark:hover:bg-muted"
               data-testid="button-preview"
             >
               <Eye className="h-4 w-4" />
@@ -94,7 +107,7 @@ export function WriterEditorTopBar({
             type="button"
             onClick={onSaveDraft}
             disabled={isSaving}
-            className="hidden h-9 items-center rounded-full px-3.5 text-sm text-[#1B2B3A] shadow-[inset_0_0_0_1px_#DCE4EC] hover:bg-[#F7FAFC] disabled:opacity-60 dark:text-foreground dark:shadow-none dark:hover:bg-muted sm:inline-flex"
+            className="inline-flex h-11 items-center rounded-full bg-white px-5 text-[15px] font-semibold text-[#1B2B3A] shadow-[inset_0_0_0_1px_#DCE4EC] hover:bg-[#F7FAFC] disabled:opacity-60 dark:bg-card dark:text-foreground dark:shadow-none dark:hover:bg-muted"
             data-testid="button-save-draft"
           >
             {saveLabel}
@@ -103,7 +116,7 @@ export function WriterEditorTopBar({
             type="button"
             onClick={onSubmit}
             disabled={submitDisabled}
-            className="hidden h-10 items-center gap-2 rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white hover:bg-[#178BD0] disabled:opacity-60 lg:inline-flex"
+            className="hidden h-11 items-center gap-2 rounded-full bg-[#1E9BE6] px-5 text-[15px] font-semibold text-white hover:bg-[#178BD0] disabled:opacity-60 lg:inline-flex"
             data-testid="button-publish"
           >
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -111,7 +124,7 @@ export function WriterEditorTopBar({
           </button>
         </div>
       </div>
-    </div>
+    </header>
   );
 }
 
@@ -161,28 +174,51 @@ export function WriterEditorCanvas({
   const titleRef = useRef<HTMLTextAreaElement | null>(null);
   // العنوان يصل من الخادم بعد التحميل، لذا نعيد حساب الارتفاع مع كل تغيّر في القيمة.
   useLayoutEffect(() => autoGrow(titleRef.current), [title]);
+  const titleLength = title.trim().length;
+  const titleTooLong = titleLength > WRITER_TITLE_APP_LIMIT;
   return (
-    <div className="mx-auto w-full max-w-[760px] space-y-5" data-testid="writer-editor-canvas">
+    <div className="w-full space-y-4" data-testid="writer-editor-canvas">
       {topNotice ? <div className="lg:hidden">{topNotice}</div> : null}
-      <div id="editor-section-title">
+      <section
+        className="rounded-[22px] bg-white p-4 shadow-[0_2px_14px_rgba(27,43,58,0.06)] dark:bg-card sm:px-6 sm:py-5"
+        id="editor-section-title"
+      >
+        <div className="mb-2.5 flex items-center justify-between gap-3">
+          <label htmlFor="writer-title-input" className="text-[15px] font-bold text-[#1B2B3A] dark:text-foreground">
+            عنوان المقال <span className="text-[#E5484D]">*</span>
+          </label>
+          <span
+            className={cn("text-[13px] tabular-nums", titleTooLong ? "text-[#B54708]" : "text-[#8A99A8]")}
+            data-testid="writer-title-counter"
+          >
+            {titleLength} / {WRITER_TITLE_APP_LIMIT} حرفًا
+          </span>
+        </div>
         <textarea
+          id="writer-title-input"
           value={title}
           onChange={(event) => onTitleChange(event.target.value.replace(/\n+/g, " "))}
-          placeholder="عنوان المقال"
+          placeholder="اكتب عنوانًا واضحًا لمقالك"
           rows={1}
           disabled={titleDisabled}
-          className="block w-full resize-none overflow-hidden border-0 !bg-transparent p-0 shadow-none text-[26px] font-bold leading-[1.5] text-[#1B2B3A] placeholder:text-[#A7B4C2] focus:outline-none focus:ring-0 dark:text-foreground sm:text-[32px]"
+          className="block w-full resize-none overflow-hidden rounded-[14px] border-0 !bg-white px-4 py-3 text-[20px] font-bold leading-[1.5] text-[#1B2B3A] shadow-[inset_0_0_0_1px_#C9D4DF] placeholder:text-[#A3B1BF] focus:shadow-[inset_0_0_0_2px_#1E9BE6] focus:outline-none focus:ring-0 dark:!bg-background dark:text-foreground sm:px-[18px] sm:text-2xl"
           ref={titleRef}
           data-testid="input-title"
         />
-      </div>
+        <p className={cn("mt-2 text-[13px]", titleTooLong ? "text-[#B54708]" : "text-[#55667A] dark:text-muted-foreground")}>
+          {titleTooLong
+            ? `أطول من ${WRITER_TITLE_APP_LIMIT} حرفًا، وقد يُقص في التطبيق.`
+            : `يظهر كاملًا في التطبيق حتى ${WRITER_TITLE_APP_LIMIT} حرفًا.`}
+        </p>
+      </section>
       <div id="editor-section-media">{image}</div>
-      <div
-        className="rounded-[22px] bg-white px-4 pb-6 shadow-[0_2px_14px_rgba(27,43,58,0.06)] dark:bg-card sm:px-8"
+      <section
+        className="rounded-[22px] bg-white px-4 pb-6 pt-4 shadow-[0_2px_14px_rgba(27,43,58,0.06)] dark:bg-card sm:px-6 sm:pt-5"
         id="editor-section-content"
       >
+        <h2 className="mb-1 text-[15px] font-bold text-[#1B2B3A] dark:text-foreground">نص المقال</h2>
         {children}
-      </div>
+      </section>
     </div>
   );
 }
