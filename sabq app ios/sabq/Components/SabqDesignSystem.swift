@@ -157,14 +157,27 @@ nonisolated struct SabqTextRole: Sendable {
     let weight: Weight
     let style: Font.TextStyle
     let lineSpacing: CGFloat
+    /// عناوين الأخبار (عنوان الخبر، البارز، صفوف القوائم) بخط IBM Plex Sans Arabic
+    /// عبر `uiFont` الذي يرسم به `SabqRTLText` العناوين؛ تسميات الواجهة بـ`font`
+    /// تبقى بخط النظام (تجربة المالك 2026-11-24).
+    var isNewsHeadline = false
 
     enum Weight: Sendable { case regular, medium, semibold, bold }
 
     var font: Font { font(boldText: false) }
 
+    private func plexName(boldText: Bool) -> String {
+        switch weight {
+        case .regular: boldText ? SabqFonts.semibold : SabqFonts.regular
+        case .medium: boldText ? SabqFonts.semibold : SabqFonts.medium
+        case .semibold: boldText ? SabqFonts.bold : SabqFonts.semibold
+        case .bold: SabqFonts.bold
+        }
+    }
+
     /// يحترم «النص العريض» في إعدادات الإتاحة بدرجة وزن إضافية.
     func font(boldText: Bool) -> Font {
-        SabqFonts.editorial(style, size: size, weight: swiftUIWeight, boldText: boldText)
+        return SabqFonts.editorial(style, size: size, weight: swiftUIWeight, boldText: boldText)
     }
 
     /// Base size for `SabqRTLText`, which scales it with `uiTextStyle`.
@@ -173,6 +186,9 @@ nonisolated struct SabqTextRole: Sendable {
     /// يتبع إعداد «حجم الخط» في صفحة الخبر: يزيد أو ينقص بقدر ما غيّره القارئ.
     func uiFont(adding delta: CGFloat) -> UIFont {
         let pointSize = max(12, size + delta)
+        if isNewsHeadline, let plex = UIFont(name: plexName(boldText: false), size: pointSize) {
+            return plex
+        }
         return .systemFont(ofSize: pointSize, weight: uiWeight)
     }
 
@@ -214,10 +230,10 @@ nonisolated struct SabqTextRole: Sendable {
 /// Desk type scale: medium list headlines, bold display titles, regular body.
 /// Article body remains 18pt for long-form reading; timestamp remains 11pt.
 nonisolated enum SabqType {
-    static let articleTitle = SabqTextRole(size: 23, weight: .bold, style: .title, lineSpacing: 3)
-    static let leadTitle = SabqTextRole(size: 21, weight: .bold, style: .title2, lineSpacing: 2)
+    static let articleTitle = SabqTextRole(size: 23, weight: .bold, style: .title, lineSpacing: 3, isNewsHeadline: true)
+    static let leadTitle = SabqTextRole(size: 21, weight: .bold, style: .title2, lineSpacing: 2, isNewsHeadline: true)
     static let sectionHeading = SabqTextRole(size: 20, weight: .bold, style: .title3, lineSpacing: 0)
-    static let rowTitle = SabqTextRole(size: 16, weight: .medium, style: .headline, lineSpacing: 2)
+    static let rowTitle = SabqTextRole(size: 16, weight: .medium, style: .headline, lineSpacing: 2, isNewsHeadline: true)
     static let articleBody = SabqTextRole(size: 18, weight: .regular, style: .body, lineSpacing: 5)
     static let excerpt = SabqTextRole(size: 15, weight: .regular, style: .subheadline, lineSpacing: 1)
     static let meta = SabqTextRole(size: 13, weight: .regular, style: .footnote, lineSpacing: 0)
@@ -248,7 +264,8 @@ extension SabqTextRole {
         case 15...: target = size - 2
         default: target = max(11, size - 1)
         }
-        return SabqTextRole(size: target, weight: weight, style: style, lineSpacing: max(0, lineSpacing - 1))
+        return SabqTextRole(size: target, weight: weight, style: style, lineSpacing: max(0, lineSpacing - 1),
+                            isNewsHeadline: isNewsHeadline)
     }
 }
 
