@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowRight, Inbox, Loader2, PlusCircle } from "lucide-react";
+import {
+  ArrowRight,
+  Inbox,
+  Loader2,
+  PlusCircle,
+  MessageSquare,
+} from "lucide-react";
 import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import {
   TICKET_STATUS_CHIP,
@@ -101,7 +107,7 @@ export default function OpinionTicketsList({ selectedId }: { selectedId?: string
   const newTicketDialog = (
     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
       <DialogTrigger asChild>
-        <Button className="h-11 gap-2 rounded-full bg-[#1E9BE6] px-5 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(30,155,230,0.3)] hover:bg-[#178BD0]" data-testid="button-new-ticket">
+        <Button className="h-11 gap-2 rounded-full bg-[#1E9BE6] px-5 text-[15px] font-semibold text-white hover:bg-[#178BD0]" data-testid="button-new-ticket">
           <PlusCircle className="h-4 w-4" />
           استفسار جديد
         </Button>
@@ -155,6 +161,7 @@ export default function OpinionTicketsList({ selectedId }: { selectedId?: string
 
   return (
     <WriterPageFrame
+      icon={MessageSquare}
       title="استفساراتي"
       description="تواصل مع إدارة التحرير. الرد يصلك هنا وفي الإشعارات."
       titleTestId="text-page-title"

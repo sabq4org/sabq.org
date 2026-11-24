@@ -96,6 +96,7 @@ export default function WriterFilesPage() {
 
   return (
     <WriterPageFrame
+      icon={FolderOpen}
       title="ملفاتي"
       description="المحاضر والتعاميم والمستندات التي ترفعها إدارة الرأي لك."
       titleTestId="text-writer-files-title"

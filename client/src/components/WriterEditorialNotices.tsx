@@ -15,7 +15,7 @@ const NOTICES = [
   "تجنّب الادعاءات غير الموثقة؛ صوتك مهم، والمسؤولية أيضًا.",
 ] as const;
 
-function NoticesList({ className }: { className?: string }) {
+export function WriterEditorialNoticesList({ className }: { className?: string }) {
   return (
     <ul className={cn("space-y-3", className)}>
       {NOTICES.map((notice) => (
@@ -52,7 +52,7 @@ export function WriterEditorialNoticesAside() {
     >
       <div className="sticky top-20 space-y-4 rounded-2xl border border-sky-200/60 bg-gradient-to-b from-sky-50/70 via-background to-background p-4 shadow-sm dark:border-sky-900/40 dark:from-sky-950/25">
         <NoticesHeader />
-        <NoticesList />
+        <WriterEditorialNoticesList />
         <p className="flex items-start gap-2 rounded-xl border border-sky-100/80 bg-background/70 p-3 text-xs leading-5 text-muted-foreground dark:border-sky-900/30">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-300" />
           هذه تنويهات عامة لتوضيح مسار المراجعة، وليست بديلاً عن دليل الكاتب.
@@ -90,7 +90,7 @@ export function WriterEditorialNoticesMobile() {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="space-y-3 border-t border-sky-200/50 px-4 pb-4 pt-3 dark:border-sky-900/30">
-            <NoticesList />
+            <WriterEditorialNoticesList />
             <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-300" />
               هذه تنويهات عامة لتوضيح مسار المراجعة، وليست بديلاً عن دليل الكاتب.

@@ -2,7 +2,7 @@
 // اجتماعات صوتية مع مشاركة شاشة داخل اللوحة: المباشر الآن في المقدمة،
 // ثم المجدولة والمنتهية حديثاً. الإنشاء عبر حوار بأنماط الوصول الأربعة.
 
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -34,6 +34,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { isWriterOnly } from "@/lib/writerAudience";
 import { MinutesArchivePanel } from "@/components/meetings/MinutesArchivePanel";
 import { OpenTasksPanel } from "@/components/meetings/OpenTasksPanel";
 import { InviteePicker } from "@/components/meetings/InviteePicker";
@@ -113,7 +114,22 @@ function initialsOf(name: string): string {
   return name.trim().slice(0, 2);
 }
 
+// كاتب الرأي (دون أدوار أخرى) يرى صفحة اجتماعاته الهادئة (المرحلة 4 من خطة لوحة الكاتب).
+const WriterMeetingsPage = lazy(() => import("@/pages/opinion-author/WriterMeetingsPage"));
+
 export default function MeetingsHub() {
+  const { user } = useAuth();
+  if (isWriterOnly(user)) {
+    return (
+      <Suspense fallback={null}>
+        <WriterMeetingsPage />
+      </Suspense>
+    );
+  }
+  return <MeetingsHubStaff />;
+}
+
+function MeetingsHubStaff() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();

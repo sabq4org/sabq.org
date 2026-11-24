@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  BookOpen,
 } from "lucide-react";
 
 const GUIDE_READ_PREF = "sabq-writer-guide-read-v1";
@@ -161,6 +162,7 @@ export default function WriterGuidePage() {
 
   return (
     <WriterPageFrame
+      icon={BookOpen}
       title="دليل الكاتب"
       description="من الفكرة الأولى إلى المقال المنشور، وكيف تستفيد من أدوات سبق دون أن تفقد صوتك."
       actions={
@@ -169,7 +171,7 @@ export default function WriterGuidePage() {
           onClick={startNewArticle}
           title={createBlocked ? createBlockedReason : undefined}
           className={cn(
-            "inline-flex h-12 items-center gap-2 rounded-full bg-[#1E9BE6] px-6 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(30,155,230,0.3)] hover:bg-[#178BD0]",
+            "inline-flex h-11 items-center gap-2 rounded-full bg-[#1E9BE6] px-5 text-[15px] font-semibold text-white hover:bg-[#178BD0]",
             createBlocked && "opacity-60",
           )}
           data-testid="button-writer-guide-new-article"
