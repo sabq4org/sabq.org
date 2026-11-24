@@ -73,7 +73,13 @@ function rowsOf<T>(result: unknown): T[] {
 function isoOrNull(value: unknown): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
-  return String(value);
+  // timestamp بلا منطقة من db.execute يصل «2026-01-07 13:30:57.827» (UTC): نحوّله إلى ISO كي تقرأه التطبيقات.
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) {
+    const parsed = new Date(`${raw.replace(" ", "T")}Z`);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return raw;
 }
 
 /**

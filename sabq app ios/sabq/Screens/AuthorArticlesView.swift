@@ -130,7 +130,7 @@ struct AuthorArticlesView: View {
                 .padding(.bottom, SabqLayout.space4)
 
             if isOpinionWriter {
-                Text("كاتب رأي في سبق")
+                Text("من كتّاب الرأي في سبق")
                     .font(SabqType.tag.font)
                     .foregroundStyle(Self.monthInk)
             }
@@ -185,8 +185,8 @@ struct AuthorArticlesView: View {
     @ViewBuilder
     private var chips: some View {
         let count = page?.stats.articleCount ?? 0
-        let since = (page?.stats.earliestPublish).flatMap { SabqFormatters.parseISO8601($0) }
-        FlowLayout(spacing: SabqLayout.space8) {
+        let since = (page?.stats.earliestPublish).flatMap { Self.parseServerDate($0) }
+        let content = Group {
             if let weekdayName {
                 HStack(spacing: SabqLayout.space4) {
                     Image(systemName: "calendar")
@@ -205,7 +205,25 @@ struct AuthorArticlesView: View {
                 chip("يكتب غالبًا في: " + cats.joined(separator: " · "))
             }
         }
+        // سطر واحد في الوسط إن اتسع، وإلا شريحة تحت شريحة في الوسط.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: SabqLayout.space8) { content }
+            VStack(spacing: SabqLayout.space8) { content }
+        }
         .frame(maxWidth: .infinity)
+    }
+
+    /// الخادم يرسل أحيانًا «2026-01-07 13:30:57.827» (مسافة بدل T وبلا منطقة = UTC).
+    static func parseServerDate(_ raw: String) -> Date? {
+        if let d = SabqFormatters.parseISO8601(raw) { return d }
+        var s = raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "T")
+        if !s.hasSuffix("Z") && !s.contains("+") { s += "Z" }
+        if let d = SabqFormatters.parseISO8601(s) { return d }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f.date(from: String(raw.prefix(19)))
     }
 
     private func chip(_ text: String) -> some View {
@@ -328,7 +346,10 @@ struct AuthorArticlesView: View {
                     .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(Self.monthInk)
                     .accessibilityAddTraits(.isHeader)
-                Text("· \(OpinionText.count(month.items.count))")
+                Text("·")
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                Text(OpinionText.count(month.items.count))
                     .font(SabqType.meta.font)
                     .foregroundStyle(SabqTheme.textTertiary)
             }
