@@ -32,6 +32,7 @@ import {
 } from "./utils/creatorSchema";
 import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
 import { getTeamSeoMeta } from "./services/saudiLeagueService";
+import { MOMENT_BY_MOMENT_TITLE, momentByMomentDescription } from "@shared/momentByMomentSeo";
 
 const SKIP_PREFIXES = ['/api/', '/src/', '/@fs/', '/assets/', '/@vite/', '/node_modules/'];
 const FILE_EXT_REGEX = /\.\w{2,5}$/;
@@ -749,7 +750,7 @@ const STATIC_INDEXABLE_PAGES: Record<string, { title: string; desc: string; loca
   '/ar/accessibility-statement': { title: 'بيان إمكانية الوصول — سبق', desc: 'بيان إمكانية الوصول في صحيفة سبق الإلكترونية' },
   '/daily-brief': { title: 'الموجز اليومي — سبق', desc: 'ملخص يومي لأهم الأحداث والأخبار من صحيفة سبق الإلكترونية' },
   '/shorts': { title: 'أخبار قصيرة — سبق', desc: 'أخبار سريعة ومختصرة من صحيفة سبق الإلكترونية' },
-  '/moment-by-moment': { title: 'لحظة بلحظة — سبق', desc: 'متابعة لحظية للأحداث الجارية على صحيفة سبق الإلكترونية' },
+  '/moment-by-moment': { title: MOMENT_BY_MOMENT_TITLE, desc: momentByMomentDescription() },
   '/newsletters': { title: 'النشرات الإخبارية — سبق', desc: 'اشترك في نشرات سبق الإخبارية لتصلك أهم الأخبار' },
   '/audio-newsletter': { title: 'النشرة الصوتية — سبق', desc: 'استمع إلى أهم الأخبار في النشرة الصوتية من صحيفة سبق' },
   '/archive': { title: 'الأرشيف — سبق', desc: 'تصفح أرشيف الأخبار في صحيفة سبق الإلكترونية' },

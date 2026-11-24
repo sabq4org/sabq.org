@@ -83,6 +83,7 @@ import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
 import { getSeoCacheGeneration } from "../services/seoCacheInvalidation";
 
 import { seoProjectionCacheMiddleware } from "../middleware/seoProjectionCache";
+import { MOMENT_BY_MOMENT_TITLE, momentByMomentDescription } from "@shared/momentByMomentSeo";
 
 const router = Router();
 
@@ -1516,12 +1517,15 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   },
   {
     pattern: /^\/moment-by-moment$/,
-    handle: async () => arabicHubMeta(
-      "/moment-by-moment",
-      "لحظة بلحظة — سبق",
-      "متابعة لحظية للأحداث الجارية على صحيفة سبق الإلكترونية",
-      buildLinkListHtml("آخر الأخبار لحظة بلحظة", await latestArticleLinks(40)),
-    ),
+    handle: async () => {
+      const links = await latestArticleLinks(40);
+      return arabicHubMeta(
+        "/moment-by-moment",
+        MOMENT_BY_MOMENT_TITLE,
+        momentByMomentDescription(links[0]?.title),
+        buildLinkListHtml("آخر الأخبار لحظة بلحظة", links),
+      );
+    },
   },
   {
     pattern: /^\/daily-brief$/,
