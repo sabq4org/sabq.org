@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { isWriterOnly } from "@/lib/writerAudience";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Header } from "@/components/Header";
@@ -39,7 +41,22 @@ interface NotificationsResponse {
 
 type FilterType = "all" | "ArticlePublished" | "BreakingNews" | "FeaturedArticle";
 
-export default function Notifications() {
+const WriterNotificationsPage = lazy(() => import("@/pages/opinion-author/WriterNotificationsPage"));
+
+/** الكاتب والمراسل: «إشعاراتي» بإطار لوحة الكاتب (المرحلة 3). */
+export default function NotificationsRoute() {
+  const { user, isLoading } = useAuth();
+  if (!isLoading && isWriterOnly(user)) {
+    return (
+      <Suspense fallback={null}>
+        <WriterNotificationsPage />
+      </Suspense>
+    );
+  }
+  return <Notifications />;
+}
+
+function Notifications() {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
   const [filter, setFilter] = useState<FilterType>("all");

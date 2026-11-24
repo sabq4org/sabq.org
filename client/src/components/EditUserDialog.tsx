@@ -404,8 +404,9 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
         });
       }
 
-      // Only update staff data if at least one field has a value
-      if (bioAr || bio || titleAr || title) {
+      // له صفحة كاتب: نرسل دائمًا حتى يُحفظ المسح (حقل فارغ = حذف الصفة/السيرة).
+      // بلا صفحة: لا ننشئها إلا إن كُتب شيء.
+      if (staffData || bioAr || bio || titleAr || title) {
         await apiRequest(`/api/admin/users/${userId}/staff`, {
           method: "PATCH",
           body: JSON.stringify({ bioAr, bio, titleAr, title }),

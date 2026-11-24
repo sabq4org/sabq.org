@@ -532,6 +532,7 @@ import {
 } from "@shared/schema";
 import { pool } from "./db";
 import { paginationOrReject, parseLimit, parseOffset, parsePage } from "./utils/pagination";
+import { ensurePublicStaffRecord, refreshPublicStaffProfile } from "./services/publicBylineService";
 
 function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean }; shouldSave: boolean } {
   const data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean } = {
@@ -6110,6 +6111,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         titleAr,
       });
 
+      await refreshPublicStaffProfile(userId);
       console.log("✅ [UPDATE USER STAFF] Staff data updated successfully", { userId });
       res.json(staffData);
     } catch (error) {
@@ -33526,6 +33528,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { notes } = req.body;
       
       const result = await storage.approveOpinionAuthorApplication(id, req.user.id, notes);
+      // صفحة كاتب عامة كالمراسل: الصفة والسيرة من مصدر واحد في الويب والتطبيقين.
+      await ensurePublicStaffRecord(result.user.id, "opinion_author").catch((err: unknown) =>
+        console.error("[APPROVE] opinion author public profile failed:", err instanceof Error ? err.message : err));
 
       await logActivity({
         userId: req.user.id,

@@ -9,6 +9,7 @@
  *   (بند أبل 5.1.1(v)). ونحذف قائمة الحظر الخاصة بالحساب. فشل آبل لا يوقف الحذف.
  *
  * PUT /api/v1/members/profile
+ *   الكاتب والمراسل لا يعدّلان النبذة من هنا (تُراجع في «كيف يراك القارئ»).
  *   الاسم والنبذة يظهران بجوار التعليقات، فيمرّان بفلتر الكلمات المحظورة
  *   نفسه المطبّق على التعليقات (بند أبل 1.2).
  *
@@ -81,6 +82,13 @@ const PROFILE_TEXT_FIELDS = ["firstName", "lastName", "name", "bio"] as const;
 router.put("/members/profile", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = req.body ?? {};
+    // الكاتب والمراسل: النبذة تُعدّل من «كيف يراك القارئ» ويراجعها المحرر.
+    if (typeof body.bio === "string") {
+      const session = await verifyMemberBearer(req);
+      // استيراد متأخر: خدمة الصفة العامة تفتح قاعدة البيانات عند تحميلها.
+      const { isSelfBioLocked } = await import("../services/publicBylineRequestsService");
+      if (session && (await isSelfBioLocked(session.userId))) delete body.bio;
+    }
     const text = PROFILE_TEXT_FIELDS
       .map((key) => (typeof body[key] === "string" ? body[key].trim() : ""))
       .filter(Boolean)

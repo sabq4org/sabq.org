@@ -1,23 +1,17 @@
+// استفساراتي — المرحلة 2 من خطة لوحة الكاتب: القائمة والمحادثة في شاشة واحدة،
+// وشرائح تصفية بدل بطاقات الأرقام. نفس الصفحة للمراسلين وكتّاب الرأي.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { ArrowRight, Inbox, Loader2, PlusCircle } from "lucide-react";
+import { WriterPageFrame, WriterSurface } from "@/components/writer/WriterPageFrame";
 import {
-  CheckCircle,
-  Clock,
-  Inbox,
-  Loader2,
-  Lock,
-  MessageSquare,
-  PlusCircle,
-} from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
-import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
-import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
+  TICKET_STATUS_CHIP,
+  TICKET_STATUS_LABEL,
+  WriterTicketConversation,
+  formatTicketTime,
+} from "@/components/writer/WriterTicketConversation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,7 +27,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { STATUS_META, type OpinionTicketStatus } from "@/components/opinion-tickets/statusMeta";
+import type { OpinionTicketStatus } from "@/components/opinion-tickets/statusMeta";
 
 interface TicketRow {
   id: string;
@@ -48,41 +42,11 @@ interface ListResponse {
   tickets: TicketRow[];
 }
 
-function formatDate(date: string) {
-  try {
-    return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
-  } catch {
-    return date;
-  }
-}
+type Filter = "all" | OpinionTicketStatus;
+const FILTER_LABEL: Record<Filter, string> = { all: "الكل", open: "مفتوحة", answered: "تمت الإجابة", closed: "مغلقة" };
+const TICKETS_PATH = "/dashboard/opinion-author/tickets";
 
-interface StatCardProps {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  iconColor: string;
-  iconBg: string;
-}
-
-function StatCard({ label, value, icon: Icon, iconColor, iconBg }: StatCardProps) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className={cn("p-2 rounded-lg", iconBg)}>
-            <Icon className={cn("h-5 w-5", iconColor)} />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold">{value.toLocaleString("en-US")}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function OpinionTicketsList() {
+export default function OpinionTicketsList({ selectedId }: { selectedId?: string } = {}) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -111,7 +75,7 @@ export default function OpinionTicketsList() {
       qc.invalidateQueries({ queryKey: ["/api/opinion-tickets"] });
       qc.invalidateQueries({ queryKey: ["/api/opinion-tickets/unread-count"] });
       toast({ title: "تم إرسال الاستفسار بنجاح" });
-      if (resp?.ticket?.id) navigate(`/dashboard/opinion-author/tickets/${resp.ticket.id}`);
+      if (resp?.ticket?.id) navigate(`${TICKETS_PATH}/${resp.ticket.id}`);
     },
     onError: (err: any) =>
       toast({
@@ -123,17 +87,21 @@ export default function OpinionTicketsList() {
 
   const tickets = Array.isArray(data?.tickets) ? data!.tickets : [];
 
-  const stats = useMemo(() => {
-    const open = tickets.filter((t) => t.status === "open").length;
-    const answered = tickets.filter((t) => t.status === "answered").length;
-    const closed = tickets.filter((t) => t.status === "closed").length;
-    return { total: tickets.length, open, answered, closed };
+  const [filter, setFilter] = useState<Filter>("all");
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: tickets.length, open: 0, answered: 0, closed: 0 };
+    tickets.forEach((t) => { c[t.status] = (c[t.status] ?? 0) + 1; });
+    return c;
   }, [tickets]);
+  const shown = filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
+  // على الشاشة العريضة نعرض أول استفسار إن لم يُختر واحد؛ على الجوال تبقى القائمة.
+  const activeId = selectedId ?? shown[0]?.id ?? null;
+  const open = (id: string) => navigate(`${TICKETS_PATH}/${id}`);
 
   const newTicketDialog = (
     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
       <DialogTrigger asChild>
-        <Button className="h-10 gap-2 px-4" data-testid="button-new-ticket">
+        <Button className="h-11 gap-2 rounded-full bg-[#1E9BE6] px-5 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(30,155,230,0.3)] hover:bg-[#178BD0]" data-testid="button-new-ticket">
           <PlusCircle className="h-4 w-4" />
           استفسار جديد
         </Button>
@@ -186,128 +154,113 @@ export default function OpinionTicketsList() {
   );
 
   return (
-    <DashboardLayout>
-      <DashboardPageShell contentClassName="px-4 pb-20 sm:px-6">
-        <DashboardPageHeader
-          icon={MessageSquare}
-          title="استفساراتي"
-          description="تواصل مع إدارة التحرير — نفس الصندوق للمراسلين وكتّاب الرأي"
-          titleTestId="text-page-title"
-          actions={newTicketDialog}
-        />
-
-        {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <Skeleton className="h-4 w-20 mb-2" />
-                  <Skeleton className="h-8 w-16" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard
-              label="إجمالي الاستفسارات"
-              value={stats.total}
-              icon={Inbox}
-              iconColor="text-primary"
-              iconBg="bg-primary/10"
-            />
-            <StatCard
-              label="مفتوحة"
-              value={stats.open}
-              icon={Clock}
-              iconColor="text-yellow-600 dark:text-yellow-400"
-              iconBg="bg-yellow-500/10"
-            />
-            <StatCard
-              label="تمت الإجابة"
-              value={stats.answered}
-              icon={CheckCircle}
-              iconColor="text-green-600 dark:text-green-400"
-              iconBg="bg-green-500/10"
-            />
-            <StatCard
-              label="مغلقة"
-              value={stats.closed}
-              icon={Lock}
-              iconColor="text-muted-foreground"
-              iconBg="bg-muted"
-            />
-          </div>
-        )}
-
-        {/* List */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4">قائمة الاستفسارات</h2>
-
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-lg" />
+    <WriterPageFrame
+      title="استفساراتي"
+      description="تواصل مع إدارة التحرير. الرد يصلك هنا وفي الإشعارات."
+      titleTestId="text-page-title"
+      actions={newTicketDialog}
+    >
+      {isLoading ? (
+        <WriterSurface className="space-y-2 p-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </WriterSurface>
+      ) : tickets.length === 0 ? (
+        <WriterSurface className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+          <Inbox className="h-9 w-9 text-[#8A99A8]" aria-hidden="true" />
+          <p className="text-[15px] font-semibold">لا توجد استفسارات بعد</p>
+          <p className="max-w-sm text-[13px] leading-6 text-[#55667A] dark:text-muted-foreground">
+            اسأل إدارة التحرير عن مقال أو موعد أو أي شيء يخص عملك، ويصلك الرد هنا.
+          </p>
+          <Button
+            onClick={() => setOpenDialog(true)}
+            className="mt-1 h-11 gap-2 rounded-full bg-[#1E9BE6] px-5 font-semibold text-white hover:bg-[#178BD0]"
+            data-testid="button-new-ticket-empty"
+          >
+            <PlusCircle className="h-4 w-4" />
+            أرسل أول استفسار
+          </Button>
+        </WriterSurface>
+      ) : (
+        <>
+          <div className={cn("flex flex-wrap gap-2", selectedId && "hidden lg:flex")}>
+            {(Object.keys(FILTER_LABEL) as Filter[])
+              .filter((k) => k === "all" || counts[k] > 0)
+              .map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setFilter(k)}
+                  className={cn(
+                    "h-9 rounded-full px-4 text-[13px] transition",
+                    filter === k
+                      ? "bg-[#1E9BE6] font-semibold text-white"
+                      : "bg-card text-foreground shadow-[inset_0_0_0_1px_#DCE4EC] hover:bg-[#F7F9FB]",
+                  )}
+                  data-testid={`filter-tickets-${k}`}
+                >
+                  {FILTER_LABEL[k]} {counts[k]}
+                </button>
               ))}
-            </div>
-          ) : tickets.length === 0 ? (
-            <div className="text-center py-12 border rounded-lg bg-muted/20">
-              <Inbox className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">لا توجد استفسارات بعد</p>
-              <Button
-                onClick={() => setOpenDialog(true)}
-                className="h-10 gap-2 px-4"
-                data-testid="button-new-ticket-empty"
-              >
-                <PlusCircle className="h-4 w-4" />
-                أرسل أول استفسار
-              </Button>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-2xl border bg-card">
-              {tickets.map((t, idx) => {
-                const meta = STATUS_META[t.status];
+          </div>
+          <WriterSurface className="flex overflow-hidden lg:h-[640px]">
+            <div
+              className={cn(
+                "w-full shrink-0 overflow-y-auto lg:w-[360px] lg:border-l lg:border-[#EEF2F6] dark:lg:border-border",
+                selectedId && "hidden lg:block",
+              )}
+            >
+              {shown.map((t) => {
+                const active = t.id === activeId;
                 return (
-                  <div
+                  <button
                     key={t.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/dashboard/opinion-author/tickets/${t.id}`)}
-                    onKeyDown={(e) =>
-                      (e.key === "Enter" || e.key === " ") &&
-                      navigate(`/dashboard/opinion-author/tickets/${t.id}`)
-                    }
+                    type="button"
+                    onClick={() => open(t.id)}
                     className={cn(
-                      "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/40",
-                      idx !== tickets.length - 1 && "border-b",
-                      t.hasUnread && "bg-warning/5 dark:bg-warning/5"
+                      "flex w-full flex-col gap-1.5 border-b border-[#EEF2F6] px-5 py-4 text-start transition hover:bg-[#F7F9FB] dark:border-border dark:hover:bg-muted/40",
+                      active && "lg:bg-[#F2F9FE] lg:shadow-[inset_-3px_0_0_#1E9BE6] dark:lg:bg-sky-950/30",
                     )}
                     data-testid={`row-ticket-${t.id}`}
                   >
-                    <div className="h-9 w-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
-                      <MessageSquare className="h-4 w-4 text-warning dark:text-warning" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium text-sm line-clamp-1">{t.title}</h3>
-                        {t.hasUnread && (
-                          <span className="inline-block h-2 w-2 rounded-full bg-warning" aria-label="غير مقروء" />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        آخر نشاط: {formatDate(t.lastMessageAt)}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className={cn("shrink-0", meta.className)}>
-                      {meta.label}
-                    </Badge>
-                  </div>
+                    <span className="flex w-full items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{t.title}</span>
+                      {t.hasUnread && !active && (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#E5484D]" aria-label="رد جديد" />
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", TICKET_STATUS_CHIP[t.status])}>
+                        {TICKET_STATUS_LABEL[t.status]}
+                      </span>
+                      <span className="text-xs text-[#617183] dark:text-muted-foreground">{formatTicketTime(t.lastMessageAt)}</span>
+                    </span>
+                  </button>
                 );
               })}
+              {shown.length === 0 && <p className="px-5 py-8 text-center text-sm text-[#55667A]">لا استفسارات بهذه الحالة.</p>}
             </div>
-          )}
-        </div>
-      </DashboardPageShell>
-    </DashboardLayout>
+            <div className={cn("min-w-0 flex-1 flex-col", selectedId ? "flex" : "hidden lg:flex")}>
+              {selectedId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(TICKETS_PATH)}
+                  className="flex items-center gap-1.5 border-b border-[#EEF2F6] px-5 py-3 text-sm text-[#0B6FA8] lg:hidden"
+                  data-testid="button-back"
+                >
+                  <ArrowRight className="h-4 w-4" /> كل الاستفسارات
+                </button>
+              )}
+              {activeId ? (
+                <WriterTicketConversation key={activeId} ticketId={activeId} />
+              ) : (
+                <p className="m-auto p-8 text-sm text-[#55667A]">اختر استفسارًا لعرضه.</p>
+              )}
+            </div>
+          </WriterSurface>
+        </>
+      )}
+    </WriterPageFrame>
   );
 }

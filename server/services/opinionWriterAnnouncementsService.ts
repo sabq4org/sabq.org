@@ -120,6 +120,15 @@ export async function recordFileDownload(userId: string, fileId: string): Promis
   }
 }
 
+/** معرّفات الملفات التي فتحها هذا الكاتب أو حمّلها (لإخفاء شارة «جديد» عنها). */
+export async function listOpenedFileIds(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ subjectId: opinionWriterEngagement.subjectId })
+    .from(opinionWriterEngagement)
+    .where(and(eq(opinionWriterEngagement.subjectType, SUBJECT_FILE), eq(opinionWriterEngagement.userId, userId)));
+  return Array.from(new Set(rows.map((r) => r.subjectId)));
+}
+
 // ───────────────────────── الإعلانات ─────────────────────────
 
 type AnnouncementRow = typeof opinionWriterAnnouncements.$inferSelect;

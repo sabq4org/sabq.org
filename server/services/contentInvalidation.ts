@@ -151,6 +151,21 @@ function publishRemoteInvalidation(patterns: string[]): void {
   }
 }
 
+/**
+ * Narrow invalidation for non-article caches (e.g. a writer's public profile):
+ * clears matching memory/SWR keys here and on every other pod. No Cloudflare
+ * purge and no feed wipe — callers purge their own edge URLs. Never throws.
+ */
+export function invalidateMemoryPatternsAcrossPods(patterns: string[]): void {
+  if (patterns.length === 0) return;
+  try {
+    memoryCache.invalidatePatterns(patterns);
+  } catch (e: unknown) {
+    console.error("[ContentInvalidation] targeted memory invalidation failed:", e instanceof Error ? e.message : e);
+  }
+  publishRemoteInvalidation(patterns);
+}
+
 export interface InvalidatePublishedContentOptions {
   /** Article slug — when provided, also purges `/article/:slug` and `/api/articles/:slug` from Cloudflare. */
   articleSlug?: string | null;

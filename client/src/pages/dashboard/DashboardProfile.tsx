@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { Redirect } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
+import { isWriterOnly, WRITER_ACCOUNT_PATH } from "@/lib/writerAudience";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -173,7 +176,14 @@ const roleDescriptions: Record<string, string> = {
   chief_editor: "رئاسة التحرير وإدارة المحتوى",
 };
 
-export default function DashboardProfile() {
+/** الكاتب والمراسل: حسابه في «ملفي وخدماتي» (المرحلة 3 من لوحة الكاتب). */
+export default function DashboardProfilePage() {
+  const { user, isLoading } = useAuth();
+  if (!isLoading && isWriterOnly(user)) return <Redirect to={WRITER_ACCOUNT_PATH} />;
+  return <DashboardProfile />;
+}
+
+function DashboardProfile() {
   const { toast } = useToast();
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isBioExpanded, setIsBioExpanded] = useState(false);

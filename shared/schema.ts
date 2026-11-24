@@ -15532,6 +15532,27 @@ export const staffProfiles = pgTable("staff_profiles", {
 ]);
 
 export type StaffProfile = typeof staffProfiles.$inferSelect;
+
+/**
+ * «صفتك تحت اسمك»: طلب الكاتب/المراسل تعديل صفته ونبذته العامتين.
+ * صف واحد لكل مستخدم. القارئ يرى staff.titleAr/bioAr الحالية حتى يعتمد المحرر الطلب.
+ * status: pending | needs_changes | approved | withdrawn
+ */
+export const publicBylineRequests = pgTable("public_byline_requests", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  titleAr: text("title_ar"),
+  bioAr: text("bio_ar"),
+  status: varchar("status", { length: 16 }).notNull(),
+  reviewNote: text("review_note"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("public_byline_requests_status_idx").on(table.status),
+]);
+
+export type PublicBylineRequest = typeof publicBylineRequests.$inferSelect;
 export type StaffDepartment = typeof staffDepartments.$inferSelect;
 export type StaffJobTitle = typeof staffJobTitles.$inferSelect;
 

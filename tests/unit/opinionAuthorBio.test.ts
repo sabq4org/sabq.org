@@ -28,13 +28,14 @@ describe("cleanOpinionAuthorBio", () => {
     expect(cleanOpinionAuthorBio("سارة علي، باحثة اجتماعية", "سارة علي")).toBe("باحثة اجتماعية");
   });
 
-  it("keeps the first sentence, strips links, and caps the length", () => {
+  it("keeps the first sentence and strips links", () => {
     expect(cleanOpinionAuthorBio("https://x.com/a\nمحام ومستشار قانوني. له مؤلفات")).toBe(
       "محام ومستشار قانوني",
     );
+  });
+
+  it("shows the generic title instead of cutting a long sentence", () => {
     const long = "كاتب ".repeat(30).trim();
-    const result = cleanOpinionAuthorBio(long);
-    expect(result.endsWith("…")).toBe(true);
-    expect(result.length).toBeLessThanOrEqual(66);
+    expect(cleanOpinionAuthorBio(long)).toBe("كاتب رأي");
   });
 });
