@@ -85,9 +85,21 @@ function OpinionRow({ article, eager }: { article: FrontArticle; eager?: boolean
       data-testid={`opinion-row-${article.id}`}
     >
       <div className="flex items-center gap-3 sm:col-start-1">
-        <WriterAvatar name={name} src={article.author?.profileImageUrl} />
+        {writerHref ? (
+          <Link href={writerHref} aria-hidden="true" tabIndex={-1} className="shrink-0">
+            <WriterAvatar name={name} src={article.author?.profileImageUrl} />
+          </Link>
+        ) : (
+          <WriterAvatar name={name} src={article.author?.profileImageUrl} />
+        )}
         <div className="flex-1 min-w-0">
-          <div className="text-[15px] font-semibold truncate">{name}</div>
+          {writerHref ? (
+            <Link href={writerHref} className="block text-[15px] font-semibold truncate text-foreground hover:text-primary" data-testid={`link-opinion-writer-${article.id}`}>
+              {name}
+            </Link>
+          ) : (
+            <div className="text-[15px] font-semibold truncate">{name}</div>
+          )}
           <div className="text-[13px] text-muted-foreground truncate">
             {role}
             {article.category?.nameAr ? ` · ${article.category.nameAr}` : ""}
@@ -389,7 +401,13 @@ export default function OpinionPage() {
                               {a.title}
                             </Link>
                             <span className="text-xs sm:text-[13px] text-muted-foreground">
-                              {getOpinionAuthorName(a)}
+                              {authorHref(getOpinionAuthorName(a)) ? (
+                                <Link href={authorHref(getOpinionAuthorName(a))!} className="text-muted-foreground hover:text-primary">
+                                  {getOpinionAuthorName(a)}
+                                </Link>
+                              ) : (
+                                getOpinionAuthorName(a)
+                              )}
                               {a.publishedAt ? ` · ${formatArticleTimestamp(new Date(a.publishedAt))}` : ""}
                             </span>
                           </div>
