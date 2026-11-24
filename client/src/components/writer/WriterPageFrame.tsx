@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { cn } from "@/lib/utils";
 
 type WriterPageFrameProps = {
+  /** سطر صغير فوق العنوان، اختياري (لا يتكرر اسم «لوحة الكاتب» في كل صفحة). */
   eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -14,8 +15,13 @@ type WriterPageFrameProps = {
   className?: string;
 };
 
+/**
+ * رأس الصفحة: شريط أبيض بعرض المساحة كلها وخط رفيع تحته، والعنوان والوصف
+ * يمينًا والأفعال يسارًا على السطر نفسه، ثم المحتوى على خلفية #F4F7FB.
+ * لا مسار تنقل فوقه ولا صندوق داخلي (DashboardLayout fullBleed).
+ */
 export function WriterPageFrame({
-  eyebrow = "لوحة الكاتب",
+  eyebrow,
   title,
   description,
   actions,
@@ -24,21 +30,25 @@ export function WriterPageFrame({
   className,
 }: WriterPageFrameProps) {
   return (
-    <DashboardLayout>
-      <div className="min-h-full bg-[#F4F7FB] text-[#1B2B3A] dark:bg-background dark:text-foreground" dir="rtl">
-        <div className={cn("w-full max-w-[1200px] space-y-6 px-4 pb-16 pt-6 sm:px-8 sm:pt-9", className)}>
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <DashboardLayout fullBleed>
+      <div className="min-h-full text-[#1B2B3A] dark:text-foreground" dir="rtl">
+        <header className="border-b border-[#E6ECF2] bg-white dark:border-border dark:bg-card">
+          <div className="flex w-full max-w-[1200px] flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-8 sm:py-6">
             <div className="min-w-0 space-y-1">
-              {eyebrow ? <p className="text-[13px] text-[#55667A] dark:text-muted-foreground">{eyebrow}</p> : null}
-              <h1 className="text-2xl font-bold leading-tight sm:text-[28px]" data-testid={titleTestId}>
+              {eyebrow ? (
+                <p className="text-[13px] font-medium text-[#0B6FA8] dark:text-primary">{eyebrow}</p>
+              ) : null}
+              <h1 className="text-[22px] font-bold leading-snug sm:text-[26px]" data-testid={titleTestId}>
                 {title}
               </h1>
               {description ? (
-                <p className="text-sm leading-6 text-[#55667A] dark:text-muted-foreground">{description}</p>
+                <p className="max-w-2xl text-sm leading-6 text-[#55667A] dark:text-muted-foreground">{description}</p>
               ) : null}
             </div>
-            {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-          </header>
+            {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+          </div>
+        </header>
+        <div className={cn("w-full max-w-[1200px] space-y-6 px-4 pb-16 pt-6 sm:px-8 sm:pt-8", className)}>
           {children}
         </div>
       </div>

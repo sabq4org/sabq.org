@@ -48,6 +48,7 @@ import {
   Wand2,
   Loader2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isContributorRoleOnly } from "@shared/effectiveRoles";
@@ -88,6 +89,11 @@ interface RichTextEditorProps {
   dir?: "rtl" | "ltr";
   disabled?: boolean;
   imageUploadPurpose?: string;
+  /**
+   * compact: شريط هادئ لكاتب الرأي (المرحلة 4): عريض، مائل، عنوان فرعي، اقتباس،
+   * رابط، صورة، و«أدوات أكثر» يفتح الشريط الكامل. full (الافتراضي): كما هو.
+   */
+  toolbarVariant?: "full" | "compact";
 }
 
 /** الجدول الذي يقف فيه المؤشر (أقرب عقدة table فوق التحديد) */
@@ -194,7 +200,10 @@ export function RichTextEditor({
   dir = "rtl",
   disabled = false,
   imageUploadPurpose,
+  toolbarVariant = "full",
 }: RichTextEditorProps) {
+  const isCompactToolbar = toolbarVariant === "compact";
+  const [showAllTools, setShowAllTools] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
@@ -555,7 +564,7 @@ export function RichTextEditor({
 
   return (
     <div
-      className="rich-text-editor border rounded-xl"
+      className={cn("rich-text-editor rounded-xl", isCompactToolbar ? "rich-text-editor--compact border-0" : "border")}
       dir={dir}
       data-editor-shell
       data-testid="rich-text-editor"
@@ -563,7 +572,60 @@ export function RichTextEditor({
       {/* الشريط اللاصق: أدوات المحرر + أدوات الجدول معًا، حتى لا تختفي أدوات
           الجدول خارج الشاشة حين يكون الجدول في منتصف خبر طويل. */}
       <div className="rich-text-editor__chrome">
-      {/* Toolbar */}
+      {isCompactToolbar && !showAllTools && (
+        <div
+          className="rich-text-editor__toolbar rich-text-editor__toolbar--compact flex flex-wrap items-center gap-1 px-1 py-2"
+          data-testid="writer-compact-toolbar"
+        >
+          {(
+            [
+              { key: "bold", label: "ع", title: "عريض", active: editor.isActive("bold"), run: () => editor.chain().focus().toggleBold().run(), bold: true },
+              { key: "italic", label: "مائل", title: "مائل", active: editor.isActive("italic"), run: () => editor.chain().focus().toggleItalic().run(), bold: false },
+              { key: "subheading", label: "عنوان فرعي", title: "عنوان فرعي", active: editor.isActive("heading", { level: 2 }), run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), bold: false },
+              { key: "quote", label: "اقتباس", title: "اقتباس", active: editor.isActive("blockquote"), run: () => editor.chain().focus().toggleBlockquote().run(), bold: false },
+              {
+                key: "link",
+                label: "رابط",
+                title: "إضافة رابط",
+                active: editor.isActive("link"),
+                run: () => {
+                  const previousUrl = editor.getAttributes("link").href;
+                  setLinkUrl(previousUrl || "");
+                  setLinkDialogOpen(true);
+                },
+                bold: false,
+              },
+              { key: "image", label: "صورة", title: "إضافة صورة", active: false, run: () => setImageDialogOpen(true), bold: false },
+            ]
+          ).map((tool) => (
+            <button
+              key={tool.key}
+              type="button"
+              onClick={tool.run}
+              title={tool.title}
+              aria-pressed={tool.active}
+              className={cn(
+                "no-min-touch-size inline-flex h-9 items-center rounded-full px-3.5 text-sm transition-colors",
+                tool.active ? "bg-[#1E9BE6] text-white" : "text-[#1B2B3A] hover:bg-[#EEF4FA] dark:text-foreground dark:hover:bg-muted",
+                tool.bold && "font-bold",
+              )}
+              data-testid={`button-writer-tool-${tool.key}`}
+            >
+              {tool.label}
+            </button>
+          ))}
+          <span className="mx-1 h-5 w-px bg-[#E6ECF2] dark:bg-border" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setShowAllTools(true)}
+            className="no-min-touch-size inline-flex h-9 items-center rounded-full px-3.5 text-sm text-[#0B6FA8] hover:bg-[#EEF4FA] dark:text-primary dark:hover:bg-muted"
+            data-testid="button-writer-tool-more"
+          >
+            أدوات أكثر
+          </button>
+        </div>
+      )}
+      {(!isCompactToolbar || showAllTools) && (
       <div className="rich-text-editor__toolbar flex flex-wrap items-center gap-0.5 sm:gap-1 px-2 py-1.5 border-b bg-muted/30 backdrop-blur-sm">
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -874,7 +936,18 @@ export function RichTextEditor({
         >
           <Redo className="h-4 w-4" />
         </ToolbarButton>
+        {isCompactToolbar && (
+          <button
+            type="button"
+            onClick={() => setShowAllTools(false)}
+            className="no-min-touch-size ms-1 inline-flex h-8 items-center rounded-full px-3 text-xs text-[#0B6FA8] hover:bg-[#EEF4FA] dark:text-primary dark:hover:bg-muted"
+            data-testid="button-writer-tool-less"
+          >
+            أدوات أقل
+          </button>
+        )}
       </div>
+      )}
 
       {/* أدوات الجدول — تظهر فقط والمؤشر داخل جدول */}
       {tableState?.inTable && (

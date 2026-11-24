@@ -1647,6 +1647,37 @@ html[data-dashboard-theme] .text-indigo-600,
     border-start-end-radius: inherit;
   }
 
+  /* محرر كاتب الرأي (المرحلة 4): سطح كتابة هادئ بلا إطار ولا هالة تركيز،
+     وشريط أدوات صغير شفاف يلتصق أعلى منطقة الكتابة. */
+  .rich-text-editor--compact,
+  .rich-text-editor--compact:focus-within {
+    border-color: transparent;
+    box-shadow: none;
+    background-color: transparent;
+  }
+  .rich-text-editor--compact .rich-text-editor__toolbar--compact {
+    background-color: hsl(var(--card));
+    border-bottom: 1px solid #EEF2F6;
+    border-radius: 0;
+  }
+  .rich-text-editor--compact .rich-text-editor__surface,
+  .rich-text-editor--compact .rich-text-editor__content {
+    background-color: transparent;
+  }
+  .rich-text-editor--compact .ProseMirror {
+    background-color: transparent;
+    font-size: 18px;
+    line-height: 2;
+  }
+
+  /* الفقرة التي تقصدها ملاحظة المحرر (زخرفة مؤقتة، لا تُحفظ في النص) */
+  .rich-text-editor .ProseMirror .writer-note-target {
+    background-color: #FFF3D6;
+    box-shadow: inset -3px 0 0 #E0A23B;
+    border-radius: 6px;
+    padding-inline: 10px;
+  }
+
   .rich-text-editor__surface {
     border-end-start-radius: inherit;
     border-end-end-radius: inherit;

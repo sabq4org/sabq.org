@@ -60,11 +60,13 @@ import { DashboardSessionLoading } from "./DashboardSessionLoading";
 
 interface DashboardLayoutProps {
   children: ReactNode;
+  /** صفحات تملأ مساحة المحتوى بخلفيتها ورأسها الخاص (لوحة الكاتب): بلا حشوة ولا مسار تنقل. */
+  fullBleed?: boolean;
 }
 
 const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
   const { user, isLoading, isUnavailable, isRetrying, retryAuth } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
@@ -789,8 +791,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <AutoPublishBanner />
           <MeetingCallAlert />
 
-          <div className="flex-1 overflow-auto p-3 md:p-6">
-            <AppBreadcrumbs
+          <div
+            className={
+              fullBleed
+                ? "flex-1 overflow-auto bg-[#F4F7FB] dark:bg-background"
+                : "flex-1 overflow-auto p-3 md:p-6"
+            }
+          >
+            {fullBleed ? null : <AppBreadcrumbs
               role={role}
               flags={flags}
               permissions={user?.permissions || []}
@@ -801,13 +809,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     ? [user.role]
                     : []
               }
-            />
+            />}
             {/* مساحة الكاتب تعرض الترخيص في بطاقة «خطوتك التالية» — لا نكرره هنا */}
             {showMediaLicenseWarningBanner && location.split("?")[0] !== "/dashboard/opinion-author" ? (
               <button
                 type="button"
                 onClick={openMediaLicenseForm}
-                className="mb-4 w-full rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-start text-sm font-medium leading-relaxed text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-950/70"
+                className={cn("mb-4 w-full rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-start text-sm font-medium leading-relaxed text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-950/70", fullBleed && "mx-4 mt-4 w-[calc(100%-2rem)] sm:mx-8 sm:w-[calc(100%-4rem)]")}
                 data-testid="banner-media-license-warning"
               >
                 {createBlockedReason}

@@ -152,9 +152,17 @@ import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
 import { MEDIA_LICENSE_DASHBOARD_WARNING, MEDIA_LICENSE_REQUIRED_MESSAGE } from "@shared/mediaLicense";
 import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import {
-  WriterEditorialNoticesAside,
   WriterEditorialNoticesMobile,
 } from "@/components/WriterEditorialNotices";
+import {
+  WriterEditorCanvas,
+  WriterEditorNoteCard,
+  WriterEditorTopBar,
+  WriterMobileReadinessBar,
+  WriterSubmitRail,
+  highlightPassageInEditor,
+} from "@/components/writer/editor/WriterEditorChrome";
+import { buildWriterReadiness, findQuotedPassage, formatWriterSlot } from "@/lib/writerSubmitReadiness";
 import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
@@ -744,6 +752,7 @@ export default function ArticleEditor() {
   // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره من حوار في مكانه
   // (دون مغادرة المحرر وفقدان المسودة)، ثم يُستكمل الإرسال تلقائياً.
   const { data: writerOwnSchedule } = useQuery<{
+    banner?: { weekday: number; publishTime: string; nextPublishAt: string } | null;
     canChoose?: boolean;
     dayLoads?: number[];
     activeArticle?: {
@@ -765,6 +774,17 @@ export default function ArticleEditor() {
       writerOwnSchedule?.activeArticle &&
       (isNewArticle || writerOwnSchedule.activeArticle.id !== id),
   );
+
+  // ملاحظة المحرر لكاتب الرأي: إن اقتبست جملة من المقال نظلّل فقرتها مرة عند الفتح.
+  // يُعاد التظليل بعد كل تغيير في النص لأن المحرر قد يعيد رسم الفقرة فيسقط الصنف.
+  useEffect(() => {
+    if (!isOpinionAuthor || reviewStatus !== "needs_changes" || !reviewNotes || !editorInstance) return;
+    const timer = window.setTimeout(() => {
+      const passage = findQuotedPassage(reviewNotes, editorInstance.getText());
+      if (passage) highlightPassageInEditor(editorInstance, passage, { scroll: false });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [isOpinionAuthor, reviewStatus, reviewNotes, editorInstance, content]);
 
   const handleSubmitForReviewGated = () => {
     if (hasBlockingActiveOpinionArticle && writerOwnSchedule?.activeArticle) {
@@ -2669,6 +2689,88 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     }
   };
 
+  // ── محرر كاتب الرأي (المرحلة 4): «قبل الإرسال» وملاحظة المحرر وكتلة الصورة ──
+  const writerReadinessItems = buildWriterReadiness({
+    title: title || "",
+    hasImage: Boolean(imageUrl),
+    words: plainContentWords,
+    slotMissing: Boolean(isOpinionAuthor && writerOwnSchedule?.canChoose),
+    slotLabel: formatWriterSlot(writerOwnSchedule?.banner?.weekday, writerOwnSchedule?.banner?.publishTime),
+  });
+  const writerNoteVisible = Boolean(isOpinionAuthor && reviewStatus === "needs_changes" && reviewNotes);
+  const writerNotePassage = writerNoteVisible ? findQuotedPassage(reviewNotes, plainContentText) : null;
+  const writerNoteCard = writerNoteVisible ? (
+    <WriterEditorNoteCard
+      notes={reviewNotes || ""}
+      passage={writerNotePassage}
+      onShowPassage={() => highlightPassageInEditor(editorInstance, writerNotePassage)}
+    />
+  ) : null;
+  const writerImageBlock = isOpinionAuthor ? (
+    <div className="space-y-2" data-testid="writer-image-block">
+      {imageUrl ? (
+        <div className="relative overflow-hidden rounded-[18px] bg-[#EEF2F6]">
+          <img src={imageUrl} alt="" className="aspect-[16/9] w-full object-cover" data-testid="img-preview" />
+          <div className="absolute bottom-3 start-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => document.getElementById("writer-image-upload")?.click()}
+              disabled={isUploadingImage || isLockedByOther}
+              className="h-9 rounded-full bg-white/95 px-4 text-sm text-[#1B2B3A] shadow-sm"
+              data-testid="button-upload-image"
+            >
+              تغيير الصورة
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImageUrl("");
+                setIsAiGeneratedImage(false);
+                setThumbnailUrl("");
+                setHeroImageMediaId(null);
+                setImageFocalPoint(null);
+              }}
+              disabled={isLockedByOther}
+              className="h-9 rounded-full bg-white/95 px-4 text-sm text-[#B42318] shadow-sm"
+              data-testid="button-delete-image"
+            >
+              حذف
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => document.getElementById("writer-image-upload")?.click()}
+          disabled={isUploadingImage || isLockedByOther}
+          className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#C9D4DF] bg-white/60 px-4 py-3.5 text-start hover:border-[#1E9BE6] hover:bg-white dark:border-border dark:bg-card/60"
+          data-testid="button-upload-image"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EAF5FD] text-[#1E9BE6]">
+            {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-[#1B2B3A] dark:text-foreground">أضف صورة للمقال</span>
+            <span className="block text-xs text-[#55667A] dark:text-muted-foreground">اختيارية. قد تستبدلها هيئة التحرير إن لم تناسب.</span>
+          </span>
+        </button>
+      )}
+      {isUploadingImage && (
+        <div className="space-y-1.5" role="status" aria-live="polite" data-testid="hero-upload-progress">
+          <p className="text-xs text-muted-foreground">{newsImageUploadLabel(imageUploadProgress)}</p>
+          <Progress value={imageUploadProgress.percent} className="h-1.5" />
+        </div>
+      )}
+      <input
+        id="writer-image-upload"
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+    </div>
+  ) : null;
+
   const statusBadgeInfo = (() => {
     if (isNewArticle) {
       return { label: "مسودة جديدة", className: "border-border/80 bg-muted/60 text-muted-foreground" };
@@ -2692,7 +2794,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
   })();
 
   return (
-    <DashboardLayout>
+    <DashboardLayout fullBleed={isOpinionAuthor}>
       <BannedWordNotice block={bannedWordBlock} content={content} onDismiss={() => setBannedWordBlock(null)} />
       {/* Draft Recovery Dialog */}
       {/* Title Proofread Dialog */}
@@ -2794,7 +2896,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       {/* Scope wrapper for the per-card CSS below. Page background is
           deliberately left at the DashboardLayout default so this
           editor matches the rest of the dashboard. */}
-      <div className="article-editor-stage" dir="rtl">
+      <div className={cn("article-editor-stage", isOpinionAuthor && "px-3 pb-28 md:px-6 lg:pb-12")} dir="rtl">
         <style>{`
           /* محايد: بطاقات بيضاء مضغوطة ومنظمة بصرياً لغرفة الأخبار */
           .article-editor-stage .shadcn-card {
@@ -2962,7 +3064,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         {/* Lock Status Indicator - When current user owns the lock.
             لا تظهر مع وجود محررين آخرين — رسالة «حصري» بجوار «فلان يحرّر الآن
             أيضًا» كانت تقرأ كتناقض وتوحي بتصريحٍ بالمتابعة رغم التحذير. */}
-        {!isNewArticle && lockStatus?.isOwner && coEditors.length === 0 && (
+        {!isNewArticle && lockStatus?.isOwner && coEditors.length === 0 && !isOpinionAuthor && (
           <div 
             className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"
             data-testid="lock-status"
@@ -2977,7 +3079,31 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           <ArticleEditRequestsBanner articleId={id} enabled={!!user && hasAnyPermission(user, "articles.edit_any", "articles.publish")} />
         )}
 
+        {isOpinionAuthor && (
+          <WriterEditorTopBar
+            statusLabel={statusBadgeInfo.label}
+            saveState={autoSaveStatus === "saving" || autoSaveStatus === "saved" ? autoSaveStatus : "idle"}
+            lastSavedAt={lastAutoSaveTime}
+            onPreview={!isNewArticle && id ? () => window.open(`/dashboard/article/${id}/preview`, "_blank") : undefined}
+            onSaveDraft={() => handleSave(false)}
+            onSubmit={handleSubmitForReviewGated}
+            isSaving={isSaving || submitReviewMutation.isPending}
+            submitDisabled={isSaving || submitReviewMutation.isPending || isLockedByOther || hasBlockingActiveOpinionArticle}
+            isResubmit={reviewStatus === "needs_changes"}
+            saveLabel={status === "scheduled" || status === "published" ? "حفظ التعديلات" : "حفظ كمسودة"}
+          />
+        )}
+        {isOpinionAuthor && ownSubmissionBlocked ? (
+          <div
+            className="mx-auto mb-4 max-w-[1120px] rounded-[18px] bg-[#FFF8EC] px-4 py-3 text-sm text-[#7A4B00] shadow-[inset_0_0_0_1px_#F5DDB0]"
+            data-testid="alert-media-license-required"
+          >
+            {MEDIA_LICENSE_REQUIRED_MESSAGE}
+          </div>
+        ) : null}
+
         {/* Page Header with Actions - Newsroom Command Bar */}
+        {!isOpinionAuthor && (
         <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-sm">
           {/* Title & Status Row */}
           <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
@@ -3182,10 +3308,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
           </div>
         </div>
+        )}
 
         {hasBlockingActiveOpinionArticle && writerOwnSchedule?.activeArticle && (
           <div
-            className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-400/70 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-900/25 sm:flex-row sm:items-center sm:justify-between"
+            className="mx-auto mb-4 flex max-w-[1120px] flex-col gap-2 rounded-xl border border-amber-400/70 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-900/25 sm:flex-row sm:items-center sm:justify-between"
             data-testid="banner-opinion-pipeline-busy"
           >
             <div className="flex items-start gap-2.5">
@@ -3217,28 +3344,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         )}
 
-        {isOpinionAuthor && writerOwnSchedule?.canChoose && (
-          <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20 sm:flex-row sm:items-center sm:justify-between" data-testid="banner-day-missing">
-            <div className="flex items-start gap-2.5">
-              <Calendar className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-              <div>
-                <p className="text-sm font-bold">لم تحدد يومك الأسبوعي للنشر بعد</p>
-                <p className="text-xs text-muted-foreground">
-                  اكتب مقالك واحفظه بحرية — لكن لن يمكن إرساله للمراجعة قبل تحديد يوم نشرك الأسبوعي.
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/40"
-              onClick={() => setShowDayGate(true)}
-              data-testid="button-pick-day-now"
-            >
-              تحديد اليوم الآن
-            </Button>
-          </div>
-        )}
+        {/* اليوم الأسبوعي لكاتب الرأي صار بندًا في «قبل الإرسال» (الشريط الجانبي، وشريط الجوال السفلي). */}
 
         <Dialog open={showDayGate} onOpenChange={(open) => { if (!open) { dayGateContinueRef.current = false; } setShowDayGate(open); }}>
           <DialogContent className="max-w-lg" data-testid="dialog-day-gate">
@@ -3253,11 +3359,30 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </DialogContent>
         </Dialog>
 
-        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:items-start lg:pb-10"}>
+        <div className={isOpinionAuthor ? "mx-auto grid max-w-[1120px] grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:items-start lg:pb-10"}>
           {/* Main Content Area — contents على الموبايل لدمج الترتيب مع الشريط الجانبي */}
           <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "contents lg:col-span-8 lg:flex lg:min-w-0 lg:flex-col lg:gap-5"}>
             {isOpinionAuthor && (
-              <div className="lg:hidden">
+              <WriterEditorCanvas
+                title={title}
+                onTitleChange={handleTitleChange}
+                titleDisabled={isLockedByOther}
+                topNotice={writerNoteCard}
+                image={writerImageBlock}
+              >
+                <RichTextEditor
+                  content={content}
+                  onChange={setContent}
+                  placeholder="ابدأ مقالك هنا..."
+                  editorRef={setEditorInstance}
+                  disabled={isLockedByOther}
+                  imageUploadPurpose="article-inline"
+                  toolbarVariant="compact"
+                />
+              </WriterEditorCanvas>
+            )}
+            {isOpinionAuthor && (
+              <div className="mx-auto w-full max-w-[760px] lg:hidden">
                 <WriterEditorialNoticesMobile />
               </div>
             )}
@@ -3287,7 +3412,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </RadioGroup>
               </div>
             )}
-            {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
+            {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && !isOpinionAuthor && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-card dark:border-border p-4 space-y-3">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
                   يؤسفنا إبلاغكم بوجود بعض الملاحظات على {articleType === "opinion" ? "المقال" : "الخبر"}
@@ -3376,6 +3501,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               );
             })()}
             {/* Content panel — title/subtitle unified; order يتحكم بترتيب الموبايل */}
+            {!isOpinionAuthor && (<>
             <div className="contents" data-editor-panel="content-head">
             {/* Title & Subtitle with AI */}
             <Collapsible
@@ -3522,7 +3648,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </Collapsible>
             </div>
 
+            </>)}
+
             {/* Media panel — مباشرة بعد العنوان وقبل المحتوى */}
+            {!isOpinionAuthor && (
             <div className="order-[40] space-y-3.5 lg:order-none" data-editor-panel="media" id="editor-section-media">
             {/* Featured Image */}
             {isInfographicMode && (
@@ -4212,9 +4341,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             </div>
+            )}
 
             <div className="contents" data-editor-panel="content-body">
-            {/* Content Editor */}
+            {/* Content Editor (كاتب الرأي يكتب في WriterEditorCanvas أعلاه) */}
+            {!isOpinionAuthor && (
             <Card className="order-[50] lg:order-none" id="editor-section-content">
               <CardHeader className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -4360,6 +4491,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </CardContent>
             </Card>
+            )}
 
             {/* Excerpt */}
             {!isOpinionAuthor && <Card className="order-[55] lg:order-none">
@@ -4626,7 +4758,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
           </div>
 
-          {isOpinionAuthor && <WriterEditorialNoticesAside />}
+          {isOpinionAuthor && (
+            <WriterSubmitRail
+              items={writerReadinessItems}
+              onPickDay={() => setShowDayGate(true)}
+              note={writerNoteCard}
+            />
+          )}
 
           {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى.
               لا نستخدم sticky+max-h هنا: كانت تقصّ أسفل السايدبار (SEO/الكلمات)
@@ -5782,6 +5920,18 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         </div>
        </div>
       </div>
+
+      {isOpinionAuthor && (
+        <WriterMobileReadinessBar
+          items={writerReadinessItems}
+          onPickDay={() => setShowDayGate(true)}
+          onSaveDraft={() => handleSave(false)}
+          onSubmit={handleSubmitForReviewGated}
+          isSaving={isSaving || submitReviewMutation.isPending}
+          submitDisabled={isSaving || submitReviewMutation.isPending || isLockedByOther || hasBlockingActiveOpinionArticle}
+          isResubmit={reviewStatus === "needs_changes"}
+        />
+      )}
 
       {/* Mobile sticky actions */}
       {!isOpinionAuthor && (
