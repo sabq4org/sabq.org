@@ -197,7 +197,7 @@ struct HomeFeedView: View {
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
 
-                    } else if !articlesStore.breakingNews.isEmpty {
+                    } else if !refresh, !articlesStore.breakingNews.isEmpty {
                         breakingNewsSection
 
                     }
@@ -670,6 +670,9 @@ struct HomeFeedView: View {
     /// خبر العاجل المعروض في بطاقته (حين لا يعمل شريط اللوحة). يُستبعد من
     /// «آخر الأخبار» فقط؛ الهيرو يعرضه أيضًا.
     private var displayedBreakingArticle: Article? {
+        // على الهاتف لا سطر عاجل فوق البارز: الخبر العاجل يحمل وسم «عاجل» في
+        // البارز نفسه، والشريط العلوي لشريط لوحة التحكم وحده (طلب المالك 2026-11-24).
+        if refresh { return nil }
         if let ticker = breakingTicker, !ticker.headlines.isEmpty { return nil }
         return articlesStore.breakingNews.first
     }
