@@ -2739,21 +2739,24 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => document.getElementById("writer-image-upload")?.click()}
-          disabled={isUploadingImage || isLockedByOther}
-          className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#C9D4DF] bg-white/60 px-4 py-3.5 text-start hover:border-[#1E9BE6] hover:bg-white dark:border-border dark:bg-card/60"
-          data-testid="button-upload-image"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EAF5FD] text-[#1E9BE6]">
-            {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+        <div className="flex items-center gap-3.5 rounded-[22px] bg-white px-4 py-4 shadow-[0_2px_14px_rgba(27,43,58,0.06)] dark:bg-card sm:px-6">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF5FD] text-[#1E9BE6] dark:bg-primary/10 dark:text-primary">
+            {isUploadingImage ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5" />}
           </span>
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-[#1B2B3A] dark:text-foreground">أضف صورة للمقال</span>
-            <span className="block text-xs text-[#55667A] dark:text-muted-foreground">اختيارية. قد تستبدلها هيئة التحرير إن لم تناسب.</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-[#1B2B3A] dark:text-foreground">صورة المقال</span>
+            <span className="block text-[13px] text-[#55667A] dark:text-muted-foreground">اختيارية. قد تستبدلها هيئة التحرير إن لم تناسب.</span>
           </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => document.getElementById("writer-image-upload")?.click()}
+            disabled={isUploadingImage || isLockedByOther}
+            className="inline-flex h-10 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-[#0B6FA8] hover:bg-[#EAF5FD] disabled:opacity-60 dark:text-primary dark:hover:bg-muted"
+            data-testid="button-upload-image"
+          >
+            أضف صورة
+          </button>
+        </div>
       )}
       {isUploadingImage && (
         <div className="space-y-1.5" role="status" aria-live="polite" data-testid="hero-upload-progress">
@@ -3081,6 +3084,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
         {isOpinionAuthor && (
           <WriterEditorTopBar
+            heading={isNewArticle ? "مقال جديد" : "تعديل مقالي"}
             statusLabel={statusBadgeInfo.label}
             saveState={autoSaveStatus === "saving" || autoSaveStatus === "saved" ? autoSaveStatus : "idle"}
             lastSavedAt={lastAutoSaveTime}
