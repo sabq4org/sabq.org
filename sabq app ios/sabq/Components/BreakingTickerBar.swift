@@ -17,6 +17,7 @@ struct BreakingTickerBar: View {
 
     @State private var index = 0
     @Environment(\.openURL) private var openURL
+    @Environment(\.homeRefresh) private var homeRefresh
 
     /// 5s cadence matches the web ticker's auto-advance.
     private let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
@@ -105,17 +106,21 @@ struct BreakingTickerBar: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, SabqLayout.space16)
-        .padding(.vertical, SabqLayout.space12)
+        .padding(.horizontal, homeRefresh ? 0 : SabqLayout.space16)
+        .padding(.vertical, homeRefresh ? SabqLayout.space4 : SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.breaking.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .stroke(SabqTheme.breaking.opacity(0.18), lineWidth: 1)
-        )
+        .background {
+            if !homeRefresh {
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.breaking.opacity(0.07))
+            }
+        }
+        .overlay {
+            if !homeRefresh {
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(SabqTheme.breaking.opacity(0.18), lineWidth: 1)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("عاجل: \(headline.headline)")
     }
