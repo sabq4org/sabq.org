@@ -18,6 +18,13 @@ enum SabqFonts {
         editorial(.title, size: size, weight: .bold)
     }
 
+    /// عنوان خبر في SwiftUI بخط IBM Plex Sans Arabic (اعتماد المالك 2026-11-24:
+    /// العناوين بـPlex والتفاصيل بخط النظام). يتبع Dynamic Type عبر `relativeTo`.
+    nonisolated static func newsHeadline(size: CGFloat, bold: Bool = true,
+                                         relativeTo style: Font.TextStyle = .title3) -> Font {
+        .custom(bold ? SabqFonts.bold : SabqFonts.semibold, size: size, relativeTo: style)
+    }
+
     /// Slightly lighter weight for sub-headings inside articles.
     nonisolated static func subhead(size: CGFloat) -> Font {
         editorial(.title3, size: size, weight: .semibold)

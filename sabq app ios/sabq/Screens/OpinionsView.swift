@@ -197,7 +197,7 @@ struct OpinionsView: View {
                     }
 
                     Text(opinion.title)
-                        .font(SabqFonts.app(size: 19, weight: .bold))
+                        .font(SabqFonts.newsHeadline(size: 19))
                         .foregroundStyle(SabqTheme.textPrimary)
                         .lineSpacing(3)
                         .multilineTextAlignment(.leading)

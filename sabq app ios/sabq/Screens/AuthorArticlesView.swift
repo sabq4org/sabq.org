@@ -307,7 +307,7 @@ struct AuthorArticlesView: View {
                             .font(SabqType.meta.font)
                             .foregroundStyle(SabqTheme.textTertiary)
                         Text(article.title)
-                            .font(SabqFonts.app(size: 20, weight: .bold))
+                            .font(SabqFonts.newsHeadline(size: 20))
                             .foregroundStyle(SabqTheme.textPrimary)
                             .lineSpacing(3)
                             .multilineTextAlignment(.leading)
