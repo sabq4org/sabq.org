@@ -16315,6 +16315,55 @@ export const opinionWriterEngagement = pgTable("opinion_writer_engagement", {
 
 export type OpinionWriterEngagement = typeof opinionWriterEngagement.$inferSelect;
 
+// إضافات القارئ على مقال الرأي (shared/opinionReaderExtras.ts): «جملة المقال» التي
+// يختارها الكاتب لبطاقة المشاركة، وتفعيل «أوافق / لا أوافق» في نهاية المقال.
+// الأصوات نفسها في article_polls/poll_options/poll_votes (استطلاع بخيارين يُنشأ عند أول عرض).
+// migrations/20261124_opinion_reader_extras.sql
+export const opinionArticleExtras = pgTable("opinion_article_extras", {
+  articleId: varchar("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  pullQuote: text("pull_quote"),
+  agreeVoteEnabled: boolean("agree_vote_enabled").notNull().default(false),
+  agreePollId: varchar("agree_poll_id").references(() => articlePolls.id, { onDelete: "set null" }),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type OpinionArticleExtras = typeof opinionArticleExtras.$inferSelect;
+
+// فرصة تغيير الموعد الأسبوعي: تفتحها إدارة التحرير («جولة»)، ويستخدمها الكاتب مرة
+// واحدة في كل جولة. migrations/20261124_opinion_reader_extras.sql
+export const opinionSlotChangeRounds = pgTable("opinion_slot_change_rounds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  openedBy: varchar("opened_by").references(() => users.id, { onDelete: "set null" }),
+  openedAt: timestamp("opened_at").defaultNow().notNull(),
+  /** null = مفتوحة حتى تغلقها الإدارة */
+  closesAt: timestamp("closes_at"),
+  closedAt: timestamp("closed_at"),
+  closedBy: varchar("closed_by").references(() => users.id, { onDelete: "set null" }),
+  note: text("note"),
+});
+
+export type OpinionSlotChangeRound = typeof opinionSlotChangeRounds.$inferSelect;
+
+export const opinionSlotChanges = pgTable("opinion_slot_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roundId: varchar("round_id").notNull().references(() => opinionSlotChangeRounds.id, { onDelete: "cascade" }),
+  writerId: varchar("writer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fromWeekday: integer("from_weekday").notNull(),
+  fromTime: varchar("from_time", { length: 5 }).notNull(),
+  toWeekday: integer("to_weekday").notNull(),
+  toTime: varchar("to_time", { length: 5 }).notNull(),
+  /** لحظة موافقة الكاتب على الإيضاحات */
+  termsAcceptedAt: timestamp("terms_accepted_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_opinion_slot_changes_round_writer").on(table.roundId, table.writerId),
+  index("idx_opinion_slot_changes_writer").on(table.writerId),
+]);
+
+export type OpinionSlotChange = typeof opinionSlotChanges.$inferSelect;
+
 // تقرير البحث الأسبوعي من Search Console (shared/seoWeekly.ts): صف لكل أسبوع،
 // والفرص وقراراتها وقياس تجربة الأسبوع السابق داخل payload.
 export const seoWeeklyReports = pgTable("seo_weekly_reports", {

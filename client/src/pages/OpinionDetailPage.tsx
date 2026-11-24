@@ -65,6 +65,9 @@ import DOMPurify from "isomorphic-dompurify";
 import { formatArticleTimestamp } from "@/lib/formatTime";
 import { cleanOpinionAuthorBio } from "@/components/public/OpinionCard";
 import { displayTimeZone } from "@/lib/displayTimeZone";
+import { OpinionQuoteCard } from "@/components/opinion/OpinionQuoteCard";
+import { OpinionAgreeVote } from "@/components/opinion/OpinionAgreeVote";
+import { useOpinionExtras } from "@/components/opinion/opinionExtrasApi";
 
 type FontSizeOption = "small" | "medium" | "large" | "xlarge";
 type ReadingSurfaceOption = "default" | "paper" | "calm";
@@ -139,6 +142,7 @@ export default function OpinionDetailPage() {
     queryKey: ["/api/opinion", slug],
     enabled: !!slug,
   });
+  const { data: opinionExtras } = useOpinionExtras(article?.id);
 
   const { data: bylineProfile } = useQuery<{ title?: string | null }>({
     queryKey: ["/api/reporters", article?.staff?.slug],
@@ -1056,6 +1060,10 @@ export default function OpinionDetailPage() {
                   data-testid="text-article-content"
                 />
               </div>
+
+              {/* جملة المقال بطاقةً قابلة للمشاركة، ثم «هل توافق الكاتب؟» — يفعّلهما الكاتب */}
+              <OpinionQuoteCard extras={opinionExtras} articleUrl={typeof window !== "undefined" ? window.location.href.split("?")[0] : ""} />
+              {article.id && <OpinionAgreeVote articleId={article.id} extras={opinionExtras} />}
 
               {/* Keywords follow the body, matching the public news detail. */}
               {((article.seo?.keywords && article.seo.keywords.length > 0) || articleTags.length > 0) && (
