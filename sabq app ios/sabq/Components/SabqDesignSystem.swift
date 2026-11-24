@@ -255,14 +255,7 @@ extension SabqTextRole {
 extension View {
     /// One quiet surface per editorial group; rows share it without nested cards.
     func sabqNewsSurface() -> some View {
-        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-        return background(
-            shape.fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
-        )
-        .overlay(
-            shape.strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75)
-        )
+        modifier(SabqNewsSurfaceModifier())
     }
 
     func sabqText(_ role: SabqTextRole) -> some View {
@@ -280,5 +273,24 @@ struct SabqInputSurface: ViewModifier {
             .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius))
             .overlay(RoundedRectangle(cornerRadius: SabqTheme.buttonRadius)
                 .stroke(SabqTheme.outline, lineWidth: 1))
+    }
+}
+
+/// السطح التحريري الأبيض؛ داخل سطح جامع (`sabqFlatSurface`) يُرسم المحتوى بلا إطار.
+struct SabqNewsSurfaceModifier: ViewModifier {
+    @Environment(\.sabqFlatSurface) private var flat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+        if flat {
+            content
+        } else {
+            content
+                .background(
+                    shape.fill(SabqTheme.surface)
+                        .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+                )
+                .overlay(shape.strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
+        }
     }
 }

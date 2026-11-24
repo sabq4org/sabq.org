@@ -1572,6 +1572,8 @@ struct FeaturedCarousel: View {
     let articles: [Article]
     let isBookmarked: (Article) -> Bool
     let onBookmark: (Article) -> Void
+    /// الرئيسية المحسّنة: الصورة من حافة الشاشة إلى حافتها والعنوان على الصفحة، بلا بطاقة.
+    var edgeToEdge = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selection: String?
@@ -1604,9 +1606,18 @@ struct FeaturedCarousel: View {
                 Color.clear.frame(height: SabqLayout.space12)
             }
         }
-        .clipShape(shape)
-        .sabqNewsSurface()
+        .clipShape(edgeToEdge ? AnyShape(Rectangle()) : AnyShape(shape))
+        .modifier(CarouselSurface(enabled: !edgeToEdge))
     }
+
+    private struct CarouselSurface: ViewModifier {
+        let enabled: Bool
+        @ViewBuilder func body(content: Content) -> some View {
+            if enabled { content.sabqNewsSurface() } else { content }
+        }
+    }
+
+    private var textInset: CGFloat { edgeToEdge ? SabqLayout.pageMargin : SabqLayout.space12 }
 
     // MARK: Slide
 
@@ -1629,13 +1640,15 @@ struct FeaturedCarousel: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    LinearGradient(
-                        colors: [.clear, Color.black.opacity(0.22)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 36)
-                    .allowsHitTesting(false)
+                    if !edgeToEdge {
+                        LinearGradient(
+                            colors: [.clear, Color.black.opacity(0.22)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 36)
+                        .allowsHitTesting(false)
+                    }
                 }
                 .clipped()
                 .aiImageBadgeOverlay(
@@ -1645,6 +1658,21 @@ struct FeaturedCarousel: View {
                 )
                 .padding(.bottom, SabqLayout.space4)
 
+            if edgeToEdge {
+                HStack(spacing: SabqLayout.space8) {
+                    if article.isBreaking {
+                        HomeTextTag(text: "عاجل", tint: SabqTheme.breaking, dot: true)
+                    } else {
+                        HomeTextTag(text: article.categoryTitle, tint: article.category.tint)
+                    }
+                    Text(article.heroWhenLabel)
+                        .font(SabqType.timestamp.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .monospacedDigit()
+                }
+                .lineLimit(1)
+                .padding(.horizontal, textInset)
+            } else {
             HStack(spacing: SabqLayout.space8) {
                 if article.isBreaking {
                     // العاجل يحلّ محل التصنيف بأحمر «عاجل» نفسه في صفحة الخبر وشريط العاجل.
@@ -1684,6 +1712,7 @@ struct FeaturedCarousel: View {
             }
             .lineLimit(1)
             .padding(.horizontal, SabqLayout.space12)
+            }
 
             SabqRTLText(
                 article.title,
@@ -1693,7 +1722,7 @@ struct FeaturedCarousel: View {
                 lineSpacing: SabqType.leadTitle.lineSpacing,
                 textStyle: SabqType.leadTitle.uiTextStyle
             )
-            .padding(.horizontal, SabqLayout.space12)
+            .padding(.horizontal, textInset)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
@@ -1748,6 +1777,7 @@ enum NewsRowStyle {
 
 struct CompactArticleRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.homeRefresh) private var homeRefresh
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
@@ -1907,13 +1937,13 @@ struct CompactArticleRow: View {
             let showNew = isNew || article.isFreshlyPublished(relativeTo: context.date)
             HStack(alignment: .center, spacing: 6) {
                 if showsCategory {
-                    categoryPill
+                    if homeRefresh { HomeTextTag(text: article.categoryTitle) } else { categoryPill }
                 }
                 if article.isInfographic {
                     InfographicPill()
                 }
                 if showNew {
-                    newPill
+                    if homeRefresh { HomeTextTag(text: "جديد", tint: SabqTheme.success, dot: true) } else { newPill }
                 } else {
                     Text(SabqFormatters.arabicRelative(article.publishDate, now: context.date))
                         .font(SabqType.timestamp.font)
@@ -2340,25 +2370,12 @@ extension View {
     /// بنفس لغة `sabqNewsSurface`. داخل صفحة بيضاء (الخبر، المقال) مرّر
     /// `SabqTheme.surfaceMuted` كي يتمايز البلوك عن الصفحة.
     func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
-        let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-        let raised = fill == SabqTheme.surface
-        return clipShape(shape)
-            .background(
-                shape.fill(fill)
-                    .shadow(color: raised ? SabqTheme.shadow : .clear,
-                            radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
-            )
-            .overlay(
-                shape.strokeBorder(raised ? SabqTheme.cardBorder : .clear, lineWidth: 0.75)
-            )
+        modifier(SabqBlockSurfaceModifier(fill: fill))
     }
 
     /// بطاقة تحريرية مميزة بخلفية سماوية سبق هادئة وإطار سماوي ناعم.
     func sabqSkyCardSurface() -> some View {
-        let shape = RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-        return background(shape.fill(SabqTheme.skyTint))
-            .overlay(shape.strokeBorder(SabqTheme.skyOutline.opacity(0.85), lineWidth: 0.75))
-            .clipShape(shape)
+        modifier(SabqSkyCardSurfaceModifier())
     }
 }
 
@@ -2369,5 +2386,43 @@ struct SabqSectionBand: View {
             .frame(height: 1)
             .padding(.vertical, SabqLayout.space4)
             .accessibilityHidden(true)
+    }
+}
+
+struct SabqBlockSurfaceModifier: ViewModifier {
+    @Environment(\.sabqFlatSurface) private var flat
+    let fill: Color
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
+        let raised = fill == SabqTheme.surface
+        if flat {
+            content
+        } else {
+            content
+                .clipShape(shape)
+                .background(
+                    shape.fill(fill)
+                        .shadow(color: raised ? SabqTheme.shadow : .clear,
+                                radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
+                )
+                .overlay(shape.strokeBorder(raised ? SabqTheme.cardBorder : .clear, lineWidth: 0.75))
+        }
+    }
+}
+
+struct SabqSkyCardSurfaceModifier: ViewModifier {
+    @Environment(\.sabqFlatSurface) private var flat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+        if flat {
+            content
+        } else {
+            content
+                .background(shape.fill(SabqTheme.skyTint))
+                .overlay(shape.strokeBorder(SabqTheme.skyOutline.opacity(0.85), lineWidth: 0.75))
+                .clipShape(shape)
+        }
     }
 }

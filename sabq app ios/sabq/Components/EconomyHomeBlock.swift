@@ -472,16 +472,22 @@ struct EconomyMonthlyCardView: View {
 /// بطاقة اقتصادية على خلفية الصفحة الرمادية: سطح أبيض بحدّ رفيع بلا شريط ملوّن —
 /// لون الاتجاه يبقى في الرقم نفسه. `tone` محفوظ لتوافق النداءات.
 struct EconomyAccentCardModifier: ViewModifier {
+    @Environment(\.sabqFlatSurface) private var flat
     let tone: Color
     var radius: CGFloat = SabqRadius.medium
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        if flat {
+            content
+        } else {
         content
             .background(
                 shape.fill(SabqTheme.surface)
                     .shadow(color: SabqTheme.shadow, radius: SabqTheme.cardShadowRadius, y: SabqTheme.cardShadowY)
             )
+        }
     }
 }
 

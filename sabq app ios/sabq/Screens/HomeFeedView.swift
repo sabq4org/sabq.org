@@ -102,6 +102,9 @@ struct HomeFeedView: View {
     private static let loyaltyLastNudgeDateKey = "sabq_loyalty_last_nudge_at"
     private static let nudgeIntervalDays: Int = 5
 
+    /// نموذج «الرئيسية المحسّنة» (معامل التشغيل `-homeRefresh YES`).
+    private var refresh: Bool { HomeRefresh.isEnabled }
+
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
     }
@@ -203,6 +206,21 @@ struct HomeFeedView: View {
                     // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
                     // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
                     // فاصل الأقسام مسافة 24 لا خط: 16 من العمود + 8 هنا.
+                    if refresh {
+                        // «اليوم»: الرياضة والاقتصاد والبطولات في سطح واحد بفواصل
+                        // رفيعة بدل ثلاث بطاقات متتالية.
+                        HomeTodayGroup {
+                            SportsPortalStrip()
+                            if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                                EconomyHomeBlock()
+                            }
+                            WorldCupHomeStrip()
+                            AsianCupHomeStrip()
+                            KingsCupHomeStrip()
+                            RoshnHomeStrip()
+                        }
+                        .padding(.top, SabqLayout.space8)
+                    } else {
                     SportsPortalStrip()
                         .padding(.bottom, SabqLayout.space8)
 
@@ -222,6 +240,7 @@ struct HomeFeedView: View {
                     KingsCupHomeStrip()
 
                     RoshnHomeStrip()
+                    }
 
                     // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {
@@ -252,6 +271,7 @@ struct HomeFeedView: View {
                     }
                     } // homeFeedReplacement
                 }
+                .environment(\.homeRefresh, refresh)
                 .frame(width: max(0, container.size.width - SabqLayout.pageMargin * 2), alignment: .leading)
                 .padding(.horizontal, SabqLayout.pageMargin)
                 // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
@@ -654,11 +674,13 @@ struct HomeFeedView: View {
             .font(SabqType.rowTitle.font.weight(.medium))
             .foregroundStyle(SabqTheme.textSecondary)
             .frame(width: 36, height: 36)
-            .background(
-                Circle()
-                    .fill(SabqTheme.surface)
-                    .overlay(Circle().strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
-            )
+            .background {
+                if !refresh {
+                    Circle()
+                        .fill(SabqTheme.surface)
+                        .overlay(Circle().strokeBorder(SabqTheme.cardBorder, lineWidth: 0.75))
+                }
+            }
             .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
             .contentShape(Rectangle())
     }
@@ -700,12 +722,14 @@ struct HomeFeedView: View {
                         textStyle: SabqType.rowTitle.uiTextStyle
                     )
                 }
-                .padding(.horizontal, SabqLayout.space16)
-                .padding(.vertical, SabqLayout.space12)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                        .fill(SabqTheme.breaking.opacity(0.07))
-                )
+                .padding(.horizontal, refresh ? 0 : SabqLayout.space16)
+                .padding(.vertical, refresh ? SabqLayout.space4 : SabqLayout.space12)
+                .background {
+                    if !refresh {
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(SabqTheme.breaking.opacity(0.07))
+                    }
+                }
             }
             .buttonStyle(.plain)
         }
@@ -742,8 +766,10 @@ struct HomeFeedView: View {
             FeaturedCarousel(
                 articles: heroArticles,
                 isBookmarked: { bookmarksStore.isBookmarked($0.id) },
-                onBookmark: { bookmarksStore.toggle($0.id, article: $0) }
+                onBookmark: { bookmarksStore.toggle($0.id, article: $0) },
+                edgeToEdge: refresh && !homeSpreadLayout
             )
+            .padding(.horizontal, refresh && !homeSpreadLayout ? -SabqLayout.pageMargin : 0)
         }
     }
 
@@ -1032,9 +1058,9 @@ struct HomeFeedView: View {
                         Label("Reels", systemImage: "play.rectangle.on.rectangle")
                             .font(SabqType.metaEmphasis.font)
                             .foregroundStyle(SabqTheme.primary)
-                            .padding(.horizontal, SabqLayout.space12)
+                            .padding(.horizontal, refresh ? 0 : SabqLayout.space12)
                             .padding(.vertical, SabqLayout.space4)
-                            .background(SabqTheme.primary.opacity(0.1), in: Capsule())
+                            .background(refresh ? Color.clear : SabqTheme.primary.opacity(0.1), in: Capsule())
                             .frame(minHeight: SabqLayout.touchTarget)
                             .contentShape(Rectangle())
                     }
@@ -1049,6 +1075,14 @@ struct HomeFeedView: View {
                     }
 
                     ArticleLink(article: article) {
+                        if refresh, !homeSpreadLayout, !dynamicTypeSize.isAccessibilitySize,
+                           index % HomeRefresh.wideRowEvery == HomeRefresh.wideRowEvery - 1,
+                           article.imageURL != nil {
+                            HomeWideArticleRow(
+                                article: article,
+                                showsCategory: articlesStore.selectedCategory == nil
+                            )
+                        } else {
                         CompactArticleRow(
                             article: article,
                             onBookmark: { bookmarksStore.toggle(article.id, article: article) },
@@ -1056,6 +1090,7 @@ struct HomeFeedView: View {
                             isNew: articlesStore.isRecentlyAdded(article.id),
                             showsCategory: articlesStore.selectedCategory == nil
                         )
+                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("home.article.\(article.id)")
