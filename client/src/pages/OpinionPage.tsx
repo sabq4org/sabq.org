@@ -94,16 +94,13 @@ function OpinionRow({ article, eager }: { article: FrontArticle; eager?: boolean
         )}
         <div className="flex-1 min-w-0">
           {writerHref ? (
-            <Link href={writerHref} className="block text-[15px] font-semibold truncate text-foreground hover:text-primary" data-testid={`link-opinion-writer-${article.id}`}>
+            <Link href={writerHref} className="no-min-touch-size block text-[15px] leading-6 font-semibold truncate text-foreground hover:text-primary" data-testid={`link-opinion-writer-${article.id}`}>
               {name}
             </Link>
           ) : (
             <div className="text-[15px] font-semibold truncate">{name}</div>
           )}
-          <div className="text-[13px] text-muted-foreground truncate">
-            {role}
-            {article.category?.nameAr ? ` · ${article.category.nameAr}` : ""}
-          </div>
+          <div className="text-[13px] leading-5 text-muted-foreground truncate">{role}</div>
         </div>
         <time className="text-[13px] text-muted-foreground shrink-0" dateTime={article.publishedAt || undefined}>
           {timeLabel(article.publishedAt)}
@@ -402,7 +399,7 @@ export default function OpinionPage() {
                             </Link>
                             <span className="text-xs sm:text-[13px] text-muted-foreground">
                               {authorHref(getOpinionAuthorName(a)) ? (
-                                <Link href={authorHref(getOpinionAuthorName(a))!} className="text-muted-foreground hover:text-primary">
+                                <Link href={authorHref(getOpinionAuthorName(a))!} className="no-min-touch-size text-muted-foreground hover:text-primary">
                                   {getOpinionAuthorName(a)}
                                 </Link>
                               ) : (
