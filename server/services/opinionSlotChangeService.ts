@@ -201,17 +201,24 @@ export async function applyWriterSlotChange(
       .orderBy(asc(articles.scheduledAt));
     const moved: MovedArticle[] = [];
     if (upcoming.length > 0) {
+      // الفاصل الأسبوعي يُحسب من آخر منشور، ومن أي مقال مجدول لن ينتقل (يبقى عليه أقل من ساعة).
       const [last] = await tx
-        .select({ at: sql<string | null>`max(${articles.publishedAt})` })
+        .select({
+          at: sql<string | null>`max(case
+            when ${articles.status} = 'published' then ${articles.publishedAt}
+            when ${articles.status} = 'scheduled' and ${articles.scheduledAt} <= ${leadNow.toISOString()}::timestamp then ${articles.scheduledAt}
+          end)`,
+        })
         .from(articles)
         .where(and(
           eq(articles.authorId, writerId),
           eq(articles.articleType, "opinion"),
-          eq(articles.status, "published"),
         ));
       let floor: Date | null = last?.at ? new Date(last.at) : null;
       for (const a of upcoming) {
-        const toAt = computeNextSlot(input.weekday, input.time, floor, leadNow);
+        // نافذة البحث تتقدم مع كل مقال حتى لا تنفد بعد خمسة أسابيع.
+        const searchFrom = floor && floor.getTime() > leadNow.getTime() ? floor : leadNow;
+        const toAt = computeNextSlot(input.weekday, input.time, floor, searchFrom);
         if (!toAt || !a.scheduledAt) break;
         if (toAt.getTime() !== a.scheduledAt.getTime()) {
           await tx.update(articles).set({ scheduledAt: toAt, updatedAt: now }).where(eq(articles.id, a.id));
