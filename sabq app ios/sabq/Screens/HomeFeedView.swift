@@ -1075,14 +1075,6 @@ struct HomeFeedView: View {
                     }
 
                     ArticleLink(article: article) {
-                        if refresh, !homeSpreadLayout, !dynamicTypeSize.isAccessibilitySize,
-                           index % HomeRefresh.wideRowEvery == HomeRefresh.wideRowEvery - 1,
-                           article.imageURL != nil {
-                            HomeWideArticleRow(
-                                article: article,
-                                showsCategory: articlesStore.selectedCategory == nil
-                            )
-                        } else {
                         CompactArticleRow(
                             article: article,
                             onBookmark: { bookmarksStore.toggle(article.id, article: article) },
@@ -1090,7 +1082,6 @@ struct HomeFeedView: View {
                             isNew: articlesStore.isRecentlyAdded(article.id),
                             showsCategory: articlesStore.selectedCategory == nil
                         )
-                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("home.article.\(article.id)")
