@@ -41,6 +41,22 @@ const monthName = (key: string) => dayDate(key).toLocaleDateString(LOCALE, { mon
 const dayNumber = (key: string) => String(Number(key.slice(8, 10)));
 const authorHref = (name: string) => (name && name !== "كاتب رأي" ? `/author/${encodeURIComponent(name)}` : null);
 
+/** صيغة العدد العربية: 1 مقال، مقالان، 3–10 مقالات، 11+ مقالًا. */
+function countLabel(n: number) {
+  if (n === 0) return "لا مقالات";
+  if (n === 1) return "مقال واحد";
+  if (n === 2) return "مقالان";
+  if (n <= 10) return `${n} مقالات`;
+  return `${n} مقالًا`;
+}
+
+function readLabel(n: number) {
+  if (n === 1) return "دقيقة قراءة";
+  if (n === 2) return "دقيقتان قراءة";
+  if (n <= 10) return `${n} دقائق قراءة`;
+  return `${n} دقيقة قراءة`;
+}
+
 function timeLabel(iso?: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -69,9 +85,21 @@ function OpinionRow({ article, eager }: { article: FrontArticle; eager?: boolean
       data-testid={`opinion-row-${article.id}`}
     >
       <div className="flex items-center gap-3 sm:col-start-1">
-        <WriterAvatar name={name} src={article.author?.profileImageUrl} />
+        {writerHref ? (
+          <Link href={writerHref} aria-hidden="true" tabIndex={-1} className="shrink-0">
+            <WriterAvatar name={name} src={article.author?.profileImageUrl} />
+          </Link>
+        ) : (
+          <WriterAvatar name={name} src={article.author?.profileImageUrl} />
+        )}
         <div className="flex-1 min-w-0">
-          <div className="text-[15px] font-semibold truncate">{name}</div>
+          {writerHref ? (
+            <Link href={writerHref} className="block text-[15px] font-semibold truncate text-foreground hover:text-primary" data-testid={`link-opinion-writer-${article.id}`}>
+              {name}
+            </Link>
+          ) : (
+            <div className="text-[15px] font-semibold truncate">{name}</div>
+          )}
           <div className="text-[13px] text-muted-foreground truncate">
             {role}
             {article.category?.nameAr ? ` · ${article.category.nameAr}` : ""}
@@ -108,12 +136,12 @@ function OpinionRow({ article, eager }: { article: FrontArticle; eager?: boolean
         <p className="m-0 text-sm sm:text-base leading-8 text-muted-foreground line-clamp-3 sm:col-start-1">{summary}</p>
       )}
       <div className="flex items-center gap-4 text-[13px] text-muted-foreground sm:col-start-1">
-        {article.readMinutes ? <span>{article.readMinutes} دقائق قراءة</span> : null}
-        <Link href={href} className="font-semibold text-primary">
+        {article.readMinutes ? <span className="inline-flex items-center min-h-[44px]">{readLabel(article.readMinutes)}</span> : null}
+        <Link href={href} className="inline-flex items-center min-h-[44px] font-semibold text-primary">
           اقرأ المقال
         </Link>
         {writerHref && (
-          <Link href={writerHref} className="hidden sm:inline text-primary">
+          <Link href={writerHref} className="hidden sm:inline-flex items-center min-h-[44px] text-primary">
             مقالات الكاتب
           </Link>
         )}
@@ -321,7 +349,7 @@ export default function OpinionPage() {
                     <span className="text-xs sm:text-sm font-semibold">{weekdayName(d.key)}</span>
                     <span className="text-[19px] sm:text-[22px] font-bold">{dayNumber(d.key)}</span>
                     <span className="text-[11px] sm:text-xs opacity-85">
-                      {d.isFuture ? "قريبًا" : `${d.isToday ? "اليوم · " : ""}${d.count} مقالات`}
+                      {d.isFuture ? "قريبًا" : countLabel(d.count)}
                     </span>
                   </button>
                 );
@@ -373,7 +401,13 @@ export default function OpinionPage() {
                               {a.title}
                             </Link>
                             <span className="text-xs sm:text-[13px] text-muted-foreground">
-                              {getOpinionAuthorName(a)}
+                              {authorHref(getOpinionAuthorName(a)) ? (
+                                <Link href={authorHref(getOpinionAuthorName(a))!} className="text-muted-foreground hover:text-primary">
+                                  {getOpinionAuthorName(a)}
+                                </Link>
+                              ) : (
+                                getOpinionAuthorName(a)
+                              )}
                               {a.publishedAt ? ` · ${formatArticleTimestamp(new Date(a.publishedAt))}` : ""}
                             </span>
                           </div>
