@@ -6,6 +6,7 @@ import {
   stableLocalDraftKey,
 } from "@/lib/articleAutosave";
 import { useArticleServerAutosave } from "@/hooks/useArticleServerAutosave";
+import { OpinionExtrasEditorPanel } from "@/components/opinion/OpinionExtrasEditorPanel";
 /* eslint-disable no-console, no-restricted-syntax -- legacy debt, predates the
    guardrails: 93 console.log (stripped from prod by vite esbuild.pure) and 14
    raw fetch('/api') callsites. Both get fixed properly as pieces are extracted
@@ -4590,6 +4591,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </CollapsibleContent>
                 </Card>
               </Collapsible>
+            )}
+
+            {/* جملة المقال + «أوافق / لا أوافق» — لمقالات الرأي فقط، بحفظ مستقل */}
+            {articleType === "opinion" && (
+              <OpinionExtrasEditorPanel articleId={id} content={content} className="order-[92] lg:order-none" />
             )}
 
             {/* Article Timeline - Collapsible - Only shown when editing existing articles */}
