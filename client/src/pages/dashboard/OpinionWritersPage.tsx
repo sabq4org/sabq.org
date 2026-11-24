@@ -41,6 +41,7 @@ import { VerificationChips, VerificationSummary } from "@/components/account/Ver
 import { cn } from "@/lib/utils";
 import { MediaLicenseAdminActions } from "@/components/MediaLicenseAdminActions";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
+import { OpinionSlotChangePanel } from "./OpinionSlotChangePanel";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -581,6 +582,8 @@ export default function OpinionWritersPage() {
               </CardContent>
             </Card>
           </div>
+
+          <OpinionSlotChangePanel />
 
           {/* Weekly distribution — stacked on mobile, 7-column grid on md+ */}
           <Card className="rounded-2xl border-border/80 shadow-sm overflow-hidden">

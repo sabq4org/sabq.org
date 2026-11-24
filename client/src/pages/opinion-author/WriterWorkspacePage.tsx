@@ -66,7 +66,7 @@ import {
   Quote,
 } from "lucide-react";
 import { OpinionAuthorSocialProposalDialog } from "./OpinionAuthorSocialProposalDialog";
-import { WriterRescheduleAction, useWriterReschedules } from "./WriterReschedule";
+import { WriterSlotChangeCard } from "./WriterSlotChange";
 import { OpinionExtrasEditorPanel } from "@/components/opinion/OpinionExtrasEditorPanel";
 import { articleAcceptsEditRequests } from "@shared/articleEditRequests";
 import { EditRequestLabel, RequestEditButton, RequestEditDialog, ReviewEditRequestDialog, useArticleEditRequests, type EditRequestListItem } from "@/components/articles/ArticleEditRequests";
@@ -190,7 +190,6 @@ export default function WriterWorkspacePage() {
   /** Ideas are AI-generated and slow — only fetch after explicit user action. */
   const [ideasRequested, setIdeasRequested] = useState(false);
 
-  const reschedules = useWriterReschedules();
   const scheduleQuery = useQuery<{
     banner?: ScheduleBannerData | null;
     activeArticle?: {
@@ -405,6 +404,7 @@ export default function WriterWorkspacePage() {
             onOpenGuide={() => navigate("/dashboard/opinion-author/guide")}
           />
           <WriterAnnouncementsBoard />
+          <WriterSlotChangeCard />
           {activePipelineArticle && (
             <WriterArticleNowStrip
               article={activePipelineArticle}
@@ -606,7 +606,6 @@ export default function WriterWorkspacePage() {
                         reviewPending={reviewMutation.isPending}
                         submitPending={submitReviewMutation.isPending}
                         onSubmit={(id) => submitReviewMutation.mutate(id)}
-                        rescheduleUsed={reschedules.get(article.id)}
                       />
                     ))}
                 {!workspaceQuery.isLoading && trackedArticles.length === 0 && (
@@ -790,10 +789,8 @@ function WriterTrackingCard({
   reviewPending,
   submitPending,
   onSubmit,
-  rescheduleUsed,
 }: {
   article: TrackingArticle;
-  rescheduleUsed?: ReturnType<ReturnType<typeof useWriterReschedules>["get"]>;
   onEdit: () => void;
   onView: () => void;
   onReview: () => void;
@@ -859,7 +856,6 @@ function WriterTrackingCard({
             )}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <WriterRescheduleAction article={article} used={rescheduleUsed} />
             {(article.status === "published" || article.status === "scheduled") && (
               <Button variant="outline" size="sm" onClick={() => setExtrasOpen(true)} className="gap-1.5" data-testid={`button-opinion-extras-${article.id}`}>
                 <Quote className="h-4 w-4" /> جملة المقال والتصويت

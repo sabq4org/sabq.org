@@ -1,5 +1,5 @@
 /**
- * إضافات مقال الرأي: جملة المقال، «أوافق / لا أوافق»، وتغيير الموعد مرة واحدة.
+ * إضافات مقال الرأي: جملة المقال و«أوافق / لا أوافق».
  * المنطق الخالص في shared/opinionReaderExtras.ts. الأصوات تمر بمسار
  * الاستطلاعات القائم (POST /api/polls/:pollId/vote) على استطلاع بخيارين.
  */
@@ -9,7 +9,6 @@ import {
   articles,
   articlePolls,
   opinionArticleExtras,
-  opinionWriterReschedules,
   pollOptions,
   pollVotes,
   users,
@@ -21,13 +20,9 @@ import {
   DISAGREE_OPTION_MARK,
   DISAGREE_OPTION_TEXT,
   agreeVotePercents,
-  rescheduleEligibility,
-  rescheduleTargetError,
-  RESCHEDULE_REASON_LABELS,
   validatePullQuote,
 } from "@shared/opinionReaderExtras";
 import { memoryCache } from "../memoryCache";
-import { findWriterGapConflicts } from "./opinionWritersService";
 
 type ArticleHead = {
   id: string;
@@ -264,78 +259,3 @@ export async function getQuoteCardData(articleId: string): Promise<{
     updatedAt: row.updatedAt,
   };
 }
-
-// ── تغيير الموعد مرة واحدة ──
-
-export async function listWriterReschedules(writerId: string): Promise<Array<{ articleId: string; fromAt: string; toAt: string; createdAt: string }>> {
-  const rows = await db.select().from(opinionWriterReschedules).where(eq(opinionWriterReschedules.writerId, writerId));
-  return rows.map((r) => ({
-    articleId: r.articleId,
-    fromAt: r.fromAt.toISOString(),
-    toAt: r.toAt.toISOString(),
-    createdAt: r.createdAt.toISOString(),
-  }));
-}
-
-class RescheduleStateChanged extends Error {}
-
-export async function rescheduleOpinionArticleOnce(
-  writerId: string,
-  articleId: string,
-  target: Date | null,
-  now: Date = new Date(),
-): Promise<{ ok: true; fromAt: Date; toAt: Date; title: string } | { ok: false; status: number; message: string }> {
-  const article = await loadOpinionArticle(articleId);
-  if (!article || article.authorId !== writerId) return { ok: false, status: 404, message: "المقال غير موجود في مقالاتك" };
-
-  const [used] = await db
-    .select({ articleId: opinionWriterReschedules.articleId })
-    .from(opinionWriterReschedules)
-    .where(eq(opinionWriterReschedules.articleId, articleId))
-    .limit(1);
-  const eligibility = rescheduleEligibility({
-    status: article.status,
-    scheduledAt: article.scheduledAt,
-    alreadyUsed: Boolean(used),
-    nowMs: now.getTime(),
-  });
-  if (!eligibility.canReschedule) {
-    return { ok: false, status: 409, message: RESCHEDULE_REASON_LABELS[eligibility.reason] };
-  }
-  const fromAt = article.scheduledAt!;
-  const targetError = rescheduleTargetError(target, fromAt.getTime(), now.getTime());
-  if (targetError) return { ok: false, status: 400, message: targetError };
-  const toAt = target!;
-
-  const conflicts = await findWriterGapConflicts(articleId, writerId, toAt);
-  if (conflicts.length > 0) {
-    return { ok: false, status: 409, message: "هذا الموعد قريب من مقال آخر لك (الفاصل أسبوع تقريبًا). اختر موعدًا أبعد." };
-  }
-
-  const result = await db
-    .transaction(async (tx) => {
-      const inserted = await tx
-        .insert(opinionWriterReschedules)
-        .values({ articleId, writerId, fromAt, toAt })
-        .onConflictDoNothing()
-        .returning({ articleId: opinionWriterReschedules.articleId });
-      if (inserted.length === 0) return "used" as const;
-      // ما زال مجدولًا ولم يُنشر أثناء الطلب؟ وإلا نتراجع عن تسجيل الاستخدام
-      const updated = await tx
-        .update(articles)
-        .set({ scheduledAt: toAt, updatedAt: new Date() })
-        .where(and(eq(articles.id, articleId), eq(articles.status, "scheduled")))
-        .returning({ id: articles.id });
-      if (updated.length === 0) throw new RescheduleStateChanged();
-      return "ok" as const;
-    })
-    .catch((err: unknown) => {
-      if (err instanceof RescheduleStateChanged) return "changed" as const;
-      throw err;
-    });
-
-  if (result === "used") return { ok: false, status: 409, message: RESCHEDULE_REASON_LABELS.already_used };
-  if (result === "changed") return { ok: false, status: 409, message: "تغيّرت حالة المقال أثناء الطلب، حدّث الصفحة" };
-  return { ok: true, fromAt, toAt, title: article.title };
-}
-
