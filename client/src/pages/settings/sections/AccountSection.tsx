@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Mail, Upload } from "lucide-react";
 import { PhoneVerificationCard } from "@/components/account/PhoneVerificationCard";
+import { Link } from "wouter";
+import { hasWriterRole } from "@/lib/writerAudience";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "الاسم الأول مطلوب").max(50),
@@ -32,6 +34,8 @@ type AuthUser = {
   phoneVerified?: boolean;
   profileImageUrl?: string | null;
   emailVerified?: boolean;
+  role?: string | null;
+  roles?: string[];
 };
 
 export function AccountSection() {
@@ -225,19 +229,30 @@ export function AccountSection() {
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="bio"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>نبذة</FormLabel>
-                    <FormControl>
-                      <Textarea rows={3} {...field} data-testid="input-settings-bio" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {hasWriterRole(user) ? (
+                // الكاتب والمراسل: نبذة واحدة يراجعها المحرر، تُعدّل من «ملفي وخدماتي».
+                <p className="text-sm text-muted-foreground" data-testid="text-settings-bio-moved">
+                  نبذتك التي يراها القارئ تُعدّل من{" "}
+                  <Link href="/dashboard/my-services#public-byline" className="font-medium text-primary">
+                    «كيف يراك القارئ»
+                  </Link>
+                  ، ويراجعها المحرر قبل نشرها.
+                </p>
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="bio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>نبذة</FormLabel>
+                      <FormControl>
+                        <Textarea rows={3} {...field} data-testid="input-settings-bio" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <Button
                 type="submit"
                 disabled={updateMutation.isPending}

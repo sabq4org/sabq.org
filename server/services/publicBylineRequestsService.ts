@@ -31,6 +31,15 @@ async function publicStaffTypeFor(userId: string) {
   return pickPublicStaffType(await getUserRoleNames(userId));
 }
 
+/**
+ * الكاتب والمراسل لهما نبذة واحدة يراجعها المحرر («كيف يراك القارئ»).
+ * التعديل الذاتي القديم لـ users.bio (الملف الشخصي، إعدادات الحساب، التطبيقات)
+ * يُسقط بصمت لهم حتى لا تظهر للقارئ نبذة لم يراجعها أحد.
+ */
+export async function isSelfBioLocked(userId: string): Promise<boolean> {
+  return (await publicStaffTypeFor(userId)) !== null;
+}
+
 async function notifyWriter(userId: string, title: string, body: string, type: string) {
   try {
     await db.insert(notificationsInbox).values({

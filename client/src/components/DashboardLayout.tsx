@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { WriterNotificationBell } from "@/components/writer/WriterNotificationBell";
+import { isWriterOnly } from "@/lib/writerAudience";
 import { NewBadge, NewDot } from "@/components/writer/NewBadge";
 import { useNewFeatureNav } from "@/hooks/useNewFeatures";
 import {
@@ -703,6 +705,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             {role !== "opinion_author" && role !== "angle_writer" && (
               <EditorPresenceBar />
             )}
+            {isWriterOnly(user) && <WriterNotificationBell />}
             <DashboardThemePickerButton />
             <ThemeToggle />
             <DropdownMenu>

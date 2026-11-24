@@ -8,6 +8,7 @@ import {
   PublicBylineError,
   approvePublicByline,
   getMyPublicByline,
+  isSelfBioLocked,
   listPublicBylineRequests,
   requestPublicBylineChanges,
   submitPublicByline,
@@ -34,6 +35,19 @@ function sendError(res: Response, error: unknown, label: string) {
 const userId = (req: Request) => (req.user as { id: string }).id;
 
 router.use("/api/public-byline", isAuthenticated);
+
+/** يسبق PATCH /api/auth/user في routes.ts: الكاتب لا يكتب users.bio بنفسه. */
+router.patch("/api/auth/user", async (req, _res, next) => {
+  const user = req.user as { id?: string } | undefined;
+  if (user?.id && req.body && typeof req.body === "object" && "bio" in req.body) {
+    try {
+      if (await isSelfBioLocked(user.id)) delete (req.body as Record<string, unknown>).bio;
+    } catch (error) {
+      console.warn("[PublicByline] bio lock check failed, continuing:", error);
+    }
+  }
+  next();
+});
 router.use("/api/admin/public-byline", isAuthenticated, requireReviewer);
 
 router.get("/api/public-byline/me", async (req, res) => {

@@ -1,5 +1,6 @@
 // ملفي وخدماتي — صفحة الكاتب والمراسل (المرحلة 1 من خطة تطوير لوحة الكاتب):
 // شريط جاهزية، ثم «كيف يراك القارئ»، ثم الأوراق الرسمية صفوفًا تنفتح في مكانها.
+// المرحلة 3: الصورة و«حسابي» وأدواري وسجل نشاطي هنا، بدل صفحة «الملف الشخصي» للكاتب.
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +12,14 @@ import { StaffProfileForm } from "@/components/staff/StaffProfileForm";
 import { MyOfficialLettersCard } from "@/components/officialLetters/MyOfficialLettersCard";
 import { WriterMediaLicenseCard } from "@/pages/opinion-author/WriterMediaLicenseCard";
 import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
+import {
+  WriterAccountGroup,
+  WriterActivityBody,
+  WriterIdentityStrip,
+  WriterRolesBody,
+  roleLabelAr,
+  type WriterAccountUser,
+} from "@/components/writer/WriterAccountSection";
 import { useNewFeature } from "@/hooks/useNewFeatures";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -23,7 +32,7 @@ import {
   type ReadinessTone,
 } from "@/lib/myServicesReadiness";
 
-type RowKey = "profile" | "letters" | "license";
+type RowKey = "profile" | "letters" | "license" | "roles" | "activity";
 
 const TONE_CLASS: Record<ReadinessTone, string> = {
   ok: "text-[#13734E] dark:text-emerald-400",
@@ -49,6 +58,7 @@ export default function MyServicesPage() {
   const licenseEndpoint = isReporter ? "/api/reporter/media-license" : "/api/opinion-author/media-license";
   const enabled = Boolean(user?.id);
 
+  const { data: accountRaw } = useQuery<WriterAccountUser | null>({ queryKey: ["/api/auth/user"], enabled });
   const { data: bylineRaw } = useQuery({ queryKey: [PUBLIC_BYLINE_QUERY], enabled });
   const { data: profileRaw } = useQuery({ queryKey: ["/api/staff-profiles/me"], enabled });
   const { data: lettersRaw } = useQuery({ queryKey: ["/api/official-letters/mine"], enabled });
@@ -63,6 +73,8 @@ export default function MyServicesPage() {
     const fromHash = () => {
       if (window.location.hash === `#${WRITER_MEDIA_LICENSE_ANCHOR}`) setOpenRow("license");
       if (window.location.hash === "#my-staff-profile") setOpenRow("profile");
+      const id = window.location.hash.slice(1);
+      if (id === "account" || id === "public-byline") window.setTimeout(() => scrollToId(id), 300);
     };
     fromHash();
     window.addEventListener("hashchange", fromHash);
@@ -88,7 +100,11 @@ export default function MyServicesPage() {
     { key: "license", label: "الترخيص المهني", ...license, onClick: () => { setOpenRow("license"); scrollToId("row-license"); } },
   ];
 
-  const rows: Array<{ key: RowKey; label: string; sub: string; readiness: Readiness; action: string; body: ReactNode }> = [
+  const account = accountRaw && typeof accountRaw === "object" && "id" in accountRaw ? accountRaw : null;
+  const roleLabel =
+    account?.roleLabel || roleLabelAr(byline?.staffType ?? (isReporter ? "reporter" : "opinion_author"));
+
+  const rows: Array<{ key: RowKey; label: string; sub: string; readiness?: Readiness; action: string; body: ReactNode }> = [
     {
       key: "profile",
       label: "الملف المعتمد",
@@ -113,14 +129,32 @@ export default function MyServicesPage() {
       action: license.tone === "ok" ? "تحديث" : "تسجيل الترخيص",
       body: <WriterMediaLicenseCard endpoint={licenseEndpoint} />,
     },
+    {
+      key: "roles",
+      label: "أدواري",
+      sub: `${roleLabel}: ما تستطيع فعله في لوحة التحكم.`,
+      action: "عرض",
+      body: <WriterRolesBody />,
+    },
+    {
+      key: "activity",
+      label: "سجل نشاطي",
+      sub: "ما فعلته في لوحة التحكم: الإرسال والتعديل وغيرهما.",
+      action: "عرض السجل",
+      body: <WriterActivityBody />,
+    },
   ];
 
   return (
     <WriterPageFrame
       title="ملفي وخدماتي"
-      description="حضورك أمام القراء وأوراقك الرسمية في مكان واحد."
+      description="كل ما يخصك في مكان واحد: حسابك، وكيف يراك القارئ، وأوراقك الرسمية."
       titleTestId="text-my-services-title"
     >
+      {account && (
+        <WriterIdentityStrip user={account} title={byline?.current?.titleAr ?? null} roleLabel={roleLabel} />
+      )}
+
       <WriterSurface
         className={cn(
           "grid gap-px overflow-hidden bg-[#EEF2F6] dark:bg-border",
@@ -144,10 +178,12 @@ export default function MyServicesPage() {
         ))}
       </WriterSurface>
 
+      {account && <WriterAccountGroup user={account} />}
+
       {showByline && <PublicBylineEditor />}
 
       <div className="space-y-2.5">
-        <h2 className="text-[17px] font-bold">أوراقي الرسمية</h2>
+        <h2 className="text-[17px] font-bold">أوراقي وسجلي</h2>
         <WriterSurface className="divide-y divide-[#EEF2F6] dark:divide-border">
           {rows.map((r) => {
             const open = openRow === r.key;
@@ -164,9 +200,11 @@ export default function MyServicesPage() {
                     <span className="block text-[15px] font-semibold">{r.label}</span>
                     <span className="block text-[13px] leading-6 text-[#55667A] dark:text-muted-foreground">{r.sub}</span>
                   </span>
-                  <span className={cn("hidden shrink-0 rounded-full px-3 py-1 text-xs font-semibold sm:inline", CHIP_CLASS[r.readiness.tone])}>
-                    {r.readiness.chip}
-                  </span>
+                  {r.readiness && (
+                    <span className={cn("hidden shrink-0 rounded-full px-3 py-1 text-xs font-semibold sm:inline", CHIP_CLASS[r.readiness.tone])}>
+                      {r.readiness.chip}
+                    </span>
+                  )}
                   <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#0B6FA8]">
                     {open ? "إغلاق" : r.action}
                     <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
