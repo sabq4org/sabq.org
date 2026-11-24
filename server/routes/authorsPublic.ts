@@ -4,6 +4,7 @@
  */
 import { Router } from "express";
 import { getAuthorPageByName } from "../services/authorProfileService";
+import { getWriterPageExtras } from "../services/writerPageService";
 import { paginationOrReject } from "../utils/pagination";
 
 const router = Router();
@@ -24,8 +25,14 @@ router.get("/api/authors/by-name", async (req, res) => {
       return res.status(404).json({ message: "لم يتم العثور على الكاتب" });
     }
 
+    // إضافات كاتب الرأي (يوم الكتابة، موعده القادم، كتّاب اليوم نفسه) — لا تُفشل الصفحة
+    const writer = await getWriterPageExtras(result.author.id).catch((err) => {
+      console.error("[Authors] writer extras error:", err);
+      return null;
+    });
+
     res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
-    res.json(result);
+    res.json({ ...result, writer });
   } catch (error) {
     console.error("[Authors] by-name error:", error);
     res.status(500).json({ message: "تعذر جلب بيانات الكاتب" });
