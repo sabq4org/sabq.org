@@ -3,9 +3,10 @@
  * الإدارة تفتح جولة وتغلقها، والكاتب يغيّر يومه ووقته مرة واحدة في الجولة.
  * القفل الاستشاري يجعل فحص امتلاء اليوم والكتابة خطوة واحدة بين الكتّاب.
  */
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
+  articles,
   opinionSlotChangeRounds,
   opinionSlotChanges,
   opinionWriterSchedules,
@@ -13,7 +14,12 @@ import {
 } from "@shared/schema";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import { isRoundOpen, slotChangeTargetError } from "@shared/opinionSlotChange";
-import { getWriterDayLoads } from "./opinionWritersService";
+import { computeNextSlot, getWriterDayLoads } from "./opinionWritersService";
+
+/** لا يُنقل مقال يحين نشره خلال ساعة، ولا يُنقل إلى موعد قبل ساعة من الآن. */
+const MOVE_MIN_LEAD_MS = 60 * 60 * 1000;
+
+export type MovedArticle = { id: string; fromAt: string; toAt: string };
 
 const SLOT_CHANGE_LOCK_KEY = 0x0a5c4a17;
 
@@ -104,7 +110,14 @@ export async function getWriterSlotChangeState(writerId: string, now = new Date(
 }
 
 type ApplyResult =
-  | { ok: true; from: { weekday: number; publishTime: string }; to: { weekday: number; publishTime: string }; roundId: string }
+  | {
+      ok: true;
+      from: { weekday: number; publishTime: string };
+      to: { weekday: number; publishTime: string };
+      roundId: string;
+      /** مقالات الكاتب المجدولة التي انتقلت إلى موعده الجديد */
+      moved: MovedArticle[];
+    }
   | { ok: false; status: number; message: string };
 
 /** الكاتب يعتمد موعده الجديد: مرة واحدة في الجولة، وبعد الموافقة على الإيضاحات. */
@@ -173,11 +186,47 @@ export async function applyWriterSlotChange(
       .set({ weekday: input.weekday, publishTime: input.time, updatedBy: writerId, updatedAt: now })
       .where(eq(opinionWriterSchedules.writerId, writerId));
 
+    // النشر القادم على الموعد الجديد: كل مقال مجدول للكاتب (لم يبقَ عليه أقل من ساعة)
+    // ينتقل إلى أقرب موعد جديد يحترم الفاصل الأسبوعي بعد آخر نشر، ثم الذي يليه أسبوعًا بأسبوع.
+    const leadNow = new Date(now.getTime() + MOVE_MIN_LEAD_MS);
+    const upcoming = await tx
+      .select({ id: articles.id, scheduledAt: articles.scheduledAt })
+      .from(articles)
+      .where(and(
+        eq(articles.authorId, writerId),
+        eq(articles.articleType, "opinion"),
+        eq(articles.status, "scheduled"),
+        gt(articles.scheduledAt, leadNow),
+      ))
+      .orderBy(asc(articles.scheduledAt));
+    const moved: MovedArticle[] = [];
+    if (upcoming.length > 0) {
+      const [last] = await tx
+        .select({ at: sql<string | null>`max(${articles.publishedAt})` })
+        .from(articles)
+        .where(and(
+          eq(articles.authorId, writerId),
+          eq(articles.articleType, "opinion"),
+          eq(articles.status, "published"),
+        ));
+      let floor: Date | null = last?.at ? new Date(last.at) : null;
+      for (const a of upcoming) {
+        const toAt = computeNextSlot(input.weekday, input.time, floor, leadNow);
+        if (!toAt || !a.scheduledAt) break;
+        if (toAt.getTime() !== a.scheduledAt.getTime()) {
+          await tx.update(articles).set({ scheduledAt: toAt, updatedAt: now }).where(eq(articles.id, a.id));
+          moved.push({ id: a.id, fromAt: a.scheduledAt.toISOString(), toAt: toAt.toISOString() });
+        }
+        floor = toAt;
+      }
+    }
+
     return {
       ok: true,
       from: { weekday: schedule.weekday, publishTime: schedule.publishTime },
       to: { weekday: input.weekday, publishTime: input.time },
       roundId: round.id,
+      moved,
     };
   });
 }

@@ -58,9 +58,9 @@ router.post("/api/opinion-author/slot-change", requireAuth, async (req: Request,
       entityId: userId,
       oldValue: result.from,
       newValue: result.to,
-      metadata: { roundId: result.roundId, termsAccepted: true },
+      metadata: { roundId: result.roundId, termsAccepted: true, movedArticles: result.moved },
     }).catch(() => undefined);
-    res.json({ ok: true, from: result.from, to: result.to });
+    res.json({ ok: true, from: result.from, to: result.to, moved: result.moved });
   } catch (error) {
     console.error("[opinion-slot-change] apply failed:", error);
     res.status(500).json({ message: "تعذر حفظ الموعد الجديد" });
