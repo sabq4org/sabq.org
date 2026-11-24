@@ -102,8 +102,9 @@ struct HomeFeedView: View {
     private static let loyaltyLastNudgeDateKey = "sabq_loyalty_last_nudge_at"
     private static let nudgeIntervalDays: Int = 5
 
-    /// نموذج «الرئيسية المحسّنة» (معامل التشغيل `-homeRefresh YES`).
-    private var refresh: Bool { HomeRefresh.isEnabled }
+    /// الرئيسية بأقل بطاقات (اعتماد المالك 2026-11-24) على الهاتف وعمود Duo؛
+    /// رئيسية Duo مفتوحًا بعمودين (2026-10-18) تبقى بشكلها.
+    private var refresh: Bool { !homeSpreadLayout }
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
@@ -206,41 +207,20 @@ struct HomeFeedView: View {
                     // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
                     // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
                     // فاصل الأقسام مسافة 24 لا خط: 16 من العمود + 8 هنا.
-                    if refresh {
-                        // «اليوم»: الرياضة والاقتصاد والبطولات في سطح واحد بفواصل
-                        // رفيعة بدل ثلاث بطاقات متتالية.
-                        HomeTodayGroup {
-                            SportsPortalStrip()
-                            if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
-                                EconomyHomeBlock()
-                            }
-                            WorldCupHomeStrip()
-                            AsianCupHomeStrip()
-                            KingsCupHomeStrip()
-                            RoshnHomeStrip()
+                    // «اليوم»: الرياضة والاقتصاد والبطولات في سطح واحد بفواصل رفيعة
+                    // بدل ثلاث بطاقات متتالية (اعتماد المالك 2026-11-24). كل شريحة
+                    // تختفي ذاتيًا بلا بيانات؛ الاقتصاد مشروط هنا كي لا يشغّل .task فارغًا.
+                    HomeTodayGroup {
+                        SportsPortalStrip()
+                        if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                            EconomyHomeBlock()
                         }
-                        .padding(.top, SabqLayout.space8)
-                    } else {
-                    SportsPortalStrip()
-                        .padding(.bottom, SabqLayout.space8)
-
-                    // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
-                    // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
-                    // الشرط هنا لا داخل البلوك: Group بمحتوى EmptyView لا يشغّل .task
-                    // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
-                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
-                        EconomyHomeBlock()
+                        WorldCupHomeStrip()
+                        AsianCupHomeStrip()
+                        KingsCupHomeStrip()
+                        RoshnHomeStrip()
                     }
-
-                    // بطاقات البطولات تأتي بعد بطاقة الاقتصاد، وتختفي ذاتيًا بلا بيانات.
-                    WorldCupHomeStrip()
-
-                    AsianCupHomeStrip()
-
-                    KingsCupHomeStrip()
-
-                    RoshnHomeStrip()
-                    }
+                    .padding(.top, SabqLayout.space8)
 
                     // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {
@@ -767,9 +747,9 @@ struct HomeFeedView: View {
                 articles: heroArticles,
                 isBookmarked: { bookmarksStore.isBookmarked($0.id) },
                 onBookmark: { bookmarksStore.toggle($0.id, article: $0) },
-                edgeToEdge: refresh && !homeSpreadLayout
+                edgeToEdge: refresh
             )
-            .padding(.horizontal, refresh && !homeSpreadLayout ? -SabqLayout.pageMargin : 0)
+            .padding(.horizontal, refresh ? -SabqLayout.pageMargin : 0)
         }
     }
 
