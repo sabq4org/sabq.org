@@ -373,8 +373,8 @@ struct OpinionsView: View {
                     .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(width: 72, height: 34, alignment: .top)
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(width: 72, alignment: .top)
             }
         }
         .buttonStyle(.plain)
