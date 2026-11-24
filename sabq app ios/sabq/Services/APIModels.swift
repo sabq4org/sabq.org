@@ -2360,9 +2360,12 @@ nonisolated struct APIAuthorPage: Decodable {
     let stats: APIAuthorStats
     let topCategories: [APIAuthorCategory]
     let recentArticles: [APIArticle]
+    /// كاتب الرأي: يوم الكتابة، موعده القادم، كتّاب اليوم نفسه (null للمراسلين).
+    let writer: APIWriterExtras?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
+        writer = try? c.decode(APIWriterExtras.self, forKey: FlexKey("writer"))
         author = try c.decode(APIAuthorProfile.self, forKey: FlexKey("author"))
         stats = (try? c.decode(APIAuthorStats.self, forKey: FlexKey("stats"))) ?? APIAuthorStats()
         topCategories = (try? c.decode([APIAuthorCategory].self, forKey: FlexKey("topCategories"))) ?? []
