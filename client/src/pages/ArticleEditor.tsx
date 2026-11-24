@@ -2843,12 +2843,18 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           .article-editor-stage .rich-text-editor {
             overflow: visible;
           }
-          .article-editor-stage .rich-text-editor__toolbar {
+          /* اللاصق هو الغلاف (شريط الأدوات + أدوات الجدول) لا الشريط وحده،
+             وإلا بقيت أدوات الجدول خارج الشاشة والجدول في منتصف خبر طويل. */
+          .article-editor-stage .rich-text-editor__chrome {
             position: sticky;
             /* DashboardLayout scrolls below its header, so no header offset is needed. */
             top: 0;
             z-index: 20;
             box-shadow: 0 2px 6px hsl(var(--foreground) / 0.06);
+            border-start-start-radius: inherit;
+            border-start-end-radius: inherit;
+          }
+          .article-editor-stage .rich-text-editor__toolbar {
             border-start-start-radius: inherit;
             border-start-end-radius: inherit;
           }

@@ -161,7 +161,8 @@ body {
 }
 
 .prose table.sabq-table {
-  width: 100%;
+  width: 100% !important;
+  min-width: 0 !important;
   border-collapse: separate;
   border-spacing: 0;
   margin: 1.5em 0;
@@ -191,6 +192,13 @@ body {
 .prose table.sabq-table th p,
 .prose table.sabq-table td p {
   margin: 0;
+}
+/* «عمود عناوين»: خلايا th في صفوف الجسم بحد عادي لا بخط الترويسة */
+.prose table.sabq-table tr:not(:first-child) th {
+  border-bottom: 1px solid hsl(var(--border));
+}
+.prose table.sabq-table tr:last-child th {
+  border-bottom: none;
 }
 .prose table.sabq-table--card {
   border-radius: 0.75rem;

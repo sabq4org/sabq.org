@@ -1655,7 +1655,8 @@ html[data-dashboard-theme] .text-indigo-600,
   /* على الجوال: صف واحد قابل للتمرير أفقياً بدل 3-4 صفوف ملفوفة تأكل الشاشة
      وهي لاصقة أعلى المحرر. */
   @media (max-width: 639px) {
-    .rich-text-editor__toolbar {
+    .rich-text-editor__toolbar,
+    .rich-text-editor__table-bar {
       flex-wrap: nowrap;
       overflow-x: auto;
       overflow-y: hidden;
@@ -1663,10 +1664,12 @@ html[data-dashboard-theme] .text-indigo-600,
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
     }
-    .rich-text-editor__toolbar::-webkit-scrollbar {
+    .rich-text-editor__toolbar::-webkit-scrollbar,
+    .rich-text-editor__table-bar::-webkit-scrollbar {
       display: none;
     }
-    .rich-text-editor__toolbar > * {
+    .rich-text-editor__toolbar > *,
+    .rich-text-editor__table-bar > * {
       flex-shrink: 0;
     }
   }
@@ -3695,7 +3698,11 @@ a.whatsapp-cta-card .whatsapp-cta-link {
  * تُدرج من زر «جدول» في المحرر. التنسيق كله من هنا — لا خيارات يدوية.
  * أي تعديل هنا يجب مزامنته مع web-next/app/globals.css. */
 .prose table.sabq-table {
-  width: 100%;
+  /* !important: المحرر (TipTap) يكتب style="width: 482px" على الجدول عند
+     لصقه من Word/Docs أو سحب أعمدته، فكان الجدول يضيق عن عرض الخبر.
+     الجدول يملأ العرض دائمًا، وعروض الأعمدة تعمل كنسب (table-layout أدناه). */
+  width: 100% !important;
+  min-width: 0 !important;
   border-collapse: separate;
   border-spacing: 0;
   margin: 1.5em 0;
@@ -3726,6 +3733,31 @@ a.whatsapp-cta-card .whatsapp-cta-link {
 .prose table.sabq-table td p {
   margin: 0;
 }
+/* «عمود عناوين»: خلايا th في صفوف الجسم بحد عادي لا بخط الترويسة */
+.prose table.sabq-table tr:not(:first-child) th {
+  border-bottom: 1px solid hsl(var(--border));
+}
+.prose table.sabq-table tr:last-child th {
+  border-bottom: none;
+}
+/* أعمدة بعرض محفوظ (سحب أو لصق): توزَّع بنسبها على كامل العرض.
+   ^="width" لا يطابق "min-width" التي يضعها المحرر للأعمدة التلقائية. */
+.prose table.sabq-table:has(> colgroup > col[style^="width"]) {
+  table-layout: fixed;
+}
+.prose table.sabq-table:has(> colgroup > col[style^="width"]) :is(td, th) {
+  overflow-wrap: anywhere;
+}
+/* جداول قديمة محفوظة بعروض بكسل (لصق قبل التحويل إلى نسب): على الجوال
+   تُهمل العروض كي لا يفيض الجدول عن الشاشة. */
+@media (max-width: 639px) {
+  .prose table.sabq-table:has(> colgroup > col[style^="width"][style*="px"]) {
+    table-layout: auto;
+  }
+  .prose table.sabq-table > colgroup > col[style*="px"] {
+    width: auto !important;
+  }
+}
 
 /* مظهر «بطاقة تعريفية» — لجداول عمودين مثل قوائم المسارات/المواصفات */
 .prose table.sabq-table--card {
@@ -3747,6 +3779,30 @@ a.whatsapp-cta-card .whatsapp-cta-link {
 /* محرّر TipTap: تمرير أفقي للجدول وتظليل الخلايا المحددة */
 .ProseMirror .tableWrapper {
   overflow-x: auto;
+}
+/* سحب عرض الأعمدة: مقبض أزرق على حد الخلية + مؤشر col-resize */
+.ProseMirror table.sabq-table :is(td, th) {
+  position: relative;
+}
+.ProseMirror table.sabq-table .column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: -1px;
+  right: -2px;
+  width: 4px;
+  background: hsl(var(--primary));
+  pointer-events: none;
+  z-index: 2;
+}
+.ProseMirror.resize-cursor,
+.ProseMirror.resize-cursor * {
+  cursor: col-resize;
+}
+/* شريط أدوات الجدول داخل الغلاف اللاصق — خلفية مصمتة فاتحة لا تشف النص تحته */
+.rich-text-editor__table-bar {
+  background: hsl(var(--primary) / 0.05);
+  background-color: color-mix(in srgb, hsl(var(--primary)) 5%, hsl(var(--editor-background)));
+  border-color: hsl(var(--editor-border));
 }
 .ProseMirror table.sabq-table .selectedCell {
   position: relative;
