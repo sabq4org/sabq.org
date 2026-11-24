@@ -375,9 +375,12 @@ export default function AuthorArticlesPage() {
 
                 {months.map((m) => (
                   <section key={m.key} className="flex flex-col gap-2.5">
-                    <div className="flex items-baseline gap-2">
-                      <h2 className="text-lg font-bold">{m.label}</h2>
-                      <span className="text-xs text-[#7A8896]">{countLabel(m.items.length)}</span>
+                    <div className="flex items-center gap-2">
+                      <span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#E6F4FD] text-[#1E9BE6]">
+                        <CalendarDays className="h-4 w-4" />
+                      </span>
+                      <h2 className="text-base font-bold text-[#0B6FA8]">{m.label}</h2>
+                      <span className="text-xs text-[#7A8896]">· {countLabel(m.items.length)}</span>
                     </div>
                     <div className="overflow-hidden rounded-[20px] bg-white shadow-[0_1px_2px_rgba(27,43,58,.04)]">
                       {m.items.map((a, i) => (
