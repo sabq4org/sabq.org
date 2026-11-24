@@ -1,8 +1,8 @@
 import SwiftUI
 
 // صفحة الكاتب — مطابقة للويب (/author/:name، #2257 و#2258):
-//   1. رأس سماوي هادئ: الصورة، الاسم، المسمى تحته، وسطر «يكتب كل <يوم> · N مقالًا
-//      منذ <شهر>» نصًا بلا كبسولات (طلب المالك 2026-11-24).
+//   1. رأس سماوي هادئ: الصورة، الاسم، المسمى تحته، وسطر «N مقالًا منذ <شهر>»
+//      نصًا بلا كبسولات (طلب المالك 2026-11-24).
 //   2. «أحدث مقال» بارزًا، ثم بقية المقالات مجمّعة بالشهر بأيقونة تقويم.
 //   3. «كتّاب <اليوم>» و«موعده القادم» لكتّاب الرأي.
 // بلا أعداد مشاهدات. البيانات من /api/v1/authors/by-name (الحقل `writer`).
@@ -155,7 +155,8 @@ struct AuthorArticlesView: View {
         .background(LinearGradient(colors: [Self.heroTop, SabqTheme.background], startPoint: .top, endPoint: .bottom))
     }
 
-    /// سطر نصي واحد بلا كبسولات: يوم الكتابة بالأزرق ثم عدد المقالات.
+    /// عدد المقالات منذ أول نشر. لا «يكتب كل <يوم>» في الرأس: اليوم مستنتج من
+    /// أغلب أيام آخر 8 مقالات لا جدول معتمد (رفض المالك 2026-11-24).
     @ViewBuilder
     private var chips: some View {
         let count = page?.stats.articleCount ?? 0
@@ -163,21 +164,13 @@ struct AuthorArticlesView: View {
         let countText = count > 0
             ? OpinionText.count(count) + (since.map { " منذ \(OpinionText.monthYear($0))" } ?? "")
             : nil
-        VStack(spacing: SabqLayout.space4) {
-            if weekdayName != nil || countText != nil {
-                (Text(weekdayName.map { "يكتب كل \($0)" } ?? "")
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundColor(SabqTheme.primary)
-                 + Text(weekdayName != nil && countText != nil ? "  ·  " : "")
-                    .font(SabqType.meta.font)
-                    .foregroundColor(SabqTheme.textTertiary)
-                 + Text(countText ?? "")
-                    .font(SabqType.meta.font)
-                    .foregroundColor(SabqTheme.textSecondary))
-                    .multilineTextAlignment(.center)
-            }
+        if let countText {
+            Text(countText)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
     }
 
     /// الخادم يرسل أحيانًا «2026-01-07 13:30:57.827» (مسافة بدل T وبلا منطقة = UTC).
