@@ -39,6 +39,8 @@ export interface NavItem {
   children?: NavItem[];
   meta?: NavItemMeta;
   divider?: boolean; // Show divider after this item
+  /** عنوان فرعي يظهر قبل هذا العنصر داخل مجموعته (تضعه organizeStaffNavigation) */
+  sectionLabel?: string;
 }
 
 export interface NavContext {
