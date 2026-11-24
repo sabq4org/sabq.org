@@ -36,6 +36,7 @@ import {
   type StaffDocKind,
   type StaffProfilePatch,
 } from "../services/staffProfileService";
+import { syncApprovedStaffBioToPublicProfile } from "../services/publicBylineService";
 import {
   assertPressIdNumberChange,
   ensurePressIdNumber,
@@ -440,7 +441,12 @@ router.post(
         req.params.userId,
         (req.user as { id: string }).id,
       );
-      res.json({ ok: true, ...updated });
+      // النبذة المعتمدة تصبح سيرة الكاتب العامة — فشلها لا يُلغي الاعتماد.
+      const publicBio = await syncApprovedStaffBioToPublicProfile(req.params.userId).catch((err: unknown) => {
+        console.error("[StaffProfiles] public bio sync failed:", err instanceof Error ? err.message : err);
+        return null;
+      });
+      res.json({ ok: true, ...updated, publicBioSynced: publicBio?.synced === true });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "تعذر الاعتماد";
       const code = /غير مكتمل|لا يوجد/.test(message) ? 400 : 500;

@@ -174,6 +174,17 @@
   `pending_review` تلقائياً. HR يعتمد عبر `POST .../approve` أو يطلب تصحيحاً.
   الإصدار الذاتي للشهادة يتطلب `approved` فقط (تفاصيل في
   `official-letters/SYSTEM.md`).
+- **الصفة والسيرة العامة للكاتب والمراسل (2026-11-24):** ما يراه القارئ تحت الاسم
+  هو `staff.titleAr`، والسيرة في صفحة الكاتب `staff.bioAr`، عبر `/api/reporters/:slug`
+  في الويب وiOS وأندرويد (نص احتياطي ثابت عند الفراغ؛ الرأي يسقط على `staff.bioAr`
+  ثم `users.bio`). `users.bio` نبذة شخصية ذاتية بلا مراجعة. منطقها في
+  `server/services/publicBylineService.ts` (+ `shared/publicByline.ts`):
+  اعتماد ملف المنسوب ينسخ `staff_profiles.bioAr` إلى `staff.bioAr` (لكاتب الرأي
+  والمراسل فقط؛ ينشئ صفحتهما إن لم توجد، ولا يمس المحررين)، والرد يضيف
+  `publicBioSynced`. قبول طلب كاتب رأي ينشئ صفًا في `staff` بنوع `opinion_author`
+  (السيرة منسوخة من `users.bio` فلا يتغير العرض). `PATCH /api/admin/users/:id/staff`
+  يقبل المسح، وكل تعديل يمسح كاش الملف في كل النسخ ويطهّر حافة Cloudflare.
+  تعديل النبذة بعد الاعتماد لا يُنشر حتى اعتماد جديد.
 - **رقم البطاقة الصحفية — نظام مركزي (منذ 2026-07-30):** الصيغة `SBQ-PR-0042`
   مشتقة من تسلسل الرقم الوظيفي `SBQ-0042` (رقم واحد للمنسوب في كل الأنظمة)،
   ويولّده `server/services/pressCardNumberService.ts` عبر
