@@ -22,9 +22,10 @@ import {
   createOpinionWriterFile,
   getOpinionWriterFileDownload,
   listOpinionWriterFiles,
+  notifyWritersOfNewFile,
   softDeleteOpinionWriterFile,
 } from "../services/opinionWriterFilesService";
-import { recordFileDownload } from "../services/opinionWriterAnnouncementsService";
+import { listOpenedFileIds, recordFileDownload } from "../services/opinionWriterAnnouncementsService";
 
 const router = Router();
 
@@ -59,8 +60,12 @@ router.get("/api/opinion-writer-files", requireAuth, async (req: Request, res: R
     if (!(await canReadOpinionWriterFiles(userId))) {
       return res.status(403).json({ message: "هذا القسم مخصص لكتّاب الرأي وإدارة المقالات" });
     }
-    const files = await listOpinionWriterFiles();
-    return res.json({ files });
+    const [files, openedFileIds] = await Promise.all([
+      listOpinionWriterFiles(),
+      listOpenedFileIds(userId).catch(() => [] as string[]),
+    ]);
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.json({ files, openedFileIds });
   } catch (error) {
     console.error("[opinion-writer-files] list failed:", error);
     return res.status(500).json({ message: "تعذر جلب قائمة الملفات" });
@@ -134,6 +139,8 @@ router.post(
         mimeType: uploadedFile.mimetype,
         uploadedBy: actorId,
       });
+      // إشعار الكتّاب بالملف الجديد في الخلفية — لا يؤخر الرد ولا يُفشله.
+      void notifyWritersOfNewFile(file, actorId);
 
       await logActivity({
         userId: actorId,

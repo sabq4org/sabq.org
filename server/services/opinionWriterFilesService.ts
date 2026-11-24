@@ -3,7 +3,7 @@
 
 import { randomUUID } from "crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { opinionWriterFiles, users } from "@shared/schema";
+import { notificationsInbox, opinionWriterFiles, users } from "@shared/schema";
 import {
   MAX_OPINION_WRITER_FILE_BYTES,
   buildPdfContentDisposition,
@@ -11,6 +11,8 @@ import {
 } from "@shared/opinionWriterFiles";
 import { db } from "../db";
 import { ObjectStorageService } from "../objectStorage";
+import { notificationBus } from "../notificationBus";
+import { listActiveOpinionWriters } from "./opinionWriterAnnouncementsService";
 
 export { MAX_OPINION_WRITER_FILE_BYTES, buildPdfContentDisposition, isValidPdfBuffer };
 
@@ -175,4 +177,41 @@ export async function getOpinionWriterFileDownload(id: string): Promise<{
     originalFileName: file.originalFileName,
     signedUrl,
   };
+}
+
+const WRITER_FILES_DEEPLINK = "/dashboard/opinion-author/files";
+
+/**
+ * إشعار كل كتّاب الرأي النشطين بملف جديد (صندوق الإشعارات + البث الحي).
+ * لا يُفشل الرفع أبدًا: أي خطأ يُسجَّل فقط.
+ */
+export async function notifyWritersOfNewFile(file: { id: string; title: string }, uploadedBy: string): Promise<number> {
+  try {
+    const writers = (await listActiveOpinionWriters()).filter((w) => w.id !== uploadedBy);
+    if (writers.length === 0) return 0;
+    const type = "OpinionWriterFileNew";
+    const title = "ملف جديد في «ملفاتي»";
+    const body = file.title;
+    for (let i = 0; i < writers.length; i += 200) {
+      const chunk = writers.slice(i, i + 200);
+      await db.insert(notificationsInbox).values(
+        chunk.map((w) => ({
+          userId: w.id,
+          type,
+          title,
+          body,
+          deeplink: WRITER_FILES_DEEPLINK,
+          read: false,
+          metadata: { fileId: file.id },
+        })),
+      );
+    }
+    for (const w of writers) {
+      notificationBus.emit(w.id, { type, title, body, deeplink: WRITER_FILES_DEEPLINK });
+    }
+    return writers.length;
+  } catch (error: unknown) {
+    console.error("[opinion-writer-files] notify writers failed:", error instanceof Error ? error.message : error);
+    return 0;
+  }
 }
