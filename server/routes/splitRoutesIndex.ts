@@ -47,6 +47,7 @@ import reporterArticleListRouter from "./reporterArticleList";
 import sabqPlusPreviewRouter from "./sabqPlusPreview";
 import nationalDayBlockRouter from "./nationalDayBlock";
 import staffProfilesRouter from "./staffProfiles";
+import publicBylineRouter from "./publicByline";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
 import meetingArchiveRouter from "./meetingArchiveRoutes";
@@ -207,6 +208,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(sabqPlusPreviewRouter);
   app.use(nationalDayBlockRouter);
   app.use(staffProfilesRouter);
+  app.use(publicBylineRouter);
   app.use(meetingsRouter);
   app.use(meetingMinutesRouter);
   app.use(meetingArchiveRouter);
