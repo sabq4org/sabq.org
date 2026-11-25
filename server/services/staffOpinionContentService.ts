@@ -10,7 +10,7 @@ import { db } from "../db";
 import { articles, type Article } from "@shared/schema";
 import { resolveStaffOpinionArticleStatus } from "@shared/staffApp";
 import { recordArticleSave } from "./articleHistoryService";
-import { articleLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
+import { deskLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
 import { normalizeDraftContent } from "./botDraftsService";
 import { draftLockMessageFor } from "./draftLockService";
 import { StaffOpinionDeskError } from "./staffOpinionDeskService";
@@ -107,7 +107,7 @@ export async function editOpinionDraftFromDesk(input: {
       eq(articles.status, before.status),
       before.scheduledAt ? eq(articles.scheduledAt, before.scheduledAt) : isNull(articles.scheduledAt),
       matchesArticleVersion(new Date(before.updatedAt)),
-      articleLockAllowsWriter(input.actorId),
+      deskLockAllowsWriter(input.actorId),
     ))
     .returning();
   if (!row) {

@@ -25,7 +25,7 @@ import type { BotDeskOpinionImageJob } from "@shared/botDesk";
 import { resolveStaffOpinionArticleStatus } from "@shared/staffApp";
 import { logActivity } from "../rbac";
 import { recordArticleSave } from "./articleHistoryService";
-import { articleLockAllowsWriter, nextArticleVersion } from "./articleWriteVersion";
+import { deskLockAllowsWriter, nextArticleVersion } from "./articleWriteVersion";
 import { draftLockMessageFor } from "./draftLockService";
 import { buildOpinionImagePrompt } from "./opinionPrepareText";
 import { stripHtmlToText } from "./proofreadService";
@@ -274,7 +274,7 @@ export async function runOpinionImage(initial: StoredJob, snapshot: ArticleSnaps
         snapshot.scheduledAt ? eq(articles.scheduledAt, snapshot.scheduledAt) : isNull(articles.scheduledAt),
         snapshot.publishedAt ? eq(articles.publishedAt, snapshot.publishedAt) : isNull(articles.publishedAt),
         imageUnchangedSince(snapshot.imageUrl),
-        articleLockAllowsWriter(job.actorId),
+        deskLockAllowsWriter(job.actorId),
       ))
       .returning();
     if (!row) {

@@ -26,7 +26,7 @@ import {
 import { aiGateway } from "../ai/gateway";
 import { logActivity } from "../rbac";
 import { recordArticleSave } from "./articleHistoryService";
-import { articleLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
+import { deskLockAllowsWriter, liveDeskEditLock, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
 import { createEditorialImageJob, getEditorialImageJob, runEditorialImageJob } from "./editorialImagesService";
 import { EditorialImageError, safeImageError } from "./openaiImagesProvider";
 import { getNextSlotForWriter } from "./opinionWritersService";
@@ -129,7 +129,7 @@ export async function lockHeldByOther(articleId: string, actorId: string): Promi
     .where(and(
       eq(articleEditLocks.articleId, articleId),
       ne(articleEditLocks.userId, actorId),
-      gt(articleEditLocks.expiresAt, new Date()),
+      liveDeskEditLock(),
     ))
     .limit(1);
   return lock ? lock.userName || "زميل" : null;
@@ -460,7 +460,7 @@ async function runOpinionPrep(initial: StoredJob, scheduledAt?: string): Promise
         eq(articles.id, before.id),
         ne(articles.status, "published"),
         matchesArticleVersion(new Date(before.updatedAt)),
-        articleLockAllowsWriter(job.actorId),
+        deskLockAllowsWriter(job.actorId),
       ))
       .returning();
     if (!row) {
