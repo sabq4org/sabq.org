@@ -184,6 +184,14 @@ export const navConfig: NavItem[] = [
     roles: ["opinion_author"],
   },
   {
+    id: "opinion_author_voice",
+    labelKey: "nav.writer_voice",
+    labelAr: "صوتي",
+    path: "/dashboard/opinion-author/voice",
+    icon: Mic,
+    roles: ["opinion_author"],
+  },
+  {
     id: "opinion_author_feedback",
     labelKey: "nav.writer_feedback",
     labelAr: "اهتماماتي ومقترحاتي",
@@ -565,6 +573,16 @@ export const navConfig: NavItem[] = [
     icon: FolderOpen,
     roles: ["admin", "editor", "system_admin"],
     permissions: ["opinion.review"],
+  },
+  {
+    id: "opinion_writer_voices",
+    labelKey: "nav.opinion_writer_voices",
+    labelAr: "أصوات كتّاب الرأي",
+    path: "/dashboard/opinion-writer-voices",
+    icon: Mic,
+    roles: ["admin", "system_admin"],
+    // صلاحية غير موجودة في القاعدة عمدًا: تظهر لحامل "*" فقط (المسؤول ومدير النظام).
+    permissions: ["opinion_writer_voices.view"],
   },
   {
     id: "opinion_writer_announcements",

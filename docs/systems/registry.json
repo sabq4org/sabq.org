@@ -261,6 +261,15 @@
         "client/src/components/meetings/UpcomingMeetingNotice.tsx",
         "client/src/components/meetings/meetingNoticeTiming.ts",
         "migrations/20261123_opinion_writer_files.sql",
+        "shared/writerVoice.ts",
+        "server/routes/writerVoice.ts",
+        "server/services/writerVoiceService.ts",
+        "server/jobs/writerVoicePurgeJob.ts",
+        "client/src/hooks/useVoiceRecorder.ts",
+        "client/src/pages/opinion-author/WriterVoicePage.tsx",
+        "client/src/pages/dashboard/OpinionWriterVoicesAdminPage.tsx",
+        "migrations/20261125_opinion_writer_voices.sql",
+        "tests/unit/writerVoice.test.ts",
         "tests/unit/opinionWriterFiles.test.ts",
         "shared/opinionWriterFeedback.ts",
         "server/routes/opinionWriterFeedback.ts",
@@ -654,7 +663,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-11-24"
+      "lastReviewed": "2026-11-25"
     },
     {
       "id": "ifox",

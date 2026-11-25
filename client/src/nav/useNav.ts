@@ -83,6 +83,7 @@ export const STAFF_NAV_SECTION_DEFINITIONS: readonly StaffNavSectionDefinition[]
         itemIds: [
           "opinion_writers",
           "opinion_writer_files",
+          "opinion_writer_voices",
           "opinion_writer_announcements",
           "opinion_writer_feedback",
           "opinion_tickets",

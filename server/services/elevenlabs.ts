@@ -512,6 +512,55 @@ export class ElevenLabsService {
     }
   }
 
+  /**
+   * Instant Voice Clone from one browser recording (writer voice «صوتي»).
+   * Unlike cloneVoice() it keeps the real MIME type and file name, has a
+   * timeout, and never logs the voice id together with a person's name.
+   */
+  async cloneVoiceFromSample(options: {
+    name: string;
+    description?: string;
+    file: Buffer;
+    mimeType: string;
+    fileName: string;
+    labels?: Record<string, string>;
+    timeoutMs?: number;
+  }): Promise<{ voice_id: string }> {
+    const formData = new FormData();
+    formData.append('name', options.name);
+    if (options.description) formData.append('description', options.description);
+    if (options.labels) formData.append('labels', JSON.stringify(options.labels));
+    const blob = new Blob([new Uint8Array(options.file)], { type: options.mimeType });
+    formData.append('files', blob, options.fileName);
+
+    const response = await fetch(`${this.baseUrl}/voices/add`, {
+      method: 'POST',
+      headers: { 'xi-api-key': this.apiKey },
+      body: formData,
+      signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
+    });
+    if (!response.ok) {
+      const errorText = (await response.text()).slice(0, 300);
+      const err: Error & { status?: number } = new Error(`Voice cloning failed: ${response.status} - ${errorText}`);
+      err.status = response.status;
+      throw err;
+    }
+    const result = (await response.json()) as { voice_id?: string };
+    if (!result.voice_id) throw new Error('Voice cloning failed: no voice_id in response');
+    return { voice_id: result.voice_id };
+  }
+
+  /** Delete a voice and report the HTTP outcome; 404 counts as already gone. */
+  async deleteVoiceStrict(voiceId: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/voices/${encodeURIComponent(voiceId)}`, {
+      method: 'DELETE',
+      headers: { 'xi-api-key': this.apiKey },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (response.ok || response.status === 404) return;
+    throw new Error(`Voice delete failed: ${response.status}`);
+  }
+
   async deleteVoice(voiceId: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/voices/${voiceId}`, {

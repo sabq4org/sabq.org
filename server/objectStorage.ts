@@ -863,6 +863,25 @@ export class ObjectStorageService {
     );
   }
 
+  /**
+   * Permanently delete a private document stored via uploadPrivateDocument.
+   * `key` is the stored `path`. Deleting a missing key succeeds (S3 semantics).
+   * Used when a writer withdraws consent for a voice sample (writer voice).
+   */
+  async deletePrivateDocument(key: string): Promise<void> {
+    if (!key) return;
+    const provider = getPrivateStorageProvider();
+    if (provider === "r2") {
+      await getR2Client().send(new DeleteObjectCommand({ Bucket: getR2PrivateBucket(), Key: key }));
+      return;
+    }
+    if (provider === "s3") {
+      await getS3Client().send(new DeleteObjectCommand({ Bucket: getS3Bucket(), Key: key }));
+      return;
+    }
+    throw new Error("[ObjectStorage] Private document delete unavailable — configure R2 or S3 credentials.");
+  }
+
   async uploadFile(
     path: string,
     buffer: Buffer,
