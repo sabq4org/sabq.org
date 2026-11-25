@@ -20,6 +20,7 @@ const COMPACT_ONLY_IDS = new Set([
   "opinion_author_guide",
   "opinion_author_my_services",
   "opinion_author_files",
+  "opinion_author_voice",
   "opinion_author_feedback",
   "my_angle",
   "writer_inquiries",

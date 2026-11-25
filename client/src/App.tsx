@@ -476,6 +476,8 @@ const AdminPublisherApplications = lazy(() => retryImport(() => import("@/pages/
 const OpinionAuthorDashboard = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorDashboard")));
 const WriterGuidePage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterGuidePage")));
 const WriterFilesPage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterFilesPage")));
+const WriterVoicePage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterVoicePage")));
+const OpinionWriterVoicesAdminPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWriterVoicesAdminPage")));
 const WriterFeedbackPage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterFeedbackPage")));
 const ReporterMyArticlesPage = lazy(() => retryImport(() => import("@/pages/reporter/ReporterMyArticlesPage")));
 const OpinionTicketsList = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketsList")));
@@ -1028,6 +1030,7 @@ function Router() {
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
         <Route path="/dashboard/opinion-writer-files">{() => <LazyRoute component={OpinionWriterFilesAdminPage} />}</Route>
+        <Route path="/dashboard/opinion-writer-voices">{() => <LazyRoute component={OpinionWriterVoicesAdminPage} />}</Route>
         <Route path="/dashboard/opinion-writer-feedback">{() => <LazyRoute component={OpinionWriterFeedbackAdminPage} />}</Route>
         <Route path="/dashboard/opinion-writer-announcements">{() => <LazyRoute component={OpinionWriterAnnouncementsAdminPage} />}</Route>
         <Route path="/dashboard/opinion-writer-announcements/:id">{() => <LazyRoute component={OpinionWriterAnnouncementTrackingPage} />}</Route>
@@ -1169,6 +1172,7 @@ function Router() {
         <Route path="/dashboard/opinion-author">{() => <LazyRoute component={OpinionAuthorDashboard} />}</Route>
         <Route path="/dashboard/opinion-author/guide">{() => <LazyRoute component={WriterGuidePage} />}</Route>
         <Route path="/dashboard/opinion-author/files">{() => <LazyRoute component={WriterFilesPage} />}</Route>
+        <Route path="/dashboard/opinion-author/voice">{() => <LazyRoute component={WriterVoicePage} />}</Route>
         <Route path="/dashboard/opinion-author/feedback">{() => <LazyRoute component={WriterFeedbackPage} />}</Route>
         <Route path="/dashboard/opinion-author/tickets/:id">{() => <LazyRoute component={OpinionTicketDetail} />}</Route>
         <Route path="/dashboard/opinion-author/tickets">{() => <LazyRoute component={OpinionTicketsList} />}</Route>

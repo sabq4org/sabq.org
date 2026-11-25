@@ -16253,6 +16253,32 @@ export const opinionWriterFiles = pgTable("opinion_writer_files", {
 export type OpinionWriterFile = typeof opinionWriterFiles.$inferSelect;
 export type InsertOpinionWriterFile = typeof opinionWriterFiles.$inferInsert;
 
+// «صوتي» لكتّاب الرأي: صف واحد لكل كاتب لاستنساخ صوته في ElevenLabs (لمقالاته فقط وباختياره).
+// migrations/20261125_opinion_writer_voices.sql
+export const opinionWriterVoices = pgTable("opinion_writer_voices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 20 }).notNull().default("processing"),
+  consentVersion: varchar("consent_version", { length: 20 }),
+  consentedAt: timestamp("consented_at"),
+  consentWithdrawnAt: timestamp("consent_withdrawn_at"),
+  sampleStorageKey: text("sample_storage_key"),
+  sampleMime: varchar("sample_mime", { length: 60 }),
+  sampleBytes: integer("sample_bytes"),
+  sampleSeconds: integer("sample_seconds"),
+  sampleDeletedAt: timestamp("sample_deleted_at"),
+  previewStorageKey: text("preview_storage_key"),
+  elevenlabsVoiceId: varchar("elevenlabs_voice_id", { length: 64 }),
+  errorMessage: text("error_message"),
+  readyAt: timestamp("ready_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_opinion_writer_voices_sample_purge").on(table.readyAt).where(sql`${table.sampleStorageKey} IS NOT NULL`),
+]);
+
+export type OpinionWriterVoice = typeof opinionWriterVoices.$inferSelect;
+
 // استبيان كتّاب الرأي: الاهتمامات (اختيار متعدد) والمقترحات — صف واحد لكل كاتب يحدّثه متى شاء.
 // migrations/20261123_opinion_writer_feedback.sql
 export const opinionWriterFeedback = pgTable("opinion_writer_feedback", {

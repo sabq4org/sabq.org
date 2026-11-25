@@ -466,6 +466,10 @@ export default function WriterWorkspacePage() {
                   {workspace?.monthlyBrief?.message ? (
                     <p className="m-0 border-b border-[#EEF2F6] px-5 py-3 text-[13px] leading-6 text-[#55667A]">{workspace.monthlyBrief.message}</p>
                   ) : null}
+                  <button type="button" onClick={() => navigate("/dashboard/opinion-author/voice")} className="flex w-full items-center justify-between border-b border-[#EEF2F6] px-5 py-3 text-sm">
+                    <span>صوتي</span>
+                    <span className="flex items-center gap-1 text-[13px] text-[#0B6FA8]">سجّل صوتك لمقالاتك <ArrowLeft className="h-4 w-4" /></span>
+                  </button>
                   <button type="button" onClick={() => navigate("/dashboard/opinion-author/files")} className="flex w-full items-center justify-between px-5 py-3 text-sm">
                     <span>ملفاتي</span>
                     <span className="flex items-center gap-1 text-[13px] text-[#0B6FA8]">الملفات والمحاضر <ArrowLeft className="h-4 w-4" /></span>
