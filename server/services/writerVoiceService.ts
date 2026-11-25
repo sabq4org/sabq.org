@@ -387,6 +387,19 @@ export async function getWriterVoiceAudioUrl(userId: string, kind: "sample" | "p
   return new ObjectStorageService().getPrivateFileDownloadURL(key, 300);
 }
 
+/**
+ * التسجيل الأصلي كاملًا من التخزين الخاص (≤ 12MB). سفاري لا يشغّل تسجيل آيفون (MP4 بلا مدة)
+ * إذا بُثّ من الرابط مباشرة، فتقرؤه الصفحة كاملًا وتشغّله من الذاكرة كما في خطوة «استمع لتسجيلك».
+ */
+export async function getWriterVoiceSampleBytes(userId: string): Promise<{ buffer: Buffer; mime: string } | null> {
+  const row = await getWriterVoiceRow(userId);
+  if (!row || row.status === "deleted" || !row.sampleStorageKey) return null;
+  const url = await new ObjectStorageService().getPrivateFileDownloadURL(row.sampleStorageKey, 60);
+  const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  if (!response.ok) throw new Error(`sample fetch ${response.status}`);
+  return { buffer: Buffer.from(await response.arrayBuffer()), mime: row.sampleMime || "audio/mp4" };
+}
+
 export type WriterVoiceAdminRow = {
   userId: string;
   name: string;
