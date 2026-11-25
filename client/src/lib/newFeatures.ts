@@ -21,6 +21,12 @@ export const NEW_FEATURES: NewFeature[] = [
     paths: ["/dashboard/my-services"],
     showUntil: "2027-03-31",
   },
+  {
+    key: "writer-voice",
+    label: "صوتي",
+    paths: ["/dashboard/opinion-author/voice"],
+    showUntil: "2027-03-31",
+  },
 ];
 
 export type NewFeatureSeen = Record<string, { firstShownAt?: number; openedAt?: number }>;

@@ -50,6 +50,7 @@ export function useVoiceRecorder() {
   };
 
   const release = useCallback(() => {
+    setAudioSessionType("playback");
     stopLoop();
     modeRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -63,6 +64,7 @@ export function useVoiceRecorder() {
 
   const ensureStream = useCallback(async () => {
     if (streamRef.current && analyserRef.current) return;
+    setAudioSessionType("play-and-record");
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true, channelCount: 1 },
     });
@@ -184,7 +186,8 @@ export function useVoiceRecorder() {
       };
       statsRef.current = { speechSum: 0, speechFrames: 0, clipped: 0, frames: 0, noiseSum: 0, noiseFrames: 0 };
       recorderRef.current = recorder;
-      recorder.start(1000);
+      // بلا تقسيم زمني: سفاري يكتب كل شريحة MP4 مستقلة فيخرج الملف المجمّع صامتًا عند التشغيل.
+      recorder.start();
       startedAtRef.current = performance.now();
       modeRef.current = "record";
       setElapsed(0);
@@ -214,4 +217,17 @@ export function useVoiceRecorder() {
   }, [release]);
 
   return { phase, error, elapsed, levels, liveDbfs, noiseDbfs, result, checkRoom, startRecording, stopRecording, reset };
+}
+
+/**
+ * آيفون: بعد فتح الميكروفون تبقى جلسة الصوت «تسجيل» فيخرج التشغيل من سماعة المكالمات أو يُكتم مع زر الصامت.
+ * نعيدها إلى «تشغيل» بعد التسجيل (Safari 16.4+، وتتجاهلها المتصفحات الأخرى).
+ */
+export function setAudioSessionType(type: "playback" | "play-and-record") {
+  try {
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session) session.type = type;
+  } catch {
+    /* غير مدعوم */
+  }
 }
