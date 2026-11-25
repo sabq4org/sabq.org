@@ -23,6 +23,26 @@ describe("createOAuthWebCompletion", () => {
     warn.mockRestore();
   });
 
+  it("redirects Google invalid_grant TokenError without logging description", () => {
+    const { req, res } = fakeReqRes(undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    createOAuthTokenErrorHandler("google")(
+      {
+        name: "TokenError",
+        code: "invalid_grant",
+        status: 400,
+        description: "sensitive provider response"
+      },
+      req,
+      res,
+      vi.fn(),
+    );
+    expect(res.redirect).toHaveBeenCalledWith("/ar/login?error=google_auth_failed");
+    expect(warn).toHaveBeenCalledWith("[google OAuth TokenError] code=invalid_grant status=400");
+    expect(warn.mock.calls.flat().join(" ")).not.toContain("sensitive provider response");
+    warn.mockRestore();
+  });
+
   it("passes invalid_client TokenError to next", () => {
     const { req, res } = fakeReqRes(undefined);
     const next = vi.fn();
@@ -32,12 +52,18 @@ describe("createOAuthWebCompletion", () => {
     expect(res.redirect).not.toHaveBeenCalled();
   });
 
-  it("passes unexpected errors to next", () => {
+  it("passes unexpected errors and unsupported TokenError codes to next", () => {
     const { req, res } = fakeReqRes(undefined);
     const next = vi.fn();
     const error = new Error("unexpected");
     createOAuthTokenErrorHandler("google")(error, req, res, next);
+    const invalidRequest = { name: "TokenError", code: "invalid_request", status: 400 };
+    const invalidClient = { name: "TokenError", code: "invalid_client", status: 401 };
+    createOAuthTokenErrorHandler("google")(invalidRequest, req, res, next);
+    createOAuthTokenErrorHandler("google")(invalidClient, req, res, next);
     expect(next).toHaveBeenCalledWith(error);
+    expect(next).toHaveBeenCalledWith(invalidRequest);
+    expect(next).toHaveBeenCalledWith(invalidClient);
     expect(res.redirect).not.toHaveBeenCalled();
   });
 

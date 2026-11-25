@@ -19,6 +19,10 @@ import { isChunkErrorMessage } from "./retryImport";
 const RELOAD_FLAG = "sabq:deploy-reload-at";
 const RELOAD_COOLDOWN_MS = 30_000;
 const CACHE_BUST_PARAM = "_dr";
+// location.replace starts navigation asynchronously. Keep this separate from
+// the sessionStorage cooldown: sibling preloads can fail in the same task while
+// the first, real recovery is already in flight.
+let recoveryReloadInProgress = false;
 
 const DYNAMIC_IMPORT_FAILURE_RE =
   /(dynamically imported module|Importing a module script failed|Failed to fetch dynamically imported|error loading dynamically imported module|Loading chunk \d+ failed|Loading CSS chunk)/i;
@@ -54,6 +58,12 @@ function markReloaded(): void {
  * without ever triggering more than one reload.
  */
 export function attemptChunkRecoveryReload(reason: string): boolean {
+  if (recoveryReloadInProgress) {
+    // A direct caller such as retryImport must still settle its promise if the
+    // pending navigation never commits. The window listener below separately
+    // suppresses sibling preload events that are covered by this navigation.
+    return false;
+  }
   if (recentlyReloaded()) {
     console.error(
       `[deployRecovery] Reloaded within the last ${RELOAD_COOLDOWN_MS}ms; ` +
@@ -62,6 +72,7 @@ export function attemptChunkRecoveryReload(reason: string): boolean {
     );
     return false;
   }
+  recoveryReloadInProgress = true;
   markReloaded();
   console.warn(
     `[deployRecovery] Stale build detected (${reason}); reloading to fetch the latest deploy.`,
@@ -83,8 +94,19 @@ function reloadOnce(reason: string): void {
   attemptChunkRecoveryReload(reason);
 }
 
+/**
+ * Automatic refresh for a confirmed new deploy. It bypasses the cooldown but
+ * still coalesces with a recovery navigation that is already in flight.
+ */
+export function attemptConfirmedDeployRecoveryReload(): boolean {
+  if (recoveryReloadInProgress) return false;
+  forceDeployRecoveryReload();
+  return true;
+}
+
 /** User-initiated hard refresh — bypasses the auto-reload cooldown. */
 export function forceDeployRecoveryReload(): void {
+  recoveryReloadInProgress = true;
   try {
     const url = new URL(window.location.href);
     url.searchParams.set(CACHE_BUST_PARAM, String(Date.now()));
@@ -121,7 +143,10 @@ export function installDeployRecovery(): void {
     // every lazy chunk that fails in the next 30s: the caller gets `undefined`,
     // WebKit throws the dot-less "undefined is not an object (evaluating
     // '(await t())[n]')", and retryImport never gets a rejection to retry.
-    if (attemptChunkRecoveryReload("vite:preloadError")) {
+    if (
+      recoveryReloadInProgress ||
+      attemptChunkRecoveryReload("vite:preloadError")
+    ) {
       event.preventDefault?.();
     }
   });

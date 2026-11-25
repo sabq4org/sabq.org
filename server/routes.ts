@@ -806,7 +806,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       session: false,
       failureRedirect: "/ar/login?error=google_auth_failed",
       failureMessage: true
-    }),
+    }), createOAuthTokenErrorHandler("google"),
     oauthComplete("google")
   );
 

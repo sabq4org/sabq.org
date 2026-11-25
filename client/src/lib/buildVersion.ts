@@ -23,7 +23,7 @@
 //     to prevent reload loops on transient chunk errors) must not block it.
 //     Long-lived tabs across a deploy depend on this to self-heal.
 
-import { forceDeployRecoveryReload } from "./deployRecovery";
+import { attemptConfirmedDeployRecoveryReload } from "./deployRecovery";
 
 declare const __SABQ_BUILD_ID__: string;
 
@@ -59,7 +59,7 @@ async function checkForNewBuild(): Promise<void> {
       // vite:preloadError) blocks the reload, and the user is left on a broken
       // page. A confirmed build-id change is never a false positive, so there's
       // no loop risk here (polling runs at most once per minute, visible only).
-      forceDeployRecoveryReload();
+      attemptConfirmedDeployRecoveryReload();
     }
   } catch {
     // Network/parse failure — stay quiet and retry on the next interval.

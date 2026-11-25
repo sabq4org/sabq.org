@@ -1,4 +1,7 @@
-import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "./deployRecovery";
+import {
+  attemptChunkRecoveryReload,
+  attemptConfirmedDeployRecoveryReload,
+} from "./deployRecovery";
 
 declare const __SABQ_BUILD_ID__: string;
 
@@ -135,7 +138,8 @@ export function retryImport<T>(
           // navigation to a deleted chunk before polling's first/next tick).
           detectNewDeploy().then((isNewDeploy) => {
             if (isNewDeploy) {
-              forceDeployRecoveryReload();
+              if (attemptConfirmedDeployRecoveryReload()) return;
+              reject(new Error("تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)"));
               return;
             }
             // No deploy (null = couldn't tell, or false = same build) — fall
