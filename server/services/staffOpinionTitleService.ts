@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { articles, systemSettings, type Article } from "@shared/schema";
 import { recordArticleSave } from "./articleHistoryService";
-import { articleLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
+import { deskLockAllowsWriter, matchesArticleVersion, nextArticleVersion } from "./articleWriteVersion";
 import { draftLockMessageFor } from "./draftLockService";
 import { StaffOpinionDeskError } from "./staffOpinionDeskService";
 import { opinionTitleEditKey, type OpinionTitleEditFlag } from "./staffOpinionTitleFlags";
@@ -68,7 +68,7 @@ export async function editOpinionTitleFromDesk(input: {
       eq(articles.id, before.id),
       eq(articles.status, "draft"),
       matchesArticleVersion(new Date(before.updatedAt)),
-      articleLockAllowsWriter(input.actorId),
+      deskLockAllowsWriter(input.actorId),
     ))
     .returning();
   if (!row) {
