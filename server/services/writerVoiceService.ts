@@ -3,7 +3,7 @@
 // صف واحد لكل كاتب في opinion_writer_voices؛ آمن مع أكثر من نسخة خادم لأن الحالة في القاعدة.
 
 import { randomUUID } from "crypto";
-import { and, desc, eq, isNotNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lte, or, sql } from "drizzle-orm";
 import { articles, notificationsInbox, opinionWriterVoices, users, type OpinionWriterVoice } from "@shared/schema";
 import {
   WRITER_VOICE_CONSENT_VERSION,
@@ -34,6 +34,8 @@ export class WriterVoiceError extends Error {
 const PROCESSING_STALE_MS = 10 * 60 * 1000;
 const PREVIEW_MODEL = "eleven_multilingual_v2";
 const VOICE_DEEPLINK = "/dashboard/opinion-author/voice";
+/** وسم كل صوت ننشئه في ElevenLabs؛ المطابقة اليومية تحذف الموسوم منها بلا مرجع في القاعدة. */
+const WRITER_VOICE_LABEL_USE = "opinion-writer-own-articles";
 
 function stripHtml(html: string | null | undefined): string {
   return String(html || "")
@@ -176,11 +178,21 @@ export async function submitWriterVoiceSample(input: {
     errorMessage: null,
     updatedAt: now,
   };
+  // حجز ذري: لا يقبل تسجيلًا ثانيًا بينما الأول في «التجهيز» (تبويبان أو نسختا خادم).
+  const staleBefore = new Date(now.getTime() - PROCESSING_STALE_MS);
   const [row] = await db
     .insert(opinionWriterVoices)
     .values({ userId: input.userId, ...fields })
-    .onConflictDoUpdate({ target: opinionWriterVoices.userId, set: fields })
+    .onConflictDoUpdate({
+      target: opinionWriterVoices.userId,
+      set: fields,
+      setWhere: sql`${opinionWriterVoices.status} <> 'processing' OR ${opinionWriterVoices.updatedAt} < ${staleBefore}`,
+    })
     .returning();
+  if (!row) {
+    await deletePrivateQuietly(storage, sampleKey, "unclaimed sample");
+    throw new WriterVoiceError(409, "PROCESSING", "نجهّز تسجيلك السابق الآن. انتظر حتى يكتمل");
+  }
 
   void finishWriterVoiceClone({
     userId: input.userId,
@@ -211,7 +223,7 @@ async function finishWriterVoiceClone(job: {
       file: job.buffer,
       mimeType: job.media.mime,
       fileName: `sample.${job.media.ext}`,
-      labels: { source: "sabq", use: "opinion-writer-own-articles" },
+      labels: { source: "sabq", use: WRITER_VOICE_LABEL_USE, writer: job.userId },
     });
     newVoiceId = clone.voice_id;
 
@@ -243,15 +255,17 @@ async function finishWriterVoiceClone(job: {
 
     if (updated.length === 0) {
       // سحب الكاتب موافقته أو بدأ تسجيلًا آخر أثناء التجهيز: لا نُبقي صوتًا يتيمًا.
-      await service.deleteVoiceStrict(newVoiceId).catch(() => {});
+      await service.deleteVoiceStrict(newVoiceId).catch(() => {}); // إن فشل تلتقطه مطابقة الأصوات اليتيمة
       await deletePrivateQuietly(storage, previewKey, "orphan preview");
+      await deletePrivateQuietly(storage, job.sampleKey, "orphan sample");
       return;
     }
 
     if (job.previous) {
       if (job.previous.elevenlabsVoiceId && job.previous.elevenlabsVoiceId !== newVoiceId) {
+        // إن فشل الحذف يبقى الصوت القديم بلا مرجع في القاعدة، فتحذفه المطابقة اليومية reconcileOrphanWriterVoices.
         await service.deleteVoiceStrict(job.previous.elevenlabsVoiceId).catch((error) => {
-          console.error("[WriterVoice] old voice delete failed:", error instanceof Error ? error.message : error);
+          console.error("[WriterVoice] old voice delete failed (daily reconcile will retry):", error instanceof Error ? error.message : error);
         });
       }
       await deletePrivateQuietly(storage, job.previous.sampleStorageKey, "old sample");
@@ -317,9 +331,35 @@ export async function withdrawWriterVoice(userId: string): Promise<WriterVoiceSt
       throw new WriterVoiceError(502, "DELETE_FAILED", "تعذر حذف صوتك الآن. حاول بعد قليل");
     }
   }
+  // الملفات: لا نؤكد الحذف النهائي قبل نجاحه. إن فشل نُبقي المفاتيح ليعيد الكاتب المحاولة،
+  // والصوت نفسه حُذف من ElevenLabs فنمسح معرّفه.
   const storage = new ObjectStorageService();
-  await deletePrivateQuietly(storage, row.sampleStorageKey, "sample");
-  await deletePrivateQuietly(storage, row.previewStorageKey, "preview");
+  const remaining: { sampleStorageKey: string | null; previewStorageKey: string | null } = {
+    sampleStorageKey: row.sampleStorageKey,
+    previewStorageKey: row.previewStorageKey,
+  };
+  for (const field of ["sampleStorageKey", "previewStorageKey"] as const) {
+    const key = remaining[field];
+    if (!key) continue;
+    try {
+      await storage.deletePrivateDocument(key);
+      remaining[field] = null;
+    } catch (error) {
+      console.error(`[WriterVoice] withdraw ${field} delete failed:`, error instanceof Error ? error.message : error);
+    }
+  }
+  if (remaining.sampleStorageKey || remaining.previewStorageKey) {
+    await db
+      .update(opinionWriterVoices)
+      .set({
+        elevenlabsVoiceId: null,
+        ...remaining,
+        errorMessage: "حذفنا صوتك المستنسخ، وتعذر حذف ملف التسجيل الآن. اضغط «احذف صوتي» مرة أخرى.",
+        updatedAt: new Date(),
+      })
+      .where(eq(opinionWriterVoices.userId, userId));
+    throw new WriterVoiceError(502, "DELETE_FAILED", "حذفنا صوتك المستنسخ، وتعذر حذف ملف التسجيل الآن. حاول مرة أخرى بعد قليل");
+  }
   const now = new Date();
   const [updated] = await db
     .update(opinionWriterVoices)
@@ -413,3 +453,39 @@ export async function purgeExpiredWriterVoiceSamples(now: Date = new Date()): Pr
   }
   return purged;
 }
+
+/**
+ * مطابقة يومية: يحذف من ElevenLabs كل صوت يحمل وسم أصوات الكتّاب ولا يشير إليه أي صف،
+ * مثل صوت قديم فشل حذفه بعد إعادة التسجيل. يتجاوز الكاتب الذي لديه تجهيز جارٍ الآن.
+ */
+export async function reconcileOrphanWriterVoices(): Promise<number> {
+  const service = getElevenLabsService();
+  if (!service) return 0;
+  const voices = await service.listAllVoices();
+  const tagged = voices.filter((v) => v.labels?.use === WRITER_VOICE_LABEL_USE && v.labels?.source === "sabq");
+  if (tagged.length === 0) return 0;
+  const rows = await db
+    .select({
+      userId: opinionWriterVoices.userId,
+      status: opinionWriterVoices.status,
+      voiceId: opinionWriterVoices.elevenlabsVoiceId,
+      updatedAt: opinionWriterVoices.updatedAt,
+    })
+    .from(opinionWriterVoices);
+  const referenced = new Set(rows.map((r) => r.voiceId).filter(Boolean) as string[]);
+  const busyWriters = new Set(rows.filter((r) => r.status === "processing" && !isStaleProcessing(r)).map((r) => r.userId));
+  let deleted = 0;
+  for (const v of tagged) {
+    if (referenced.has(v.voice_id)) continue;
+    const writer = v.labels?.writer;
+    if (!writer || busyWriters.has(writer)) continue; // صوت بلا كاتب معروف أو تجهيز جارٍ: لا نلمسه
+    try {
+      await service.deleteVoiceStrict(v.voice_id);
+      deleted += 1;
+    } catch (error) {
+      console.error("[WriterVoice] reconcile delete failed:", error instanceof Error ? error.message : error);
+    }
+  }
+  return deleted;
+}
+
