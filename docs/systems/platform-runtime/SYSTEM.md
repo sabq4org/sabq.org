@@ -1,6 +1,6 @@
 # تشغيل المنصة والبنية المشتركة (`platform-runtime`)
 
-> آخر مراجعة: 2026-11-08 (ملكية اشتراك Redis وإعادة محاولته بعد Upstash rate-limit) | المالك: platform
+> آخر مراجعة: 2026-11-22 (استعادة متزامنة لفشل حزم الواجهة أثناء النشر) | المالك: platform
 
 ## الغرض والحدود
 الإقلاع، القيادة، انتهاء العملية، أدوات البناء والملفات المشتركة. `routes.ts` و`storage.ts` و`mobileApiRoutes.ts` و`schema.ts` مداخل مشتركة وليست ملكية لكل منطق أعمالها؛ يجب قراءة SYSTEM النظام المستهلك عند تعديل مساره أو جدوله. لا تغيير للبيانات أو Schema الإنتاج ضمن مراجعة سبتمبر.
@@ -14,6 +14,7 @@
 - CI يغطي :app و:vara لأندرويد، ومشروعي سبق وVARA في iOS دون توقيع.
 - Sentry يُحمّل بعد أول رسم لتحسين LCP؛ مخزن الأخطاء المبكرة يحفظ `source` و`filename` الأصليين، ولا يعيد عبر `captureException` إلا الخطأ الذي يثبت أن له ملفًا أو stack من نطاق/حزمة سبق أو مشروع Pages `sabq-org`. لا تُعامل أخطاء السكربتات المحقونة عديمة المكدس كالتقاط صريح من التطبيق.
 - فلتر Sentry يسقط `TypeError` ذي القيمة الدقيقة `Type error` من `unhandledrejection` فقط عند وجود رسالة breadcrumb المطابقة لـ`[deployRecovery] Stale build detected (vite:preloadError)` وbreadcrumb `fetch` آخر يبدأ رابطه حرفيًا بـ`https://cdn.sabq.org/assets/` ويثبت الفشل بمستوى `error` أو status لا يقل عن 400؛ أي TypeError آخر يبقى قابلًا للرصد، والتحليل لا يستخدم serialization لبيانات breadcrumb.
+- استعادة حزم Vite تبدأ إعادة تحميل واحدة بكاسر كاش؛ إذا فشلت حزم شقيقة قبل اكتمال انتقال الوثيقة نفسه تُمنع رفضاتها المتزامنة من التسرب كـ`unhandledrejection` دون بدء تحميل ثانٍ. الحالة داخل الذاكرة لا تعبر إعادة التحميل، لذلك يبقى الفشل المتكرر في الوثيقة الجديدة ظاهرًا لمسار إعادة المحاولة/الخطأ ولا يُخفى بسبب cooldown قديم.
 - يضبط الخادم `requestDataIntegration` لمنع body/cookies/headers/ip/query مع `sendDefaultPii=false`، ثم يمرر `beforeSend` عبر `sanitizeServerEvent` لحذف `user` والحقول الحساسة، مع إبقاء method/path وURL بلا query ورؤوس آمنة محددة فقط.
 - بركتا PostgreSQL عبر `node-postgres` في الإنتاج (الرئيسة والاحتياطية للجلسات) تثبتان مستمع خطأ دائمًا على كل عميل عند اتصاله، إضافة إلى مستمع البركة. هذا يمنع انقطاع socket عابرًا أثناء استعارة العميل من التحول إلى `uncaughtException`، مع إزالة التكرار عندما تعيد البركة إرسال كائن الخطأ نفسه؛ البركة الرئيسة تعلّم الاتصال غير متاح وتبدأ فحص الاستعادة. مسار `NeonPool` القديم يبقي مستمع `error` فقط حتى لا يعطّل `poolQueryViaFetch` الاختياري.
 - مشتركا Redis في `server/memoryCache.ts` و`server/services/contentInvalidation.ts` يعطلان `autoResubscribe`؛ `server/utils/redisSubscription.ts` يملك الاشتراك Promise-based، يلتقط الفشل، ويعيد المحاولة بتأخير أسي محدود، ويعيد الاشتراك عند `ready`. تعكس الجاهزية نجاح الاشتراك فقط، وتصبح false عند الانقطاع أو الرفض؛ تبقى الإذاعة والإبطال المحليان best-effort مستقلين عن Redis.
