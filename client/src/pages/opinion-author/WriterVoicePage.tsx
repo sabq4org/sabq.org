@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { isVoiceRecordingSupported, useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { isVoiceRecordingSupported, setAudioSessionType, useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useNewFeature } from "@/hooks/useNewFeatures";
 import {
   WRITER_VOICE_CONSENT_TEXT,
@@ -74,17 +74,28 @@ function Row({ icon: Icon, title, text, tone }: { icon: typeof Mic; title: React
   );
 }
 
-function AudioPlayer({ src, label }: { src: string; label: string }) {
+function AudioPlayer({ src, label, knownDuration }: { src: string; label: string; knownDuration?: number }) {
   const ref = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  // تسجيلات المتصفح كثيرًا ما تُرجع مدة غير معروفة، فنستعمل المدة المقيسة أثناء التسجيل.
+  const total = duration || knownDuration || 0;
+  const play = () => {
+    setAudioSessionType("playback");
+    const el = ref.current;
+    if (!el) return;
+    el.muted = false;
+    el.volume = 1;
+    void el.play().catch(() => {});
+  };
   return (
     <div className="flex items-center gap-3.5 px-4 py-4 sm:px-5">
       <audio
         ref={ref}
         src={src}
-        preload="metadata"
+        preload="auto"
+        playsInline
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
         onEnded={() => setPlaying(false)}
@@ -94,15 +105,15 @@ function AudioPlayer({ src, label }: { src: string; label: string }) {
       <button
         type="button"
         aria-label={playing ? "إيقاف مؤقت" : label}
-        onClick={() => (playing ? ref.current?.pause() : void ref.current?.play())}
+        onClick={() => (playing ? ref.current?.pause() : play())}
         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1E9BE6] text-white"
       >
         {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
       </button>
       <div className="relative h-1.5 flex-1 rounded-full bg-[#EEF2F6]" dir="ltr">
-        <i className="absolute inset-y-0 left-0 rounded-full bg-[#1E9BE6]" style={{ width: duration ? `${Math.min(100, (time / duration) * 100)}%` : "0%" }} />
+        <i className="absolute inset-y-0 left-0 rounded-full bg-[#1E9BE6]" style={{ width: total ? `${Math.min(100, (time / total) * 100)}%` : "0%" }} />
       </div>
-      <span className="text-[13px] tabular-nums text-[#6B7C8F]" dir="ltr">{fmtTime(time)}{duration ? ` / ${fmtTime(duration)}` : ""}</span>
+      <span className="text-[13px] tabular-nums text-[#6B7C8F]" dir="ltr">{fmtTime(time)}{total ? ` / ${fmtTime(total)}` : ""}</span>
     </div>
   );
 }
@@ -270,7 +281,7 @@ export default function WriterVoicePage() {
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[#6B7C8F]">الخطوة 3 من 3</p>
       <h2 className="text-2xl font-bold">استمع لتسجيلك قبل الإرسال</h2>
-      {sampleUrl ? <WriterSurface><AudioPlayer src={sampleUrl} label="تشغيل تسجيلك" /></WriterSurface> : null}
+      {sampleUrl ? <WriterSurface><AudioPlayer src={sampleUrl} label="تشغيل تسجيلك" knownDuration={recorder.result?.durationSeconds} /></WriterSurface> : null}
       {r ? (
         <WriterSurface>
           <Row icon={durationOk ? Check : AlertTriangle} tone={durationOk ? "ok" : "warn"} title={<>المدة <span className="tabular-nums" dir="ltr">{fmtTime(r.durationSeconds)}</span></>}
