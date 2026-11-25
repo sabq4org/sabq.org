@@ -118,6 +118,31 @@ function AudioPlayer({ src, label, knownDuration }: { src: string; label: string
   );
 }
 
+/** التسجيل الأصلي: يُقرأ كاملًا ثم يُشغَّل من الذاكرة، لأن سفاري يعجز عن بثّ تسجيل آيفون من رابط. */
+function SampleFilePlayer({ knownDuration }: { knownDuration?: number | null }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    fetch(apiUrl(`${VOICE_QUERY}/sample-file`), { credentials: "include" })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+      .then((blob) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setSrc(url);
+      })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, []);
+  if (failed) return <p className="px-4 py-3 text-[13.5px] text-[#B7791F] sm:px-5">تعذر تحميل التسجيل الأصلي. حدّث الصفحة وحاول مرة أخرى.</p>;
+  if (!src) return <p className="px-4 py-3 text-[13.5px] text-[#6B7C8F] sm:px-5">جارٍ تحميل التسجيل…</p>;
+  return <AudioPlayer src={src} label="تشغيل تسجيلك" knownDuration={knownDuration ?? undefined} />;
+}
+
 export default function WriterVoicePage() {
   const { toast } = useToast();
   const recorder = useVoiceRecorder();
@@ -351,7 +376,7 @@ export default function WriterVoicePage() {
           {voice.hasSample ? (
             <>
               <span className="text-[13.5px] text-[#6B7C8F]">يُحذف تلقائيًا في {fmtDate(voice.sampleDeletesAt)}.</span>
-              <AudioPlayer src={apiUrl(`${VOICE_QUERY}/audio/sample`)} label="تشغيل تسجيلك" />
+              <SampleFilePlayer knownDuration={voice.sampleSeconds} />
             </>
           ) : (
             <span className="text-[13.5px] text-[#6B7C8F]">حُذف بعد تجهيز صوتك، ويبقى صوتك المستنسخ فقط.</span>

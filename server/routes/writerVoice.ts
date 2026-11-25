@@ -3,6 +3,7 @@
 //   POST   /api/opinion-author/voice                       إرسال التسجيل مع الموافقة (multipart: file, consent, consentVersion, durationSeconds)
 //   DELETE /api/opinion-author/voice                       حذف الصوت وسحب الموافقة
 //   GET    /api/opinion-author/voice/audio/:kind           تسجيلي (sample) أو الاستماع التجريبي (preview) — رابط مؤقت
+//   GET    /api/opinion-author/voice/sample-file           تسجيلي كاملًا (للتشغيل من الذاكرة على آيفون)
 //   GET    /api/admin/opinion-writer-voices                قائمة الحالة للمسؤول ومدير النظام فقط ("*")
 //   GET    /api/admin/opinion-writer-voices/:userId/sample تسجيل كاتب للمسؤول فقط ("*")
 // ADR-001: لا وصول مباشر لقاعدة البيانات هنا — الاستعلامات في writerVoiceService.
@@ -14,6 +15,7 @@ import { getEffectiveUserPermissions, logActivity, requireAuth, userHasAnyRole }
 import {
   WriterVoiceError,
   getWriterVoiceAudioUrl,
+  getWriterVoiceSampleBytes,
   getWriterVoiceState,
   listWriterVoicesForAdmin,
   submitWriterVoiceSample,
@@ -122,6 +124,18 @@ router.delete("/api/opinion-author/voice", requireAuth, requireWriter, async (re
     return res.json({ voice });
   } catch (error) {
     return sendError(res, error, "تعذر حذف صوتك");
+  }
+});
+
+router.get("/api/opinion-author/voice/sample-file", requireAuth, requireWriter, async (req, res) => {
+  try {
+    const file = await getWriterVoiceSampleBytes(userIdOf(req));
+    if (!file) return res.status(404).json({ message: "الملف غير متاح" });
+    res.setHeader("Content-Type", file.mime);
+    res.setHeader("Content-Length", String(file.buffer.length));
+    return res.end(file.buffer);
+  } catch (error) {
+    return sendError(res, error, "تعذر تشغيل الملف");
   }
 });
 
