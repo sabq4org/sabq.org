@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { isVoiceRecordingSupported, useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { useNewFeature } from "@/hooks/useNewFeatures";
 import {
   WRITER_VOICE_CONSENT_TEXT,
   WRITER_VOICE_CONSENT_VERSION,
@@ -120,6 +121,11 @@ export default function WriterVoicePage() {
   });
   const voice = data?.voice ?? null;
   const status = voice?.status ?? "none";
+  const { markOpened } = useNewFeature("writer-voice");
+
+  useEffect(() => {
+    if (status === "processing" || status === "ready") markOpened();
+  }, [status, markOpened]);
 
   useEffect(() => {
     if (step === "home" && !isLoading && (status === "none" || status === "failed")) setStep("intro");
@@ -378,8 +384,8 @@ export default function WriterVoicePage() {
   return (
     <WriterPageFrame
       icon={Mic}
-      title={step === "home" && status === "ready" ? "صوتي" : "سجّل صوتك مرة واحدة، ويقرأ القارئ مقالاتك بصوتك"}
-      description={step === "home" && status === "ready" ? "صوتك المستنسخ لقراءة مقالاتك" : "صوتك لمقالاتك أنت فقط، وباختيارك"}
+      title={step === "home" && status === "ready" ? "صوتي" : "سجّل صوتك مرة واحدة، ليكون جاهزًا لقراءة مقالاتك"}
+      description={step === "home" && status === "ready" ? "صوتك المستنسخ لقراءة مقالاتك" : "قراءة مقالاتك بصوتك للقراء ميزة قادمة. صوتك لمقالاتك أنت فقط، وباختيارك"}
       titleTestId="writer-voice-title"
     >
       <div className="max-w-[720px]">{content}</div>
