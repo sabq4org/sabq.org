@@ -118,6 +118,35 @@ function AudioPlayer({ src, label, knownDuration }: { src: string; label: string
   );
 }
 
+/** يفك الصوت بمحرك المتصفح ويكتبه WAV أحادي 16-bit (دقيقة ≈ 2.8MB عند 24kHz). */
+async function toWavBlob(blob: Blob): Promise<Blob> {
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const ctx = new Ctx();
+  try {
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const rate = Math.min(decoded.sampleRate, 24000);
+    const step = decoded.sampleRate / rate;
+    const length = Math.floor(decoded.length / step);
+    const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i));
+    const out = new DataView(new ArrayBuffer(44 + length * 2));
+    const text = (at: number, value: string) => { for (let i = 0; i < value.length; i += 1) out.setUint8(at + i, value.charCodeAt(i)); };
+    text(0, "RIFF"); out.setUint32(4, 36 + length * 2, true); text(8, "WAVE"); text(12, "fmt ");
+    out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+    out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true);
+    text(36, "data"); out.setUint32(40, length * 2, true);
+    for (let i = 0; i < length; i += 1) {
+      const at = Math.floor(i * step);
+      let v = 0;
+      for (const ch of channels) v += ch[at];
+      v = Math.max(-1, Math.min(1, v / channels.length));
+      out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+    }
+    return new Blob([out], { type: "audio/wav" });
+  } finally {
+    void ctx.close().catch(() => {});
+  }
+}
+
 /** التسجيل الأصلي: يُقرأ كاملًا ثم يُشغَّل من الذاكرة، لأن سفاري يعجز عن بثّ تسجيل آيفون من رابط. */
 function SampleFilePlayer({ knownDuration }: { knownDuration?: number | null }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -127,9 +156,12 @@ function SampleFilePlayer({ knownDuration }: { knownDuration?: number | null }) 
     let cancelled = false;
     fetch(apiUrl(`${VOICE_QUERY}/sample-file`), { credentials: "include" })
       .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
-      .then((blob) => {
+      .then(async (blob) => {
+        // آيفون لا يشغّل ملف MP4 الذي سجّله سفاري عند إعادة فتحه، فنفكّه ونحوّله إلى WAV عادي.
+        // إن تعذّر الفك نشغّل الملف كما هو (يعمل في متصفحات الحاسب).
+        const playable = (await toWavBlob(blob).catch(() => null)) ?? blob;
         if (cancelled) return;
-        url = URL.createObjectURL(blob);
+        url = URL.createObjectURL(playable);
         setSrc(url);
       })
       .catch(() => { if (!cancelled) setFailed(true); });
