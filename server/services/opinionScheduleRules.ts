@@ -41,6 +41,12 @@ export function collectOccupiedScheduleInstants(rows: ScheduleInstantRow[]): Dat
   return occupied;
 }
 
+/** أرضية الفاصل بعد تغيير الموعد الأسبوعي: إن كانت قبل لحظة التغيير فلا أرضية. */
+export function applyGapReset(floor: Date | null, resetAt: Date | null | undefined): Date | null {
+  if (!floor || !resetAt) return floor;
+  return floor.getTime() < resetAt.getTime() ? null : floor;
+}
+
 /**
  * الصفوف التي تخرق الفاصل الأسبوعي مع الموعد المرشح (المنطق نفسه في
  * scheduleConflictsWith)، مع لحظة كل صف. يستعملها الرفض 409 و slot-check معاً.

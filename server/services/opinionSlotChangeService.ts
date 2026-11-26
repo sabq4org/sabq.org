@@ -201,11 +201,11 @@ export async function applyWriterSlotChange(
       .orderBy(asc(articles.scheduledAt));
     const moved: MovedArticle[] = [];
     if (upcoming.length > 0) {
-      // الفاصل الأسبوعي يُحسب من آخر منشور، ومن أي مقال مجدول لن ينتقل (يبقى عليه أقل من ساعة).
+      // ما نُشر على الموعد القديم لا يؤخّر الموعد الجديد (getWriterGapResetAt)؛
+      // يُحسب فقط مقال مجدول لن ينتقل لأنه يبقى عليه أقل من ساعة.
       const [last] = await tx
         .select({
           at: sql<string | null>`max(case
-            when ${articles.status} = 'published' then ${articles.publishedAt}
             when ${articles.status} = 'scheduled' and ${articles.scheduledAt} <= ${leadNow.toISOString()}::timestamp then ${articles.scheduledAt}
           end)`,
         })
