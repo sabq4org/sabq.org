@@ -62,6 +62,34 @@ function Numbers({ data, entry }: { data: ContentDutyCardResponse; entry: Conten
   );
 }
 
+/** صورة المناوب بجانب اسمه، وإلا أول حرف من اسمه (حين يكون لأحد المناوبين صورة). */
+function DutyAvatar({ entry, size }: { entry: ContentDutyCardEntry; size: number }) {
+  const [broken, setBroken] = useState(false);
+  if (entry.avatarUrl && !broken) {
+    return (
+      <img
+        src={entry.avatarUrl}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setBroken(true)}
+        className="shrink-0 rounded-full border-2 border-white object-cover shadow-[0_1px_4px_rgba(27,43,58,.12)]"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="flex shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#D6EEFD] font-bold text-[#0B6FA8]"
+      style={{ width: size, height: size, fontSize: Math.round(size / 2.4) }}
+    >
+      {entry.initial}
+    </span>
+  );
+}
+
 interface ChatTarget { id: string; name: string; subtitle: string | null }
 
 function MessageButton({ name, onClick, fill = false }: { name: string; onClick: () => void; fill?: boolean }) {
@@ -167,6 +195,8 @@ export default function ContentDutyCard() {
   const multi = data.onDuty.length > 1;
   const showMessage = (entry: ContentDutyCardEntry) => chatOn && Boolean(entry.userId) && entry.userId !== user?.id;
   const anyMessage = data.onDuty.some(showMessage);
+  // الصورة تظهر متى كان لأي مناوب صورة، ومن لا صورة له يظهر حرفه فتبقى الصفوف متحاذية.
+  const showAvatars = data.onDuty.some((e) => Boolean(e.avatarUrl));
 
   return (
     <section aria-label="المناوبة الآن" className={`${shell} flex flex-col gap-4`} dir="rtl">
@@ -182,6 +212,7 @@ export default function ContentDutyCard() {
         <div key={`${entry.name}-${idx}`} className={`flex flex-col gap-3 ${multi && idx > 0 ? "border-t border-white/80 pt-4" : ""}`}>
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
             <DutyRing pct={entry.elapsedPct} remaining={entry.remainingMin} size={multi ? 72 : 84} />
+            {showAvatars ? <DutyAvatar entry={entry} size={multi ? 52 : 56} /> : null}
             <div className="flex min-w-[180px] flex-1 flex-col gap-1">
               <span className="text-[13px] text-[#55667A]">{idx === 0 ? "المناوب الآن" : "يناوب معه"}</span>
               <span className="flex flex-wrap items-center gap-2.5">
