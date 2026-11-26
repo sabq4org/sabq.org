@@ -5,6 +5,7 @@ import {
   countWords,
   overlapRatio,
   plainText,
+  retainedPct,
   runMatchesContent,
   wordDiff,
 } from "@shared/smartEditRuns";
@@ -22,8 +23,10 @@ describe("smart edit runs — fingerprint", () => {
 
   it("attributes a published text copied from the output to the smart editor", () => {
     const adoption = computeAdoption({ finalContent: OUTPUT, outputContent: OUTPUT, inputContent: PASTED });
-    expect(adoption.aiPct).toBe(100);
-    expect(adoption.pastedPct + adoption.editorPct).toBe(0);
+    // عبارات أبقاها المحرر الذكي من المدخل («المركز الوطني للأرصاد») ليست من كتابته
+    expect(adoption.aiPct).toBe(adoption.outputChangedPct);
+    expect(adoption.editorPct).toBe(0);
+    expect(retainedPct(adoption)).toBe(100);
     expect(adoptionLabel(adoption).label).toBe("اعتُمد الناتج");
   });
 
@@ -32,6 +35,24 @@ describe("smart edit runs — fingerprint", () => {
     expect(adoption.aiPct).toBeLessThan(25);
     expect(adoption.pastedPct).toBeGreaterThan(60);
     expect(adoptionLabel(adoption).tone).toBe("red");
+  });
+
+  it("acceptance: one run that changed nothing, saved unchanged, gets no adoption badge", () => {
+    const adoption = computeAdoption({ finalContent: PASTED, outputContent: PASTED, inputContent: PASTED });
+    expect(adoption.aiPct).toBe(0);
+    expect(adoption.pastedPct).toBe(100);
+    expect(adoption.outputChangedPct).toBe(0);
+    expect(retainedPct(adoption)).toBeNull();
+    const label = adoptionLabel(adoption);
+    expect(label.label).not.toMatch(/اعتُمد/);
+    expect(label.tone).toBe("neutral");
+  });
+
+  it("a run that changed only a word or two is not counted as adoption either", () => {
+    const output = PASTED.replace("سوف تشهد", "ستشهد");
+    const adoption = computeAdoption({ finalContent: output, outputContent: output, inputContent: PASTED });
+    expect(adoption.aiPct).toBeLessThan(25);
+    expect(adoptionLabel(adoption).label).not.toMatch(/اعتُمد/);
   });
 
   it("counts the editor's own sentences separately and sums to 100", () => {
@@ -51,6 +72,7 @@ describe("smart edit runs — fingerprint", () => {
       pastedPct: 0,
       editorPct: 0,
       finalWords: 0,
+      outputChangedPct: expect.any(Number),
     });
   });
 });

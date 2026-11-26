@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { cn } from "@/lib/utils";
-import { adoptionLabel } from "@shared/smartEditRuns";
+import { adoptionLabel, type SmartEditAdoption } from "@shared/smartEditRuns";
 
 interface UsageArticle {
   articleId: string;
@@ -15,6 +15,7 @@ interface UsageArticle {
   publishedAt: string | null;
   runs: number;
   aiPct: number | null;
+  adoption: SmartEditAdoption | null;
 }
 
 interface UsageEditor {
@@ -191,7 +192,7 @@ export default function SmartEditorUsage() {
                         {editor.articles.map((article) => {
                           const tag = article.runs === 0
                             ? { label: "دون تشغيل", tone: "red" }
-                            : adoptionLabel(article.aiPct === null ? null : { aiPct: article.aiPct, pastedPct: 0, editorPct: 0, finalWords: 1 });
+                            : adoptionLabel(article.adoption);
                           return (
                             <li key={article.articleId} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
                               <a

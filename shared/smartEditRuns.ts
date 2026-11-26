@@ -26,7 +26,15 @@ export interface SmartEditAdoption {
   editorPct: number;
   /** عدد كلمات النص المحفوظ وقت الحساب. */
   finalWords: number;
+  /**
+   * نسبة كلمات الناتج التي غيّرها المحرر الذكي فعلًا (ليست ضمن ثلاثيات المدخل).
+   * قرب الصفر يعني أن الناتج نسخة من المدخل. غائبة في البصمات المحسوبة قبل إضافتها.
+   */
+  outputChangedPct?: number;
 }
+
+/** دون هذه النسبة من التغيير يُعدّ الناتج مطابقًا للمدخل فلا يُنسب للأداة اعتماد. */
+export const SMART_EDIT_UNCHANGED_MAX_PCT = 5;
 
 /** نص صافٍ من HTML: يحذف الوسوم ويفك أشهر الكيانات. */
 export function plainText(htmlOrText: string | null | undefined): string {
@@ -101,10 +109,10 @@ function pct(part: number, total: number): number {
 }
 
 /**
- * بصمة النص المحفوظ: كل كلمة مغطاة بثلاثية من الناتج وحده تُنسب للمحرر الذكي، ومن
- * المدخل وحده للنص الملصق، ولا لهذا ولا ذاك فللمحرر. الكلمة المشتركة بين المدخل والناتج
- * (عبارات أبقاها المحرر الذكي من الأصل) تُنسب للمصدر الأقرب إلى النص المحفوظ كله،
- * فالخبر المنشور بالنص الملصق كما هو لا يُحسب «اعتمادًا» للناتج لمجرد تشابه الوقائع.
+ * بصمة النص المحفوظ: الكلمة المغطاة بثلاثية موجودة في المدخل تُنسب للنص الملصق
+ * (كانت موجودة قبل التشغيل، حتى لو أبقاها المحرر الذكي)، والمغطاة بثلاثية لا توجد
+ * إلا في الناتج تُنسب للمحرر الذكي، والباقي للمحرر. فالتشغيل الذي لم يغيّر النص
+ * لا يُحسب مساهمة للأداة مهما حُفظ ناتجه كما هو.
  */
 export function computeAdoption(input: {
   finalContent: string | null | undefined;
@@ -112,29 +120,41 @@ export function computeAdoption(input: {
   inputContent: string | null | undefined;
 }): SmartEditAdoption {
   const final = comparableWords(input.finalContent);
-  const fromAi = coveredBy(final, shingleSet(comparableWords(input.outputContent)));
-  const fromInput = coveredBy(final, shingleSet(comparableWords(input.inputContent)));
-  const aiShare = fromAi.filter(Boolean).length;
-  const inputShare = fromInput.filter(Boolean).length;
-  const sharedGoesToAi = aiShare >= inputShare;
+  const output = comparableWords(input.outputContent);
+  const inputSet = shingleSet(comparableWords(input.inputContent));
+  const aiOnly = shingleSet(output);
+  for (const shingle of inputSet) aiOnly.delete(shingle);
+  const fromInput = coveredBy(final, inputSet);
+  const fromAi = coveredBy(final, aiOnly);
   let ai = 0;
   let pasted = 0;
   for (let i = 0; i < final.length; i++) {
-    if (fromAi[i] && fromInput[i]) {
-      if (sharedGoesToAi) ai++;
-      else pasted++;
-    } else if (fromAi[i]) ai++;
-    else if (fromInput[i]) pasted++;
+    if (fromInput[i]) pasted++;
+    else if (fromAi[i]) ai++;
   }
   const aiPct = pct(ai, final.length);
   const pastedPct = pct(pasted, final.length);
+  const outputKept = coveredBy(output, inputSet).filter(Boolean).length;
   return {
     aiPct,
     pastedPct,
     // الباقي للمحرر حتى يكون مجموع النسب 100 بعد التقريب
     editorPct: final.length === 0 ? 0 : Math.max(0, 100 - aiPct - pastedPct),
     finalWords: final.length,
+    outputChangedPct: output.length === 0 ? 0 : 100 - pct(outputKept, output.length),
   };
+}
+
+/**
+ * كم بقي في النص المحفوظ مما غيّره المحرر الذكي فعلًا (0–100): نسبة كلماته في المحفوظ
+ * إلى نسبة ما غيّره في ناتجه. نشر الناتج كما هو = 100 حتى لو أبقى الناتج نصف المدخل.
+ * null إن لم يغيّر الناتج النص (لا شيء يُعتمد) أو لم تُحسب البصمة.
+ */
+export function retainedPct(adoption: SmartEditAdoption | null | undefined): number | null {
+  if (!adoption || adoption.finalWords === 0) return null;
+  if (adoption.outputChangedPct === undefined) return adoption.aiPct; // بصمة قديمة
+  if (adoption.outputChangedPct < SMART_EDIT_UNCHANGED_MAX_PCT) return null;
+  return Math.min(100, Math.round((adoption.aiPct / adoption.outputChangedPct) * 100));
 }
 
 /** وصف مختصر لدرجة الاعتماد يظهر شارةً في السجل والملخص. */
@@ -143,8 +163,10 @@ export function adoptionLabel(adoption: SmartEditAdoption | null | undefined): {
   tone: "green" | "amber" | "red" | "neutral";
 } {
   if (!adoption || adoption.finalWords === 0) return { label: "لم يُحسب بعد", tone: "neutral" };
-  if (adoption.aiPct >= 60) return { label: "اعتُمد الناتج", tone: "green" };
-  if (adoption.aiPct >= 25) return { label: "اعتُمد جزئيًا", tone: "amber" };
+  const retained = retainedPct(adoption);
+  if (retained === null) return { label: "الناتج لم يغيّر النص", tone: "neutral" };
+  if (retained >= 60) return { label: "اعتُمد الناتج", tone: "green" };
+  if (retained >= 25) return { label: "اعتُمد جزئيًا", tone: "amber" };
   return { label: "لم يُعتمد الناتج", tone: "red" };
 }
 

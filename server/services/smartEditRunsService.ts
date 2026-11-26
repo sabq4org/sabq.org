@@ -12,6 +12,7 @@ import {
   SMART_EDIT_MAX_TEXT_CHARS,
   computeAdoption,
   countWords,
+  retainedPct,
   runMatchesContent,
   type SmartEditAdoption,
   type SmartEditChannel,
@@ -204,7 +205,9 @@ export interface SmartEditUsageArticle {
   englishSlug: string | null;
   publishedAt: Date | null;
   runs: number;
+  /** كم بقي في المنشور مما غيّره المحرر الذكي (retainedPct)؛ null إن لم يغيّر الناتج النص. */
   aiPct: number | null;
+  adoption: SmartEditAdoption | null;
 }
 
 export interface SmartEditUsageEditor {
@@ -304,11 +307,13 @@ export async function smartEditUsageSummary(input: { from: Date; to: Date }): Pr
       englishSlug: article.englishSlug,
       publishedAt: article.publishedAt,
       runs: runs?.count ?? 0,
-      aiPct: runs?.latest ? runs.latest.aiPct : null,
+      aiPct: retainedPct(runs?.latest),
+      adoption: runs?.latest ?? null,
     });
   }
   for (const editor of editors.values()) {
-    const scored = editor.articles.filter((a) => a.aiPct !== null);
+    // تشغيل لم يغيّر النص يُحسب صفرًا في المتوسط: استُخدمت الأداة دون أن تساهم في الكتابة
+    const scored = editor.articles.filter((a) => a.adoption && a.adoption.finalWords > 0);
     editor.avgAiPct = scored.length ? Math.round(scored.reduce((sum, a) => sum + (a.aiPct ?? 0), 0) / scored.length) : null;
     editor.articles.sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
   }
