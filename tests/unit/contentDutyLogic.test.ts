@@ -98,6 +98,12 @@ describe("expandOccurrences", () => {
     expect(occ.map((o) => o.userId)).toEqual(["salem"]);
     expect(coverWindow(day, { startMinute: 21 * 60, endMinute: null })).toBeNull();
     expect(coverWindow(day, { startMinute: null, endMinute: null })).toEqual({ fromOffset: 0, toOffset: 720, partial: false });
+    // نهاية خارج الوردية تُرفض ولا تُمدَّد إلى نهايتها.
+    expect(coverWindow(day, { startMinute: 14 * 60, endMinute: 7 * 60 })).toBeNull();
+    const morning: DutyShiftRule = { id: "m", userId: "salem", days: [4], startMinute: 8 * 60, endMinute: 12 * 60 };
+    const evening: DutyShiftRule = { id: "e2", userId: "salem", days: [4], startMinute: 16 * 60, endMinute: 20 * 60 };
+    const two = expandOccurrences([morning, evening], [{ id: "e", dutyDate: THU, userId: "salem", coverUserId: "majed", startMinute: null, endMinute: 11 * 60 }], thuMidnight, thuMidnight + 24 * 60 * MIN);
+    expect(two.map((o) => [o.userId, (o.start - thuMidnight) / MIN])).toEqual([["majed", 480], ["salem", 660], ["salem", 960]]);
   });
 
   it("lets two managers share the same hours", () => {

@@ -140,8 +140,9 @@ export function coverWindow(
   const offsetOf = (minute: number) => ((((minute - shift.startMinute) % 1440) + 1440) % 1440);
   const fromOffset = hasFrom ? offsetOf(exception.startMinute as number) : 0;
   let toOffset = hasTo ? offsetOf(exception.endMinute as number) : duration;
-  // نهاية عند بداية الوردية نفسها (وردية 24 ساعة) أو بعد نهايتها تعني حتى النهاية.
-  if (hasTo && (toOffset === 0 || toOffset > duration)) toOffset = duration;
+  // نهاية عند بداية الوردية نفسها تعني نهايتها (وردية 24 ساعة). نهاية خارج الوردية تُرفض ولا تُمدَّد.
+  if (hasTo && toOffset === 0) toOffset = duration;
+  if (toOffset > duration) return null;
   if (fromOffset >= duration || fromOffset >= toOffset) return null;
   return { fromOffset, toOffset, partial: fromOffset > 0 || toOffset < duration };
 }

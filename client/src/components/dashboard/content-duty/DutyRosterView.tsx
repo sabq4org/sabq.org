@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ContentDutyRosterResponse, DutyThresholds, RosterShiftView } from "@shared/contentDuty";
-import { addDays, DUTY_DAY_NAMES, minuteLabel } from "@shared/contentDuty";
+import { addDays, DUTY_DAY_NAMES, minuteLabel, RIYADH_OFFSET_MS } from "@shared/contentDuty";
 import { DUTY_ALERT_KINDS, DUTY_ALERT_LABELS, type DutyAlertSettings } from "@shared/contentDutyAlerts";
 import { apiRequest } from "@/lib/queryClient";
 import { personColor } from "@/lib/contentDuty";
@@ -19,6 +19,8 @@ const toMinute = (hhmm: string) => {
   return h * 60 + (m || 0);
 };
 const toTime = (minute: number) => minuteLabel(minute % 1440);
+/** دقيقة الرياض لحظة الضغط، لا لحظة تحميل الجدول. */
+const riyadhNowMinute = () => Math.floor(((Date.now() + RIYADH_OFFSET_MS) % 86_400_000) / 60_000);
 
 function useDutyMutation<T>(fn: (body: T) => Promise<unknown>, done: string) {
   const qc = useQueryClient();
@@ -162,8 +164,8 @@ function ExceptionEditor({ roster }: { roster: ContentDutyRosterResponse }) {
     const off = (hhmm: string) => (toMinute(hhmm) - shift.startMinute + 1440) % 1440;
     const a = partial && from ? off(from) : 0;
     let b = partial && to ? off(to) : dur;
-    if (b === 0 || b > dur) b = dur;
-    if (a >= b) return { invalid: true as const };
+    if (b === 0) b = dur;
+    if (a >= b || b > dur) return { invalid: true as const };
     const at = (o: number) => toTime((shift.startMinute + o) % 1440);
     return {
       invalid: false as const,
@@ -229,8 +231,8 @@ function ExceptionEditor({ roster }: { roster: ContentDutyRosterResponse }) {
               </label>
             </div>
             {isToday ? (
-              <button type="button" className="inline-flex h-9 items-center self-start rounded-full border border-[#D6E9F7] bg-[#EAF7FF] px-3.5 text-[13px] font-semibold text-[#0B6FA8]" onClick={() => setFrom(toTime(roster.nowMinute))}>
-                من الآن (<bdi dir="ltr">{toTime(roster.nowMinute)}</bdi>)
+              <button type="button" className="inline-flex h-9 items-center self-start rounded-full border border-[#D6E9F7] bg-[#EAF7FF] px-3.5 text-[13px] font-semibold text-[#0B6FA8]" onClick={() => setFrom(toTime(riyadhNowMinute()))}>
+                من الآن
               </button>
             ) : null}
           </>
