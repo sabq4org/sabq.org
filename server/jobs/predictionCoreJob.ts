@@ -31,10 +31,10 @@ async function tick(trigger: string): Promise<void> {
     await settleGulfDuels();
 
     const activity =
-      sync.created + sync.rescheduled + sync.resultsSet + sync.voided + sync.errors.length;
+      sync.created + sync.rescheduled + sync.reopened + sync.resultsSet + sync.voided + sync.errors.length;
     if (activity > 0 || locked > 0 || settlement.settled > 0 || settlement.failed > 0 || outbox.delivered > 0 || outbox.deadLettered > 0) {
       console.log(
-        `[Prediction Core Job] (${trigger}) synced(created=${sync.created} rescheduled=${sync.rescheduled} ` +
+        `[Prediction Core Job] (${trigger}) synced(created=${sync.created} rescheduled=${sync.rescheduled} reopened=${sync.reopened} ` +
           `results=${sync.resultsSet} voided=${sync.voided}) locked=${locked} settled=${settlement.settled} ` +
           `failed=${settlement.failed} outboxDelivered=${outbox.delivered} deadLettered=${outbox.deadLettered}`,
       );
