@@ -36,6 +36,7 @@
 - **رابط عميق للمباراة:** `/predictions?competition=rsl-2026&fixture=<apiFootballId>` أو `&contest=<contestId>`. الصفحة تختار البطولة وتمرّر لبطاقة `match_score` ذات `externalRef` المطابق وتُميّزها مؤقتاً.
 - Android VARA يستهلك النظائر تحت `/api/v1/predictions/*` بنماذج typed مطابقة لعقود `PredictionCoreModels` في iOS: يقرأ `contestType` (بطاقات النتيجة لـ`match_score` فقط)، و`myRank` من رد leaderboards (لا حقل `isMe` — غير موجود في العقد)، ويعرض التسوية ببطاقة مزدوجة (نقاط البطولة / محفظة ×N من `award.wallet`) وتفكيك «كيف حُسبت نقاطي؟» بأربع خطوات من `breakdown`. صفحة «لك» تقرأ `/api/v1/sports/predictions/mine` الموحدة (لا مسار `/world-cup/predictions/mine` القديم).
 - **أرقام الواجهة (2026-09-15):** مركز التوقعات يعرض الوقت والعدّ التنازلي والإحصاءات بأرقام لاتينية (`formatTime` + `ar-SA-u-nu-latn`). لا تستخدم `Intl.DateTimeFormat("ar-SA")` بلا `nu-latn` — سفاري يحوّل الأرقام إلى هندية.
+- **المباريات المؤجلة (2026-11-26):** المزود يُبقي المؤجلة على موعدها القديم بحالة `PST` حتى يُعلن الجديد، فتُقفل المسابقة عند الموعد القديم. `decideSyncAction` يعيدها `open` (إجراء `reopen`) حين يظهر موعد مؤكد (ليس `PST`) بعد القديم بست ساعات على الأقل وقبل الموعد الجديد بعشر دقائق على الأقل، بشرط `locked` و`resultVersion = 0`. التوقعات السابقة تبقى نشطة وقابلة للتعديل. قبل هذا كانت تبقى «مقفل – بانتظار النتيجة» حتى تُلعب.
 
 ## صحة وتشغيل
 - راجع `docs/PREDICTION_CORE.md` لمسارات الصحة والـ outbox

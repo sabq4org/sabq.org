@@ -116,6 +116,7 @@ export type FixtureSyncSummary = {
   competitions: number;
   created: number;
   rescheduled: number;
+  reopened: number;
   resultsSet: number;
   voided: number;
   errors: Array<{ slug: string; error: string }>;
@@ -126,6 +127,7 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
     competitions: 0,
     created: 0,
     rescheduled: 0,
+    reopened: 0,
     resultsSet: 0,
     voided: 0,
     errors: [],
@@ -222,6 +224,31 @@ export async function syncCompetitionFixtures(): Promise<FixtureSyncSummary> {
             console.log(
               `[Prediction Adapter] rescheduled ${competition.slug}#${fixture.externalRef} → ${action.locksAt.toISOString()}`,
             );
+            break;
+          }
+          case "reopen": {
+            // الحارس في WHERE يمنع السباق مع تثبيت نتيجة أو تسوية في اللحظة نفسها.
+            // التوقعات القائمة لا تُمس: تبقى نشطة ويستطيع صاحبها تعديلها حتى الموعد الجديد.
+            const reopened = await db
+              .update(predictionContests)
+              .set({
+                status: "open",
+                locksAt: action.locksAt,
+                metadata: fixtureMetadata(fixture),
+                updatedAt: now,
+              })
+              .where(and(
+                eq(predictionContests.id, contest!.id),
+                eq(predictionContests.status, "locked"),
+                eq(predictionContests.resultVersion, 0),
+              ))
+              .returning({ id: predictionContests.id });
+            if (reopened.length > 0) {
+              summary.reopened++;
+              console.log(
+                `[Prediction Adapter] reopened postponed ${competition.slug}#${fixture.externalRef} → ${action.locksAt.toISOString()}`,
+              );
+            }
             break;
           }
           case "set_result": {

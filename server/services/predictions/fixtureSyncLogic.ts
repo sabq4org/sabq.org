@@ -7,6 +7,10 @@
 //   AWD/WO (قرارات إدارية) لا تُسوّى كنتيجة ملعب — تُلغى المسابقة.
 // - الإلغاء/الهجر (CANC/ABD/WO/AWD) = void. المؤجل (PST) = انتظار، قد
 //   يُعاد جدولته فتُحدَّث locks_at.
+// - المزود يُبقي المؤجلة على موعدها القديم بحالة PST حتى يُعلن الجديد، فتُقفل
+//   المسابقة عند الموعد القديم. حين يُعلن موعد جديد مؤكد (ليس PST) بعد
+//   القديم بفارق تأجيل حقيقي وقبل البداية، تُعاد فتحها (reopen) وتبقى توقعات
+//   من توقعوا قبل التأجيل كما هي.
 
 export type NormalizedFixture = {
   /** String(fixture.id) لدى المصدر — يصبح external_ref للمسابقة. */
@@ -40,6 +44,7 @@ export type ContestSnapshot = {
 export type SyncAction =
   | { kind: "create" }
   | { kind: "reschedule"; locksAt: Date }
+  | { kind: "reopen"; locksAt: Date }
   | { kind: "set_result"; finalHome: number; finalAway: number }
   | { kind: "void" }
   | { kind: "none" };
@@ -52,6 +57,14 @@ export const SYNC_HORIZON_MS = 14 * 24 * 3_600_000;
 
 /** تجاهل فروق الجدولة تحت دقيقة — ضجيج مزود لا إعادة جدولة حقيقية. */
 const RESCHEDULE_EPSILON_MS = 60_000;
+
+/**
+ * إعادة الفتح بعد القفل لا تكون إلا لتأجيل حقيقي: الموعد الجديد بعد القديم
+ * بست ساعات على الأقل (تأخير ضربة البداية دقائق ليس تأجيلًا)…
+ */
+export const REOPEN_MIN_SHIFT_MS = 6 * 3_600_000;
+/** …ويبقى قبل الموعد الجديد هامش كافٍ للتوقع. */
+export const REOPEN_MIN_LEAD_MS = 10 * 60_000;
 
 export function hasSettleableScore(fixture: NormalizedFixture): boolean {
   return (
@@ -93,6 +106,20 @@ export function decideSyncAction(
   // أول تثبيت، وready/التصحيح خارج مسؤولية المحوّل
   if (contest.status === "locked" && contest.resultVersion === 0 && hasSettleableScore(fixture)) {
     return { kind: "set_result", finalHome: fixture.goalsHome!, finalAway: fixture.goalsAway! };
+  }
+
+  // مباراة مؤجلة قُفلت على موعدها القديم ثم أُعلن موعدها الجديد: تُعاد فتحها.
+  // الشرط: لم تُثبت نتيجتها، لم تبدأ، موعد مؤكد (ليس PST)، تأجيل حقيقي، ووقت كافٍ قبلها.
+  if (
+    contest.status === "locked" &&
+    contest.resultVersion === 0 &&
+    !fixture.live &&
+    !fixture.finished &&
+    fixture.statusCode !== "PST" &&
+    fixture.kickoff.getTime() - contest.locksAt.getTime() >= REOPEN_MIN_SHIFT_MS &&
+    fixture.kickoff.getTime() - now.getTime() >= REOPEN_MIN_LEAD_MS
+  ) {
+    return { kind: "reopen", locksAt: fixture.kickoff };
   }
 
   // إعادة جدولة (تأجيل/تقديم): قبل بدء المباراة فقط
