@@ -6,6 +6,7 @@ import { db } from "../db";
 import {
   articles,
   notificationsInbox,
+  opinionSlotChanges,
   opinionWriterSchedules,
   roles,
   userRoles,
@@ -19,7 +20,9 @@ import {
   resolveMediaLicenseReviewStatus,
 } from "./mediaLicenseService";
 import {
+  applyGapReset,
   findScheduleGapConflicts,
+  occupiedScheduleInstantOf,
   opinionResubmitReviewPatch,
   resolveWriterScheduleBannerState,
 } from "./opinionScheduleRules";
@@ -168,6 +171,27 @@ export function computeNextSlot(
   return null;
 }
 
+/**
+ * لحظة آخر تغيير لموعد الكاتب الأسبوعي عبر «فرصة تغيير الموعد». المقالات التي
+ * نُشرت أو شُغلت قبلها لا تُحسب في الفاصل الأسبوعي، فينزل أول مقال على الموعد
+ * الجديد مباشرة ولو كان آخر مقال على الموعد القديم قبل أقل من أسبوع (2026-11-26).
+ */
+export async function getWriterGapResetAt(writerIds: string[]): Promise<Map<string, Date>> {
+  const ids = [...new Set(writerIds.filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ writerId: opinionSlotChanges.writerId, at: sql<string | null>`max(${opinionSlotChanges.createdAt})` })
+    .from(opinionSlotChanges)
+    .where(inArray(opinionSlotChanges.writerId, ids))
+    .groupBy(opinionSlotChanges.writerId);
+  const out = new Map<string, Date>();
+  for (const row of rows) {
+    const at = parseDbTimestamp(row.at);
+    if (at) out.set(row.writerId, at);
+  }
+  return out;
+}
+
 async function fetchWriterUsers(writerId?: string) {
   const isOpinionAuthor = or(
     eq(users.role, "opinion_author"),
@@ -216,6 +240,7 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
   const ids = writerRows.map((w) => w.id);
   const now = new Date();
 
+  const gapResetByWriter = await getWriterGapResetAt(ids);
   const [stats, lastArticles, nextScheduled] = await Promise.all([
     db
       .select({
@@ -284,10 +309,12 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
 
     const lastPublishedAt = last?.publishedAt ? new Date(last.publishedAt) : null;
     const maxScheduledAt = parseDbTimestamp(s?.maxScheduledAt);
-    const floor =
+    const floor = applyGapReset(
       lastPublishedAt && maxScheduledAt
         ? new Date(Math.max(lastPublishedAt.getTime(), maxScheduledAt.getTime()))
-        : lastPublishedAt ?? maxScheduledAt;
+        : lastPublishedAt ?? maxScheduledAt,
+      gapResetByWriter.get(w.id),
+    );
 
     const nextSlot =
       schedule && schedule.active
@@ -558,8 +585,12 @@ export async function getNextSlotsForWriters(
     .where(and(...floorWhere))
     .groupBy(articles.authorId);
 
+  const gapResetByWriter = await getWriterGapResetAt(scheduledWriterIds);
   const floorByWriter = new Map(
-    floorRows.map((row) => [row.authorId, parseDbTimestamp(row.floor)]),
+    floorRows.map((row) => [
+      row.authorId,
+      applyGapReset(parseDbTimestamp(row.floor), row.authorId ? gapResetByWriter.get(row.authorId) : null),
+    ]),
   );
 
   const now = new Date();
@@ -1028,7 +1059,14 @@ export async function findWriterGapConflicts(
       eq(articles.authorId, authorId),
       sql`${articles.id} <> ${articleId}`,
     ));
-  return findScheduleGapConflicts(scheduledAt, others).map(({ row, at }) => ({
+  const resetAt = (await getWriterGapResetAt([authorId])).get(authorId);
+  const counted = resetAt
+    ? others.filter((row) => {
+        const instant = occupiedScheduleInstantOf(row);
+        return !instant || instant.getTime() >= resetAt.getTime();
+      })
+    : others;
+  return findScheduleGapConflicts(scheduledAt, counted).map(({ row, at }) => ({
     articleId: row.id,
     title: row.title ?? null,
     status: row.status,
@@ -1164,10 +1202,13 @@ export async function getWriterScheduleBanner(
   const hasInReview = (agg?.inReviewCount ?? 0) > 0;
   const hasUpcoming = (agg?.upcomingCount ?? 0) > 0 || hasInReview;
 
-  const floor =
+  const gapResetAt = (await getWriterGapResetAt([writerId])).get(writerId);
+  const floor = applyGapReset(
     lastPublishedAt && maxScheduledAt
       ? new Date(Math.max(lastPublishedAt.getTime(), maxScheduledAt.getTime()))
-      : lastPublishedAt ?? maxScheduledAt;
+      : lastPublishedAt ?? maxScheduledAt,
+    gapResetAt,
+  );
   const nextSlot = computeNextSlot(schedule.weekday, schedule.publishTime, floor, now);
   if (!nextSlot) return null;
 
