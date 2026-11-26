@@ -219,7 +219,7 @@ export interface SmartEditUsageEditor {
 }
 
 /**
- * ملخص المحررين: الأخبار التي نشرها كل مستخدم في الفترة (أول نسخة «published» له)،
+ * ملخص المحررين: الأخبار التي نشرها كل مستخدم في الفترة (أول نسخة «published» له، أو إنشاؤه منشورًا مباشرة)،
  * وكم منها شُغّل عليه المحرر الذكي، ومتوسط ما بقي من الناتج. الأخبار التي نشرها
  * النظام أو البوت بلا مستخدم لا تدخل.
  */
@@ -236,7 +236,8 @@ export async function smartEditUsageSummary(input: { from: Date; to: Date }): Pr
     .from(articleVersions)
     .innerJoin(articles, eq(articles.id, articleVersions.articleId))
     .where(and(
-      eq(articleVersions.action, "published"),
+      // نشر لاحق، أو إنشاء الخبر منشورًا مباشرة (يُسجَّل «created» بحالة published)
+      sql`(${articleVersions.action} = 'published' OR (${articleVersions.action} = 'created' AND ${articleVersions.snapshot}->>'status' = 'published'))`,
       gte(articleVersions.createdAt, input.from),
       lte(articleVersions.createdAt, input.to),
       eq(articles.status, "published"),
