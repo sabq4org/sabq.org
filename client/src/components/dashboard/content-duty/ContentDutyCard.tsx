@@ -153,7 +153,9 @@ export default function ContentDutyCard() {
       onOpen={() => setChat({ id: conv.peer.id, name: conv.peer.name, subtitle: subtitleFor(conv.peer.id) })}
     />
   );
-  const stripConv = strips.extra;
+  // إن كنتُ أحد المناوبين: محادثتي تظهر تحت صفي أنا، لا أسفل البطاقة تحت المناوب الآخر.
+  const myRowId = user?.id && onDutyIds.includes(user.id) && data.onDuty.length > 1 ? user.id : null;
+  const stripConv = myRowId ? null : strips.extra;
   const chatBits = (
     <>
       {stripConv ? stripFor(stripConv) : null}
@@ -244,6 +246,7 @@ export default function ContentDutyCard() {
             <DutyPulseRibbon compact cells={entry.cells} startMs={0} endMs={entry.cells.length * 300_000} label={`نبض وردية ${entry.name}`} />
           ) : null}
           {entry.userId && strips.byPeer.get(entry.userId) ? stripFor(strips.byPeer.get(entry.userId)!) : null}
+          {entry.userId && entry.userId === myRowId && strips.extra ? stripFor(strips.extra) : null}
         </div>
       ))}
       {chatBits}

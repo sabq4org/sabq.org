@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  messagePreview,
   appendMessage,
   applyStatusEvent,
   isAllowedAttachmentMime,
@@ -142,5 +143,15 @@ describe("duty chat input", () => {
     const self = pickStripConversations([conv("lead", "2026-11-26T18:42:00Z")], ["salah", "me"], "me");
     expect(self.byPeer.size).toBe(0);
     expect(self.extra?.peer.id).toBe("lead");
+  });
+});
+
+describe("messagePreview", () => {
+  const img = { name: "a.png", mime: "image/png", size: 1, isImage: true, url: "/x" };
+  const pdf = { ...img, mime: "application/pdf", isImage: false };
+  it("keeps the attachment visible when text accompanies it", () => {
+    expect(messagePreview({ body: "يا هلا", attachment: img })).toBe("📎 صورة · يا هلا");
+    expect(messagePreview({ body: "", attachment: pdf })).toBe("📎 ملف PDF");
+    expect(messagePreview({ body: "نص", attachment: null })).toBe("نص");
   });
 });

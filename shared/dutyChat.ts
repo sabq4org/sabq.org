@@ -112,6 +112,22 @@ export function safeFileName(raw: string | null | undefined, mime: string): stri
   return mime === "application/pdf" ? "مرفق.pdf" : "صورة";
 }
 
+/** وصف المرفق في المعاينات والإشعارات: «صورة» أو «ملف PDF». */
+export function attachmentLabel(a: Pick<DutyChatAttachment, "isImage"> | null | undefined): string {
+  if (!a) return "";
+  return a.isImage ? "صورة" : "ملف PDF";
+}
+
+/**
+ * نص المعاينة (الشريط والإشعارات): النص وحده، أو المرفق وحده، أو كلاهما
+ * («📎 صورة · النص») حتى لا يضيع المرفق إذا صاحبه نص.
+ */
+export function messagePreview(m: Pick<DutyChatMessage, "body" | "attachment">): string {
+  const label = attachmentLabel(m.attachment);
+  if (!label) return m.body;
+  return m.body ? `📎 ${label} · ${m.body}` : `📎 ${label}`;
+}
+
 /**
  * أي محادثة تظهر في الشريط تحت بطاقة المناوبة:
  * 1) أحدث محادثة فيها رسائل غير مقروءة أو «تنبيه» لم يُؤكَّد، وإلا

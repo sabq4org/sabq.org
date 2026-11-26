@@ -13,6 +13,7 @@ import {
   DUTY_CHAT_PAGE_SIZE,
   initialOf,
   isOnline,
+  messagePreview,
   type DutyChatConversation,
   type DutyChatEvent,
   type DutyChatInboxResponse,
@@ -365,7 +366,7 @@ async function pushIfOffline(me: string, peerId: string, message: DutyChatMessag
 }
 
 async function sendDeskPush(recipientId: string, senderId: string, sender: string, message: Pick<DutyChatMessage, "id" | "body" | "kind" | "attachment">) {
-  const text = message.body || (message.attachment?.isImage ? "صورة" : "مرفق");
+  const text = messagePreview(message);
   await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, {
     title: message.kind === "alert" ? `تنبيه من ${sender}` : `رسالة من ${sender}`,
     body: text.length > 180 ? `${text.slice(0, 179)}…` : text,
