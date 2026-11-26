@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  DUTY_CHAT_FORBIDDEN_MESSAGE,
   appendMessage,
   applyStatusEvent,
   type DutyChatEvent,
@@ -17,6 +18,31 @@ export const dutyChatThreadUrl = (peerId: string) => `/api/duty-chat/thread/${en
 /** أحداث القناة لمن يحتاجها داخل الصفحة (النافذة المفتوحة، مؤشر الكتابة). */
 export const dutyChatEvents = new EventTarget();
 
+/**
+ * طلب فتح محادثة بعينها (من إشعار المتصفح): يحفظه حتى تُحمَّل بطاقة المناوبة في الرئيسية فتفتحه.
+ */
+let pendingOpenPeer: string | null = null;
+export function requestOpenDutyChat(peerId: string) {
+  pendingOpenPeer = peerId;
+  dutyChatEvents.dispatchEvent(new CustomEvent("open", { detail: peerId }));
+}
+export function takePendingDutyChat(): string | null {
+  const id = pendingOpenPeer;
+  pendingOpenPeer = null;
+  return id;
+}
+
+/** يطلب إذن إشعارات المتصفح مرة واحدة، ضمن نقرة من المستخدم (شرط Safari). */
+export function askDutyChatNotificationPermission() {
+  try {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  } catch {
+    /* متصفح قديم بلا إشعارات */
+  }
+}
+
 const typingUntil = new Map<string, number>();
 const TYPING_SHOW_MS = 4_000;
 
@@ -27,7 +53,12 @@ export function useDutyChatInbox() {
     queryFn: () => apiRequest<DutyChatInboxResponse>(DUTY_CHAT_INBOX_URL, { silent: true }),
     enabled: Boolean(user?.id),
     staleTime: 20_000,
-    refetchInterval: 60_000,
+    // غير المؤهل (403) يتوقف نهائيًا، فلا يكرر طلبات في كل صفحة. الأخطاء المؤقتة
+    // (انقطاع، 5xx، أو قبل تنفيذ SQL) تُعاد كل 5 دقائق حتى يتعافى الخادم.
+    refetchInterval: (q) => {
+      if (q.state.status !== "error") return 60_000;
+      return (q.state.error as Error | null)?.message === DUTY_CHAT_FORBIDDEN_MESSAGE ? false : 5 * 60_000;
+    },
     // 403 (ليس مدير محتوى) و503 (قبل تنفيذ SQL): لا إعادة محاولة، ويختفي كل شيء.
     retry: false,
   });

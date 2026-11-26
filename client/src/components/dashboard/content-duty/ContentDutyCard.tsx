@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { pickStripConversation } from "@shared/dutyChat";
 import type { ContentDutyCardEntry, ContentDutyCardResponse } from "@shared/contentDuty";
@@ -6,7 +6,7 @@ import { useContentDutyCard } from "@/hooks/useContentDuty";
 import { formatRemaining, statusLabel, statusTone } from "@/lib/contentDuty";
 import { DutyPulseRibbon } from "./DutyPulseRibbon";
 import { useAuth } from "@/hooks/useAuth";
-import { useDutyChatInbox, useDutyChatStream } from "@/hooks/useDutyChat";
+import { askDutyChatNotificationPermission, dutyChatEvents, takePendingDutyChat, useDutyChatInbox } from "@/hooks/useDutyChat";
 import DutyChatStrip from "../duty-chat/DutyChatStrip";
 import DutyChatPanel from "../duty-chat/DutyChatPanel";
 
@@ -85,8 +85,25 @@ export default function ContentDutyCard() {
   // «محادثة المناوب»: 403 لغير مديري المحتوى و503 قبل تنفيذ SQL، فلا شريط ولا زر.
   const inbox = useDutyChatInbox();
   const chatOn = inbox.isSuccess && Boolean(inbox.data);
-  useDutyChatStream(chatOn);
-  const [chat, setChat] = useState<ChatTarget | null>(null);
+  // قناة البث يفتحها DutyChatNotifier مرة واحدة لكل لوحة التحكم.
+  const [chat, setChatState] = useState<ChatTarget | null>(null);
+  const setChat = (t: ChatTarget | null) => {
+    if (t) askDutyChatNotificationPermission();
+    setChatState(t);
+  };
+  // الضغط على إشعار المتصفح يفتح المحادثة هنا.
+  const conversations = inbox.data?.conversations;
+  useEffect(() => {
+    const openPeer = (peerId: string | null) => {
+      if (!peerId) return;
+      const c = conversations?.find((x) => x.peer.id === peerId);
+      setChatState({ id: peerId, name: c?.peer.name ?? "", subtitle: null });
+    };
+    openPeer(takePendingDutyChat());
+    const onOpen = (e: Event) => openPeer(takePendingDutyChat() ?? (e as CustomEvent<string>).detail);
+    dutyChatEvents.addEventListener("open", onOpen);
+    return () => dutyChatEvents.removeEventListener("open", onOpen);
+  }, [conversations]);
   // قبل تنفيذ SQL أو عند الخطأ تختفي البطاقة ولا تزعج اللوحة.
   if (isError) return null;
   if (isLoading || !data) {

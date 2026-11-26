@@ -8,6 +8,7 @@ import { isAuthenticated } from "../auth";
 import {
   DUTY_CHAT_HEARTBEAT_MS,
   DUTY_CHAT_MAX_ATTACHMENT_BYTES,
+  DUTY_CHAT_FORBIDDEN_MESSAGE,
   DUTY_CHAT_MAX_BODY,
   isAllowedAttachmentMime,
   normalizeBody,
@@ -24,6 +25,7 @@ import {
   getThread,
   markDelivered,
   markRead,
+  pushFallback,
   sendMessage,
   sendTyping,
   subscribeDutyChat,
@@ -49,7 +51,7 @@ async function eligible(req: Request, res: Response, next: NextFunction) {
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
   try {
     if (!(await canUseDutyChat(userId))) {
-      return res.status(403).json({ error: "DUTY_CHAT_FORBIDDEN", message: "المحادثة لمديري المحتوى والمسؤول فقط" });
+      return res.status(403).json({ error: "DUTY_CHAT_FORBIDDEN", message: DUTY_CHAT_FORBIDDEN_MESSAGE });
     }
     return next();
   } catch (error) {
@@ -155,6 +157,15 @@ router.post("/api/duty-chat/delivered", ...base, async (req, res) => {
     return res.json({ updated: await markDelivered(userIdOf(req)!) });
   } catch (error) {
     return fail(res, error, "delivered");
+  }
+});
+
+// إشعار «مكتب سبق» بديلًا حين لا يستطيع المتصفح عرض الإشعار (انظر DutyChatNotifier).
+router.post("/api/duty-chat/messages/:id/push-fallback", ...base, async (req, res) => {
+  try {
+    return res.json({ sent: await pushFallback(userIdOf(req)!, req.params.id) });
+  } catch (error) {
+    return fail(res, error, "push-fallback");
   }
 });
 
