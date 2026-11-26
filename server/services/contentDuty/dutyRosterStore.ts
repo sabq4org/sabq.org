@@ -13,7 +13,9 @@ import {
   users,
 } from "@shared/schema";
 import {
+  coverWindow,
   normalizeThresholds,
+  riyadhWeekday,
   validateShiftInput,
   type DutyExceptionRule,
   type DutyShiftRule,
@@ -78,6 +80,8 @@ export async function listExceptions(fromKey: string, toKey: string): Promise<Ar
         userId: contentDutyExceptions.userId,
         coverUserId: contentDutyExceptions.coverUserId,
         note: contentDutyExceptions.note,
+        startMinute: contentDutyExceptions.startMinute,
+        endMinute: contentDutyExceptions.endMinute,
       })
       .from(contentDutyExceptions)
       .where(and(
@@ -191,13 +195,26 @@ export async function updateShift(id: string, patch: Partial<ShiftInput> & { act
   }
 }
 
-export async function createException(input: { dutyDate: string; userId: string; coverUserId: string | null; note: string | null }, actorId: string): Promise<{ id: string }> {
+export async function createException(
+  input: { dutyDate: string; userId: string; coverUserId: string | null; note: string | null; startMinute?: number | null; endMinute?: number | null },
+  actorId: string,
+): Promise<{ id: string }> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dutyDate) || Number.isNaN(Date.parse(input.dutyDate))) {
     throw new ContentDutyInputError("التاريخ غير صالح");
   }
   if (input.coverUserId && input.coverUserId === input.userId) throw new ContentDutyInputError("البديل هو نفس الموظف");
+  const startMinute = input.startMinute ?? null;
+  const endMinute = input.endMinute ?? null;
   try {
     if (input.coverUserId) await assertUserExists(input.coverUserId);
+    if (startMinute !== null || endMinute !== null) {
+      // الوقت المحدد يجب أن يقع داخل وردية لصاحبها في ذلك اليوم.
+      const weekday = riyadhWeekday(input.dutyDate);
+      const shifts = (await listActiveShifts()).filter((s) => s.userId === input.userId && s.days.includes(weekday));
+      if (!shifts.some((s) => coverWindow(s, { startMinute, endMinute }))) {
+        throw new ContentDutyInputError("الوقت المحدد خارج وردية صاحبها في هذا اليوم");
+      }
+    }
     return await db.transaction(async (tx) => {
       // استثناء واحد لكل موظف في اليوم: الجديد يلغي القديم.
       await tx.update(contentDutyExceptions)
@@ -212,6 +229,8 @@ export async function createException(input: { dutyDate: string; userId: string;
         userId: input.userId,
         coverUserId: input.coverUserId,
         note: input.note?.slice(0, 300) || null,
+        startMinute,
+        endMinute,
         createdBy: actorId,
       }).returning({ id: contentDutyExceptions.id });
       return row;

@@ -148,6 +148,9 @@ const exceptionBody = z.object({
   userId: z.string().min(1).max(160),
   coverUserId: z.string().min(1).max(160).nullable(),
   note: z.string().max(300).nullable().optional(),
+  // تغطية بوقت محدد: دقائق من منتصف ليل الرياض. الغياب أو null = الوردية كاملة.
+  startMinute: z.number().int().min(0).max(1440).nullable().optional(),
+  endMinute: z.number().int().min(0).max(1440).nullable().optional(),
 }).strict();
 
 router.post("/api/admin/content-duty/exceptions", isAuthenticated, noStore, async (req, res) => {

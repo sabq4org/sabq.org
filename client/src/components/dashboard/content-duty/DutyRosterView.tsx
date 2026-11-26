@@ -108,13 +108,46 @@ function ShiftEditor({ roster, editing, onDone }: { roster: ContentDutyRosterRes
   );
 }
 
+/** نص نافذة التغطية بوقت محدد، مثل «14:10–20:00». فارغ للوردية كاملة. */
+const windowLabel = (e: { startMinute: number | null; endMinute: number | null }, shift?: RosterShiftView) => {
+  if (e.startMinute === null && e.endMinute === null) return "";
+  const from = e.startMinute ?? shift?.startMinute;
+  const to = e.endMinute ?? shift?.endMinute;
+  return from === undefined || to === undefined ? "" : `${toTime(from)}–${toTime(to)}`;
+};
+
 function ExceptionEditor({ roster }: { roster: ContentDutyRosterResponse }) {
   const [dutyDate, setDutyDate] = useState(roster.today);
   const [userId, setUserId] = useState("");
   const [coverUserId, setCover] = useState("");
   const [note, setNote] = useState("");
+  const [partial, setPartial] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const weekday = new Date(`${dutyDate}T00:00:00Z`).getUTCDay();
+  // وردية صاحبها في ذلك اليوم: منها تُملأ «من/إلى» ويُرسم التقسيم.
+  const shift = roster.shifts.find((s) => s.userId === userId && s.days.includes(weekday));
+  useEffect(() => {
+    if (!shift) return;
+    setFrom(toTime(shift.startMinute));
+    setTo(toTime(shift.endMinute));
+  }, [shift?.id, shift?.startMinute, shift?.endMinute, dutyDate]);
+  const nameOf = (id: string) => roster.people.find((p) => p.userId === id)?.name ?? roster.candidates.find((c) => c.userId === id)?.name ?? "";
+  const ownerName = nameOf(userId);
+  const coverName = coverUserId ? nameOf(coverUserId) : "";
+  const isToday = dutyDate === roster.today;
   const add = useDutyMutation(
-    () => apiRequest("/api/admin/content-duty/exceptions", { method: "POST", body: JSON.stringify({ dutyDate, userId, coverUserId: coverUserId || null, note: note || null }) }),
+    () => apiRequest("/api/admin/content-duty/exceptions", {
+      method: "POST",
+      body: JSON.stringify({
+        dutyDate,
+        userId,
+        coverUserId: coverUserId || null,
+        note: note || null,
+        startMinute: partial && from ? toMinute(from) : null,
+        endMinute: partial && to ? toMinute(to) : null,
+      }),
+    }),
     "حُفظ الاستثناء",
   );
   const cancel = useDutyMutation(
@@ -122,18 +155,44 @@ function ExceptionEditor({ roster }: { roster: ContentDutyRosterResponse }) {
     "أُلغي الاستثناء",
   );
   const rostered = roster.people;
+  // معاينة التقسيم: صاحب الوردية قبل التغطية وبعدها، والبديل في وقتها.
+  const preview = useMemo(() => {
+    if (!shift) return null;
+    const dur = ((shift.endMinute - shift.startMinute + 1440) % 1440) || 1440;
+    const off = (hhmm: string) => (toMinute(hhmm) - shift.startMinute + 1440) % 1440;
+    const a = partial && from ? off(from) : 0;
+    let b = partial && to ? off(to) : dur;
+    if (b === 0 || b > dur) b = dur;
+    if (a >= b) return { invalid: true as const };
+    const at = (o: number) => toTime((shift.startMinute + o) % 1440);
+    return {
+      invalid: false as const,
+      parts: [
+        a > 0 ? { flex: a, label: `${ownerName} ${at(0)}–${at(a)}`, cover: false } : null,
+        { flex: b - a, label: `${coverName || "إجازة"} ${at(a)}–${at(b)}`, cover: true },
+        b < dur ? { flex: dur - b, label: `${ownerName} ${at(b)}–${at(dur)}`, cover: false } : null,
+      ].filter(Boolean) as Array<{ flex: number; label: string; cover: boolean }>,
+    };
+  }, [shift, partial, from, to, ownerName, coverName]);
+  const toggle = (on: boolean) => `inline-flex h-10 items-center rounded-full px-4 text-sm ${on ? "bg-[#1E9BE6] font-semibold text-white" : "border border-[#DCE4EC] bg-white font-medium text-[#1B2B3A]"}`;
   return (
     <section aria-labelledby="duty-ex" className={`${surface} overflow-hidden`}>
       <div className="px-5 pb-2 pt-[18px]"><h2 id="duty-ex" className="m-0 text-base font-bold">إجازة أو تغطية</h2></div>
-      {roster.exceptions.map((e) => (
-        <div key={e.id} className="flex items-start justify-between gap-3 border-t border-[#EEF2F6] px-5 py-3">
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold">{e.name} · {e.coverName ? `يغطيه ${e.coverName}` : "إجازة"} · {DUTY_DAY_NAMES[new Date(`${e.dutyDate}T00:00:00Z`).getUTCDay()]} <bdi dir="ltr">{e.dutyDate.slice(8)}/{e.dutyDate.slice(5, 7)}</bdi></span>
-            {e.note ? <span className="text-xs text-[#55667A]">{e.note}</span> : null}
+      {roster.exceptions.map((e) => {
+        const ownShift = roster.shifts.find((s) => s.userId === e.userId && s.days.includes(new Date(`${e.dutyDate}T00:00:00Z`).getUTCDay()));
+        const win = windowLabel(e, ownShift);
+        return (
+          <div key={e.id} className="flex items-start justify-between gap-3 border-t border-[#EEF2F6] px-5 py-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-semibold">
+                {e.name} · {e.coverName ? `يغطيه ${e.coverName}` : "إجازة"}{win ? <> <bdi dir="ltr">{win}</bdi></> : null} · {DUTY_DAY_NAMES[new Date(`${e.dutyDate}T00:00:00Z`).getUTCDay()]} <bdi dir="ltr">{e.dutyDate.slice(8)}/{e.dutyDate.slice(5, 7)}</bdi>
+              </span>
+              {e.note ? <span className="text-xs text-[#55667A]">{e.note}</span> : null}
+            </div>
+            <button type="button" className="text-[13px] font-semibold text-[#0B6FA8]" onClick={() => cancel.mutate(e.id)}>إلغاء</button>
           </div>
-          <button type="button" className="text-[13px] font-semibold text-[#0B6FA8]" onClick={() => cancel.mutate(e.id)}>إلغاء</button>
-        </div>
-      ))}
+        );
+      })}
       <div className="flex flex-col gap-2.5 border-t border-[#EEF2F6] p-5">
         <div className="grid grid-cols-2 gap-2.5">
           <label className="flex flex-col gap-1.5 text-[13px] text-[#55667A]">اليوم
@@ -152,8 +211,54 @@ function ExceptionEditor({ roster }: { roster: ContentDutyRosterResponse }) {
             {roster.candidates.filter((c) => c.userId !== userId).map((c) => <option key={c.userId} value={c.userId}>{c.name}</option>)}
           </select>
         </label>
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] text-[#55667A]">المدة</span>
+          <div role="group" aria-label="المدة" className="flex gap-2">
+            <button type="button" className={toggle(!partial)} aria-pressed={!partial} onClick={() => setPartial(false)}>الوردية كاملة</button>
+            <button type="button" className={toggle(partial)} aria-pressed={partial} onClick={() => setPartial(true)}>وقت محدد</button>
+          </div>
+        </div>
+        {partial ? (
+          <>
+            <div className="grid grid-cols-2 gap-2.5">
+              <label className="flex flex-col gap-1.5 text-[13px] text-[#55667A]">من
+                <input type="time" dir="ltr" className={input} value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1.5 text-[13px] text-[#55667A]">إلى
+                <input type="time" dir="ltr" className={input} value={to} onChange={(e) => setTo(e.target.value)} />
+              </label>
+            </div>
+            {isToday ? (
+              <button type="button" className="inline-flex h-9 items-center self-start rounded-full border border-[#D6E9F7] bg-[#EAF7FF] px-3.5 text-[13px] font-semibold text-[#0B6FA8]" onClick={() => setFrom(toTime(roster.nowMinute))}>
+                من الآن (<bdi dir="ltr">{toTime(roster.nowMinute)}</bdi>)
+              </button>
+            ) : null}
+          </>
+        ) : null}
+        {userId && !shift ? <span className="text-[13px] text-[#B4232C]">لا وردية لـ{ownerName} في هذا اليوم.</span> : null}
+        {preview?.invalid ? <span className="text-[13px] text-[#B4232C]">الوقت المحدد خارج الوردية أو نهايته قبل بدايته.</span> : null}
+        {preview && !preview.invalid ? (
+          <div className="flex flex-col gap-2 pt-1">
+            <span className="text-[13px] text-[#55667A]">كيف ستُحسب الوردية</span>
+            <div className="flex h-10 overflow-hidden rounded-xl" dir="ltr">
+              {preview.parts.map((p, i) => (
+                <div key={i} style={{ flex: p.flex }} className={`flex min-w-0 items-center justify-center truncate px-1 text-[13px] font-semibold ${p.cover ? "bg-[#1E9BE6] text-white" : "bg-[#EAF0F5] text-[#3F5266]"}`}>{p.label}</div>
+              ))}
+            </div>
+            {partial && preview.parts.length > 1 ? (
+              <span className="text-[13px] leading-relaxed text-[#55667A]">لكل زميل حضوره وأخباره في الجزء الذي عمله فقط.</span>
+            ) : null}
+          </div>
+        ) : null}
         <input className={input} placeholder="ملاحظة (اختياري)" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
-        <button type="button" className={primary} disabled={!userId || !dutyDate || add.isPending} onClick={() => add.mutate(undefined, { onSuccess: () => { setNote(""); setCover(""); } })}>حفظ الاستثناء</button>
+        <button
+          type="button"
+          className={primary}
+          disabled={!userId || !dutyDate || add.isPending || (partial && (!shift || !preview || preview.invalid))}
+          onClick={() => add.mutate(undefined, { onSuccess: () => { setNote(""); setCover(""); setPartial(false); } })}
+        >
+          {coverUserId ? "حفظ التغطية" : "حفظ الاستثناء"}
+        </button>
       </div>
     </section>
   );

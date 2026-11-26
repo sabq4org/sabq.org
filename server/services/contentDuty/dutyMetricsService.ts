@@ -588,6 +588,8 @@ export async function getDutyRoster(viewer: DutyViewer, requestedWeek: string | 
       coverUserId: e.coverUserId ? opaque(e.coverUserId) : null,
       coverName: e.coverUserId ? names.get(e.coverUserId) ?? "بلا اسم" : null,
       note: showId ? e.note : null,
+      startMinute: e.startMinute ?? null,
+      endMinute: e.endMinute ?? null,
     })),
     blocks: rosterBlocks(occurrences, weekStart).map((b) => ({ ...b, userId: opaque(b.userId) })),
     gaps,

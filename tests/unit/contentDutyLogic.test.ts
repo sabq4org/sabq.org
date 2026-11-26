@@ -7,6 +7,7 @@ import {
   buildPresenceCells,
   computeShiftReport,
   coverageGaps,
+  coverWindow,
   expandOccurrences,
   liveStatus,
   riyadhMidnight,
@@ -59,6 +60,44 @@ describe("expandOccurrences", () => {
     const thu = cover.find((o) => o.dutyDate === THU);
     expect(thu?.userId).toBe("fahad");
     expect(thu?.coveredUserId).toBe("amjad");
+  });
+
+  it("splits a shift at the handover time for a partial cover", () => {
+    const day: DutyShiftRule = { id: "salem", userId: "salem", days: [4], startMinute: 8 * 60, endMinute: 20 * 60 };
+    const occ = expandOccurrences([day], [{ id: "e", dutyDate: THU, userId: "salem", coverUserId: "majed", startMinute: 14 * 60 + 10, endMinute: null }], thuMidnight, thuMidnight + 24 * 60 * MIN);
+    expect(occ.map((o) => [o.userId, o.start - thuMidnight, o.end - thuMidnight, o.coveredUserId])).toEqual([
+      ["salem", 8 * 60 * MIN, (14 * 60 + 10) * MIN, null],
+      ["majed", (14 * 60 + 10) * MIN, 20 * 60 * MIN, "salem"],
+    ]);
+    expect(occ[0].key).toBe(`salem:${THU}`);
+    // العمل قبل التسليم لا يُحسب للبديل إلا في نصف الساعة السابق لجزئه.
+    expect(workCountFrom(occ[1], occ)).toBe(thuMidnight + (13 * 60 + 40) * MIN);
+  });
+
+  it("gives the owner both ends of a cover in the middle, with distinct room keys", () => {
+    const day: DutyShiftRule = { id: "salem", userId: "salem", days: [4], startMinute: 8 * 60, endMinute: 20 * 60 };
+    const occ = expandOccurrences([day], [{ id: "e", dutyDate: THU, userId: "salem", coverUserId: "majed", startMinute: 12 * 60, endMinute: 14 * 60 }], thuMidnight, thuMidnight + 24 * 60 * MIN);
+    expect(occ.map((o) => o.userId)).toEqual(["salem", "majed", "salem"]);
+    const roomKeys = occ.map((o) => `${o.key}:${o.userId}`);
+    expect(new Set(roomKeys).size).toBe(3);
+    for (const k of roomKeys) expect(k).toMatch(/^[^:\s]+:\d{4}-\d{2}-\d{2}:[^:\s]+$/);
+    // إجازة جزئية بلا بديل: يُحذف وقت الغياب فقط.
+    const leave = expandOccurrences([day], [{ id: "e", dutyDate: THU, userId: "salem", coverUserId: null, startMinute: 12 * 60, endMinute: 14 * 60 }], thuMidnight, thuMidnight + 24 * 60 * MIN);
+    expect(leave.map((o) => (o.end - o.start) / MIN)).toEqual([240, 360]);
+  });
+
+  it("splits an overnight shift after midnight", () => {
+    const occ = expandOccurrences([amjad], [{ id: "e", dutyDate: THU, userId: "amjad", coverUserId: "fahad", startMinute: 30, endMinute: 120 }], thuMidnight, thuMidnight + 30 * 60 * MIN);
+    const thu = occ.filter((o) => o.dutyDate === THU);
+    expect(thu.map((o) => [o.userId, (o.end - o.start) / MIN])).toEqual([["amjad", 270], ["fahad", 90]]);
+  });
+
+  it("keeps the whole shift when the cover time falls outside it", () => {
+    const day: DutyShiftRule = { id: "salem", userId: "salem", days: [4], startMinute: 8 * 60, endMinute: 20 * 60 };
+    const occ = expandOccurrences([day], [{ id: "e", dutyDate: THU, userId: "salem", coverUserId: "majed", startMinute: 21 * 60, endMinute: null }], thuMidnight, thuMidnight + 24 * 60 * MIN);
+    expect(occ.map((o) => o.userId)).toEqual(["salem"]);
+    expect(coverWindow(day, { startMinute: 21 * 60, endMinute: null })).toBeNull();
+    expect(coverWindow(day, { startMinute: null, endMinute: null })).toEqual({ fromOffset: 0, toOffset: 720, partial: false });
   });
 
   it("lets two managers share the same hours", () => {

@@ -27,6 +27,10 @@ export interface DutyExceptionRule {
   userId: string;
   /** فارغ = إجازة بلا بديل */
   coverUserId: string | null;
+  /** تغطية بوقت محدد: دقيقة بداية التغطية من منتصف ليل الرياض (فارغ = من بداية الوردية) */
+  startMinute?: number | null;
+  /** دقيقة نهاية التغطية (فارغ = حتى نهاية الوردية) */
+  endMinute?: number | null;
 }
 
 export interface DutyOccurrence {
@@ -121,7 +125,28 @@ export function validateShiftInput(input: { days: unknown; startMinute: unknown;
   return null;
 }
 
-/** كل الورديات التي تتقاطع مع [from, to)، بعد تطبيق الإجازات والتغطيات. */
+/**
+ * نافذة التغطية داخل وردية بعينها، بالدقائق من بدايتها. الوردية كاملة = 0 حتى مدتها.
+ * null إن لم تقع النافذة داخل الوردية (مثل وقت محدد في وردية أخرى للموظف نفسه).
+ */
+export function coverWindow(
+  shift: Pick<DutyShiftRule, "startMinute" | "endMinute">,
+  exception: Pick<DutyExceptionRule, "startMinute" | "endMinute">,
+): { fromOffset: number; toOffset: number; partial: boolean } | null {
+  const duration = shiftDurationMinutes(shift);
+  const hasFrom = exception.startMinute !== null && exception.startMinute !== undefined;
+  const hasTo = exception.endMinute !== null && exception.endMinute !== undefined;
+  if (!hasFrom && !hasTo) return { fromOffset: 0, toOffset: duration, partial: false };
+  const offsetOf = (minute: number) => ((((minute - shift.startMinute) % 1440) + 1440) % 1440);
+  const fromOffset = hasFrom ? offsetOf(exception.startMinute as number) : 0;
+  let toOffset = hasTo ? offsetOf(exception.endMinute as number) : duration;
+  // نهاية عند بداية الوردية نفسها (وردية 24 ساعة) أو بعد نهايتها تعني حتى النهاية.
+  if (hasTo && (toOffset === 0 || toOffset > duration)) toOffset = duration;
+  if (fromOffset >= duration || fromOffset >= toOffset) return null;
+  return { fromOffset, toOffset, partial: fromOffset > 0 || toOffset < duration };
+}
+
+/** كل الورديات التي تتقاطع مع [from, to)، بعد تطبيق الإجازات والتغطيات (الكاملة أو بوقت محدد). */
 export function expandOccurrences(
   shifts: readonly DutyShiftRule[],
   exceptions: readonly DutyExceptionRule[],
@@ -140,17 +165,27 @@ export function expandOccurrences(
       const end = start + shiftDurationMinutes(shift) * MINUTE;
       if (end <= from || start >= to) continue;
       const exception = exceptions.find((e) => e.dutyDate === key && e.userId === shift.userId);
-      if (exception && !exception.coverUserId) continue;
-      const userId = exception?.coverUserId ?? shift.userId;
-      out.push({
-        key: `${shift.id}:${key}`,
-        shiftId: shift.id,
-        userId,
-        coveredUserId: exception ? shift.userId : null,
-        dutyDate: key,
-        start,
-        end,
-      });
+      // بلا استثناء، أو وقت محدد خارج هذه الوردية: تبقى لصاحبها كاملة.
+      const win = exception ? coverWindow(shift, exception) : null;
+      if (!exception || !win) {
+        out.push({ key: `${shift.id}:${key}`, shiftId: shift.id, userId: shift.userId, coveredUserId: null, dutyDate: key, start, end });
+        continue;
+      }
+      // الوردية تنقسم عند وقت التسليم: صاحبها قبل التغطية وبعدها، والبديل في وقتها.
+      // الجزء الأخير لصاحب الوردية يأخذ «~2» في مفتاحه حتى لا يتطابق مع الجزء الأول.
+      const coverStart = start + win.fromOffset * MINUTE;
+      const coverEnd = start + win.toOffset * MINUTE;
+      const segments: DutyOccurrence[] = [];
+      if (coverStart > start) {
+        segments.push({ key: `${shift.id}:${key}`, shiftId: shift.id, userId: shift.userId, coveredUserId: null, dutyDate: key, start, end: coverStart });
+      }
+      if (exception.coverUserId) {
+        segments.push({ key: `${shift.id}:${key}`, shiftId: shift.id, userId: exception.coverUserId, coveredUserId: shift.userId, dutyDate: key, start: coverStart, end: coverEnd });
+      }
+      if (coverEnd < end) {
+        segments.push({ key: `${shift.id}~2:${key}`, shiftId: shift.id, userId: shift.userId, coveredUserId: null, dutyDate: key, start: coverEnd, end });
+      }
+      for (const seg of segments) if (seg.end > from && seg.start < to) out.push(seg);
     }
   }
   return out.sort((a, b) => a.start - b.start || a.userId.localeCompare(b.userId));
@@ -691,6 +726,9 @@ export interface RosterExceptionView {
   coverUserId: string | null;
   coverName: string | null;
   note: string | null;
+  /** تغطية بوقت محدد (فارغ = الوردية كاملة) */
+  startMinute: number | null;
+  endMinute: number | null;
 }
 
 export interface ContentDutyRosterResponse {
