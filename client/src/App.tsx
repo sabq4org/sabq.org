@@ -1,5 +1,6 @@
 import { Switch, Route, useLocation, useParams, Redirect } from "wouter";
 import { LiveMeetingBanner } from "@/components/meetings/LiveMeetingBanner";
+import DutyChatNotifier from "@/components/dashboard/duty-chat/DutyChatNotifier";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { ArticleWithDetails } from "@shared/schema";
@@ -1484,6 +1485,7 @@ function App() {
                   <CapacitorDeepLinks />
                   <WebMCPProvider />
                   <LiveMeetingBanner />
+                  <DutyChatNotifier />
                   <ErrorBoundary>
                     <div id="main-content" tabIndex={-1}>
                       <Router />
