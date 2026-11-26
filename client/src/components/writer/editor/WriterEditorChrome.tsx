@@ -38,6 +38,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export function WriterEditorTopBar({
   heading,
   statusLabel,
+  statusTone = "neutral",
   saveState,
   lastSavedAt,
   onPreview,
@@ -50,6 +51,8 @@ export function WriterEditorTopBar({
 }: {
   heading: string;
   statusLabel: string;
+  /** warn: مسودة لم تُرسل للتحرير بعد. */
+  statusTone?: "neutral" | "warn";
   saveState: SaveState;
   lastSavedAt: Date | null;
   onPreview?: () => void;
@@ -81,13 +84,21 @@ export function WriterEditorTopBar({
           <div className="min-w-0 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold leading-snug text-[#1B2B3A] dark:text-foreground sm:text-[28px]">{heading}</h1>
-              <span className="shrink-0 rounded-full bg-[#EEF2F6] px-3 py-0.5 text-xs text-[#55667A] dark:bg-muted dark:text-muted-foreground">
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-3 py-0.5 text-xs",
+                  statusTone === "warn"
+                    ? "bg-[#FFF8EC] text-[#7A4B00] shadow-[inset_0_0_0_1px_#F5DDB0]"
+                    : "bg-[#EEF2F6] text-[#55667A] dark:bg-muted dark:text-muted-foreground",
+                )}
+                data-testid="writer-editor-status"
+              >
                 {statusLabel}
               </span>
               <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} />
             </div>
             <p className="text-[13px] leading-6 text-[#55667A] dark:text-muted-foreground sm:text-sm">
-              اكتب العنوان والنص، وراجع «قبل الإرسال»، ثم أرسله للمراجعة. يُحفظ تلقائيًا.
+              اكتب العنوان والنص، وراجع «قبل الإرسال»، ثم اضغط «إرسال للمراجعة». الحفظ وحده لا يرسل المقال.
             </p>
           </div>
         </div>
@@ -487,7 +498,7 @@ export function WriterMobileReadinessBar({
           className="h-10 shrink-0 rounded-full px-3.5 text-sm text-[#1B2B3A] shadow-[inset_0_0_0_1px_#DCE4EC] disabled:opacity-60 dark:text-foreground dark:shadow-none"
           data-testid="button-save-draft-mobile-bar"
         >
-          مسودة
+          حفظ فقط
         </button>
         <button
           type="button"

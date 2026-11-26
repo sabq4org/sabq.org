@@ -25,7 +25,7 @@ import {
 } from "./WriterPriorityRail";
 import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
 import { WriterAnnouncementsBoard } from "./WriterAnnouncementsBoard";
-import { WriterHomeHeader, WriterArticleNowStrip, WriterWeeklySlotCard, WriterTabPills, ArticleStatusChips, filterTrackedArticles, type ArticleStatusFilter } from "./WriterHomeParts";
+import { WriterHomeHeader, WriterArticleNowStrip, WriterUnsentDraftStrip, WriterWeeklySlotCard, WriterTabPills, ArticleStatusChips, filterTrackedArticles, type ArticleStatusFilter } from "./WriterHomeParts";
 import {
   ContributorStatsRow,
   PerformanceChart,
@@ -278,6 +278,15 @@ export default function WriterWorkspacePage() {
     return null;
   }, [scheduleQuery.data?.activeArticle, trackedArticles]);
 
+  // أحدث مسودة لم تُرسل للتحرير (حالة «مسودة» بلا حالة مراجعة): تظهر في شريط أعلى اللوحة.
+  const unsentDraft = useMemo(() => {
+    const drafts = trackedArticles.filter((a) => a.status === "draft" && !a.reviewStatus);
+    if (drafts.length === 0) return null;
+    return [...drafts].sort(
+      (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
+    )[0];
+  }, [trackedArticles]);
+
   const pipelineBlockReason = activePipelineArticle
     ? activePipelineArticle.stage === "scheduled"
       ? `يوجد لديك مقال مجدول للنشر حالياً («${activePipelineArticle.title}»). يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.`
@@ -362,6 +371,11 @@ export default function WriterWorkspacePage() {
       if (token) window.open(`/survey/${token}`, "_blank", "noopener");
       return;
     }
+    // تذكير «مسودة لم تُرسل» يفتح المسودة في المحرر مباشرة.
+    if (notification.type === "draft_reminder" && notification.articleId) {
+      navigate(`/dashboard/articles/${notification.articleId}/edit`);
+      return;
+    }
     if (notification.type === "social_published" && notification.deepLink?.startsWith("https://")) {
       window.open(notification.deepLink, "_blank", "noopener");
       return;
@@ -419,6 +433,14 @@ export default function WriterWorkspacePage() {
               }}
             />
           )}
+
+          {!activePipelineArticle && unsentDraft ? (
+            <WriterUnsentDraftStrip
+              article={unsentDraft}
+              onOpen={() => navigate(`/dashboard/articles/${unsentDraft.id}/edit`)}
+              onSend={() => navigate(`/dashboard/articles/${unsentDraft.id}/edit?send=1`)}
+            />
+          ) : null}
 
           <WriterPriorityRail
             notifications={unreadNotifications}
@@ -778,7 +800,7 @@ function trackingState(article: TrackingArticle) {
   if (article.reviewStatus === "needs_changes") return { label: EDITORIAL_STATE_LABELS.needs_changes, description: "أعاد فريق التحرير المقال إليك لإجراء تعديلات محددة.", icon: Edit3, tone: "warning" as const, dateLabel: "وصلت الملاحظات في", date: article.reviewedAt || article.updatedAt };
   if (article.reviewStatus === "pending_review") return { label: EDITORIAL_STATE_LABELS.pending, description: "وصلت المقالة إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.", icon: Clock3, tone: "default" as const, dateLabel: "تاريخ الإرسال", date: article.updatedAt };
   if (article.reviewStatus === "approved") return { label: EDITORIAL_STATE_LABELS.approved, description: "اعتمدت هيئة التحرير المقال وهو الآن بانتظار تحديد موعد النشر.", icon: FileCheck2, tone: "success" as const, dateLabel: "تم الاعتماد في", date: article.reviewedAt || article.updatedAt };
-  return { label: EDITORIAL_STATE_LABELS.draft, description: "المقال محفوظ لديك ولم يُرسل إلى فريق التحرير بعد.", icon: Feather, tone: "default" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
+  return { label: "لم تُرسل", description: "المقال محفوظ لديك فقط، ولن تراه هيئة التحرير حتى تضغط «إرسال للمراجعة».", icon: Feather, tone: "warning" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
 }
 
 function WriterTrackingCard({

@@ -183,6 +183,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WriterDayPicker } from "@/pages/opinion-author/WriterPriorityRail";
+import { WriterUnsentDraftDialog, type WriterUnsentDraftState } from "@/components/writer/editor/WriterUnsentDraftDialog";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
 import { OpenAIImageGeneratorDialog } from "@/components/OpenAIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
@@ -810,7 +811,9 @@ export default function ArticleEditor() {
   useEffect(() => {
     if (!showDayGate) return;
     // ثبّت الكاتب يومه من داخل الحوار — أغلقه، وأكمل الإرسال إن كان قد بدأه
-    if (writerOwnSchedule && writerOwnSchedule.canChoose === false) {
+    // بعد التثبيت يعيد /api/opinion-author/schedule «banner» بلا canChoose (undefined لا false)،
+    // فكان الشرط === false لا يتحقق: تبقى نافذة اليوم مفتوحة ولا يُرسل المقال رغم تثبيت اليوم.
+    if (writerOwnSchedule && !writerOwnSchedule.canChoose) {
       const shouldSubmit = dayGateContinueRef.current;
       dayGateContinueRef.current = false;
       setShowDayGate(false);
@@ -2315,6 +2318,45 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     navigateAfterContributorSubmit();
   };
 
+  // «حفظ دون إرسال» لكاتب الرأي: المسودة لا تصل للتحرير، فنقول ذلك صراحة بدل «تم الحفظ بنجاح».
+  const [unsentDraftState, setUnsentDraftState] = useState<WriterUnsentDraftState | null>(null);
+  const writerDraftIsUnsent =
+    isOpinionAuthor &&
+    (isNewArticle || status === "draft") &&
+    reviewStatus !== "pending_review" &&
+    reviewStatus !== "approved";
+  const handleWriterSaveDraft = async () => {
+    if (!writerDraftIsUnsent) {
+      void handleSave(false);
+      return;
+    }
+    const result = await handleSave(false, { skipNavigate: true, skipToast: true });
+    if (!result.ok) return;
+    setAutoSaveStatus("saved");
+    setLastAutoSaveTime(new Date());
+    if (isNewArticle && result.articleId) {
+      // مثل الحفظ التلقائي: ثبّت رقم المقال في الرابط كي يعدّل الإرسال الصف نفسه.
+      createdDraftIdRef.current = result.articleId;
+      navigate(`/dashboard/articles/${result.articleId}/edit`, { replace: true, state: { keepScroll: true } });
+    }
+    const active = writerOwnSchedule?.activeArticle;
+    setUnsentDraftState(
+      active && active.id !== result.articleId ? { kind: "busy", activeTitle: active.title } : { kind: "unsent" },
+    );
+  };
+
+  // «إرسال للمراجعة» من شريط «مسودة لم تُرسل» في لوحة الكاتب يفتح المحرر بـ ?send=1،
+  // فيمر الإرسال بالمسار نفسه (اختيار اليوم، الترخيص، المقال الجاري) بعد تحميل المقال.
+  const sendOnOpenRef = useRef(queryParams.get("send") === "1");
+  useEffect(() => {
+    if (!sendOnOpenRef.current || !isOpinionAuthor || !id) return;
+    if (!article || article.id !== id || !title.trim() || !content.trim() || !writerOwnSchedule) return;
+    sendOnOpenRef.current = false;
+    navigate(`/dashboard/articles/${id}/edit`, { replace: true, state: { keepScroll: true } });
+    if (writerDraftIsUnsent) handleSubmitForReviewGated();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpinionAuthor, id, article, title, content, writerOwnSchedule, writerDraftIsUnsent]);
+
   const handleAddLink = (suggestion: { text: string; position: number; length: number }, url: string) => {
     if (!editorInstance) {
       toast({
@@ -3085,16 +3127,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         {isOpinionAuthor && (
           <WriterEditorTopBar
             heading={isNewArticle ? "مقال جديد" : "تعديل مقالي"}
-            statusLabel={statusBadgeInfo.label}
+            statusLabel={writerDraftIsUnsent && reviewStatus !== "needs_changes" ? "لم يُرسل بعد" : statusBadgeInfo.label}
+            statusTone={writerDraftIsUnsent ? "warn" : "neutral"}
             saveState={autoSaveStatus === "saving" || autoSaveStatus === "saved" ? autoSaveStatus : "idle"}
             lastSavedAt={lastAutoSaveTime}
             onPreview={!isNewArticle && id ? () => window.open(`/dashboard/article/${id}/preview`, "_blank") : undefined}
-            onSaveDraft={() => handleSave(false)}
+            onSaveDraft={() => void handleWriterSaveDraft()}
             onSubmit={handleSubmitForReviewGated}
             isSaving={isSaving || submitReviewMutation.isPending}
             submitDisabled={isSaving || submitReviewMutation.isPending || isLockedByOther || hasBlockingActiveOpinionArticle}
             isResubmit={reviewStatus === "needs_changes"}
-            saveLabel={status === "scheduled" || status === "published" ? "حفظ التعديلات" : "حفظ كمسودة"}
+            saveLabel={status === "scheduled" || status === "published" ? "حفظ التعديلات" : "حفظ دون إرسال"}
           />
         )}
         {isOpinionAuthor && ownSubmissionBlocked ? (
@@ -5929,11 +5972,26 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         <WriterMobileReadinessBar
           items={writerReadinessItems}
           onPickDay={() => setShowDayGate(true)}
-          onSaveDraft={() => handleSave(false)}
+          onSaveDraft={() => void handleWriterSaveDraft()}
           onSubmit={handleSubmitForReviewGated}
           isSaving={isSaving || submitReviewMutation.isPending}
           submitDisabled={isSaving || submitReviewMutation.isPending || isLockedByOther || hasBlockingActiveOpinionArticle}
           isResubmit={reviewStatus === "needs_changes"}
+        />
+      )}
+      {isOpinionAuthor && (
+        <WriterUnsentDraftDialog
+          state={unsentDraftState}
+          onSubmitNow={() => {
+            setUnsentDraftState(null);
+            // الحفظ اليدوي الناجح يوقف الحفظ التلقائي؛ نعيده هنا بعد أن ثبت رقم المقال في الرابط.
+            serverAutosave.resumeAfterManualSave();
+            handleSubmitForReviewGated();
+          }}
+          onLater={() => {
+            setUnsentDraftState(null);
+            navigate("/dashboard/opinion-author");
+          }}
         />
       )}
 
