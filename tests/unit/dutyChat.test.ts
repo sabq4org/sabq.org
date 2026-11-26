@@ -4,6 +4,7 @@ import {
   applyStatusEvent,
   isAllowedAttachmentMime,
   isOnline,
+  mergeMessages,
   normalizeBody,
   pickStripConversation,
   safeFileName,
@@ -70,6 +71,16 @@ describe("duty chat status events", () => {
   it("a message arriving from both the stream and the send response is added once", () => {
     const once = appendMessage([msg({ id: "1" })], msg({ id: "2" }));
     expect(appendMessage(once, msg({ id: "2" }))).toHaveLength(2);
+  });
+});
+
+describe("duty chat paging", () => {
+  it("keeps older pages and messages that left the latest page, with fresh status winning", () => {
+    const older = [msg({ id: "1", createdAt: "2026-11-26T09:00:00Z" }), msg({ id: "2", createdAt: "2026-11-26T09:01:00Z" })];
+    const latest = [msg({ id: "2", createdAt: "2026-11-26T09:01:00Z", readAt: "2026-11-26T09:05:00Z" }), msg({ id: "3", createdAt: "2026-11-26T09:02:00Z" })];
+    const merged = mergeMessages(older, latest);
+    expect(merged.map((m) => m.id)).toEqual(["1", "2", "3"]);
+    expect(merged[1].readAt).toBe("2026-11-26T09:05:00Z");
   });
 });
 

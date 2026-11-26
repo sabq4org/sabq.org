@@ -4,7 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DUTY_CHAT_ALLOWED_MIME,
   DUTY_CHAT_MAX_ATTACHMENT_BYTES,
+  DUTY_CHAT_MAX_BODY,
   appendMessage,
+  mergeMessages,
   type DutyChatEvent,
   type DutyChatKind,
   type DutyChatMessage,
@@ -104,7 +106,11 @@ export default function DutyChatPanel({ peerId, peerName, subtitle, onClose }: P
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const messages = [...(older?.messages ?? []), ...(data?.messages ?? [])];
+  // ما حُمِّل من الأقدم يحتفظ بكل رسالة رأيناها، فلا تختفي رسائل إن تقدمت الصفحة الأخيرة.
+  useEffect(() => {
+    if (data?.messages) setOlder((prev) => (prev ? { ...prev, messages: mergeMessages(prev.messages, data.messages) } : prev));
+  }, [data?.messages]);
+  const messages = older ? mergeMessages(older.messages, data?.messages ?? []) : (data?.messages ?? []);
   const hasMore = older ? older.hasMore : Boolean(data?.hasMore);
   const lastId = messages[messages.length - 1]?.id;
 
@@ -121,7 +127,7 @@ export default function DutyChatPanel({ peerId, peerName, subtitle, onClose }: P
         `${dutyChatThreadUrl(peerId)}?before=${encodeURIComponent(first.createdAt)}`,
         { silent: true },
       );
-      setOlder({ messages: [...res.messages, ...(older?.messages ?? [])], hasMore: res.hasMore });
+      setOlder((prev) => ({ messages: mergeMessages(res.messages, prev?.messages ?? messages), hasMore: res.hasMore }));
     } catch {
       setError("تعذر تحميل الرسائل الأقدم");
     }
@@ -361,6 +367,7 @@ export default function DutyChatPanel({ peerId, peerName, subtitle, onClose }: P
                   void send();
                 }
               }}
+              maxLength={DUTY_CHAT_MAX_BODY}
               placeholder={`اكتب رسالة إلى ${peer?.name ?? peerName}…`}
               className="max-h-32 min-h-[44px] flex-1 resize-none rounded-[22px] border border-[#DDE6EF] bg-white px-4 py-2.5 text-[15px] leading-6 text-[#1B2B3A] outline-none focus:border-[#1E9BE6]"
             />

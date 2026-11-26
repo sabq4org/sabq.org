@@ -149,6 +149,23 @@ export function applyStatusEvent(
   });
 }
 
+/**
+ * يدمج صفحتين من الرسائل بالمعرّف (الأحدث نسخةً يغلب) ويرتبها زمنيًا،
+ * لئلا تختفي رسائل حين تتقدم الصفحة الأخيرة بعد تحميل الأقدم.
+ */
+export function mergeMessages(
+  base: readonly DutyChatMessage[],
+  newer: readonly DutyChatMessage[],
+): DutyChatMessage[] {
+  const byId = new Map<string, DutyChatMessage>();
+  for (const m of base) byId.set(m.id, m);
+  for (const m of newer) byId.set(m.id, m);
+  return Array.from(byId.values()).sort((a, b) => {
+    const d = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    return d !== 0 ? d : a.id.localeCompare(b.id);
+  });
+}
+
 /** يضيف رسالة جديدة مرة واحدة فقط (قد تصل من البث ومن رد الإرسال معًا). */
 export function appendMessage(messages: readonly DutyChatMessage[], m: DutyChatMessage): DutyChatMessage[] {
   if (messages.some((x) => x.id === m.id)) return messages.slice();

@@ -8,6 +8,7 @@ import { isAuthenticated } from "../auth";
 import {
   DUTY_CHAT_HEARTBEAT_MS,
   DUTY_CHAT_MAX_ATTACHMENT_BYTES,
+  DUTY_CHAT_MAX_BODY,
   isAllowedAttachmentMime,
   normalizeBody,
   safeFileName,
@@ -111,6 +112,10 @@ router.post("/api/duty-chat/thread/:peerId/messages", ...base, handleUpload, asy
   try {
     const parsed = sendBody.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "بيانات الرسالة غير صحيحة" });
+    // نرفض الطويل صراحة بدل قصّه بصمت، فلا تصل الرسالة ناقصة دون علم المرسل.
+    if ((parsed.data.body ?? "").replace(/\r\n/g, "\n").trim().length > DUTY_CHAT_MAX_BODY) {
+      return res.status(400).json({ message: `الرسالة أطول من ${DUTY_CHAT_MAX_BODY} حرف، قسّمها إلى رسالتين` });
+    }
     const file = req.file;
     if (file && !isAllowedAttachmentMime(file.mimetype)) {
       return res.status(400).json({ message: "المرفق المسموح: صورة (JPG أو PNG أو WebP أو GIF) أو PDF" });

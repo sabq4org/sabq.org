@@ -153,10 +153,24 @@ export function toMessage(r: Row, viewerId: string): DutyChatMessage {
 
 export async function getInbox(me: string): Promise<DutyChatInboxResponse> {
   return guard(async () => {
-    const recent = await db.select().from(dutyChatMessages)
-      .where(or(eq(dutyChatMessages.senderId, me), eq(dutyChatMessages.recipientId, me)))
-      .orderBy(desc(dutyChatMessages.createdAt))
-      .limit(400);
+    // آخر رسالة لكل طرف أولًا (DISTINCT ON)، ثم الحد: فلا تسقط محادثة قديمة لكثرة رسائل محادثة أخرى.
+    const latestIds = await db.execute(sql`
+      SELECT id FROM (
+        SELECT DISTINCT ON (peer) id, created_at
+        FROM (
+          SELECT id, created_at, CASE WHEN sender_id = ${me} THEN recipient_id ELSE sender_id END AS peer
+          FROM duty_chat_messages
+          WHERE sender_id = ${me} OR recipient_id = ${me}
+        ) mine
+        ORDER BY peer, created_at DESC, id DESC
+      ) t
+      ORDER BY created_at DESC
+      LIMIT 200
+    `);
+    const ids = (latestIds.rows as { id: string }[]).map((r) => r.id);
+    const recent = ids.length
+      ? await db.select().from(dutyChatMessages).where(inArray(dutyChatMessages.id, ids)).orderBy(desc(dutyChatMessages.createdAt))
+      : [];
     const pending = await db.select({
       senderId: dutyChatMessages.senderId,
       readAt: dutyChatMessages.readAt,
