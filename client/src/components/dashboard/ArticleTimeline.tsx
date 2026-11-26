@@ -45,11 +45,14 @@ import {
   type ContentMedia,
 } from "@shared/articleHistory";
 import { ArticleVersionCompare, type RestoreRequest } from "./ArticleVersionCompare";
+import { SmartEditRunCompare, SmartEditRunEvent, type SmartEditRunSummary } from "./SmartEditRuns";
 
 interface ArticleTimelineProps {
   articleId: string;
   /** استرجاع النسخ لمن يملك articles.edit_any (أو الصلاحية الشاملة). */
   canRestore?: boolean;
+  /** تشغيلات «تحرير وتوليد شامل» بنصوصها: للمسؤول ومدير النظام فقط ("*"). */
+  canSeeSmartEditRuns?: boolean;
 }
 
 interface FieldChange {
@@ -302,20 +305,30 @@ function TimelineSkeleton() {
 
 type TimelineItem =
   | { kind: "event"; event: ArticleEvent }
+  | { kind: "smart_edit"; run: SmartEditRunSummary }
   | { kind: "autosaves"; events: ArticleEvent[] };
 
-export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimelineProps) {
+export function ArticleTimeline({ articleId, canRestore = false, canSeeSmartEditRuns = false }: ArticleTimelineProps) {
   const { toast } = useToast();
   const [filter, setFilter] = useState<FilterKey>("all");
   const [openAutosaves, setOpenAutosaves] = useState<Set<string>>(new Set());
   const [compare, setCompare] = useState<{ versionId: string; field?: "content" | "title" } | null>(null);
   const [pendingRestore, setPendingRestore] = useState<(RestoreRequest & { title: string }) | null>(null);
   const [reason, setReason] = useState("");
+  const [compareRunId, setCompareRunId] = useState<string | null>(null);
 
   const history = useQuery<HistoryResponse>({
     queryKey: ["/api/admin/articles", articleId, "history"],
     queryFn: () => apiRequest(`/api/admin/articles/${articleId}/history`),
   });
+
+  const smartEdit = useQuery<{ runs: SmartEditRunSummary[] }>({
+    queryKey: ["/api/admin/articles", articleId, "smart-edit-runs"],
+    queryFn: () => apiRequest(`/api/admin/articles/${articleId}/smart-edit-runs`),
+    enabled: canSeeSmartEditRuns,
+    retry: false,
+  });
+  const smartRuns = useMemo(() => (Array.isArray(smartEdit.data?.runs) ? smartEdit.data!.runs : []), [smartEdit.data]);
 
   const restore = useMutation({
     mutationFn: (request: RestoreRequest) =>
@@ -344,8 +357,19 @@ export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimeli
 
   const items = useMemo<TimelineItem[]>(() => {
     const visible = filter === "all" ? events : events.filter((e) => FILTER_EVENT_TYPES[filter].has(e.eventType));
+    // تشغيلات المحرر الذكي تُدمج بالوقت مع الأحداث (الأحدث أولًا) في «الكل» و«تعديلات المحتوى»
+    const runs = filter === "all" || filter === "content" ? smartRuns : [];
+    const merged: Array<{ at: number; event?: ArticleEvent; run?: SmartEditRunSummary }> = [
+      ...visible.map((event) => ({ at: new Date(event.createdAt).getTime(), event })),
+      ...runs.map((run) => ({ at: new Date(run.createdAt).getTime(), run })),
+    ].sort((a, b) => b.at - a.at);
     const out: TimelineItem[] = [];
-    for (const event of visible) {
+    for (const entry of merged) {
+      if (entry.run) {
+        out.push({ kind: "smart_edit", run: entry.run });
+        continue;
+      }
+      const event = entry.event!;
       const isAutosave = event.eventType === "updated" && event.metadata?.autosave === true;
       const last = out[out.length - 1];
       if (isAutosave && last?.kind === "autosaves") last.events.push(event);
@@ -353,7 +377,7 @@ export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimeli
       else out.push({ kind: "event", event });
     }
     return out;
-  }, [events, filter]);
+  }, [events, filter, smartRuns]);
 
   const askRestore = (request: RestoreRequest, title: string) => {
     setReason("");
@@ -549,6 +573,7 @@ export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimeli
       <div>
         {items.map((item) => {
           if (item.kind === "event") return renderEvent(item.event);
+          if (item.kind === "smart_edit") return <SmartEditRunEvent key={`run-${item.run.id}`} run={item.run} onCompare={setCompareRunId} />;
           const key = item.events[0].id;
           const expanded = openAutosaves.has(key);
           const first = item.events[item.events.length - 1];
@@ -628,6 +653,10 @@ export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimeli
           );
         }}
       />
+
+      {canSeeSmartEditRuns && (
+        <SmartEditRunCompare runId={compareRunId} onOpenChange={(open) => !open && setCompareRunId(null)} />
+      )}
 
       <AlertDialog open={Boolean(pendingRestore)} onOpenChange={(open) => !open && setPendingRestore(null)}>
         <AlertDialogContent dir="rtl">

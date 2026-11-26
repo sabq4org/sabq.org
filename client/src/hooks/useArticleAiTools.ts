@@ -675,6 +675,7 @@ export function useArticleAiTools({
         const csrfToken = await ensureCsrfToken();
         const streamed = await streamEditAndGenerate({
           content,
+          articleId: !isNewArticle && id ? id : undefined,
           url: apiUrl("/api/articles/edit-and-generate/stream"),
           csrfToken,
           onEvent: (event, data: any) => {
@@ -695,9 +696,10 @@ export function useArticleAiTools({
         console.warn('[Edit+Generate] Stream endpoint unavailable (404/405) — falling back to JSON endpoint');
         const result = await apiRequest("/api/articles/edit-and-generate", {
           method: "POST",
-          body: JSON.stringify({ 
-            content, 
-            language: "ar" 
+          body: JSON.stringify({
+            content,
+            language: "ar",
+            ...(!isNewArticle && id ? { articleId: id } : {}),
           }),
         });
 

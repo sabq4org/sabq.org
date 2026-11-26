@@ -2,6 +2,8 @@ export type EditAndGenerateStreamEventHandler = (event: string, data: unknown) =
 
 export interface StreamEditAndGenerateOptions {
   content: string;
+  /** رقم الخبر إن كان محفوظًا، ليُربط التشغيل بالخبر في سجل المحرر الذكي. */
+  articleId?: string;
   url: string;
   csrfToken?: string | null;
   onEvent: EditAndGenerateStreamEventHandler;
@@ -15,6 +17,7 @@ export interface StreamEditAndGenerateOptions {
  */
 export async function streamEditAndGenerate({
   content,
+  articleId,
   url,
   csrfToken,
   onEvent,
@@ -27,7 +30,7 @@ export async function streamEditAndGenerate({
       ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
     },
     credentials: "include",
-    body: JSON.stringify({ content, language: "ar" }),
+    body: JSON.stringify({ content, language: "ar", ...(articleId ? { articleId } : {}) }),
   });
 
   if (response.status === 404 || response.status === 405) return null;

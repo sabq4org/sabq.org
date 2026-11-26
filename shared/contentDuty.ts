@@ -628,6 +628,8 @@ export interface DutyPerson {
 }
 
 export interface ContentDutyCardEntry extends DutyPerson {
+  /** صورة حساب المناوب إن وُجدت */
+  avatarUrl?: string | null;
   status: LiveStatus;
   start: string;
   end: string;

@@ -54,3 +54,14 @@ describe("فرصة تغيير الموعد الأسبوعي", () => {
     expect(formatSlotTimeAr("12:00")).toBe("12:00 م");
   });
 });
+
+describe("applyGapReset", () => {
+  it("drops a floor that predates the slot change", async () => {
+    const { applyGapReset } = await import("../../server/services/opinionScheduleRules");
+    const reset = new Date("2026-11-24T10:00:00Z");
+    expect(applyGapReset(new Date("2026-11-23T06:00:00Z"), reset)).toBeNull();
+    const after = new Date("2026-11-27T15:00:00Z");
+    expect(applyGapReset(after, reset)).toEqual(after);
+    expect(applyGapReset(after, null)).toEqual(after);
+  });
+});

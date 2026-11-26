@@ -115,6 +115,17 @@ export async function loadNames(userIds: readonly string[]): Promise<Map<string,
   return new Map(rows.map((r) => [r.id, displayName(r)]));
 }
 
+/** صور حسابات المناوبين لبطاقة المناوبة (من لا صورة له لا يظهر في الخريطة). */
+export async function loadAvatars(userIds: readonly string[]): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: users.id, url: users.profileImageUrl })
+    .from(users)
+    .where(inArray(users.id, ids));
+  return new Map(rows.flatMap((r) => (r.url && r.url.trim() ? [[r.id, r.url.trim()] as [string, string]] : [])));
+}
+
 /** من يمكن إسناد وردية له: مديرو المحتوى والمحررون والمسؤولون النشطون. */
 export async function listDutyCandidates(): Promise<Array<{ userId: string; name: string }>> {
   const staffRoles = ["content_manager", "editor", "chief_editor", "admin", "system_admin", "superadmin"];

@@ -67,6 +67,7 @@ export const STAFF_NAV_SECTION_DEFINITIONS: readonly StaffNavSectionDefinition[]
           "world_days",
           "media_library",
           "publish_banned_words",
+          "smart_editor_usage",
         ],
       },
       { label: "التوزيع", itemIds: ["social_publishing", "audio_bulletin", "push_notifications"] },

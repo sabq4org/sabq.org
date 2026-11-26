@@ -135,6 +135,27 @@ export function pickStripConversation(
   return null;
 }
 
+/**
+ * أشرطة البطاقة حين يناوب أكثر من زميل: لكل مناوب (غيري) محادثته تحت صفه،
+ * و`extra` محادثة لا تخص أي صف (منتظرة من غير مناوب، أو أحدث محادثة إن كنت أنا المناوب).
+ */
+export function pickStripConversations(
+  conversations: readonly DutyChatConversation[],
+  onDutyIds: readonly string[],
+  meId?: string | null,
+): { byPeer: Map<string, DutyChatConversation>; extra: DutyChatConversation | null } {
+  const byRecent = [...conversations].sort(
+    (a, b) => new Date(b.last.createdAt).getTime() - new Date(a.last.createdAt).getTime(),
+  );
+  const duty = new Set(onDutyIds.filter((id) => id !== meId));
+  const byPeer = new Map<string, DutyChatConversation>();
+  for (const c of byRecent) if (duty.has(c.peer.id) && !byPeer.has(c.peer.id)) byPeer.set(c.peer.id, c);
+  const rest = byRecent.filter((c) => !byPeer.has(c.peer.id));
+  const extra = rest.find((c) => c.unread > 0 || c.pendingAcks > 0)
+    ?? (meId && onDutyIds.includes(meId) ? rest[0] ?? null : null);
+  return { byPeer, extra };
+}
+
 /** تحديث رسائل محادثة مفتوحة بحدث حالة (تسليم/قراءة/استلام) دون إعادة تحميل. */
 export function applyStatusEvent(
   messages: readonly DutyChatMessage[],

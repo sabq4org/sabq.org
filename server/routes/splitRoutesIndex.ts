@@ -67,6 +67,7 @@ import botPublisherTokensRouter from "./botPublisherTokens";
 import botSocialRouter from "./botSocial";
 import publishFirstRouter from "./publishFirst";
 import articleHistoryRouter from "./articleHistory";
+import smartEditRunsRouter from "./smartEditRuns";
 import articleEditRequestsRouter from "./articleEditRequests";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
@@ -241,6 +242,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(botSocialRouter);
   app.use(publishFirstRouter);
   app.use(articleHistoryRouter);
+  // سجل «تحرير وتوليد شامل» (للمسؤول ومدير النظام)
+  app.use(smartEditRunsRouter);
   app.use(articleEditRequestsRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);

@@ -18,7 +18,11 @@ router.post(
   isAuthenticated,
   requireAnyPermission("articles.create", "articles.edit_any", "articles.edit_own"),
   async (req, res) => {
-    const { content, language = "ar" } = (req.body ?? {}) as { content?: unknown; language?: "ar" | "en" | "ur" };
+    const { content, language = "ar", articleId } = (req.body ?? {}) as {
+      content?: unknown;
+      language?: "ar" | "en" | "ur";
+      articleId?: unknown;
+    };
     if (!content || typeof content !== "string" || content.trim().length === 0) {
       return res.status(400).json({ message: "يجب توفير محتوى الخبر" });
     }
@@ -48,6 +52,7 @@ router.post(
         content,
         language,
         onEvent: (ev) => send(ev.type, ev),
+        audit: { userId: (req.user as { id?: string } | undefined)?.id ?? null, articleId, channel: "web" },
       });
       send("result", payload);
     } catch (error) {

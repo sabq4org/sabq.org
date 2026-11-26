@@ -14245,7 +14245,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // المنطق مشترك مع المسار المبثوث (routes/editAndGenerateStream.ts)
       console.log("[Edit+Generate API] Processing with parallel AI calls for best quality...");
       const { runEditAndGenerate } = await import("./services/editAndGenerateService");
-      res.json(await runEditAndGenerate({ content, language }));
+      res.json(await runEditAndGenerate({ content, language, audit: { userId: req.user?.id, articleId: req.body.articleId, channel: "web" } }));
     } catch (error: any) {
       console.error("[Edit+Generate API] ❌ Error occurred:");
       console.error("[Edit+Generate API] Error name:", error?.name);

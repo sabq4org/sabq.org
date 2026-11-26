@@ -7,6 +7,7 @@ import {
   mergeMessages,
   normalizeBody,
   pickStripConversation,
+  pickStripConversations,
   safeFileName,
   tickFor,
   type DutyChatConversation,
@@ -127,5 +128,19 @@ describe("duty chat input", () => {
     expect(normalizeBody("  سطر\r\nثانٍ  ")).toBe("سطر\nثانٍ");
     expect(normalizeBody(42)).toBe("");
     expect(normalizeBody("x".repeat(5000))).toHaveLength(4000);
+  });
+
+  it("gives each on-duty colleague their own strip so one chat never hides the other", () => {
+    const list = [conv("ali", "2026-11-26T18:40:00Z"), conv("salah", "2026-11-26T18:20:00Z", { pendingAcks: 1 })];
+    const { byPeer, extra } = pickStripConversations(list, ["salah", "ali"], "lead");
+    expect([...byPeer.keys()].sort()).toEqual(["ali", "salah"]);
+    expect(extra).toBeNull();
+    // رسالة منتظرة من غير المناوبين تظهر في شريط مستقل.
+    const more = pickStripConversations([...list, conv("off", "2026-11-26T18:41:00Z", { unread: 1 })], ["salah", "ali"], "lead");
+    expect(more.extra?.peer.id).toBe("off");
+    // المناوب نفسه يرى محادثته مع المسؤول، ولا يُحسب صفه هو.
+    const self = pickStripConversations([conv("lead", "2026-11-26T18:42:00Z")], ["salah", "me"], "me");
+    expect(self.byPeer.size).toBe(0);
+    expect(self.extra?.peer.id).toBe("lead");
   });
 });

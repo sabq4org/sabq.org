@@ -1244,6 +1244,37 @@ export const articleVersions = pgTable("article_versions", {
 
 export type ArticleVersion = typeof articleVersions.$inferSelect;
 
+// سجل كل تشغيل لـ«تحرير وتوليد شامل» (الويب و/api/v1): من شغّله ومتى، والنص المدخل
+// والناتج كاملين، وبصمة الخبر المحفوظ (كم بقي من الناتج). يُكتب تلقائيًا في الخادم.
+// article_id يُرسل من المحرر أو يُربط عند أول حفظ (shared/smartEditRuns.ts).
+export const smartEditRuns = pgTable("smart_edit_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "set null" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  channel: varchar("channel", { length: 16 }).notNull(), // web | mobile
+  status: varchar("status", { length: 16 }).notNull(), // success | failed
+  errorType: varchar("error_type", { length: 32 }),
+  inputContent: text("input_content").notNull(),
+  outputContent: text("output_content"),
+  outputTitle: text("output_title"),
+  // العنوان الفرعي والموجز والكلمات المفتاحية وSEO والتصنيف المقترح
+  outputFields: jsonb("output_fields").$type<Record<string, unknown>>(),
+  inputWords: integer("input_words").default(0).notNull(),
+  outputWords: integer("output_words").default(0).notNull(),
+  latencyMs: integer("latency_ms").default(0).notNull(),
+  // { aiPct, pastedPct, editorPct, finalWords } مقابل آخر نص محفوظ للخبر
+  adoption: jsonb("adoption").$type<{ aiPct: number; pastedPct: number; editorPct: number; finalWords: number }>(),
+  adoptionAt: timestamp("adoption_at"),
+  linkedAt: timestamp("linked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_smart_edit_runs_article").on(table.articleId, table.createdAt),
+  index("idx_smart_edit_runs_user").on(table.userId, table.createdAt),
+  index("idx_smart_edit_runs_created").on(table.createdAt),
+]);
+
+export type SmartEditRun = typeof smartEditRuns.$inferSelect;
+
 // «طلب تعديل» من المراسل على خبره (منشور أو مسودة) يعتمده المحرر أو يرفضه.
 // المقترح في proposed (shared/articleEditRequests.ts)، والقيم وقت الطلب في base_snapshot.
 export const articleEditRequests = pgTable("article_edit_requests", {

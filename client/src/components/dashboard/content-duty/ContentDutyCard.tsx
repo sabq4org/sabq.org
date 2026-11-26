@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { pickStripConversation } from "@shared/dutyChat";
+import { pickStripConversations, type DutyChatConversation } from "@shared/dutyChat";
 import type { ContentDutyCardEntry, ContentDutyCardResponse } from "@shared/contentDuty";
 import { useContentDutyCard } from "@/hooks/useContentDuty";
 import { formatRemaining, statusLabel, statusTone } from "@/lib/contentDuty";
@@ -53,7 +53,7 @@ function Numbers({ data, entry }: { data: ContentDutyCardResponse; entry: Conten
   return (
     <div className="flex rounded-2xl bg-white/75">
       {cells.map((c, i) => (
-        <div key={c.label} className={`flex flex-col gap-0.5 px-4 py-2.5 ${i > 0 ? "border-s border-[#EEF2F6]" : ""}`}>
+        <div key={c.label} className={`flex w-[72px] flex-col gap-0.5 px-4 py-2.5 ${i > 0 ? "border-s border-[#EEF2F6]" : ""}`}>
           <span className="text-xs text-[#55667A]">{c.label}</span>
           <span dir="ltr" className="text-right text-[22px] font-bold tabular-nums" style={{ color: c.color }}>{c.value ?? "—"}</span>
         </div>
@@ -62,14 +62,42 @@ function Numbers({ data, entry }: { data: ContentDutyCardResponse; entry: Conten
   );
 }
 
+/** صورة المناوب بجانب اسمه، وإلا أول حرف من اسمه (حين يكون لأحد المناوبين صورة). */
+function DutyAvatar({ entry, size }: { entry: ContentDutyCardEntry; size: number }) {
+  const [broken, setBroken] = useState(false);
+  if (entry.avatarUrl && !broken) {
+    return (
+      <img
+        src={entry.avatarUrl}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setBroken(true)}
+        className="shrink-0 rounded-full border-2 border-white object-cover shadow-[0_1px_4px_rgba(27,43,58,.12)]"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="flex shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#D6EEFD] font-bold text-[#0B6FA8]"
+      style={{ width: size, height: size, fontSize: Math.round(size / 2.4) }}
+    >
+      {entry.initial}
+    </span>
+  );
+}
+
 interface ChatTarget { id: string; name: string; subtitle: string | null }
 
-function MessageButton({ name, onClick }: { name: string; onClick: () => void }) {
+function MessageButton({ name, onClick, fill = false }: { name: string; onClick: () => void; fill?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-11 items-center gap-2 rounded-full border border-[#CFE6F7] bg-white px-[18px] text-sm font-semibold text-[#0B6FA8] hover:bg-[#F8FBFE]"
+      className={`${fill ? "w-full justify-center " : ""}inline-flex h-11 items-center gap-2 rounded-full border border-[#CFE6F7] bg-white px-[18px] text-sm font-semibold text-[#0B6FA8] hover:bg-[#F8FBFE]`}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B6FA8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
@@ -111,19 +139,24 @@ export default function ContentDutyCard() {
   }
 
   const onDutyIds = data.onDuty.map((e) => e.userId).filter((id): id is string => Boolean(id));
-  const stripConv = chatOn && inbox.data ? pickStripConversation(inbox.data.conversations, onDutyIds, user?.id) : null;
+  // شريط لكل مناوب تحت صفه، فلا تختفي رسالة أحدهما حين يناوب الاثنان معًا.
+  const strips = chatOn && inbox.data
+    ? pickStripConversations(inbox.data.conversations, onDutyIds, user?.id)
+    : { byPeer: new Map<string, DutyChatConversation>(), extra: null };
   const subtitleFor = (peerId: string) => {
     const e = data.onDuty.find((x) => x.userId === peerId);
     return e ? `مناوب ${e.start} – ${e.end}` : null;
   };
+  const stripFor = (conv: DutyChatConversation) => (
+    <DutyChatStrip
+      conversation={conv}
+      onOpen={() => setChat({ id: conv.peer.id, name: conv.peer.name, subtitle: subtitleFor(conv.peer.id) })}
+    />
+  );
+  const stripConv = strips.extra;
   const chatBits = (
     <>
-      {stripConv ? (
-        <DutyChatStrip
-          conversation={stripConv}
-          onOpen={() => setChat({ id: stripConv.peer.id, name: stripConv.peer.name, subtitle: subtitleFor(stripConv.peer.id) })}
-        />
-      ) : null}
+      {stripConv ? stripFor(stripConv) : null}
       {chat ? <DutyChatPanel peerId={chat.id} peerName={chat.name} subtitle={chat.subtitle} onClose={() => setChat(null)} /> : null}
     </>
   );
@@ -152,12 +185,34 @@ export default function ContentDutyCard() {
     );
   }
 
+  const roomLink = (
+    <Link href={ROOM} className="inline-flex h-11 shrink-0 items-center rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(30,155,230,.3)]">
+      افتح غرفة المناوبة
+    </Link>
+  );
+  // أكثر من مناوب: الزر الخاص بالبطاقة كلها يصعد إلى رأسها، وكل صف بأعمدة ثابتة
+  // (الحلقة، الاسم، العدادات، خانة «راسل») فتتحاذى العدادات والأزرار بين الصفوف.
+  const multi = data.onDuty.length > 1;
+  const showMessage = (entry: ContentDutyCardEntry) => chatOn && Boolean(entry.userId) && entry.userId !== user?.id;
+  const anyMessage = data.onDuty.some(showMessage);
+  // الصورة تظهر متى كان لأي مناوب صورة، ومن لا صورة له يظهر حرفه فتبقى الصفوف متحاذية.
+  const showAvatars = data.onDuty.some((e) => Boolean(e.avatarUrl));
+
   return (
     <section aria-label="المناوبة الآن" className={`${shell} flex flex-col gap-4`} dir="rtl">
+      {multi ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-[15px] font-bold">
+            المناوبون الآن <span className="font-semibold text-[#55667A]">· <bdi dir="ltr" className="tabular-nums">{data.onDuty.length}</bdi></span>
+          </span>
+          {roomLink}
+        </div>
+      ) : null}
       {data.onDuty.map((entry, idx) => (
-        <div key={`${entry.name}-${idx}`} className="flex flex-col gap-3">
+        <div key={`${entry.name}-${idx}`} className={`flex flex-col gap-3 ${multi && idx > 0 ? "border-t border-white/80 pt-4" : ""}`}>
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-            <DutyRing pct={entry.elapsedPct} remaining={entry.remainingMin} size={idx === 0 ? 84 : 64} />
+            <DutyRing pct={entry.elapsedPct} remaining={entry.remainingMin} size={multi ? 72 : 84} />
+            {showAvatars ? <DutyAvatar entry={entry} size={multi ? 52 : 56} /> : null}
             <div className="flex min-w-[180px] flex-1 flex-col gap-1">
               <span className="text-[13px] text-[#55667A]">{idx === 0 ? "المناوب الآن" : "يناوب معه"}</span>
               <span className="flex flex-wrap items-center gap-2.5">
@@ -171,21 +226,24 @@ export default function ContentDutyCard() {
               </span>
             </div>
             <Numbers data={data} entry={entry} />
-            {chatOn && entry.userId && entry.userId !== user?.id ? (
-              <MessageButton
-                name={entry.name}
-                onClick={() => setChat({ id: entry.userId!, name: entry.name, subtitle: `مناوب ${entry.start} – ${entry.end}` })}
-              />
+            {showMessage(entry) ? (
+              <div className={multi ? "sm:w-[148px]" : undefined}>
+                <MessageButton
+                  fill={multi}
+                  name={entry.name}
+                  onClick={() => setChat({ id: entry.userId!, name: entry.name, subtitle: `مناوب ${entry.start} – ${entry.end}` })}
+                />
+              </div>
+            ) : multi && anyMessage ? (
+              // صف المستخدم نفسه بلا «راسل»: خانة فارغة بالعرض نفسه حتى لا تنزاح العدادات.
+              <div className="hidden sm:block sm:w-[148px]" aria-hidden="true" />
             ) : null}
-            {idx === 0 ? (
-              <Link href={ROOM} className="inline-flex h-11 items-center rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(30,155,230,.3)]">
-                افتح غرفة المناوبة
-              </Link>
-            ) : null}
+            {!multi ? roomLink : null}
           </div>
           {entry.cells ? (
             <DutyPulseRibbon compact cells={entry.cells} startMs={0} endMs={entry.cells.length * 300_000} label={`نبض وردية ${entry.name}`} />
           ) : null}
+          {entry.userId && strips.byPeer.get(entry.userId) ? stripFor(strips.byPeer.get(entry.userId)!) : null}
         </div>
       ))}
       {chatBits}
