@@ -357,6 +357,7 @@ const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/Qu
 
 // === LAZY IMPORTS (Dashboard Tools) ===
 const PublishBannedWords = lazy(() => retryImport(() => import("@/pages/dashboard/PublishBannedWords")));
+const SmartEditorUsage = lazy(() => retryImport(() => import("@/pages/dashboard/SmartEditorUsage")));
 const SeoWeeklyReport = lazy(() => retryImport(() => import("@/pages/dashboard/SeoWeeklyReport")));
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
@@ -1396,6 +1397,16 @@ function Router() {
             <ProtectedRoute requireStaff={true} requireAnyPermission={["seo_weekly.view"]}>
               <Suspense fallback={<PageLoader />}>
                 <SeoWeeklyReport />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
+        {/* استخدام المحرر الذكي — للمسؤول ومدير النظام ("*") فقط */}
+        <Route path="/dashboard/smart-editor-usage">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["smart_edit_runs.view"]}>
+              <Suspense fallback={<PageLoader />}>
+                <SmartEditorUsage />
               </Suspense>
             </ProtectedRoute>
           )}

@@ -18,6 +18,7 @@ import {
   type ArticleSnapshot,
   type ArticleVersionAction,
 } from "@shared/articleHistory";
+import { syncSmartEditRunsAfterSave } from "./smartEditRunsService";
 import { logArticleEvent, getArticleEventsWithActor } from "./articleEventsService";
 import { articleLockAllowsWriter, nextArticleVersion } from "./articleWriteVersion";
 import { maybePlanPublishedRevision, recordArticleRevision, editorDisplayName } from "./publishFirstService";
@@ -153,6 +154,11 @@ export async function recordArticleSave(input: {
     });
   } catch (error) {
     console.error("[article-history] version insert failed", error);
+  }
+
+  // سجل «تحرير وتوليد شامل»: ربط تشغيلات صاحب الحفظ وحساب ما بقي من الناتج (لا ينتظر)
+  if (!beforeSnap || fields.includes("content")) {
+    void syncSmartEditRunsAfterSave({ articleId, actorId, content: input.after.content });
   }
 
   const metadata: Record<string, unknown> = {

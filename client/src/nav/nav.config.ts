@@ -418,6 +418,15 @@ export const navConfig: NavItem[] = [
         permissions: ["publish_banned_words.manage"],
       },
       {
+        id: "smart_editor_usage",
+        labelKey: "nav.smart_editor_usage",
+        labelAr: "استخدام المحرر الذكي",
+        path: "/dashboard/smart-editor-usage",
+        icon: Sparkles,
+        roles: ["admin", "system_admin"],
+        permissions: ["smart_edit_runs.view"],
+      },
+      {
         id: "breaking_ticker",
         labelKey: "nav.breaking_ticker",
         labelAr: "شريط الأخبار العاجلة",
