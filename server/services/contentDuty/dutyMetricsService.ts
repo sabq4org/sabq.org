@@ -56,6 +56,7 @@ import {
   listActiveShifts,
   listDutyCandidates,
   listExceptions,
+  loadAvatars,
   loadNames,
 } from "./dutyRosterStore";
 
@@ -318,7 +319,7 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
     const current = occurrences.filter((o) => o.start <= now && now < o.end);
     const upcoming = occurrences.filter((o) => o.start > now).sort((a, b) => a.start - b.start)[0] ?? null;
     const ids = [...current.map((o) => o.userId), ...current.flatMap((o) => (o.coveredUserId ? [o.coveredUserId] : [])), ...(upcoming ? [upcoming.userId] : [])];
-    const names = await loadNames(ids);
+    const [names, avatars] = await Promise.all([loadNames(ids), loadAvatars(current.map((o) => o.userId))]);
     const from = Math.min(now - 15 * MINUTE, ...current.map((o) => workCountFrom(o, occurrences)));
     const data = await loadDutyData(from, now + MINUTE, current.map((o) => o.userId), now);
     const seesNumbers = viewer.access !== "staff";
@@ -351,6 +352,7 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
           userId: viewer.access === "lead" || (viewer.access === "manager" && occ.userId === viewer.userId) ? occ.userId : null,
           name,
           initial: initialOf(name),
+          avatarUrl: avatars.get(occ.userId) ?? null,
           status: liveStatus(minutes, now),
           start: riyadhClock(occ.start),
           end: riyadhClock(occ.end),
