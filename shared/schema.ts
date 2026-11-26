@@ -16197,6 +16197,9 @@ export const contentDutyExceptions = pgTable("content_duty_exceptions", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   coverUserId: varchar("cover_user_id").references(() => users.id, { onDelete: "set null" }),
   note: text("note"),
+  // تغطية بوقت محدد (migrations/20261126_content_duty_partial_cover.sql): دقائق من منتصف ليل الرياض، فارغ = الوردية كاملة.
+  startMinute: integer("start_minute"),
+  endMinute: integer("end_minute"),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   cancelledAt: timestamp("cancelled_at"),
