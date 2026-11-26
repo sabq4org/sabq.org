@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import type { DutyChatEvent, DutyChatMessage } from "@shared/dutyChat";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
 import { dutyChatEvents, requestOpenDutyChat, useDutyChatInbox, useDutyChatStream } from "@/hooks/useDutyChat";
 
 const HOME = "/dashboard";
@@ -32,8 +33,13 @@ function DutyChatNotifierInner() {
     if (!chatOn) return;
     const stripInView = () => locationRef.current === HOME && document.visibilityState === "visible";
     const show = (m: DutyChatMessage, senderName: string) => {
-      if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-      if (stripInView() || alreadyNotified(m.id)) return;
+      if (stripInView()) return;
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+        // لا إشعار متصفح ولا شريط أمامه: نطلب إشعار «مكتب سبق» على جواله بدلًا منه.
+        apiRequest(`/api/duty-chat/messages/${encodeURIComponent(m.id)}/push-fallback`, { method: "POST", body: "{}", silent: true }).catch(() => {});
+        return;
+      }
+      if (alreadyNotified(m.id)) return;
       const title = m.kind === "alert" ? `تنبيه من ${senderName}` : `رسالة من ${senderName}`;
       const body = m.body || (m.attachment?.isImage ? "صورة" : m.attachment ? "مرفق PDF" : "");
       try {

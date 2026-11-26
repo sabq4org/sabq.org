@@ -358,20 +358,50 @@ async function pushIfOffline(me: string, peerId: string, message: DutyChatMessag
   try {
     const peers = await loadPeers([me, peerId]);
     if (peers.get(peerId)?.online) return;
-    const sender = peers.get(me)?.name ?? "مدير المحتوى";
-    const text = message.body || (message.attachment?.isImage ? "صورة" : "مرفق");
-    await sendPushToUserApp(peerId, STAFF_APP_BUNDLE_ID, {
-      title: message.kind === "alert" ? `تنبيه من ${sender}` : `رسالة من ${sender}`,
-      body: text.length > 180 ? `${text.slice(0, 179)}…` : text,
-      type: "duty_chat_message",
-      deeplink: "/dashboard",
-      collapseId: `duty-chat-${me}`,
-      interruptionLevel: message.kind === "alert" ? "time-sensitive" : "active",
-      data: { senderId: me, messageId: message.id },
-    });
+    await sendDeskPush(peerId, me, peers.get(me)?.name ?? "مدير المحتوى", message);
   } catch (error) {
     console.error("[DutyChat] desk push failed:", (error as Error).message);
   }
+}
+
+async function sendDeskPush(recipientId: string, senderId: string, sender: string, message: Pick<DutyChatMessage, "id" | "body" | "kind" | "attachment">) {
+  const text = message.body || (message.attachment?.isImage ? "صورة" : "مرفق");
+  await sendPushToUserApp(recipientId, STAFF_APP_BUNDLE_ID, {
+    title: message.kind === "alert" ? `تنبيه من ${sender}` : `رسالة من ${sender}`,
+    body: text.length > 180 ? `${text.slice(0, 179)}…` : text,
+    type: "duty_chat_message",
+    deeplink: "/dashboard",
+    collapseId: `duty-chat-${senderId}`,
+    interruptionLevel: message.kind === "alert" ? "time-sensitive" : "active",
+    data: { senderId, messageId: message.id },
+  });
+}
+
+const fallbackSent = new Set<string>();
+const FALLBACK_WINDOW_MS = 15 * 60_000;
+
+/**
+ * المستلم متصل باللوحة لكن في صفحة بلا شريط، والمتصفح لا يسمح بالإشعار:
+ * يطلب جهازه إشعار «مكتب سبق» بدلًا منه. مرة واحدة لكل رسالة، ولرسالة حديثة لم تُقرأ.
+ */
+export async function pushFallback(me: string, messageId: string): Promise<boolean> {
+  return guard(async () => {
+    if (!messageId || fallbackSent.has(messageId)) return false;
+    const [row] = await db.select().from(dutyChatMessages)
+      .where(and(eq(dutyChatMessages.id, messageId), eq(dutyChatMessages.recipientId, me), isNull(dutyChatMessages.readAt)))
+      .limit(1);
+    if (!row || Date.now() - new Date(row.createdAt).getTime() > FALLBACK_WINDOW_MS) return false;
+    fallbackSent.add(messageId);
+    if (fallbackSent.size > 5000) fallbackSent.clear();
+    const peers = await loadPeers([row.senderId]);
+    try {
+      await sendDeskPush(me, row.senderId, peers.get(row.senderId)?.name ?? "مدير المحتوى", toMessage(row, me));
+    } catch (error) {
+      console.error("[DutyChat] fallback push failed:", (error as Error).message);
+      return false;
+    }
+    return true;
+  });
 }
 
 // ---------- ناقل الأحداث ----------

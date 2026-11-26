@@ -9,6 +9,8 @@ export const DUTY_CHAT_HEARTBEAT_MS = 25_000;
 export const DUTY_CHAT_MAX_BODY = 4000;
 export const DUTY_CHAT_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const DUTY_CHAT_PAGE_SIZE = 60;
+/** رسالة 403 لغير المؤهلين: يطابقها العميل ليتوقف عن الاستطلاع نهائيًا. */
+export const DUTY_CHAT_FORBIDDEN_MESSAGE = "المحادثة لمديري المحتوى والمسؤول فقط";
 
 export const DUTY_CHAT_ALLOWED_MIME = [
   "image/jpeg",
