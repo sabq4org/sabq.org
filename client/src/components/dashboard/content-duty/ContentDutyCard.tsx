@@ -1,8 +1,14 @@
+import { useState } from "react";
 import { Link } from "wouter";
+import { pickStripConversation } from "@shared/dutyChat";
 import type { ContentDutyCardEntry, ContentDutyCardResponse } from "@shared/contentDuty";
 import { useContentDutyCard } from "@/hooks/useContentDuty";
 import { formatRemaining, statusLabel, statusTone } from "@/lib/contentDuty";
 import { DutyPulseRibbon } from "./DutyPulseRibbon";
+import { useAuth } from "@/hooks/useAuth";
+import { useDutyChatInbox, useDutyChatStream } from "@/hooks/useDutyChat";
+import DutyChatStrip from "../duty-chat/DutyChatStrip";
+import DutyChatPanel from "../duty-chat/DutyChatPanel";
 
 const ROOM = "/dashboard/content-duty";
 
@@ -56,13 +62,54 @@ function Numbers({ data, entry }: { data: ContentDutyCardResponse; entry: Conten
   );
 }
 
+interface ChatTarget { id: string; name: string; subtitle: string | null }
+
+function MessageButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-11 items-center gap-2 rounded-full border border-[#CFE6F7] bg-white px-[18px] text-sm font-semibold text-[#0B6FA8] hover:bg-[#F8FBFE]"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B6FA8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+      </svg>
+      راسل {name.split(" ")[0]}
+    </button>
+  );
+}
+
 export default function ContentDutyCard() {
   const { data, isLoading, isError } = useContentDutyCard();
+  const { user } = useAuth();
+  // «محادثة المناوب»: 403 لغير مديري المحتوى و503 قبل تنفيذ SQL، فلا شريط ولا زر.
+  const inbox = useDutyChatInbox();
+  const chatOn = inbox.isSuccess && Boolean(inbox.data);
+  useDutyChatStream(chatOn);
+  const [chat, setChat] = useState<ChatTarget | null>(null);
   // قبل تنفيذ SQL أو عند الخطأ تختفي البطاقة ولا تزعج اللوحة.
   if (isError) return null;
   if (isLoading || !data) {
     return <div className="h-[132px] animate-pulse rounded-[22px] bg-[#EEF4FA] dark:bg-slate-800" aria-busy="true" aria-label="جار تحميل المناوبة" />;
   }
+
+  const onDutyIds = data.onDuty.map((e) => e.userId).filter((id): id is string => Boolean(id));
+  const stripConv = chatOn && inbox.data ? pickStripConversation(inbox.data.conversations, onDutyIds, user?.id) : null;
+  const subtitleFor = (peerId: string) => {
+    const e = data.onDuty.find((x) => x.userId === peerId);
+    return e ? `مناوب ${e.start} – ${e.end}` : null;
+  };
+  const chatBits = (
+    <>
+      {stripConv ? (
+        <DutyChatStrip
+          conversation={stripConv}
+          onOpen={() => setChat({ id: stripConv.peer.id, name: stripConv.peer.name, subtitle: subtitleFor(stripConv.peer.id) })}
+        />
+      ) : null}
+      {chat ? <DutyChatPanel peerId={chat.id} peerName={chat.name} subtitle={chat.subtitle} onClose={() => setChat(null)} /> : null}
+    </>
+  );
 
   const shell = "rounded-[22px] border border-white bg-gradient-to-br from-[#E2F2FD] to-[#EEF1FE] p-4 text-[#1B2B3A] shadow-[0_2px_10px_rgba(27,43,58,.05)] sm:p-6";
 
@@ -83,6 +130,7 @@ export default function ContentDutyCard() {
             افتح غرفة المناوبة
           </Link>
         </div>
+        {stripConv ? <div className="mt-4">{chatBits}</div> : chatBits}
       </section>
     );
   }
@@ -106,6 +154,12 @@ export default function ContentDutyCard() {
               </span>
             </div>
             <Numbers data={data} entry={entry} />
+            {chatOn && entry.userId && entry.userId !== user?.id ? (
+              <MessageButton
+                name={entry.name}
+                onClick={() => setChat({ id: entry.userId!, name: entry.name, subtitle: `مناوب ${entry.start} – ${entry.end}` })}
+              />
+            ) : null}
             {idx === 0 ? (
               <Link href={ROOM} className="inline-flex h-11 items-center rounded-full bg-[#1E9BE6] px-5 text-sm font-semibold text-white shadow-[0_6px_14px_rgba(30,155,230,.3)]">
                 افتح غرفة المناوبة
@@ -117,6 +171,7 @@ export default function ContentDutyCard() {
           ) : null}
         </div>
       ))}
+      {chatBits}
       {data.alert ? (
         <Link
           href={`/dashboard/articles/${data.alert.articleId}/edit`}

@@ -16233,6 +16233,33 @@ export const contentDutyAlerts = pgTable("content_duty_alerts", {
   index("idx_content_duty_alerts_created").on(table.createdAt),
 ]);
 
+// «محادثة المناوب»: رسائل ثنائية بين المسؤول ومديري المحتوى المناوبين (migrations/20261126_duty_chat.sql).
+// التسليم والقراءة وتأكيد الاستلام («تنبيه») أختام زمنية على الرسالة نفسها.
+export const dutyChatMessages = pgTable("duty_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  recipientId: varchar("recipient_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull().default(""),
+  kind: text("kind").notNull().default("normal"),
+  attachmentKey: text("attachment_key"),
+  attachmentName: text("attachment_name"),
+  attachmentMime: text("attachment_mime"),
+  attachmentSize: integer("attachment_size"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  ackedAt: timestamp("acked_at"),
+}, (table) => [
+  index("idx_duty_chat_messages_pair").on(table.senderId, table.recipientId, table.createdAt),
+  index("idx_duty_chat_messages_recipient").on(table.recipientId, table.createdAt),
+]);
+
+// آخر ظهور لكل مستخدم في المحادثة (نبضة كل 25 ثانية من قناة البث). متصل = آخر ظهور خلال 75 ثانية.
+export const dutyChatPresence = pgTable("duty_chat_presence", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+});
+
 // ملفات ومستندات كتّاب الرأي (PDF مثل محاضر الاجتماعات والتعاميم) — يرفعها فريق التحرير وتظهر للكتّاب للتحميل.
 // migrations/20261123_opinion_writer_files.sql
 export const opinionWriterFiles = pgTable("opinion_writer_files", {

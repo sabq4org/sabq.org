@@ -347,7 +347,8 @@ export async function getDutyCard(viewer: DutyViewer): Promise<ContentDutyCardRe
         const minutes = data.minutes.get(occ.userId) ?? new Map();
         const report = seesNumbers && mine ? reportFor(occ, data, now, thresholds, occurrences, since) : null;
         return {
-          userId: viewer.access === "lead" ? occ.userId : null,
+          // المسؤول يرى الكل؛ والمناوب يرى معرّفه هو فقط (لشريط «محادثة المناوب»). مفتاح الذاكرة لكل مدير.
+          userId: viewer.access === "lead" || (viewer.access === "manager" && occ.userId === viewer.userId) ? occ.userId : null,
           name,
           initial: initialOf(name),
           status: liveStatus(minutes, now),

@@ -347,6 +347,12 @@
         "tests/unit/contentDutyBotService.test.ts",
         "tests/unit/botDeskDuty.test.ts",
         "tests/fixtures/contentDutyActivityReplay.json",
+        "shared/dutyChat.ts",
+        "server/routes/dutyChat.ts",
+        "migrations/20261126_duty_chat.sql",
+        "client/src/hooks/useDutyChat.ts",
+        "client/src/components/dashboard/duty-chat/**",
+        "tests/unit/dutyChat.test.ts",
         "client/src/components/NewsMap.tsx",
         "client/src/components/NewsMapHudhud.tsx",
         "client/src/lib/hudhudMap.ts",
@@ -663,7 +669,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-11-25"
+      "lastReviewed": "2026-11-26"
     },
     {
       "id": "ifox",
