@@ -10,6 +10,7 @@ import { storage } from "../storage";
 import { generateSmartContent, withRetry } from "../openai";
 import { generateNewsletterSubtitle } from "./smartCategoryClassifier";
 import { analyzeAndEditWithSabqStyle } from "../ai/contentAnalyzer";
+import { recordSmartEditRunInBackground } from "./smartEditRunsService";
 
 export type EditAndGeneratePhase = "edit" | "smart" | "newsletter";
 
@@ -35,7 +36,60 @@ export interface EditAndGeneratePayload {
   newsletterExcerpt?: string;
 }
 
+/** من شغّل «تحرير وتوليد شامل» وعلى أي خبر؛ يُسجَّل التشغيل بنصيه في smart_edit_runs. */
+export interface EditAndGenerateAudit {
+  userId?: string | null;
+  articleId?: unknown;
+  channel: "web" | "mobile";
+}
+
 export async function runEditAndGenerate(input: {
+  content: string;
+  language?: "ar" | "en" | "ur";
+  onEvent?: (event: EditAndGenerateEvent) => void;
+  audit?: EditAndGenerateAudit;
+}): Promise<EditAndGeneratePayload> {
+  const startedAt = Date.now();
+  try {
+    const payload = await runEditAndGenerateInner(input);
+    if (input.audit) {
+      recordSmartEditRunInBackground({
+        userId: input.audit.userId,
+        articleId: typeof input.audit.articleId === "string" ? input.audit.articleId : null,
+        channel: input.audit.channel,
+        status: "success",
+        inputContent: input.content,
+        outputContent: payload.editedContent,
+        outputTitle: payload.mainTitle,
+        outputFields: {
+          subTitle: payload.subTitle,
+          smartSummary: payload.smartSummary,
+          keywords: payload.keywords,
+          seo: payload.seo,
+          detectedCategory: payload.detectedCategory,
+          qualityScore: payload.qualityScore,
+        },
+        latencyMs: Date.now() - startedAt,
+      });
+    }
+    return payload;
+  } catch (error) {
+    if (input.audit) {
+      recordSmartEditRunInBackground({
+        userId: input.audit.userId,
+        articleId: typeof input.audit.articleId === "string" ? input.audit.articleId : null,
+        channel: input.audit.channel,
+        status: "failed",
+        errorType: editAndGenerateErrorResponse(error).errorType,
+        inputContent: input.content,
+        latencyMs: Date.now() - startedAt,
+      });
+    }
+    throw error;
+  }
+}
+
+async function runEditAndGenerateInner(input: {
   content: string;
   language?: "ar" | "en" | "ur";
   onEvent?: (event: EditAndGenerateEvent) => void;

@@ -1092,6 +1092,9 @@ if (!(globalThis as any).__sabqServer) {
     // حدود مسارات AI المجهولة (POST /sports/intel/ask) قبل mobileApiRoutes.
     const aiCostLimiters = (await import("./routes/v1/aiCostLimiters")).default;
     app.use("/api/v1", aiCostLimiters);
+    // سجل «تحرير وتوليد شامل» من الجوال: يلتقط المدخل والناتج قبل mobileApiRoutes.
+    const mobileSmartEditRunHook = (await import("./routes/mobileSmartEditRunHook")).default;
+    app.use("/api/v1", mobileSmartEditRunHook);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 

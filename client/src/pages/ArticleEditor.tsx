@@ -4751,7 +4751,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <CardContent className="pt-0">
-                      <ArticleTimeline articleId={id} canRestore={canRestoreVersions} />
+                      <ArticleTimeline articleId={id} canRestore={canRestoreVersions} canSeeSmartEditRuns={Boolean(user?.permissions?.includes("*"))} />
                     </CardContent>
                   </CollapsibleContent>
                 </Card>
