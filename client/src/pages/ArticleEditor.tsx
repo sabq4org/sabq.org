@@ -1808,7 +1808,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.newsletterExcerpt = newsletterExcerpt;
         articleData.reporterId = validReporterId;
         articleData.newsType = newsType;
-        articleData.isFeatured = isFeatured;
+        // من لا يملك صلاحية التمييز لا يرسل الحقل؛ الخادم يرفض تغييره بـ403
+        if (canFeatureArticle) articleData.isFeatured = isFeatured;
         articleData.isReading = isReading;
       } else {
         // Opinion articles always use regular newsType
