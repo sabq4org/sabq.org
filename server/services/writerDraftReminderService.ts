@@ -1,17 +1,19 @@
 // تذكير كاتب الرأي بمسودة حفظها ولم يرسلها للتحرير (2026-11-26).
 // بعض الكتّاب يضغطون «حفظ» ويظنون أن المقال وصل. بعد 24 ساعة بلا تعديل نرسل تذكيرًا واحدًا
 // لكل مسودة: تنبيه في لوحة الكاتب (editorial_notifications) وبريد قصير.
-// منع التكرار بلا جدول جديد: صف التنبيه نفسه (type = draft_reminder + article_id) هو العلامة،
-// ويُكتب قبل البريد، فلا يتكرر التذكير ولو تبدّل القائد أو أُعيد التشغيل.
+// منع التكرار بلا جدول جديد: صف في activity_logs (action = draft_reminder_sent، entity = المقال)
+// يُكتب قبل التنبيه والبريد. لا نعتمد على صف التنبيه لأن الكاتب يستطيع حذفه من تطبيق الجوال،
+// وactivity_logs يبقى 90 يومًا (أطول من نافذة الـ14 يومًا).
 // لا نذكّر كاتبًا لديه مقال آخر لدى التحرير أو مجدول (لا يستطيع الإرسال الآن)؛ نذكّره بعد نشره.
+// الاستبعاد داخل الاستعلام نفسه (قبل الحد) كي لا يحجب كتّاب مشغولون مسودات غيرهم.
 
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articles, editorialNotifications, users } from "@shared/schema";
+import { activityLogs, articles, editorialNotifications, users } from "@shared/schema";
 import { sendEmailNotification } from "./email";
-import { getWriterActivePipelineArticle } from "./opinionWritersService";
 
 export const DRAFT_REMINDER_TYPE = "draft_reminder";
+export const DRAFT_REMINDER_LOG_ACTION = "draft_reminder_sent";
 /** مدة السكون قبل التذكير. */
 export const DRAFT_REMINDER_IDLE_MS = 24 * 60 * 60 * 1000;
 /** لا نذكّر بمسودات قديمة جدًا (عند أول تشغيل أو مسودة مهجورة). */
@@ -82,9 +84,16 @@ export async function runWriterDraftReminderTick(now: Date = new Date()): Promis
           lte(articles.updatedAt, idleBefore),
           gte(articles.updatedAt, notOlderThan),
           sql`length(trim(coalesce(${articles.title}, ''))) > 0`,
-          sql`NOT EXISTS (SELECT 1 FROM ${editorialNotifications} n WHERE n.article_id = ${articles.id} AND n.type = ${DRAFT_REMINDER_TYPE})`,
+          // مسودات التطبيقات القديمة بلا حالة مراجعة تُعد مرسلة (awaitingEditorialSql).
+          sql`coalesce(${articles.source}, '') NOT IN ('ios-app', 'android-app')`,
+          // تذكير واحد لكل مسودة.
+          sql`NOT EXISTS (SELECT 1 FROM ${activityLogs} l WHERE l.entity_type = 'article' AND l.entity_id = ${articles.id} AND l.action = ${DRAFT_REMINDER_LOG_ACTION})`,
           // تذكير واحد على الأكثر لكل كاتب في اليوم، ولو كانت لديه عدة مسودات.
-          sql`NOT EXISTS (SELECT 1 FROM ${editorialNotifications} n WHERE n.user_id = ${articles.authorId} AND n.type = ${DRAFT_REMINDER_TYPE} AND n.created_at > ${idleBefore})`,
+          sql`NOT EXISTS (SELECT 1 FROM ${activityLogs} l WHERE l.action = ${DRAFT_REMINDER_LOG_ACTION} AND l.created_at > ${idleBefore} AND l.new_value->>'writerId' = ${articles.authorId})`,
+          // الكاتب ليس لديه مقال آخر لدى التحرير أو مجدول (مثل getWriterActivePipelineArticle).
+          sql`NOT EXISTS (SELECT 1 FROM ${articles} p WHERE p.article_type = 'opinion' AND p.author_id = ${articles.authorId} AND p.id <> ${articles.id}
+            AND (p.status = 'scheduled' OR (p.status = 'draft' AND (p.review_status IN ('pending_review', 'approved')
+              OR (p.review_status IS NULL AND p.source IN ('ios-app', 'android-app'))))))`,
         ),
       )
       .orderBy(desc(articles.updatedAt))
@@ -96,8 +105,15 @@ export async function runWriterDraftReminderTick(now: Date = new Date()): Promis
     for (const row of candidates) {
       if (!row.authorId || remindedAuthors.has(row.authorId)) continue;
       try {
-        const active = await getWriterActivePipelineArticle(row.authorId, row.id);
-        if (active) continue;
+        await db.insert(activityLogs).values({
+          userId: null,
+          action: DRAFT_REMINDER_LOG_ACTION,
+          entityType: "article",
+          entityId: row.id,
+          newValue: { writerId: row.authorId },
+          createdAt: now,
+        });
+        remindedAuthors.add(row.authorId);
         const copy = buildDraftReminderCopy(row.title);
         const [inserted] = await db
           .insert(editorialNotifications)
@@ -113,7 +129,6 @@ export async function runWriterDraftReminderTick(now: Date = new Date()): Promis
             createdAt: now,
           })
           .returning({ id: editorialNotifications.id });
-        remindedAuthors.add(row.authorId);
         if (!inserted) continue;
         if (row.email) {
           const name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim() || "الكاتب";

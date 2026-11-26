@@ -4,12 +4,11 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { getTableConfig, PgDialect, type PgTable } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { articles, editorialNotifications, users } from "@shared/schema";
+import { activityLogs, articles, editorialNotifications, users } from "@shared/schema";
 
 const state = vi.hoisted(() => ({
   db: null as any,
   emails: [] as Array<{ to: string; subject: string; text?: string }>,
-  busyWriters: new Set<string>(),
 }));
 
 vi.mock("../../server/db", () => ({ get db() { return state.db; } }));
@@ -18,10 +17,6 @@ vi.mock("../../server/services/email", () => ({
     state.emails.push(options);
     return { success: true };
   },
-}));
-vi.mock("../../server/services/opinionWritersService", () => ({
-  getWriterActivePipelineArticle: async (writerId: string) =>
-    state.busyWriters.has(writerId) ? { id: "active", title: "مقال لدى التحرير", stage: "pending_review" } : null,
 }));
 
 import { DRAFT_REMINDER_TYPE, runWriterDraftReminderTick } from "../../server/services/writerDraftReminderService";
@@ -62,10 +57,9 @@ describe.skipIf(!url)("writer unsent-draft reminder against PostgreSQL", () => {
       await admin.end();
     }
     pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: 5 });
-    for (const table of [users, articles, editorialNotifications]) await pool.query(ddlFor(table));
+    for (const table of [users, articles, editorialNotifications, activityLogs]) await pool.query(ddlFor(table));
     state.db = drizzle(pool);
     state.emails = [];
-    state.busyWriters = new Set();
     await pool.query(`INSERT INTO users (id, email, first_name, role) VALUES
       ('w1', 'w1@test.local', 'سارة', 'opinion_author'),
       ('w2', 'w2@test.local', 'خالد', 'opinion_author'),
@@ -110,13 +104,37 @@ describe.skipIf(!url)("writer unsent-draft reminder against PostgreSQL", () => {
 
   it("waits while the writer has another article with the editors, then reminds", async () => {
     await addArticle("a2", "w2", hoursAgo(30));
-    state.busyWriters.add("w2");
+    await addArticle("busy", "w2", hoursAgo(40), { reviewStatus: "pending_review" });
     await runWriterDraftReminderTick(NOW);
     expect(await reminders()).toEqual([]);
 
-    state.busyWriters.delete("w2");
+    await pool.query(`UPDATE articles SET status = 'published', review_status = 'approved' WHERE id = 'busy'`);
     await runWriterDraftReminderTick(NOW);
     expect((await reminders()).map((r) => r.article_id)).toEqual(["a2"]);
+  });
+
+  it("busy writers' drafts do not crowd out other writers' drafts past the batch limit", async () => {
+    await addArticle("busy", "w2", hoursAgo(40), { status: "scheduled", reviewStatus: "approved" });
+    for (let i = 0; i < 45; i++) await addArticle(`w2d${String(i).padStart(2, "0")}`, "w2", hoursAgo(25 + i / 10));
+    await addArticle("w1old", "w1", hoursAgo(100));
+    await runWriterDraftReminderTick(NOW);
+    expect((await reminders()).map((r) => r.article_id)).toEqual(["w1old"]);
+  });
+
+  it("deleting the reminder from the inbox does not trigger a second one", async () => {
+    await addArticle("a1", "w1", hoursAgo(25));
+    await runWriterDraftReminderTick(NOW);
+    await pool.query(`DELETE FROM editorial_notifications`);
+    await runWriterDraftReminderTick(new Date(NOW.getTime() + 2 * 24 * 3600_000));
+    expect(await reminders()).toEqual([]);
+    expect(state.emails.length).toBe(1);
+  });
+
+  it("skips old app drafts, which count as already sent", async () => {
+    await addArticle("app", "w1", hoursAgo(30));
+    await pool.query(`UPDATE articles SET source = 'ios-app' WHERE id = 'app'`);
+    await runWriterDraftReminderTick(NOW);
+    expect(await reminders()).toEqual([]);
   });
 
   it("sends at most one reminder per writer per day, newest draft first", async () => {
