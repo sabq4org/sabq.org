@@ -3,7 +3,7 @@
 // إن لم يكن المستلم ينظر إلى الشريط في الرئيسية. الضغط على الإشعار يفتح الرئيسية والمحادثة.
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import type { DutyChatEvent, DutyChatMessage } from "@shared/dutyChat";
+import { messagePreview, type DutyChatEvent, type DutyChatMessage } from "@shared/dutyChat";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { dutyChatEvents, requestOpenDutyChat, useDutyChatInbox, useDutyChatStream } from "@/hooks/useDutyChat";
@@ -41,7 +41,7 @@ function DutyChatNotifierInner() {
       }
       if (alreadyNotified(m.id)) return;
       const title = m.kind === "alert" ? `تنبيه من ${senderName}` : `رسالة من ${senderName}`;
-      const body = m.body || (m.attachment?.isImage ? "صورة" : m.attachment ? "مرفق PDF" : "");
+      const body = messagePreview(m);
       try {
         const n = new Notification(title, { body, tag: `duty-chat-${m.senderId}`, dir: "rtl", lang: "ar", requireInteraction: m.kind === "alert" });
         n.onclick = () => {
@@ -72,7 +72,7 @@ function DutyChatNotifierInner() {
       if ((c.unread > 0 || c.pendingAcks > 0) && !c.last.mine && !alreadyNotified(c.last.id)) {
         try {
           const n = new Notification(c.last.kind === "alert" ? `تنبيه من ${c.peer.name}` : `رسالة من ${c.peer.name}`, {
-            body: c.last.body || "مرفق",
+            body: messagePreview(c.last),
             tag: `duty-chat-${c.peer.id}`,
             dir: "rtl",
             lang: "ar",

@@ -1,5 +1,5 @@
 // الشريط تحت بطاقة المناوبة: آخر رسالة لم تُقرأ أو «تنبيه» لم يُؤكَّد، وإلا آخر محادثة مع المناوب الآن.
-import type { DutyChatConversation } from "@shared/dutyChat";
+import { attachmentLabel, type DutyChatConversation } from "@shared/dutyChat";
 import { usePeerTyping } from "@/hooks/useDutyChat";
 import { ChatAvatar, CheckIcon, Ticks, chatTime } from "./dutyChatUi";
 
@@ -7,7 +7,7 @@ export default function DutyChatStrip({ conversation, onOpen }: { conversation: 
   const { peer, last, unread, pendingAcks } = conversation;
   const typing = usePeerTyping(peer.id);
   const incomingPending = unread > 0 || pendingAcks > 0;
-  const preview = last.body || (last.attachment?.isImage ? "صورة" : last.attachment ? "مرفق PDF" : "");
+  const fileLabel = attachmentLabel(last.attachment);
 
   return (
     <button
@@ -33,7 +33,12 @@ export default function DutyChatStrip({ conversation, onOpen }: { conversation: 
               <span className="text-[#55667A]">أنت:</span>
             </>
           ) : null}
-          <span className="truncate">{preview}</span>
+          {fileLabel ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#E6F4FD] px-2 py-0.5 text-[12px] font-semibold text-[#0B6FA8]">
+              <ClipIcon /> {fileLabel}
+            </span>
+          ) : null}
+          {last.body ? <span className="truncate">{last.body}</span> : null}
         </span>
       </span>
       {last.mine && last.kind === "alert" && last.ackedAt ? (
@@ -51,5 +56,13 @@ export default function DutyChatStrip({ conversation, onOpen }: { conversation: 
         {incomingPending ? "ردّ" : "افتح"}
       </span>
     </button>
+  );
+}
+
+function ClipIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
   );
 }
