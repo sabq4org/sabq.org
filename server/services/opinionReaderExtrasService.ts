@@ -22,7 +22,7 @@ import {
   agreeVotePercents,
   validatePullQuote,
 } from "@shared/opinionReaderExtras";
-import { memoryCache } from "../memoryCache";
+import { memoryCache, withCache } from "../memoryCache";
 import { anonVoteCapReached } from "./pollVoteGuard";
 
 type ArticleHead = {
@@ -97,6 +97,28 @@ async function loadExtrasRow(articleId: string) {
   return row ?? null;
 }
 
+/**
+ * الجزء العام من القراءة (المقال والإضافات والكاتب) مشترك بين كل القرّاء،
+ * فيُخزَّن 30 ثانية بجلب واحد لكل مقال (REVIEW.md C2). اختيار القارئ وصلاحيته
+ * والأعداد تُقرأ لكل طلب. الحفظ وإنشاء الاستطلاع يُبطلانه على هذه النسخة؛
+ * النسخة الأخرى تلحق خلال 30 ثانية.
+ */
+const PUBLIC_BASE_TTL_MS = 30_000;
+const publicBaseKey = (articleId: string) => `opinion-extras:base:${articleId}`;
+
+function loadPublicBase(articleId: string) {
+  return withCache(publicBaseKey(articleId), PUBLIC_BASE_TTL_MS, async () => {
+    const article = await loadOpinionArticle(articleId);
+    if (!article) return { article: null, row: null, author: null };
+    const [row, author] = await Promise.all([loadExtrasRow(articleId), loadAuthor(article.authorId)]);
+    return { article, row, author };
+  });
+}
+
+function invalidatePublicBase(articleId: string) {
+  memoryCache.delete(publicBaseKey(articleId));
+}
+
 /** ينشئ استطلاع «أوافق / لا أوافق» مرة واحدة للمقال (قفل استشاري يمنع التكرار). */
 export async function ensureAgreePoll(articleId: string, createdBy: string | null): Promise<string> {
   return db.transaction(async (tx) => {
@@ -119,6 +141,7 @@ export async function ensureAgreePoll(articleId: string, createdBy: string | nul
       .values({ articleId, agreeVoteEnabled: true, agreePollId: poll.id, updatedBy: createdBy })
       .onConflictDoUpdate({ target: opinionArticleExtras.articleId, set: { agreePollId: poll.id, updatedAt: new Date() } });
     memoryCache.delete(`poll:article:${articleId}`);
+    invalidatePublicBase(articleId);
     return poll.id;
   });
 }
@@ -178,13 +201,14 @@ export async function getOpinionExtras(
     isEditor: () => Promise<boolean>;
   },
 ): Promise<GetExtrasResult> {
-  const article = await loadOpinionArticle(articleId);
+  const base = await loadPublicBase(articleId);
+  const article = base.article;
   if (!article) return { ok: false, status: 404, message: "مقال الرأي غير موجود" };
   const canEdit = await canEditOpinionExtras(viewer.userId, article.authorId, viewer.isEditor);
   const isPublic = isArticlePubliclyVisible(article);
   if (!isPublic && !canEdit) return { ok: false, status: 404, message: "مقال الرأي غير موجود" };
 
-  const row = await loadExtrasRow(articleId);
+  const row = base.row;
   let agree: AgreeState | null = null;
   if (row?.agreeVoteEnabled) {
     // الاستطلاع يُنشأ عند أول عرض علني فقط، لا في معاينة المسودة.
@@ -200,7 +224,7 @@ export async function getOpinionExtras(
       canEdit,
       pullQuote: row?.pullQuote ?? null,
       agreeVoteEnabled: Boolean(row?.agreeVoteEnabled),
-      author: await loadAuthor(article.authorId),
+      author: base.author,
       agree,
       quoteCardUrl: row?.pullQuote ? `/api/opinion-extras/${articleId}/quote-card.png` : null,
     },
@@ -236,6 +260,7 @@ export async function saveOpinionExtras(
     await db.update(articlePolls).set({ isActive: input.agreeVoteEnabled, updatedAt: new Date() }).where(eq(articlePolls.id, saved.agreePollId));
   }
   memoryCache.delete(`poll:article:${articleId}`);
+  invalidatePublicBase(articleId);
   return { ok: true };
 }
 

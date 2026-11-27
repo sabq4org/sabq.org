@@ -71,7 +71,7 @@ router.get("/opinion-extras/:articleId", async (req: Request, res: Response) => 
   }
 });
 
-const voteSchema = z.object({ choice: z.enum(["agree", "disagree"]) });
+const voteSchema = z.object({ choice: z.enum(["agree", "disagree"]) }).strict();
 
 router.post("/opinion-extras/:articleId/vote", voteLimiter, async (req: Request, res: Response) => {
   try {
@@ -93,17 +93,27 @@ router.post("/opinion-extras/:articleId/vote", voteLimiter, async (req: Request,
   }
 });
 
-const saveSchema = z.object({
-  pullQuote: z.string().max(1000).nullable().optional(),
-  agreeVoteEnabled: z.boolean().optional(),
-});
+// strict: حقل غير معروف (pull_quote مثلًا) يُرفض بدل أن يُسقط فيُرد «حُفظ» دون حفظ (REVIEW.md A4).
+const saveSchema = z
+  .object({
+    pullQuote: z.string().max(1000).nullable().optional(),
+    agreeVoteEnabled: z.boolean().optional(),
+  })
+  .strict();
 
 router.put("/opinion-extras/:articleId", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberBearer(req);
     if (!session) return res.status(401).json({ success: false, message: "سجّل الدخول أولًا" });
     const parsed = saveSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ success: false, message: "بيانات غير صالحة" });
+    if (!parsed.success) {
+      const unknown = parsed.error.issues.find((i) => i.code === "unrecognized_keys");
+      return res.status(400).json({
+        success: false,
+        code: unknown ? "UNKNOWN_FIELDS" : "INVALID_BODY",
+        message: unknown ? "حقول غير معروفة في الطلب" : "بيانات غير صالحة",
+      });
+    }
     const result = await saveOpinionExtras(req.params.articleId, parsed.data, {
       id: session.userId,
       isEditor: editorCheck(session.userId),

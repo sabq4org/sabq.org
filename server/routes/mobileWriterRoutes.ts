@@ -188,7 +188,7 @@ const slotChangeSchema = z.object({
   weekday: z.number().int().min(0).max(6),
   time: z.string().regex(/^\d{2}:\d{2}$/),
   acceptedTerms: z.literal(true),
-});
+}).strict();
 
 router.post("/contributor/slot-change", async (req: Request, res: Response) => {
   try {
@@ -230,7 +230,7 @@ router.get("/contributor/articles/:articleId/social-proposal", async (req: Reque
 const proposalSchema = z.object({
   text: z.string().trim().min(1, "نص المنشور مطلوب").max(2000, "النص طويل جداً"),
   textSource: z.enum(["title", "custom"]),
-});
+}).strict();
 
 router.post("/contributor/articles/:articleId/social-proposal", async (req: Request, res: Response) => {
   try {
@@ -285,7 +285,7 @@ router.post("/contributor/tickets", async (req: Request, res: Response) => {
   try {
     const userId = await writerSession(req, res);
     if (!userId) return;
-    const parsed = insertOpinionTicketSchema.omit({ writerId: true }).safeParse(req.body);
+    const parsed = insertOpinionTicketSchema.omit({ writerId: true }).strict().safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message || "بيانات غير صالحة" });
     }
@@ -332,7 +332,7 @@ router.post("/contributor/tickets/:id/messages", async (req: Request, res: Respo
   try {
     const userId = await writerSession(req, res);
     if (!userId) return;
-    const parsed = insertOpinionTicketMessageSchema.pick({ message: true }).safeParse(req.body);
+    const parsed = insertOpinionTicketMessageSchema.pick({ message: true }).strict().safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message || "الرسالة مطلوبة" });
     }
