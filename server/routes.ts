@@ -100,6 +100,7 @@ import { createOAuthTokenErrorHandler, createOAuthWebCompletion } from "./oauthW
 import { legacyUserActionGuard } from "./middleware/legacyUserActionGuard";
 import { getInactiveRoleNames } from "./services/roleStatusCache";
 import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getUserRoleNames, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { resolveFeatureField } from "@shared/articleFeatureGuard";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isOpinionOnlyContributor, isReaderLikeRole, mergeRoleSignals, pickPrimaryRoleRecord, primaryRoleKey } from "@shared/effectiveRoles";
 import { inferStaffRolesFromWork } from "./services/staffRoleInference";
@@ -7366,7 +7367,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // Convert date strings to Date objects before validation
-      const requestData = { ...req.body };
+      const featureField = resolveFeatureField({ ...req.body }, await getEffectiveUserPermissions(authorId), false); // «مميز» لمن يملك articles.feature فقط
+      if (!featureField.ok) return res.status(featureField.httpStatus).json({ message: featureField.message, code: featureField.code });
+      const requestData = featureField.body;
 
       // كاتب الرأي فقط تُفرض عليه «مقال رأي»؛ من يحمل دور المراسل أيضاً يختار بنفسه.
       if (isOpinionOnlyContributor(await getUserRoleNames(authorId))) {
@@ -7914,7 +7917,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      const sanitizedBody = sanitizeArticleUpdatePayload(req.body);
+      const featureField = resolveFeatureField(sanitizeArticleUpdatePayload(req.body), userPermissions, existingArticle.isFeatured);
+      if (!featureField.ok) return res.status(featureField.httpStatus).json({ message: featureField.message, code: featureField.code });
+      const sanitizedBody = featureField.body;
 
       const parsed = updateArticleSchema.safeParse(sanitizedBody);
 
@@ -25107,7 +25112,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(403).json({ message: "You don't have permission to edit this opinion article" });
       }
 
-      const sanitizedBody = sanitizeArticleUpdatePayload(req.body);
+      const featureField = resolveFeatureField(sanitizeArticleUpdatePayload(req.body), userPermissions, existingArticle.isFeatured);
+      if (!featureField.ok) return res.status(featureField.httpStatus).json({ message: featureField.message, code: featureField.code });
+      const sanitizedBody = featureField.body;
       const parsed = updateArticleSchema.safeParse(sanitizedBody);
 
       if (!parsed.success) {

@@ -609,6 +609,8 @@ export default function ArticleEditor() {
   const canUseComprehensiveEdit = user && hasPermission(user, PERMISSION_CODES.ARTICLES_COMPREHENSIVE_EDIT);
   const canUseContentTypeSelector = user && hasPermission(user, PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR);
   const canHideFromHomepage = user && hasPermission(user, PERMISSION_CODES.ARTICLES_HIDE_HOMEPAGE);
+  // «خبر مميز» بصلاحية التمييز نفسها التي يتحقق منها الخادم (shared/articleFeatureGuard.ts)
+  const canFeatureArticle = user && hasPermission(user, PERMISSION_CODES.ARTICLES_FEATURE);
   
   // Check if user can backdate articles (any superuser-tier role + chief_editor).
   // SUPERUSER_ROLE_NAMES covers admin/superadmin/system_admin/system.admin — a
@@ -1806,7 +1808,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.newsletterExcerpt = newsletterExcerpt;
         articleData.reporterId = validReporterId;
         articleData.newsType = newsType;
-        articleData.isFeatured = isFeatured;
+        // من لا يملك صلاحية التمييز لا يرسل الحقل؛ الخادم يرفض تغييره بـ403
+        if (canFeatureArticle) articleData.isFeatured = isFeatured;
         articleData.isReading = isReading;
       } else {
         // Opinion articles always use regular newsType
@@ -5265,6 +5268,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
                     <div className="space-y-2 pt-1">
                       {/* Featured Article Checkbox */}
+                      {canFeatureArticle && (
                       <div className="flex items-center space-x-2 space-x-reverse rounded-lg border border-border/60 bg-muted/20 p-2.5">
                         <Checkbox 
                           id="isFeatured"
@@ -5282,6 +5286,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           </div>
                         </Label>
                       </div>
+                      )}
 
                       {/* Reading / Sabq Long-form Read Checkbox */}
                       <div className="flex items-center space-x-2 space-x-reverse rounded-lg border border-border/60 bg-muted/20 p-2.5">
