@@ -3,7 +3,7 @@
  * المنطق الخالص في shared/opinionReaderExtras.ts. الأصوات تمر بمسار
  * الاستطلاعات القائم (POST /api/polls/:pollId/vote) على استطلاع بخيارين.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articles,
@@ -23,6 +23,7 @@ import {
   validatePullQuote,
 } from "@shared/opinionReaderExtras";
 import { memoryCache } from "../memoryCache";
+import { anonVoteCapReached } from "./pollVoteGuard";
 
 type ArticleHead = {
   id: string;
@@ -258,4 +259,67 @@ export async function getQuoteCardData(articleId: string): Promise<{
     articleTitle: article.title,
     updatedAt: row.updatedAt,
   };
+}
+
+export type AgreeVoteResult =
+  | { ok: true; agree: AgreeState }
+  | { ok: false; status: number; message: string };
+
+/**
+ * صوت «أوافق / لا أوافق» من التطبيق (/api/v1). القواعد نفسها في
+ * POST /api/polls/:pollId/vote: صوت واحد لكل مصوّت، قفل استشاري على
+ * (الاستطلاع، المصوّت)، وسقف للأصوات المجهولة من العنوان الواحد.
+ */
+export async function castAgreeVote(
+  articleId: string,
+  choice: "agree" | "disagree",
+  voter: { userId: string | null; sessionIdFor: (pollId: string) => string; ip: string },
+): Promise<AgreeVoteResult> {
+  const article = await loadOpinionArticle(articleId);
+  if (!article || !isArticlePubliclyVisible(article)) return { ok: false, status: 404, message: "مقال الرأي غير موجود" };
+  const row = await loadExtrasRow(articleId);
+  if (!row?.agreeVoteEnabled) return { ok: false, status: 404, message: "التصويت غير مفعّل لهذا المقال" };
+  const pollId = row.agreePollId ?? (await ensureAgreePoll(articleId, article.authorId));
+  const sessionId = voter.userId ? null : voter.sessionIdFor(pollId);
+  const before = await loadAgreeState(pollId, { userId: voter.userId, sessionId });
+  if (!before) return { ok: false, status: 404, message: "التصويت غير متاح" };
+  if (before.userChoice) return { ok: true, agree: before };
+
+  if (!voter.userId) {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(pollVotes)
+      .where(and(eq(pollVotes.pollId, pollId), eq(pollVotes.ipAddress, voter.ip), isNull(pollVotes.userId)));
+    if (anonVoteCapReached(Number(count))) return { ok: false, status: 429, message: "تم بلوغ حد التصويت من هذا الاتصال" };
+  }
+
+  const optionId = choice === "agree" ? before.agreeOptionId : before.disagreeOptionId;
+  const voterKey = voter.userId ? `u:${voter.userId}` : `s:${sessionId}`;
+  const voteCondition = voter.userId ? eq(pollVotes.userId, voter.userId) : eq(pollVotes.sessionId, String(sessionId));
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`poll-vote:${pollId}:${voterKey}`}, 0))`);
+    const [already] = await tx
+      .select({ id: pollVotes.id })
+      .from(pollVotes)
+      .where(and(eq(pollVotes.pollId, pollId), voteCondition))
+      .limit(1);
+    if (already) return;
+    const inserted = await tx
+      .insert(pollVotes)
+      .values({ pollId, optionId, userId: voter.userId, sessionId: sessionId ?? voter.sessionIdFor(pollId), ipAddress: voter.ip })
+      .onConflictDoNothing()
+      .returning({ id: pollVotes.id });
+    if (inserted.length === 0) return;
+    await tx
+      .update(pollOptions)
+      .set({ votesCount: sql`${pollOptions.votesCount} + 1` })
+      .where(and(eq(pollOptions.id, optionId), eq(pollOptions.pollId, pollId)));
+    await tx
+      .update(articlePolls)
+      .set({ totalVotes: sql`${articlePolls.totalVotes} + 1`, updatedAt: new Date() })
+      .where(eq(articlePolls.id, pollId));
+  });
+  memoryCache.delete(`poll:article:${articleId}`);
+  const after = await loadAgreeState(pollId, { userId: voter.userId, sessionId });
+  return after ? { ok: true, agree: after } : { ok: false, status: 500, message: "تعذر قراءة نتيجة التصويت" };
 }

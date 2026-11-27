@@ -304,6 +304,33 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
+    // MARK: - Opinion reader extras (/api/v1/opinion-extras)
+    //
+    // «جملة المقال» وبطاقتها و«أوافق / لا أوافق». القارئ غير المسجّل يُعرَّف
+    // بمعرّف ثابت للجهاز في X-Session-Id، فلا يتكرر صوته ولا يضيع اختياره.
+
+    func opinionExtras(articleId: String) async throws -> APIOpinionExtras {
+        let url = try buildURL(path: "/opinion-extras/\(articleId)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        applyHeaders(&request)
+        request.setValue(OpinionVoterIdentity.current, forHTTPHeaderField: "X-Session-Id")
+        return try await perform(request, as: APIOpinionExtras.self)
+    }
+
+    func voteOpinion(articleId: String, agree: Bool) async throws -> APIOpinionAgreeState {
+        struct Body: Encodable { let choice: String }
+        struct Response: Decodable { let agree: APIOpinionAgreeState }
+        let url = try buildURL(path: "/opinion-extras/\(articleId)/vote")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyHeaders(&request)
+        request.setValue(OpinionVoterIdentity.current, forHTTPHeaderField: "X-Session-Id")
+        request.httpBody = try JSONEncoder().encode(Body(choice: agree ? "agree" : "disagree"))
+        return try await perform(request, as: Response.self).agree
+    }
+
     func deleteRequest<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
         let url = try buildURL(path: path)
         var request = URLRequest(url: url)

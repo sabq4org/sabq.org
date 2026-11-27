@@ -13,6 +13,11 @@ enum SabqShareHelper {
         var items: [Any] = []
         if let title, !title.isEmpty { items.append(title) }
         items.append(url)
+        presentShareSheet(items: items, completion: completion)
+    }
+
+    /// مشاركة عناصر جاهزة (صورة بطاقة الاقتباس مع رابط المقال مثلًا).
+    static func presentShareSheet(items: [Any], completion: ((Bool) -> Void)? = nil) {
         let av = UIActivityViewController(activityItems: items, applicationActivities: nil)
         av.completionWithItemsHandler = { _, completed, _, _ in completion?(completed) }
         guard let scene = UIApplication.shared.connectedScenes

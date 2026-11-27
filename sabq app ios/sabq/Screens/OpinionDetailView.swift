@@ -108,6 +108,16 @@ struct OpinionDetailView: View {
                         opinionBody
                             .analyticsReadingBody()
 
+                        // «جملة المقال» وبطاقتها و«أوافق / لا أوافق» كما في الويب.
+                        if !isFocusMode {
+                            OpinionReaderExtrasSection(
+                                articleId: opinion.id,
+                                articleTitle: displayOpinion.title,
+                                articleURL: fallbackShareURL
+                            )
+                            .padding(.top, SabqLayout.space8)
+                        }
+
                         // Mirrors ArticleDetailView's spacing pass —
                         // the lower share / keywords / more-opinions
                         // sections used to inherit the parent VStack's

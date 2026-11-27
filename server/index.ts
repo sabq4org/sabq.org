@@ -1095,6 +1095,9 @@ if (!(globalThis as any).__sabqServer) {
     // سجل «تحرير وتوليد شامل» من الجوال: يلتقط المدخل والناتج قبل mobileApiRoutes.
     const mobileSmartEditRunHook = (await import("./routes/mobileSmartEditRunHook")).default;
     app.use("/api/v1", mobileSmartEditRunHook);
+    // إضافات مقال الرأي للتطبيقات: جملة المقال و«أوافق / لا أوافق» (Bearer).
+    const mobileOpinionExtras = (await import("./routes/mobileOpinionExtras")).default;
+    app.use("/api/v1", mobileOpinionExtras);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 
