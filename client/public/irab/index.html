@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>أعرِب: إعراب الجمل العربية</title>
+<meta name="description" content="اكتب جملة عربية فيظهر تشكيلها الكامل وإعراب كل كلمة كما يُكتب في كراسة النحو، مع بيان العلامة وسببها والأوجه المحتملة.">
+<meta property="og:title" content="أعرِب: إعراب الجمل العربية">
+<meta property="og:description" content="إعراب تفصيلي لكل كلمة، بقراءتين مستقلتين تُطابَقان قبل عرض النتيجة.">
+<meta name="theme-color" content="#F5F6FA">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Reem+Kufi:wght@500;700&family=Readex+Pro:wght@300;400;500;600&display=swap">
+<style>
+/* «أعرِب» هوية مستقلة عن سبق عمدًا (طلب المالك 2026-11-27). فاتح فقط. */
+:root{
+  color-scheme: light;
+  --bg:#F5F6FA; --paper:#FFFFFF; --ink:#24223A; --ink-soft:#5E5C78; --line:#E3E4EE;
+  --raf:#E2583A; --nasb:#0E9483; --jarr:#7457E8; --jazm:#C98A06; --mabni:#8A8DA3;
+  --accent:#0E9483; --warn:#B4610A; --warn-bg:#FFF4E2;
+  --f-display:"Reem Kufi","Readex Pro",system-ui,sans-serif;
+  --f-ui:"Readex Pro",system-ui,"Segoe UI",Tahoma,sans-serif;
+  --f-text:"Amiri","Noto Naskh Arabic","Traditional Arabic",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.7;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:28px}
+.hero{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:clamp(44px,8vw,72px);line-height:1;margin:0}
+.brand h1 .mark{color:var(--raf)}
+.brand p{margin:8px 0 0;color:var(--ink-soft);max-width:42ch;text-wrap:balance}
+.signs{display:flex;gap:8px;flex-wrap:wrap}
+.sign{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 6px;font-size:13px}
+.sign .g{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-text);font-size:20px;line-height:1;color:#fff}
+.ask{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 30px -18px rgba(36,34,58,.25)}
+.ask label{font-size:13px;color:var(--ink-soft)}
+.row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+#q{flex:1 1 280px;min-width:0;font-family:var(--f-text);font-size:24px;border:1.5px solid var(--line);border-radius:14px;padding:8px 14px;color:var(--ink);background:var(--bg);outline:none}
+#q:focus{border-color:var(--accent);background:#fff}
+#go{font-family:var(--f-ui);font-weight:600;font-size:16px;border:0;border-radius:14px;padding:0 26px;min-height:52px;background:var(--accent);color:#fff;cursor:pointer}
+#go[disabled]{opacity:.6;cursor:progress}
+button:focus-visible{outline:3px solid rgba(14,148,131,.35);outline-offset:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chips .lbl{font-size:12px;color:var(--ink-soft)}
+.chip{font-family:var(--f-text);font-size:17px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:2px 14px;cursor:pointer;color:var(--ink)}
+.chip[aria-pressed="true"]{background:#E6F6F3;border-color:var(--accent);color:#08665A}
+.chip small{font-family:var(--f-ui);font-size:11px;color:var(--jarr);margin-inline-start:6px}
+.hintline{font-size:12px;color:var(--ink-soft);margin:0}
+.msg{font-size:14px;border-radius:12px;padding:10px 14px;background:var(--warn-bg);color:var(--warn)}
+.result{display:flex;flex-direction:column;gap:18px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.tags{display:flex;gap:8px;flex-wrap:wrap}
+.tag{font-size:13px;border-radius:999px;padding:3px 12px;background:#fff;border:1px solid var(--line)}
+.tag.ok{background:#E6F6F3;border-color:#BFE7DF;color:#08665A}
+.tag.amb{background:#F0ECFF;border-color:#D9D0FF;color:#4C34B8}
+.tag.unc{background:var(--warn-bg);border-color:#F6D9A8;color:var(--warn)}
+.copy{font-family:var(--f-ui);font-size:13px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 14px;cursor:pointer;color:var(--ink)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{font-family:var(--f-ui);font-size:14px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:6px 14px;cursor:pointer;color:var(--ink);text-align:start}
+.tab b{font-family:var(--f-text);font-size:19px;font-weight:700;display:block;line-height:1.4}
+.tab[aria-selected="true"]{border-color:var(--jarr);background:#F6F3FF}
+.tab .u{font-size:11px;color:var(--warn)}
+.stage{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:24px;padding:96px 18px 26px;overflow-x:auto}
+.stage svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.sentence{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 26px;font-family:var(--f-text);font-weight:700;font-size:clamp(34px,6.5vw,58px);line-height:1.5;position:relative}
+.w{position:relative;padding:0 2px 10px;border-radius:10px;transition:background .2s}
+.w::after{content:"";position:absolute;inset-inline:6px;bottom:4px;height:5px;border-radius:5px;background:var(--c)}
+.w.unc::after{background:repeating-linear-gradient(90deg,var(--c) 0 8px,transparent 8px 13px)}
+.w .role{display:block;font-family:var(--f-ui);font-weight:500;font-size:13px;color:var(--c);text-align:center;line-height:1.2;margin-top:4px}
+.w.hi{background:color-mix(in srgb,var(--c) 10%,transparent)}
+.stage .hint{position:absolute;top:14px;inset-inline-start:18px;font-size:12px;color:var(--ink-soft)}
+.arcl{font-family:var(--f-ui);font-size:12px;fill:var(--ink-soft)}
+.note{font-size:14px;color:var(--ink-soft);text-align:center;margin:14px auto 0;max-width:60ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:16px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-content:start;min-width:0}
+.card.hi{border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 18%,transparent)}
+.dial{grid-row:span 3;width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 12%,#fff);color:var(--c);font-family:var(--f-text);font-size:30px;line-height:1}
+.dial.m{font-family:var(--f-ui);font-size:12px;font-weight:600}
+.card .word{font-family:var(--f-text);font-weight:700;font-size:26px;line-height:1.3}
+.card .r{font-weight:600;color:var(--c);font-size:15px}
+.card .facts{display:flex;gap:6px;flex-wrap:wrap;font-size:12px}
+.card .facts span{background:var(--bg);border-radius:8px;padding:1px 8px;color:var(--ink-soft)}
+.card .facts .u{background:var(--warn-bg);color:var(--warn)}
+.card .txt{grid-column:1/-1;margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--line);font-family:var(--f-text);font-size:19px;line-height:1.8}
+.card .alt{grid-column:1/-1;margin:8px 0 0;border-radius:12px;background:var(--warn-bg);padding:8px 12px;font-size:13px;color:#6B3D06}
+.card .alt b{display:block;font-weight:600;margin-bottom:2px}
+.card .alt p{margin:0;font-family:var(--f-text);font-size:17px;line-height:1.7;color:var(--ink)}
+.story{background:#F6F3FF;border:1px solid #E2DAFF;border-radius:16px;padding:14px 16px;font-size:14px;color:#3E2E8F}
+.loading{display:flex;flex-direction:column;align-items:center;gap:14px;padding:48px 16px;background:var(--paper);border:1px solid var(--line);border-radius:24px;text-align:center}
+.loading .dots{display:flex;gap:10px;font-family:var(--f-text);font-size:40px;line-height:1}
+.loading .dots span{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:#fff}
+.loading p{margin:0;color:var(--ink-soft);font-size:14px}
+.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.how div{border-top:2px solid var(--line);padding-top:10px;font-size:13px;color:var(--ink-soft)}
+.how b{display:block;color:var(--ink);font-size:14px}
+footer{font-size:12px;color:var(--ink-soft);text-align:center}
+@media (prefers-reduced-motion:no-preference){
+  .w,.card{animation:rise .45s both}
+  @keyframes rise{from{opacity:.001;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .loading .dots span{animation:bob 1.2s ease-in-out infinite}
+  .loading .dots span:nth-child(2){animation-delay:.15s}.loading .dots span:nth-child(3){animation-delay:.3s}.loading .dots span:nth-child(4){animation-delay:.45s}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+}
+@media (max-width:560px){.stage{padding-top:30px}.stage svg,.stage .hint{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="brand">
+      <h1>أعرِ<span class="mark">بْ</span></h1>
+      <p>اكتب جملة عربية، فيظهر تشكيلها الكامل وإعراب كل كلمة كما يُكتب في كراسة النحو، مع بيان العلامة وسببها.</p>
+    </div>
+    <div class="signs" aria-label="ألوان حالات الإعراب">
+      <span class="sign"><span class="g" style="background:var(--raf)">بُ</span>رفع</span>
+      <span class="sign"><span class="g" style="background:var(--nasb)">بَ</span>نصب</span>
+      <span class="sign"><span class="g" style="background:var(--jarr)">بِ</span>جر</span>
+      <span class="sign"><span class="g" style="background:var(--jazm)">بْ</span>جزم</span>
+      <span class="sign"><span class="g" style="background:var(--mabni);font-size:13px;font-family:var(--f-ui)">م</span>مبني</span>
+    </div>
+  </header>
+
+  <section class="ask">
+    <label for="q">الجملة</label>
+    <form class="row" id="f">
+      <input id="q" name="q" autocomplete="off" dir="rtl" maxlength="160" placeholder="اكتب جملة، مثل: كتب الطالب الدرس">
+      <button id="go" type="submit">أعرِب</button>
+    </form>
+    <div class="chips" id="chips"><span class="lbl">أمثلة:</span></div>
+    <p class="hintline">إن كتبت الحركات التزم الإعراب بها. بلا حركات تُشكَّل الجملة على الوجه الأشهر، وتظهر الأوجه الأخرى إن احتملتها.</p>
+    <div class="msg" id="msg" role="alert" hidden></div>
+  </section>
+
+  <div class="loading" id="loading" hidden>
+    <div class="dots" aria-hidden="true"><span style="background:var(--raf)">بُ</span><span style="background:var(--nasb)">بَ</span><span style="background:var(--jarr)">بِ</span><span style="background:var(--jazm)">بْ</span></div>
+    <p>نُعرب الجملة مرتين بشكل مستقل ثم نطابق بين القراءتين…</p>
+  </div>
+
+  <section class="result" id="result" aria-live="polite">
+    <div class="meta">
+      <div class="tags" id="tags"></div>
+      <button class="copy" id="copy" type="button">نسخ الإعراب</button>
+    </div>
+    <div class="tabs" id="tabs" role="tablist" hidden></div>
+    <div class="stage" id="stage">
+      <span class="hint">الأقواس تربط كل كلمة بعاملها</span>
+      <svg id="arcs" aria-hidden="true"></svg>
+      <div class="sentence" id="sentence"></div>
+      <p class="note" id="snote"></p>
+    </div>
+    <div class="cards" id="cards"></div>
+    <div id="extras"></div>
+  </section>
+
+  <section class="how" aria-label="كيف نحرص على الدقة">
+    <div><b>التشكيل أولًا</b>الحركات تحسم الإعراب، فتُشكَّل الجملة كاملة ثم تُعرب على تشكيلها.</div>
+    <div><b>قراءتان مستقلتان</b>تُعرب كل جملة مرتين بطريقتين، ولا تظهر «متفق عليه» إلا إذا تطابقتا في كل كلمة.</div>
+    <div><b>الأوجه لا التخمين</b>ما اختلفت فيه القراءتان يُعلَّم «غير مؤكد» ويظهر الوجه الآخر بجانبه.</div>
+  </section>
+  <footer>الإعراب آلي ومراجَع بقراءتين، وقد يخطئ في التراكيب النادرة. الأمثلة مراجعة يدويًا.</footer>
+</div>
+
+<script>
+(function(){
+const CASE={raf:{c:"var(--raf)",g:"بُ",n:"مرفوع"},nasb:{c:"var(--nasb)",g:"بَ",n:"منصوب"},jarr:{c:"var(--jarr)",g:"بِ",n:"مجرور"},jazm:{c:"var(--jazm)",g:"بْ",n:"مجزوم"},mabni:{c:"var(--mabni)",g:"",n:"مبني"}};
+function R(name,sentence,type,words,notes,meaning){return{name:name,sentence:sentence,type:type,words:words,notes:notes||[],meaning:meaning||""}}
+function W(word,role,k,sign,text,head,headLabel){return{word:word,role:role,case:k,sign:sign,text:text,head:head===undefined?null:head,headLabel:headLabel}}
+// أمثلة مُعربة ومراجعة يدويًا: تُعرض فورًا وبلا تكلفة.
+var EX=[
+ {input:"كتب الطالب الدرس",agreement:"agreed",readings:[R("","كَتَبَ الطَّالِبُ الدَّرْسَ","جملة فعلية",[
+  W("كَتَبَ","فعل ماضٍ","mabni","مبني على الفتح","فعل ماضٍ مبني على الفتح الظاهر على آخره."),
+  W("الطَّالِبُ","فاعل","raf","الضمة الظاهرة","فاعل مرفوع وعلامة رفعه الضمة الظاهرة على آخره.",0),
+  W("الدَّرْسَ","مفعول به","nasb","الفتحة الظاهرة","مفعول به منصوب وعلامة نصبه الفتحة الظاهرة على آخره.",0)])]},
+ {input:"الطالب يقرأ القصة",agreement:"agreed",readings:[R("","الطَّالِبُ يَقْرَأُ الْقِصَّةَ","جملة اسمية، خبرها جملة فعلية",[
+  W("الطَّالِبُ","مبتدأ","raf","الضمة الظاهرة","مبتدأ مرفوع وعلامة رفعه الضمة الظاهرة على آخره."),
+  W("يَقْرَأُ","فعل مضارع","raf","الضمة الظاهرة","فعل مضارع مرفوع لتجرده من الناصب والجازم، وعلامة رفعه الضمة الظاهرة على آخره، والفاعل ضمير مستتر جوازًا تقديره «هو».",0,"خبر (جملة)"),
+  W("الْقِصَّةَ","مفعول به","nasb","الفتحة الظاهرة","مفعول به منصوب وعلامة نصبه الفتحة الظاهرة على آخره.",1)],
+  ["والجملة الفعلية «يقرأ القصة» في محل رفع خبر المبتدأ «الطالب»."])]},
+ {input:"إن المعلمين مخلصون",agreement:"agreed",readings:[R("","إِنَّ الْمُعَلِّمِينَ مُخْلِصُونَ","جملة اسمية منسوخة بـ«إنّ»",[
+  W("إِنَّ","حرف توكيد ونصب","mabni","مبني على الفتح","حرف توكيد ونصب مبني على الفتح، لا محل له من الإعراب."),
+  W("الْمُعَلِّمِينَ","اسم إنّ","nasb","الياء · جمع مذكر سالم","اسم «إنّ» منصوب وعلامة نصبه الياء لأنه جمع مذكر سالم.",0),
+  W("مُخْلِصُونَ","خبر إنّ","raf","الواو · جمع مذكر سالم","خبر «إنّ» مرفوع وعلامة رفعه الواو لأنه جمع مذكر سالم، والنون عوض عن التنوين في الاسم المفرد.",0)])]},
+ {input:"لم يذهب أخوك إلى المدرسة",agreement:"agreed",readings:[R("","لَمْ يَذْهَبْ أَخُوكَ إِلَى الْمَدْرَسَةِ","جملة فعلية منفية",[
+  W("لَمْ","حرف نفي وجزم وقلب","mabni","مبني على السكون","حرف نفي وجزم وقلب مبني على السكون، لا محل له من الإعراب."),
+  W("يَذْهَبْ","فعل مضارع مجزوم","jazm","السكون الظاهر","فعل مضارع مجزوم بـ«لم» وعلامة جزمه السكون الظاهر على آخره.",0,"مجزوم"),
+  W("أَخُوكَ","فاعل، وهو مضاف","raf","الواو · الأسماء الخمسة","فاعل مرفوع وعلامة رفعه الواو لأنه من الأسماء الخمسة، وهو مضاف. والكاف ضمير متصل مبني على الفتح في محل جر مضاف إليه.",1,"فاعل"),
+  W("إِلَى","حرف جر","mabni","مبني على السكون","حرف جر مبني على السكون، لا محل له من الإعراب."),
+  W("الْمَدْرَسَةِ","اسم مجرور","jarr","الكسرة الظاهرة","اسم مجرور بـ«إلى» وعلامة جره الكسرة الظاهرة على آخره.",3,"مجرور")],
+  ["وشبه الجملة «إلى المدرسة» متعلق بالفعل «يذهب»."])]},
+ {input:"رأيت الفتى",agreement:"agreed",readings:[R("","رَأَيْتُ الْفَتَى","جملة فعلية",[
+  W("رَأَيْتُ","فعل وفاعل","mabni","مبني على السكون","رأى: فعل ماضٍ مبني على السكون لاتصاله بتاء الفاعل. والتاء ضمير متصل مبني على الضم في محل رفع فاعل."),
+  W("الْفَتَى","مفعول به","nasb","الفتحة المقدرة · للتعذر","مفعول به منصوب وعلامة نصبه الفتحة المقدرة على الألف، منع من ظهورها التعذر.",0)])]},
+ {input:"ما أحسن السماء",agreement:"agreed",story:"يُروى أن ابنة أبي الأسود الدؤلي قالت: «ما أحسنُ السماءِ؟» تريد التعجب، فأجابها: «نجومُها». فقالت: إنما أردتُ التعجب. فقال: قولي «ما أحسنَ السماءَ!». الجملة بلا تشكيل تحتمل الوجهين، ولذلك تُعرض الأوجه بدل اختيار أحدها.",readings:[
+  R("التعجب","مَا أَحْسَنَ السَّمَاءَ!","أسلوب تعجب",[
+   W("مَا","ما التعجبية، مبتدأ","raf","مبنية على السكون · في محل رفع","«ما» التعجبية: نكرة تامة بمعنى «شيء» مبنية على السكون في محل رفع مبتدأ."),
+   W("أَحْسَنَ","فعل ماضٍ جامد للتعجب","mabni","مبني على الفتح","فعل ماضٍ جامد لإنشاء التعجب مبني على الفتح، وفاعله ضمير مستتر وجوبًا تقديره «هو» يعود على «ما».",0,"خبر (جملة)"),
+   W("السَّمَاءَ","مفعول به","nasb","الفتحة الظاهرة","مفعول به منصوب وعلامة نصبه الفتحة الظاهرة على آخره.",1)],
+   ["والجملة الفعلية «أحسنَ السماءَ» في محل رفع خبر «ما»."],"التعجب من حسن السماء"),
+  R("الاستفهام","مَا أَحْسَنُ السَّمَاءِ؟","أسلوب استفهام",[
+   W("مَا","اسم استفهام، مبتدأ","raf","مبني على السكون · في محل رفع","اسم استفهام مبني على السكون في محل رفع مبتدأ."),
+   W("أَحْسَنُ","خبر، وهو مضاف","raf","الضمة الظاهرة","خبر مرفوع وعلامة رفعه الضمة الظاهرة على آخره، وهو مضاف.",0,"خبر"),
+   W("السَّمَاءِ","مضاف إليه","jarr","الكسرة الظاهرة","مضاف إليه مجرور وعلامة جره الكسرة الظاهرة على آخره.",1,"مضاف إليه")],
+   [],"السؤال عن أحسن شيء في السماء")]}
+];
+var $=function(s){return document.querySelector(s)};
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function strip(s){return String(s).replace(/[ً-ْٰـ!؟?.،]/g,"").replace(/[أإآ]/g,"ا").replace(/\s+/g," ").trim()}
+var cur=null,ri=0,busy=false;
+
+function chips(){
+  $("#chips").innerHTML='<span class="lbl">أمثلة:</span>'+EX.map(function(e,i){
+    var pressed=cur&&cur.input===e.input;
+    return '<button type="button" class="chip" data-i="'+i+'" aria-pressed="'+pressed+'">'+esc(e.input)+(e.readings.length>1?"<small>وجهان</small>":"")+"</button>"}).join("");
+}
+function showMsg(t){var m=$("#msg");m.textContent=t||"";m.hidden=!t}
+function anyUnc(r){return r.uncertain||r.words.some(function(w){return w.uncertain})}
+
+function render(){
+  chips();
+  var res=$("#result");
+  if(!cur){res.hidden=true;return}
+  res.hidden=false;
+  var R=cur.readings[ri];
+  var tags='<span class="tag">'+esc(R.type)+"</span>";
+  if(cur.readings.length>1)tags+='<span class="tag amb">تحتمل '+(cur.readings.length===2?"وجهين":cur.readings.length+" أوجه")+" · الحركات تحسم المعنى</span>";
+  if(cur.agreement==="agreed"&&!anyUnc(R))tags+='<span class="tag ok">متفق عليه في القراءتين</span>';
+  else if(cur.agreement==="single")tags+='<span class="tag unc">قراءة واحدة فقط · غير مراجَع</span>';
+  else if(anyUnc(R))tags+='<span class="tag unc">كلمات غير مؤكدة · راجعها</span>';
+  else tags+='<span class="tag ok">متفق عليه في القراءتين</span>';
+  if(cur.cached)tags+='<span class="tag">محفوظ</span>';
+  $("#tags").innerHTML=tags;
+  var tabs=$("#tabs");
+  if(cur.readings.length>1){
+    tabs.hidden=false;
+    var ord=["أول","ثانٍ","ثالث"];
+    tabs.innerHTML=cur.readings.map(function(r,i){return '<button type="button" role="tab" class="tab" aria-selected="'+(i===ri)+'" data-r="'+i+'">وجه '+ord[i]+(r.name?": "+esc(r.name):"")+(r.uncertain?' <span class="u">· غير مؤكد</span>':"")+"<b>"+esc(r.sentence)+"</b></button>"}).join("");
+  } else tabs.hidden=true;
+  $("#sentence").innerHTML=R.words.map(function(x,i){var C=CASE[x.case]||CASE.mabni;return '<span class="w'+(x.uncertain?" unc":"")+'" data-i="'+i+'" style="--c:'+C.c+';animation-delay:'+(i*70)+'ms">'+esc(x.word)+'<span class="role">'+esc(String(x.role).split(/[،·]/)[0])+"</span></span>"}).join("");
+  var notes=(R.meaning?"المعنى: "+R.meaning+". ":"")+(R.notes||[]).join(" ");
+  $("#snote").textContent=notes;
+  $("#cards").innerHTML=R.words.map(function(x,i){var C=CASE[x.case]||CASE.mabni,m=x.case==="mabni";
+    return '<article class="card" data-i="'+i+'" style="--c:'+C.c+';animation-delay:'+(120+i*70)+'ms">'+
+    '<div class="dial'+(m?" m":"")+'">'+(m?"مبني":C.g)+"</div>"+
+    '<div class="word">'+esc(x.word)+'</div><div class="r">'+esc(x.role)+"</div>"+
+    '<div class="facts"><span>'+C.n+"</span>"+(x.sign?"<span>"+esc(x.sign)+"</span>":"")+(x.uncertain?'<span class="u">غير مؤكد</span>':"")+"</div>"+
+    '<p class="txt">'+esc(x.text)+"</p>"+
+    (x.alt?'<div class="alt"><b>القراءة الثانية أعربتها: '+esc(x.alt.role)+" ("+(CASE[x.alt.case]||CASE.mabni).n+")</b><p>"+esc(x.alt.text)+"</p></div>":"")+
+    "</article>"}).join("");
+  $("#extras").innerHTML=cur.story?'<div class="story">'+esc(cur.story)+"</div>":"";
+  requestAnimationFrame(arcs);
+}
+function arcs(){
+  if(!cur)return;
+  var R=cur.readings[ri],svg=$("#arcs"),st=$("#stage").getBoundingClientRect();
+  var rects=[].slice.call(document.querySelectorAll("#sentence .w")).map(function(w){return w.getBoundingClientRect()});
+  svg.setAttribute("viewBox","0 0 "+st.width+" "+st.height);
+  var oneLine=rects.every(function(r){return Math.abs(r.top-rects[0].top)<4});
+  if(!oneLine){svg.innerHTML="";return}
+  var out="";
+  R.words.forEach(function(x,i){
+    if(x.head===null||x.head===undefined||!rects[x.head])return;
+    var a=rects[i],b=rects[x.head];
+    var x1=a.left+a.width/2-st.left,x2=b.left+b.width/2-st.left,y=a.top-st.top+8;
+    var hgt=Math.min(80,30+Math.abs(i-x.head)*14),mx=(x1+x2)/2,col=(CASE[x.case]||CASE.mabni).c;
+    out+='<path d="M'+x1+","+y+" C"+x1+","+(y-hgt)+" "+x2+","+(y-hgt)+" "+x2+","+y+'" fill="none" style="stroke:'+col+'" stroke-width="2" stroke-linecap="round" opacity=".75"/>'+
+      '<circle cx="'+x2+'" cy="'+y+'" r="3.5" style="fill:'+col+'"/>'+
+      '<text class="arcl" x="'+mx+'" y="'+(y-hgt*0.75-6)+'" text-anchor="middle">'+esc(x.headLabel||String(x.role).split(/[،·]/)[0])+"</text>";
+  });
+  svg.innerHTML=out;
+}
+function setBusy(b){busy=b;$("#go").disabled=b;$("#loading").hidden=!b;if(b)$("#result").hidden=true}
+
+async function analyze(text){
+  var v=strip(text);
+  if(!v){showMsg("اكتب جملة عربية.");return}
+  var ex=null;
+  // المثال يُعرض من الصفحة فقط إن كُتب بلا حركات، لأن حركات القارئ قد تغيّر الإعراب.
+  if(!/[ً-ْ]/.test(text)){for(var i=0;i<EX.length;i++){if(strip(EX[i].input)===v){ex=EX[i];break}}}
+  showMsg("");
+  if(ex){cur=ex;ri=0;render();return}
+  if(busy)return;
+  setBusy(true);
+  try{
+    var res=await fetch("/api/irab",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sentence:text})});
+    var data=null;try{data=await res.json()}catch(_){}
+    if(!res.ok){showMsg((data&&data.message)||"تعذر إعراب الجملة الآن. أعد المحاولة بعد قليل.");cur=null;render();return}
+    if(!data.valid){showMsg(data.problem||"تعذر إعراب هذا النص لأنه لا يشكّل جملة عربية سليمة.");cur=null;render();return}
+    cur=data;ri=0;render();
+  }catch(_){showMsg("تعذر الاتصال. تأكد من الإنترنت ثم أعد المحاولة.");cur=null;render()}
+  finally{setBusy(false)}
+}
+
+document.addEventListener("click",function(e){
+  var c=e.target.closest(".chip");if(c){var ex=EX[+c.dataset.i];$("#q").value=ex.input;showMsg("");cur=ex;ri=0;render();return}
+  var t=e.target.closest(".tab");if(t){ri=+t.dataset.r;render()}
+});
+["mouseover","mouseout"].forEach(function(ev){document.addEventListener(ev,function(e){
+  var el=e.target.closest(".w,.card");if(!el)return;var i=el.dataset.i;
+  document.querySelectorAll('.w[data-i="'+i+'"],.card[data-i="'+i+'"]').forEach(function(n){n.classList.toggle("hi",ev==="mouseover")});
+})});
+$("#f").addEventListener("submit",function(e){e.preventDefault();analyze($("#q").value)});
+$("#copy").addEventListener("click",async function(){
+  if(!cur)return;var R=cur.readings[ri];
+  var txt=R.sentence+"\n\n"+R.words.map(function(x){return x.word+": "+x.text}).join("\n")+((R.notes&&R.notes.length)?"\n"+R.notes.join("\n"):"");
+  var b=$("#copy");try{await navigator.clipboard.writeText(txt);b.textContent="نُسخ"}catch(_){b.textContent="تعذّر النسخ"}
+  setTimeout(function(){b.textContent="نسخ الإعراب"},1600);
+});
+addEventListener("resize",function(){requestAnimationFrame(arcs)});
+if(document.fonts)document.fonts.ready.then(function(){requestAnimationFrame(arcs)});
+var start=EX[0];$("#q").value=start.input;cur=start;render();
+})();
+</script>
+</body>
+</html>

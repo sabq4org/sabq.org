@@ -6,6 +6,8 @@
   "exclude": [
     "/build-info.json",
     "/favicon.ico",
-    "/manifest.webmanifest"
+    "/manifest.webmanifest",
+    "/irab",
+    "/irab/*"
   ]
 }

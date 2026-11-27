@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-11-13",
+  "updatedAt": "2026-11-27",
   "systems": [
     {
       "id": "account-center",
@@ -1762,6 +1762,34 @@
         "platform"
       ],
       "lastReviewed": "2026-09-13"
+    },
+    {
+      "id": "irab",
+      "nameAr": "أعرِب — إعراب الجمل",
+      "nameEn": "Irab (Arabic sentence parsing)",
+      "status": "active",
+      "category": "engagement",
+      "summary": "صفحة عامة /irab تعرب الجملة العربية كلمة كلمة بقراءتين مستقلتين من الذكاء الاصطناعي ثم مطابقتهما، بهوية مستقلة عن سبق.",
+      "docPath": "docs/systems/irab/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/ai-hub/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "client/public/irab/**",
+        "server/routes/irab.ts",
+        "server/services/irabService.ts",
+        "shared/irab.ts",
+        "tests/unit/irab.test.ts",
+        "docs/systems/irab/**"
+      ],
+      "aiFeatureKeys": [
+        "irab"
+      ],
+      "dashboardPath": null,
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-11-27"
     }
   ]
 }

@@ -95,6 +95,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "content-tools", displayName: "أدوات المحتوى الذكية", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
   // تُضبط في proofreadService (25ث) بدل الافتراضي.
+  // «أعرِب» الصفحة العامة: قراءتان مستقلتان لكل جملة ثم مطابقة (irabService).
+  { featureKey: "irab", displayName: "أعرِب — إعراب الجمل", category: "editorial", primary: SONNET_5_5, fallbackChain: [GPT_5_1], maxTokens: 6000 },
   { featureKey: "proofread", displayName: "التدقيق اللغوي", category: "editorial", primary: SONNET_5_5, fallbackChain: CHAIN_AFTER_CLAUDE },
   { featureKey: "data-story", displayName: "قصص البيانات", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "deep-analysis", displayName: "التحليل العميق (عمق)", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
