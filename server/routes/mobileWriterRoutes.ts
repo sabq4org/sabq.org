@@ -11,12 +11,17 @@
  *   POST /contributor/slot-change                   { weekday, time, acceptedTerms }
  *   GET  /contributor/articles/:articleId/social-proposal
  *   POST /contributor/articles/:articleId/social-proposal  { text, textSource }
+ *   GET  /contributor/tickets                       محادثاتي مع التحرير (+ unreadCount)
+ *   POST /contributor/tickets                       { title, message }
+ *   GET  /contributor/tickets/:id                   الرسائل (ويُعلَّم مقروءًا)
+ *   POST /contributor/tickets/:id/messages          { message }
  *
  * يُركَّب قبل mobileApiRoutes في server/index.ts (ذلك الملف فوق سقف الأسطر).
  * لا استيراد لـ db هنا (ADR-001).
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
+import { insertOpinionTicketMessageSchema, insertOpinionTicketSchema } from "@shared/schema";
 import { validateVote } from "@shared/opinionWriterAnnouncements";
 import { computeWriterNextStep } from "@shared/writerNextStep";
 import { logActivity, userHasAnyRole } from "../rbac";
@@ -31,7 +36,16 @@ import {
   voteOnAnnouncement,
 } from "../services/opinionWriterAnnouncementsService";
 import { getOpinionWriterFileDownload } from "../services/opinionWriterFilesService";
+import {
+  OpinionTicketServiceError,
+  appendOpinionTicketMessage,
+  createOpinionTicket,
+  getOpinionTicketWithMessages,
+  getOpinionTicketsUnreadCounts,
+  listOpinionTickets,
+} from "../services/opinionTicketsService";
 import { getWriterScheduleBanner } from "../services/opinionWritersService";
+import { storage } from "../storage";
 import { applyWriterSlotChange, getWriterSlotChangeState } from "../services/opinionSlotChangeService";
 import {
   createOrUpdateAuthorSocialProposal,
@@ -61,6 +75,9 @@ async function writerSession(req: Request, res: Response): Promise<string | null
 function sendError(res: Response, error: unknown, fallback: string, tag: string) {
   if (error instanceof AnnouncementError) {
     return res.status(error.status).json({ success: false, code: error.code, message: error.message });
+  }
+  if (error instanceof OpinionTicketServiceError) {
+    return res.status(error.status).json({ success: false, message: error.message });
   }
   if (error instanceof SocialPublishValidationError) {
     return res.status(error.status).json({ success: false, message: error.message });
@@ -232,6 +249,106 @@ router.post("/contributor/articles/:articleId/social-proposal", async (req: Requ
     res.status(201).json({ success: true, post: { id: post.id, status: post.status } });
   } catch (error) {
     return sendError(res, error, "تعذر إرسال مقترح النشر الاجتماعي", "social submit");
+  }
+});
+
+// ── محادثة التحرير (الاستفسارات) ──
+// في مساحة الكاتب يُعامل كاتبًا دائمًا، حتى لو كان يملك دورًا تحريريًا أيضًا.
+
+router.get("/contributor/tickets", async (req: Request, res: Response) => {
+  try {
+    const userId = await writerSession(req, res);
+    if (!userId) return;
+    const [tickets, counts] = await Promise.all([
+      listOpinionTickets({ viewerId: userId, isAdmin: false, limit: 50 }),
+      getOpinionTicketsUnreadCounts({ viewerId: userId, isAdmin: false }),
+    ]);
+    res.json({
+      success: true,
+      unreadCount: counts.unreadCount,
+      tickets: tickets.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        direction: t.direction,
+        lastMessageAt: t.last_message_at,
+        hasUnread: t.hasUnread,
+        excerpt: t.latestMessageExcerpt,
+      })),
+    });
+  } catch (error) {
+    return sendError(res, error, "تعذر جلب المحادثات", "tickets list");
+  }
+});
+
+router.post("/contributor/tickets", async (req: Request, res: Response) => {
+  try {
+    const userId = await writerSession(req, res);
+    if (!userId) return;
+    const parsed = insertOpinionTicketSchema.omit({ writerId: true }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message || "بيانات غير صالحة" });
+    }
+    const user = await storage.getUser(userId);
+    const ticket = await createOpinionTicket({
+      actorId: userId,
+      actorFirstName: user?.firstName,
+      actorLastName: user?.lastName,
+      isAdmin: false,
+      isContributor: true,
+      authorKind: "opinion_author",
+      title: parsed.data.title,
+      message: parsed.data.message,
+    });
+    res.status(201).json({ success: true, ticket: { id: ticket.id } });
+  } catch (error) {
+    return sendError(res, error, "تعذر إرسال الرسالة", "ticket create");
+  }
+});
+
+router.get("/contributor/tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const userId = await writerSession(req, res);
+    if (!userId) return;
+    const detail = await getOpinionTicketWithMessages({ ticketId: req.params.id, viewerId: userId, isAdmin: false });
+    res.json({
+      success: true,
+      ticket: { id: detail.ticket.id, title: detail.ticket.title, status: detail.ticket.status },
+      messages: detail.messages.map((m) => ({
+        id: m.id,
+        mine: m.senderId === userId,
+        senderRole: m.senderRole,
+        senderName: m.senderName,
+        message: m.message,
+        createdAt: m.created_at,
+      })),
+    });
+  } catch (error) {
+    return sendError(res, error, "تعذر فتح المحادثة", "ticket detail");
+  }
+});
+
+router.post("/contributor/tickets/:id/messages", async (req: Request, res: Response) => {
+  try {
+    const userId = await writerSession(req, res);
+    if (!userId) return;
+    const parsed = insertOpinionTicketMessageSchema.pick({ message: true }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message || "الرسالة مطلوبة" });
+    }
+    const user = await storage.getUser(userId);
+    const result = await appendOpinionTicketMessage({
+      ticketId: req.params.id,
+      senderId: userId,
+      senderFirstName: user?.firstName,
+      senderLastName: user?.lastName,
+      isAdmin: false,
+      authorKind: "opinion_author",
+      message: parsed.data.message,
+    });
+    res.status(201).json({ success: true, message: { id: result.message.id } });
+  } catch (error) {
+    return sendError(res, error, "تعذر إرسال الرسالة", "ticket reply");
   }
 });
 

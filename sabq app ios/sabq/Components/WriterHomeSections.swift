@@ -544,3 +544,41 @@ struct WriterSocialProposalSheet: View {
         }
     }
 }
+
+/// «صوتي» يبقى في الويب (التسجيل والموافقة هناك)؛ التطبيق يفتحه في المتصفح.
+struct WriterVoiceLinkRow: View {
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Button {
+            if let url = URL(string: "https://sabq.org/dashboard/opinion-author/voice") { openURL(url) }
+        } label: {
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(SabqTheme.primary.opacity(0.1)))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("صوتي")
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                    Text("سجّل صوتك لقراءة مقالاتك، يُفتح في الموقع")
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.left.square")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(SabqLayout.space16)
+            .frame(minHeight: 44)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(SabqTheme.surface))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}

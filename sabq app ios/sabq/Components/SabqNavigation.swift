@@ -440,6 +440,10 @@ private struct SabqDestinations: ViewModifier {
                 WriterWorkspaceView()
                     .duoContentInsets()
             }
+            .navigationDestination(for: WriterTicketRoute.self) { route in
+                WriterTicketThreadView(ticketId: route.id)
+                    .duoContentInsets()
+            }
             .navigationDestination(for: AdminDashboardRoute.self) { _ in
                 AdminDashboardView()
                     .duoContentInsets()

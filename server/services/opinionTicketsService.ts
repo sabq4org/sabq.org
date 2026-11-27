@@ -14,7 +14,7 @@ import {
   isOpinionDeskViewer,
   shouldNotifyDeskOfTicketMessage,
 } from "./opinionTicketNotice";
-import { notifyDeskOfWriterInquiry } from "./opinionTicketNotifications";
+import { notifyDeskOfWriterInquiry, notifyWriterOfDeskReply } from "./opinionTicketNotifications";
 import { clipDeskAlertExcerpt } from "./deskBotAlerts";
 
 export const CONTRIBUTOR_ROLE_NAMES = new Set(["opinion_author", "angle_writer", "reporter"]);
@@ -646,6 +646,15 @@ export async function appendOpinionTicketMessage(options: {
     }
   }
   await db.update(opinionTickets).set(updates).where(eq(opinionTickets.id, ticket.id));
+
+  if (senderRole === "admin" && ticket.writerId !== options.senderId) {
+    void notifyWriterOfDeskReply({
+      ticketId: ticket.id,
+      writerId: ticket.writerId,
+      title: ticket.title,
+      message: options.message,
+    });
+  }
 
   if (shouldNotifyDeskOfTicketMessage(senderRole)) {
     const writerName = fullName(options.senderFirstName, options.senderLastName);

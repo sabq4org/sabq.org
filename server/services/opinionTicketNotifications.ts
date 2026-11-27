@@ -20,7 +20,7 @@ import {
   getDeskBotAlertRecipients,
   sendDeskAlertWebhook,
 } from "./deskBotAlerts";
-import { SABQ_DESK_BUNDLE_ID, sendPushToUserApp } from "./userAppPushService";
+import { SABQ_DESK_BUNDLE_ID, sendPushToSabqReaderApps, sendPushToUserApp } from "./userAppPushService";
 import { applyStaffDeskPrefs, loadStaffDeskPrefs } from "./staffAppPushService";
 
 const NOTIFY_ROLE_NAMES = [...OPINION_TICKET_NOTIFY_ROLE_NAMES];
@@ -181,4 +181,29 @@ export async function notifyDeskOfWriterInquiry(input: {
   }
 
   await webhookPromise;
+}
+
+/**
+ * ردّ التحرير يصل الكاتب إشعارًا في تطبيق سبق (iOS وأندرويد) ويفتح
+ * المحادثة نفسها (`sabq://writer/tickets/<id>`). لا يرمي أبدًا.
+ */
+export async function notifyWriterOfDeskReply(input: {
+  ticketId: string;
+  writerId: string;
+  title: string;
+  message: string;
+}): Promise<void> {
+  try {
+    const excerpt = input.message.replace(/\s+/g, " ").trim();
+    await sendPushToSabqReaderApps(input.writerId, {
+      title: "ردّ من فريق التحرير",
+      body: excerpt.length > 140 ? `${excerpt.slice(0, 139)}…` : excerpt || input.title,
+      type: "writer.ticket_reply",
+      deeplink: `sabq://writer/tickets/${input.ticketId}`,
+      collapseId: `ticket-${input.ticketId}`,
+      data: { ticket_id: input.ticketId },
+    });
+  } catch (err) {
+    console.error("[opinion-tickets] writer push failed", err);
+  }
 }

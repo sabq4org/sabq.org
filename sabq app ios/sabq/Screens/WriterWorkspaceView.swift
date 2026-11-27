@@ -684,6 +684,8 @@ struct WriterWorkspaceView: View {
                         }
                     }
                     scheduleCard
+                    WriterTicketsEntryRow()
+                    WriterVoiceLinkRow()
                     notificationsStatusRow
                     if unreadCount > 0 { alertsCard }
                     monthlyBriefCard
