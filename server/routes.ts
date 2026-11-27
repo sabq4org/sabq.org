@@ -14317,11 +14317,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     try {
       const { articleId } = req.params;
       const { locale } = req.query;
-      const cacheKey = `article:media-assets:${articleId}:${locale || 'all'}`;
-      const assets = await withCache(cacheKey, CACHE_TTL.MEDIUM, () =>
-        storage.getArticleMediaAssetWithDetails(articleId, locale as string | undefined)
-      );
-      res.set('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=120');
+      const cacheKey = `article:media-assets:${articleId}:${locale || 'all'}`, load = () => storage.getArticleMediaAssetWithDetails(articleId, locale as string | undefined);
+      // fresh=1 من المحرر (مسجّل دخول فقط): بلا كاش الخادم أو المتصفح، فلا يعود مرفق محذوف للظهور
+      const fresh = req.query.fresh === '1' && req.isAuthenticated?.(), assets = fresh ? await load() : await withCache(cacheKey, CACHE_TTL.MEDIUM, load);
+      res.set('Cache-Control', fresh ? 'private, no-store' : 'public, max-age=60, s-maxage=300, stale-while-revalidate=120');
       res.json(assets);
     } catch (error: any) {
       console.error("Error fetching media assets:", error);
@@ -14416,8 +14415,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
         // `media.delete` is not article-scoped; edit_any short-circuits.
         const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
-        if (!access.ok) {
-          return res.status(access.httpStatus).json({ message: access.message });
+        if (!access.ok) { // محذوف أصلًا (نقرة ثانية أو قائمة قديمة) = نجاح، لا رسالة فشل
+          return access.httpStatus === 404 ? res.status(204).send() : res.status(access.httpStatus).json({ message: access.message });
         }
 
         // Look up asset BEFORE deleting so we can purge the right article URLs.

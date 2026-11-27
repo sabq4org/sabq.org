@@ -156,6 +156,28 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/**
+ * صور الخبر بعد الأولى (الأولى صورة رئيسية): كتلة تحت النص بصيغة محرر سبق نفسها،
+ * صورة واحدة = صورة عادية، وأكثر = «ألبوم» (div[data-image-gallery]). الويب والتطبيقات
+ * تقرأ وسوم img داخلها، والمحرر يفتحها كتلة صورة/ألبوم لا «مرفقات» جانبية.
+ */
+export function buildEmailImagesHtml(urls: string[], title: string): string {
+  const clean = urls.filter((u) => /^https:\/\//i.test(u));
+  if (clean.length === 0) return "";
+  const alt = (i: number) => escapeHtml(`${title} - صورة ${i + 2}`.slice(0, 125));
+  if (clean.length === 1) {
+    return `<img src="${escapeHtml(clean[0])}" alt="${alt(0)}" data-align="center" data-width="100%">`;
+  }
+  const images = clean.map((src) => ({ src, caption: "" }));
+  const children = clean
+    .map(
+      (src, i) =>
+        `<div class="album-image-container" style="margin-bottom: 24px;"><img src="${escapeHtml(src)}" alt="${alt(i)}" style="width: 100%; height: auto; border-radius: 8px; display: block;"></div>`,
+    )
+    .join("");
+  return `<div data-image-gallery="" data-images="${escapeHtml(JSON.stringify(images))}" class="photo-album" style="width: 100%; padding: 16px 0;">${children}</div>`;
+}
+
 /** نص الرد على المرسل الموثوق. لا يحوي الرمز ولا نص الرسالة الأصلية. */
 export function buildSenderReply(
   originalSubject: string,

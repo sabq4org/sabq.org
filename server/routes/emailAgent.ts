@@ -28,6 +28,7 @@ import {
   sweepStuckEmailLogs,
 } from "../services/emailAgentDedup";
 import {
+  buildEmailImagesHtml,
   buildSenderReply,
   emailAgentRepliesEnabled,
   evaluateSenderAuth,
@@ -1870,16 +1871,12 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
       channel: "email",
     };
     
-    // Embed additional images (beyond the featured one) as <img> tags in content
-    // so they render on all clients (web, iOS, Android) without needing a separate API call
+    // الصور بعد الأولى: كتلة صورة/ألبوم تحت النص بصيغة المحرر (لا «مرفقات» جانبية، فلا تكرار)
     let finalContent = editorialResult.optimized.content;
     if (uploadedImages.length > 1) {
-      const extraImages = uploadedImages.slice(1);
-      const imgTags = extraImages
-        .map((url, i) => `<img src="${url}" alt="${articleTitle} - صورة ${i + 2}" />`)
-        .join('\n');
-      finalContent = finalContent + '\n' + imgTags;
-      console.log(`[Email Agent] 🖼️ Embedded ${extraImages.length} additional images into article content`);
+      const imagesHtml = buildEmailImagesHtml(uploadedImages.slice(1), articleTitle);
+      if (imagesHtml) finalContent = `${finalContent}\n${imagesHtml}`;
+      console.log(`[Email Agent] 🖼️ Added ${uploadedImages.length - 1} images under the text as an editor block`);
     }
 
     // قرار النشر المباشر: إعداد المرسل، ثم صحة مصدر الرسالة، ثم الكلمات المحظورة.
@@ -2002,8 +1999,9 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
       console.log("[Email Agent]    - Title:", articleData.title);
       console.log("[Email Agent]    - Status:", articleData.status);
       
-      // 🖼️ Link ALL images to article (not just the featured image)
-      const imageAttachments = allAttachmentsMetadata.filter(a => a.type === 'image');
+      // الصورة الرئيسية وحدها تُسجَّل وسيطًا (للتعليق والنص البديل). بقية الصور صارت داخل المتن،
+      // وتسجيلها مرفقات أيضًا كان يكررها في صفحة الخبر («الصور المرفقة») وفي عمود المحرر.
+      const imageAttachments = allAttachmentsMetadata.filter(a => a.type === 'image').slice(0, 1);
       if (article && imageAttachments.length > 0) {
         console.log(`[Email Agent] 🖼️ Linking ${imageAttachments.length} images to article...`);
         
