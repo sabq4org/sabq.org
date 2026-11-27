@@ -107,3 +107,23 @@ describe("mergeIrabPasses", () => {
     expect(r.readings[0].words.every((w) => w.uncertain)).toBe(true);
   });
 });
+
+describe("mergeIrabPasses with different word splits", () => {
+  it("aligns words by text, not by index, when one pass splits a conjunction", () => {
+    const input = "وذهب زيد";
+    const joined = parseIrabPass(JSON.stringify({ valid: true, readings: [{ words: [
+      { word: "وَذَهَبَ", case: "mabni", roleKey: "fiil_madi", role: "فعل ماض", text: "الواو حرف عطف، ذهب فعل ماض." },
+      { word: "زَيْدٌ", case: "raf", roleKey: "fail", role: "فاعل", text: "فاعل مرفوع." },
+    ] }] }), input);
+    const split = parseIrabPass(JSON.stringify({ valid: true, readings: [{ words: [
+      { word: "وَ", case: "mabni", roleKey: "harf", role: "حرف عطف", text: "حرف عطف." },
+      { word: "ذَهَبَ", case: "mabni", roleKey: "fiil_madi", role: "فعل ماض", text: "فعل ماض." },
+      { word: "زَيْدٌ", case: "raf", roleKey: "fail", role: "فاعل", text: "فاعل مرفوع." },
+    ] }] }), input);
+    const r = mergeIrabPasses(input, joined, split);
+    const [first, second] = r.readings[0].words;
+    expect(second.uncertain).toBeFalsy();
+    expect(first.uncertain).toBe(true);
+    expect(first.alt).toBeUndefined();
+  });
+});

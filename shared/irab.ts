@@ -182,7 +182,22 @@ export function parseIrabPass(raw: string, input: string): IrabPass {
 }
 
 function readingSignature(r: IrabReading): string {
-  return r.words.map((w) => `${w.case}:${w.roleKey}`).join("|");
+  return r.words.map((w) => `${bareArabic(w.word)}:${w.case}:${w.roleKey}`).join("|");
+}
+
+/**
+ * يقابل كل كلمة في القراءة الأولى بكلمتها في الثانية بنص الكلمة بلا تشكيل، لا بالفهرس:
+ * قد تفصل إحدى القراءتين واو العطف أو حرف الجر الملتصق ولا تفصله الأخرى.
+ */
+function alignWords(a: IrabWord[], b: IrabWord[]): Array<IrabWord | null> {
+  const used = new Set<number>();
+  return a.map((w) => {
+    const bare = bareArabic(w.word);
+    const j = b.findIndex((o, k) => !used.has(k) && bareArabic(o.word) === bare);
+    if (j < 0) return null;
+    used.add(j);
+    return b[j];
+  });
 }
 
 /**
@@ -214,10 +229,11 @@ export function mergeIrabPasses(input: string, a: IrabPass | null, b: IrabPass |
     allMatched = false;
     // لا تطابق تام: نقارن بالوجه المقابل في الترتيب نفسه كلمة بكلمة.
     const other = b.readings[i] ?? b.readings[0];
+    const aligned = alignWords(r.words, other.words);
     readings.push({
       ...r,
       words: r.words.map((w, wi) => {
-        const o = other.words[wi];
+        const o = aligned[wi];
         if (o && o.case === w.case && o.roleKey === w.roleKey) return w;
         return { ...w, uncertain: true, ...(o ? { alt: { role: o.role, case: o.case, sign: o.sign, text: o.text } } : {}) };
       }),

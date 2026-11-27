@@ -22,6 +22,8 @@ export interface RedisSessionClient {
   renewLock(key: string, val: string, ttlMs: number): Promise<number>;
   releaseLock(key: string, val: string): Promise<number>;
   setLock(key: string, val: string, ttlMs: number): Promise<"OK" | null>;
+  /** INCR ذرّي يضبط مدة الانتهاء عند إنشاء المفتاح فقط. يعيد القيمة بعد الزيادة. */
+  incrWithTtl(key: string, ttlSeconds: number): Promise<number>;
 }
 
 function createSessionAdapter(client: Redis): RedisSessionClient {
@@ -49,6 +51,8 @@ function createSessionAdapter(client: Redis): RedisSessionClient {
       "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", 1, key, val)),
     setLock: (key: string, val: string, ttlMs: number) =>
       client.set(key, val, "PX", ttlMs, "NX") as Promise<"OK" | null>,
+    incrWithTtl: async (key, ttlSeconds) => Number(await client.eval(
+      "local v = redis.call('incr', KEYS[1]) if v == 1 then redis.call('expire', KEYS[1], ARGV[1]) end return v", 1, key, ttlSeconds)),
   };
 }
 

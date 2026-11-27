@@ -106,7 +106,7 @@ async function writeCache(key: string, value: IrabResult): Promise<void> {
   }
 }
 
-/** عدّاد يومي تقريبي للجمل الجديدة (عبر النسختين في Redis، وإلا في ذاكرة النسخة). */
+/** يحجز مكانًا من السقف اليومي للجمل الجديدة بعملية ذرّية (Redis عبر النسختين، وإلا ذاكرة النسخة). */
 async function takeDailySlot(): Promise<boolean> {
   const limit = irabDailyLimit();
   if (limit === 0) return false;
@@ -114,14 +114,12 @@ async function takeDailySlot(): Promise<boolean> {
   const redis = getRedisClient();
   if (redis) {
     try {
-      const current = Number((await redis.get(key)) ?? 0);
-      if (current >= limit) return false;
-      await redis.set(key, String(current + 1), { expiration: { type: "EX", value: 2 * 24 * 3600 } });
-      return true;
+      return (await redis.incrWithTtl(key, 2 * 24 * 3600)) <= limit;
     } catch {
       // نسقط إلى عدّاد الذاكرة.
     }
   }
+  // قراءة وكتابة متتاليتان بلا await بينهما: ذرّيتان داخل النسخة الواحدة.
   const current = memoryCache.get<number>(key) ?? 0;
   if (current >= limit) return false;
   memoryCache.set(key, current + 1, 26 * 3600_000);
