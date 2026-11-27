@@ -21,7 +21,8 @@ async function batchDelete(
   table: string,
   dateColumn: string,
   interval: string,
-  batchSize = 10000
+  batchSize = 10000,
+  extraWhere = ''
 ): Promise<number> {
   let totalDeleted = 0;
   let batchDeleted = 0;
@@ -34,7 +35,7 @@ async function batchDelete(
           DELETE FROM ${table}
           WHERE ctid IN (
             SELECT ctid FROM ${table}
-            WHERE ${dateColumn} < NOW() - INTERVAL '${interval}'
+            WHERE ${dateColumn} < NOW() - INTERVAL '${interval}'${extraWhere ? ` AND (${extraWhere})` : ''}
             LIMIT ${batchSize}
           )
         `)
@@ -82,6 +83,14 @@ async function runDatabaseCleanup(): Promise<void> {
   const sessionsDeleted = await cleanupExpiredSessions();
   log.info(`${LOG_PREFIX} Expired sessions: ${sessionsDeleted} deleted`);
 
+  // إشعارات «نُشر خبر في اهتماماتك» تُولَّد لكل مهتم بالتصنيف عند كل نشر
+  // (~86 ألف صف/يوم في 2026-11، وهي 95% من الجدول). أربعة عشر يوماً تكفيها؛
+  // بقية الأنواع (تحريرية، تذاكر، رياضة) تبقى 30 يوماً.
+  const feedNotificationsDeleted = await batchDelete(
+    'notifications_inbox', 'created_at', '14 days', 10000, "type = 'ArticlePublished'",
+  );
+  log.info(`${LOG_PREFIX} Category-feed notifications (>14d): ${feedNotificationsDeleted} deleted`);
+
   const notificationsDeleted = await batchDelete('notifications_inbox', 'created_at', '30 days');
   log.info(`${LOG_PREFIX} Old notifications (>30d): ${notificationsDeleted} deleted`);
 
@@ -100,8 +109,11 @@ async function runDatabaseCleanup(): Promise<void> {
   // عدّادات المشاهدة لكل IP تخدم منع التلاعب قصير الأمد فقط — صف لم يُرَ منذ
   // 90 يومًا لا قيمة له، وبدون هذا البند كان الجدول ينمو بلا حد (1.9GB في
   // 40 يومًا وقت تدقيق 2026-07-25).
-  const ipViewsDeleted = await batchDelete('article_ip_views', 'last_seen', '90 days');
-  log.info(`${LOG_PREFIX} Old article IP views (>90d): ${ipViewsDeleted} deleted`);
+  // 30 يوماً بدل 90: منع التكرار لا يحتاج أكثر، والجدول بلغ 4.8 GB (8.7 مليون صف)
+  // لأن هذا البند كان يفشل كل ليلة بمهلة 15ث — لا فهرس على last_seen
+  // (migrations/20261102_prod_cleanup_bloat_indexes.sql يضيفه).
+  const ipViewsDeleted = await batchDelete('article_ip_views', 'last_seen', '30 days');
+  log.info(`${LOG_PREFIX} Old article IP views (>30d): ${ipViewsDeleted} deleted`);
 
   // سقف زمني لإحصاءات المقالات اليومية — المستهلكون يقرؤون 30-365 يومًا فقط.
   const dailyStatsDeleted = await batchDelete('article_daily_stats', 'date', '400 days');
@@ -129,7 +141,7 @@ export function startDatabaseCleanupJob(): void {
   cron.schedule('0 3 * * *', async () => {
     await runDatabaseCleanup();
   });
-  log.info(`${LOG_PREFIX} Scheduled daily cleanup at 3:00 AM (sessions, notifications 30d, email logs 30d, clicks 180d, activity/behavior 90d, ip-views 90d, daily-stats 400d, auth tokens 1d, mobile sessions 7d)`);
+  log.info(`${LOG_PREFIX} Scheduled daily cleanup at 3:00 AM (sessions, notifications 30d, email logs 30d, clicks 180d, activity/behavior 90d, ip-views 30d, feed-notifications 14d, daily-stats 400d, auth tokens 1d, mobile sessions 7d)`);
 }
 
 export { runDatabaseCleanup, cleanupExpiredSessions };
