@@ -465,6 +465,7 @@ struct WriterWorkspaceView: View {
     /// «طلب تعديل» على مقال منشور: نفس نموذج المراسل وقرار المحرر (2026-10-31).
     @State private var editRequestTarget: WriterTrackingArticle?
     @State private var socialTarget: WriterTrackingArticle?
+    @State private var extrasTarget: WriterTrackingArticle?
     @State private var showSlotChange = false
     @State private var showRevisions = false
     @Environment(\.openURL) private var openURL
@@ -514,6 +515,9 @@ struct WriterWorkspaceView: View {
         }
         .sheet(item: $socialTarget) { article in
             WriterSocialProposalSheet(articleId: article.id, articleTitle: article.title)
+        }
+        .sheet(item: $extrasTarget) { article in
+            WriterOpinionExtrasSheet(articleId: article.id, articleTitle: article.title)
         }
         .sheet(isPresented: $showSlotChange) {
             if let state = vm.home?.slotChange {
@@ -1311,6 +1315,14 @@ struct WriterWorkspaceView: View {
                     .padding(SabqLayout.space12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+            }
+            if article.reviewStatus != "rejected" {
+                Button {
+                    extrasTarget = article
+                } label: {
+                    actionLabel(icon: "quote.opening", text: "جملة المقال والتصويت", tint: SabqTheme.primary)
+                }
+                .buttonStyle(.plain)
             }
             HStack(spacing: SabqLayout.space16) {
                 if article.reviewStatus == "needs_changes" {

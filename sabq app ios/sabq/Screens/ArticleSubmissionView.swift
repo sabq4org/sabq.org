@@ -41,6 +41,10 @@ struct ArticleSubmissionView: View {
     // البديل: UIKit يدير التركيز بنفسه، والإغلاق عبر سلسلة المستجيبين،
     // وحالة @State عادية لتلوين إطار المحرر فقط.
     @State private var isBodyEditing = false
+    // «جملة المقال» و«أوافق / لا أوافق» (مقال الرأي فقط) تُحفظ بعد الإرسال.
+    @State private var pullQuote = ""
+    @State private var agreeVoteOn = false
+    @State private var extrasWarning: String?
 
     // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره قبل أول إرسال،
     // ثم يُستكمل الإرسال تلقائياً بعد التثبيت.
@@ -386,6 +390,15 @@ struct ArticleSubmissionView: View {
 
             imagesSection
 
+            if kind == .opinion {
+                OpinionExtrasFields(quote: $pullQuote, agreeOn: $agreeVoteOn, authorName: authStore.currentUser?.displayName)
+                    .padding(SabqLayout.space12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(SabqTheme.separator, lineWidth: 1)
+                    )
+            }
+
             submitButton
         }
     }
@@ -615,7 +628,8 @@ struct ArticleSubmissionView: View {
 
     private var submitButton: some View {
         let isBlockedByActivePipeline = blockingUnpublishedArticleTitle != nil
-        let enabled = isFormValid && screenState != .submitting && !isBlockedByActivePipeline
+        let quoteOK = kind != .opinion || OpinionExtrasRules.problem(pullQuote) == nil
+        let enabled = isFormValid && quoteOK && screenState != .submitting && !isBlockedByActivePipeline
         let filled = enabled || screenState == .submitting
         return Button {
             Task { await submit() }
@@ -629,7 +643,7 @@ struct ArticleSubmissionView: View {
                 }
                 Text(screenState == .submitting
                      ? (uploadProgress ?? "جاري الإرسال...")
-                     : (kind == .opinion ? "إرسال المقالة" : "إرسال الخبر"))
+                     : (kind == .opinion ? "إرسال للمراجعة" : "إرسال الخبر"))
                     .sabqText(SabqType.button)
             }
             .foregroundStyle(filled ? SabqTheme.onAction : SabqTheme.disabledInk)
@@ -709,6 +723,14 @@ struct ArticleSubmissionView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(5)
                 .frame(maxWidth: .infinity)
+
+            if let extrasWarning {
+                Text(extrasWarning)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.danger)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
 
             // Status timeline — three small steps showing what happens
             // next so the user understands the journey of their content.
@@ -791,6 +813,17 @@ struct ArticleSubmissionView: View {
                 }
             )
             uploadProgress = nil
+            if kind == .opinion, let articleId = resp.article?.id,
+               !pullQuote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || agreeVoteOn {
+                do {
+                    try await APIClient.shared.saveOpinionExtras(
+                        articleId: articleId, pullQuote: pullQuote, agreeVoteEnabled: agreeVoteOn
+                    )
+                } catch {
+                    // المقال وصل؛ الإضافات تُستكمل من «مقالاتي».
+                    extrasWarning = "وصل مقالك، لكن تعذر حفظ جملة المقال أو التصويت. أضفها من «مقالاتي»."
+                }
+            }
             await MainActor.run {
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
                     screenState = .success

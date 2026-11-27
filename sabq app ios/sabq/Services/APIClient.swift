@@ -331,6 +331,28 @@ actor APIClient {
         return try await perform(request, as: Response.self).agree
     }
 
+    /// الكاتب (أو التحرير) يحفظ الجملة ومفتاح التصويت. جملة فارغة تحذفها.
+    func saveOpinionExtras(articleId: String, pullQuote: String, agreeVoteEnabled: Bool) async throws {
+        struct Body: Encodable {
+            let pullQuote: String?
+            let agreeVoteEnabled: Bool
+            enum CodingKeys: String, CodingKey { case pullQuote, agreeVoteEnabled }
+            // null صريح: الحذف يحتاجه، وEncodable يُسقط المفتاح إن كان nil.
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(pullQuote, forKey: .pullQuote)
+                try c.encode(agreeVoteEnabled, forKey: .agreeVoteEnabled)
+            }
+        }
+        struct OK: Decodable {}
+        let trimmed = pullQuote.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try await put(
+            OK.self,
+            path: "/opinion-extras/\(articleId)",
+            body: Body(pullQuote: trimmed.isEmpty ? nil : trimmed, agreeVoteEnabled: agreeVoteEnabled)
+        )
+    }
+
     func deleteRequest<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
         let url = try buildURL(path: path)
         var request = URLRequest(url: url)
