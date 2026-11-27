@@ -156,6 +156,9 @@ const EXEMPT_REGEX = [
   // Muqtarab public topic view counter only; the signed-in topic comment POST
   // under the same /topics/:id/ prefix stays protected.
   /^\/api\/muqtarab\/topics\/[^/]+\/view$/,
+  // «أعرِب»: إعراب جملة للعموم. لا يقرأ الجلسة ولا يغيّر بيانات مستخدم، والحماية
+  // من الإسراف بحد لكل IP وسقف يومي في irabService.
+  /^\/api\/irab$/,
 ];
 
 export function isCsrfExemptRequest(

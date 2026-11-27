@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T18:27:55.890Z",
+  "generatedAt": "2026-11-27T18:03:05.612Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 452,
+      "fileCount": 624,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -171,7 +171,7 @@
     },
     {
       "id": "push-notifications",
-      "fileCount": 29,
+      "fileCount": 31,
       "samplePaths": [
         "server/services/fcmPayload.ts",
         "server/services/fcmRouting.ts",
@@ -213,16 +213,16 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 82,
+      "fileCount": 93,
       "samplePaths": [
-        "server/seoInjector.ts",
-        "server/middleware/slugRedirect.ts",
-        "server/routes/edgeMeta.ts",
-        "server/utils/noindexPaths.ts",
-        "web-next/.dockerignore",
-        "web-next/.env.example",
-        "web-next/.gitignore",
-        "web-next/Dockerfile"
+        "server/routes/sitemapIndex.ts",
+        "tests/unit/sitemapIndex.test.ts",
+        "shared/seoWeekly.ts",
+        "server/services/seoWeeklyService.ts",
+        "server/routes/seoWeekly.ts",
+        "server/jobs/seoWeeklyJob.ts",
+        "client/src/pages/dashboard/SeoWeeklyReport.tsx",
+        "tests/unit/seoWeekly.test.ts"
       ]
     },
     {
@@ -290,7 +290,7 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 51,
+      "fileCount": 52,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -346,7 +346,7 @@
     },
     {
       "id": "ai-staff",
-      "fileCount": 23,
+      "fileCount": 24,
       "samplePaths": [
         "shared/aiStaffRoster.ts",
         "server/services/aiStaffService.ts",
@@ -412,6 +412,18 @@
         "android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/SabqAnalytics.kt",
         "android-native/app/src/test/kotlin/com/sabq/smart/data/analytics/AnalyticsPolicyTest.kt",
         "scripts/verify-mobile-firebase-config.py"
+      ]
+    },
+    {
+      "id": "irab",
+      "fileCount": 6,
+      "samplePaths": [
+        "client/public/irab/index.html",
+        "server/routes/irab.ts",
+        "server/services/irabService.ts",
+        "shared/irab.ts",
+        "tests/unit/irab.test.ts",
+        "docs/systems/irab/SYSTEM.md"
       ]
     }
   ]
