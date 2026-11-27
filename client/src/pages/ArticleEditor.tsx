@@ -716,7 +716,8 @@ export default function ArticleEditor() {
 
   // Fetch media assets for this article
   const { data: mediaAssetsRaw, refetch: refetchMediaAssets } = useQuery<any[]>({
-    queryKey: ["/api/articles", article?.id, "media-assets"],
+    // fresh: قائمة المرفقات في المحرر تُقرأ بلا كاش، فلا يعود مرفق حُذف للتو
+    queryKey: ["/api/articles", article?.id, "media-assets", { fresh: "1" }],
     enabled: !isNewArticle && !!article?.id,
   });
   const mediaAssets = Array.isArray(mediaAssetsRaw) ? mediaAssetsRaw : [];

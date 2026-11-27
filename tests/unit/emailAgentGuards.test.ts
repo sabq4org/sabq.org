@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildEmailImagesHtml,
   buildSenderReply,
   evaluateSenderAuth,
   matchDetectedCategory,
@@ -247,5 +248,30 @@ describe("matchDetectedCategory", () => {
 
   it("never matches an excluded section", () => {
     expect(matchDetectedCategory("آي فوكس تقنية", usable)?.id).not.toBe("8");
+  });
+});
+
+describe("buildEmailImagesHtml", () => {
+  const a = "https://media.sabq.org/news/a/w1200.webp";
+  const b = "https://media.sabq.org/news/b/w1200.webp";
+
+  it("returns nothing without https images", () => {
+    expect(buildEmailImagesHtml([], "عنوان")).toBe("");
+    expect(buildEmailImagesHtml(["http://x/y.jpg", "/objects/z"], "عنوان")).toBe("");
+  });
+
+  it("one extra image becomes a normal editor image", () => {
+    const html = buildEmailImagesHtml([a], "عنوان");
+    expect(html).toContain(`<img src="${a}"`);
+    expect(html).not.toContain("data-image-gallery");
+  });
+
+  it("several extra images become one album block the editor can parse", () => {
+    const html = buildEmailImagesHtml([a, b], 'عنوان "مقتبس"');
+    expect(html.startsWith('<div data-image-gallery=""')).toBe(true);
+    const attr = /data-images="([^"]*)"/.exec(html)![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    expect(JSON.parse(attr)).toEqual([{ src: a, caption: "" }, { src: b, caption: "" }]);
+    expect(html.match(/<img /g)).toHaveLength(2);
+    expect(html).not.toContain('"مقتبس"');
   });
 });
