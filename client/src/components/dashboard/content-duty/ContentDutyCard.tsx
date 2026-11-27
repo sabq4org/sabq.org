@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { pickStripConversations, type DutyChatConversation } from "@shared/dutyChat";
+import { pickStripConversations, type DutyStripItem } from "@shared/dutyChat";
 import type { ContentDutyCardEntry, ContentDutyCardResponse } from "@shared/contentDuty";
 import { useContentDutyCard } from "@/hooks/useContentDuty";
 import { formatRemaining, statusLabel, statusTone } from "@/lib/contentDuty";
@@ -142,14 +142,15 @@ export default function ContentDutyCard() {
   // شريط لكل مناوب تحت صفه، فلا تختفي رسالة أحدهما حين يناوب الاثنان معًا.
   const strips = chatOn && inbox.data
     ? pickStripConversations(inbox.data.conversations, onDutyIds, user?.id)
-    : { byPeer: new Map<string, DutyChatConversation>(), extra: null };
+    : { byPeer: new Map<string, DutyStripItem>(), extra: null };
   const subtitleFor = (peerId: string) => {
     const e = data.onDuty.find((x) => x.userId === peerId);
     return e ? `مناوب ${e.start} – ${e.end}` : null;
   };
-  const stripFor = (conv: DutyChatConversation) => (
+  const stripFor = ({ conversation: conv, compact }: DutyStripItem) => (
     <DutyChatStrip
       conversation={conv}
+      compact={compact}
       onOpen={() => setChat({ id: conv.peer.id, name: conv.peer.name, subtitle: subtitleFor(conv.peer.id) })}
     />
   );

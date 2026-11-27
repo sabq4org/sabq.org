@@ -1,11 +1,34 @@
 // الشريط تحت بطاقة المناوبة: آخر رسالة لم تُقرأ أو «تنبيه» لم يُؤكَّد، وإلا آخر محادثة مع المناوب الآن.
 import { attachmentLabel, type DutyChatConversation } from "@shared/dutyChat";
 import { usePeerTyping } from "@/hooks/useDutyChat";
-import { ChatAvatar, CheckIcon, Ticks, chatTime } from "./dutyChatUi";
+import { ChatAvatar, CheckIcon, Ticks, chatDayLabel, chatTime } from "./dutyChatUi";
 
-export default function DutyChatStrip({ conversation, onOpen }: { conversation: DutyChatConversation; onOpen: () => void }) {
+export default function DutyChatStrip({ conversation, onOpen, compact = false }: { conversation: DutyChatConversation; onOpen: () => void; compact?: boolean }) {
   const { peer, last, unread, pendingAcks } = conversation;
   const typing = usePeerTyping(peer.id);
+  if (compact) {
+    // رسالة قديمة مني لم تُقرأ: سطر صغير بدل الشريط الكامل.
+    const what = last.kind === "alert" && last.readAt ? "تنبيهك" : "رسالتك";
+    const state = last.kind === "alert" && last.readAt ? "لم يُؤكَّد استلامه" : "لم تُقرأ بعد";
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-white/70 px-3 py-1.5 text-start text-[13px] text-[#55667A] hover:bg-white"
+        aria-label={`${what} إلى ${peer.name} ${state}، افتح المحادثة`}
+      >
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[#E8A23A]" aria-hidden="true" />
+        <span className="truncate">
+          {what} إلى <strong className="font-semibold text-[#1B2B3A]">{peer.name}</strong> {state}
+        </span>
+        <span className="shrink-0">
+          {chatDayLabel(last.createdAt) === "اليوم" ? "" : `${chatDayLabel(last.createdAt)} `}
+          <bdi dir="ltr">{chatTime(last.createdAt)}</bdi>
+        </span>
+        <span className="shrink-0 font-semibold text-[#0B6FA8]">افتح</span>
+      </button>
+    );
+  }
   const incomingPending = unread > 0 || pendingAcks > 0;
   const fileLabel = attachmentLabel(last.attachment);
 

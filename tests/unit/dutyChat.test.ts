@@ -9,6 +9,7 @@ import {
   normalizeBody,
   pickStripConversation,
   pickStripConversations,
+  stripItemFor,
   safeFileName,
   tickFor,
   type DutyChatConversation,
@@ -29,6 +30,8 @@ const msg = (over: Partial<DutyChatMessage> = {}): DutyChatMessage => ({
   ackedAt: null,
   ...over,
 });
+
+const NOW = Date.parse("2026-11-26T19:00:00Z");
 
 const conv = (peerId: string, createdAt: string, over: Partial<DutyChatConversation> = {}): DutyChatConversation => ({
   peer: { id: peerId, name: peerId, initial: peerId[0], online: false, lastSeenAt: null },
@@ -133,16 +136,34 @@ describe("duty chat input", () => {
 
   it("gives each on-duty colleague their own strip so one chat never hides the other", () => {
     const list = [conv("ali", "2026-11-26T18:40:00Z"), conv("salah", "2026-11-26T18:20:00Z", { pendingAcks: 1 })];
-    const { byPeer, extra } = pickStripConversations(list, ["salah", "ali"], "lead");
+    const { byPeer, extra } = pickStripConversations(list, ["salah", "ali"], "lead", NOW);
     expect([...byPeer.keys()].sort()).toEqual(["ali", "salah"]);
     expect(extra).toBeNull();
     // رسالة منتظرة من غير المناوبين تظهر في شريط مستقل.
-    const more = pickStripConversations([...list, conv("off", "2026-11-26T18:41:00Z", { unread: 1 })], ["salah", "ali"], "lead");
-    expect(more.extra?.peer.id).toBe("off");
+    const more = pickStripConversations([...list, conv("off", "2026-11-26T18:41:00Z", { unread: 1 })], ["salah", "ali"], "lead", NOW);
+    expect(more.extra?.conversation.peer.id).toBe("off");
     // المناوب نفسه يرى محادثته مع المسؤول، ولا يُحسب صفه هو.
-    const self = pickStripConversations([conv("lead", "2026-11-26T18:42:00Z")], ["salah", "me"], "me");
+    const self = pickStripConversations([conv("lead", "2026-11-26T18:42:00Z")], ["salah", "me"], "me", NOW);
     expect(self.byPeer.size).toBe(0);
-    expect(self.extra?.peer.id).toBe("lead");
+    expect(self.extra?.conversation.peer.id).toBe("lead");
+  });
+});
+
+describe("stale strips", () => {
+  const later = Date.parse("2026-11-27T17:30:00Z");
+  it("hides an old read conversation, keeps an old unread one as a compact line", () => {
+    const read = conv("amjad", "2026-11-26T13:24:00Z", { last: msg({ createdAt: "2026-11-26T13:24:00Z", readAt: "2026-11-26T13:30:00Z" }) });
+    expect(pickStripConversations([read], ["amjad"], "lead", later).byPeer.size).toBe(0);
+    const unreadByPeer = conv("amjad", "2026-11-26T13:24:00Z");
+    expect(pickStripConversations([unreadByPeer], ["amjad"], "lead", later).byPeer.get("amjad")?.compact).toBe(true);
+    // ما ينتظرني يبقى كاملًا مهما قدُم.
+    const waiting = conv("amjad", "2026-11-26T13:24:00Z", { unread: 2, last: msg({ mine: false, createdAt: "2026-11-26T13:24:00Z" }) });
+    expect(pickStripConversations([waiting], ["amjad"], "lead", later).byPeer.get("amjad")?.compact).toBe(false);
+    // تنبيه قُرئ ولم يُؤكَّد: سطر صغير.
+    const alert = conv("amjad", "2026-11-26T13:24:00Z", { last: msg({ kind: "alert", createdAt: "2026-11-26T13:24:00Z", readAt: "2026-11-26T13:30:00Z" }) });
+    expect(stripItemFor(alert, later)?.compact).toBe(true);
+    // خلال 3 ساعات: كامل.
+    expect(stripItemFor(read, Date.parse("2026-11-26T15:00:00Z"))?.compact).toBe(false);
   });
 });
 
