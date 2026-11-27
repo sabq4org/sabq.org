@@ -15,6 +15,14 @@ import {
   isUserEligible,
 } from "../services/meetingsService";
 import { countMinutesRecipients } from "../services/meetingArchiveService";
+import { minutesPdfFileName } from "../services/meetingMinutesDocument";
+import {
+  canDownloadMinutesPdf,
+  didUserAttend,
+  generateMinutesPdf,
+  MinutesPdfBusyError,
+  MinutesPdfTimeoutError,
+} from "../services/meetingMinutesPdfService";
 import {
   approveAndDistributeMinutes,
   cleanupOldTranscripts,
@@ -131,8 +139,16 @@ router.get(
           ? await countMinutesRecipients(meeting.id)
           : undefined;
 
+      // ملف PDF: للمضيف دائماً (مسودة أو معتمد)، ولمن حضر بعد الاعتماد
+      const canDownloadPdf = canDownloadMinutesPdf({
+        isHost,
+        minutesStatus: meeting.minutesStatus,
+        attended: isHost ? true : await didUserAttend(meeting.id, userId),
+      });
+
       res.json({
         recipients,
+        canDownloadPdf,
         minutesEnabled: meeting.minutesEnabled,
         minutesStatus: meeting.minutesStatus,
         minutes: showMinutes ? meeting.minutes : null,
@@ -144,6 +160,53 @@ router.get(
     } catch (error) {
       console.error("[Minutes] get error:", error);
       res.status(500).json({ message: "تعذر جلب المحضر" });
+    }
+  },
+);
+
+// ملف المحضر PDF بهوية سبق — للمضيف (مسودة أو معتمد) ولمن حضر بعد الاعتماد
+router.get(
+  "/api/meetings/:id/minutes/pdf",
+  isAuthenticated,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as { id: string }).id;
+      const meeting = await getMeeting(req.params.id);
+      if (!meeting) return res.status(404).json({ message: "الاجتماع غير موجود" });
+
+      const isHost = meeting.hostUserId === userId || (await hasManage(req));
+      const allowed = canDownloadMinutesPdf({
+        isHost,
+        minutesStatus: meeting.minutesStatus,
+        attended: isHost ? true : await didUserAttend(meeting.id, userId),
+      });
+      if (!allowed) {
+        return res.status(403).json({ message: "ملف المحضر متاح لمن حضر الاجتماع بعد اعتماده" });
+      }
+
+      // الافتراضي للجميع نسخة التوزيع بلا تفريغ. الملحق بطلب صريح من المضيف
+      // وحده (نفس قاعدة /transcript)؛ ?transcript=1 من غيره يُتجاهل.
+      const withTranscript = isHost && req.query.transcript === "1";
+      const pdf = await generateMinutesPdf(meeting, { includeTranscript: withTranscript });
+      if (!pdf) return res.status(404).json({ message: "لا يوجد محضر لهذا الاجتماع" });
+
+      const fileName = minutesPdfFileName(meeting.title, meeting.endedAt ?? meeting.startedAt, withTranscript);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="minutes.pdf"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      );
+      res.setHeader("Content-Length", String(pdf.length));
+      // وثيقة داخلية خاصة بالمستخدم — لا كاش وسيط
+      res.setHeader("Cache-Control", "private, no-store");
+      res.end(pdf);
+    } catch (error) {
+      if (error instanceof MinutesPdfBusyError || error instanceof MinutesPdfTimeoutError) {
+        res.setHeader("Retry-After", "15");
+        return res.status(503).json({ message: "يُجهَّز عدد من المحاضر الآن — أعد المحاولة بعد لحظات" });
+      }
+      console.error("[Minutes] pdf error:", error);
+      res.status(500).json({ message: "تعذر توليد ملف المحضر" });
     }
   },
 );
