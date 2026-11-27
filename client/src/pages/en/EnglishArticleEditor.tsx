@@ -55,6 +55,7 @@ import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDia
 import { NEWS_IMAGE_MAX_BYTES } from "@/lib/newsImageUpload";
 import { buildEnHeroImageSeoFields, EN_IMAGE_ALT_MAX, EN_IMAGE_CAPTION_MAX } from "@shared/enArticleImageText";
 import type { Editor } from "@tiptap/react";
+import { riyadhWallToIso, toRiyadhWall } from "@/lib/riyadhSchedule";
 
 /** Calmer side-panel headings (English Desk redesign). */
 const EDITOR_CARD_TITLE = "text-[15px] font-bold leading-snug tracking-normal";
@@ -192,7 +193,7 @@ export default function EnglishArticleEditor() {
       setArticleType((article.articleType as any) || "news");
       setNewsType((article.newsType as any) || "regular");
       setPublishType((article.publishType as any) || "instant");
-      setScheduledAt(article.scheduledAt ? new Date(article.scheduledAt).toISOString().slice(0, 16) : "");
+      setScheduledAt(article.scheduledAt ? toRiyadhWall(article.scheduledAt) : "");
       setHideFromHomepage(article.hideFromHomepage || false);
       
       // Validate SEO fields - truncate if too long (legacy data cleanup)
@@ -298,7 +299,7 @@ export default function EnglishArticleEditor() {
         imageFocalPoint: imageFocalPoint || null,
         articleType,
         publishType,
-        scheduledAt: publishType === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        scheduledAt: publishType === "scheduled" && scheduledAt ? riyadhWallToIso(scheduledAt) : null,
         hideFromHomepage,
         status: publishNow 
           ? (publishType === "scheduled" ? "scheduled" : "published")
@@ -332,7 +333,7 @@ export default function EnglishArticleEditor() {
         if (publishNow && publishType === "instant") {
           articleData.publishedAt = new Date().toISOString();
         } else if (publishNow && publishType === "scheduled" && scheduledAt) {
-          articleData.publishedAt = new Date(scheduledAt).toISOString();
+          articleData.publishedAt = riyadhWallToIso(scheduledAt) ?? new Date().toISOString();
         }
       } else {
         // For updates, include republish flag
@@ -1351,7 +1352,7 @@ export default function EnglishArticleEditor() {
                 
                 {publishType === "scheduled" && (
                   <div className="space-y-2">
-                    <Label>Date and Time</Label>
+                    <Label>Date and Time (Riyadh time)</Label>
                     <Input
                       type="datetime-local"
                       value={scheduledAt}

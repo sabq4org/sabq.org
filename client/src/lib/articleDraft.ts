@@ -1,3 +1,5 @@
+import { draftScheduledAtToRiyadh, toRiyadhWall } from "@/lib/riyadhSchedule";
+
 /** Compare the draft with the SAME defaults/normalizations used to load the form. */
 export function draftDiffersFromArticle(
   draft: Record<string, unknown>,
@@ -5,12 +7,9 @@ export function draftDiffersFromArticle(
   ignoredKeys: readonly string[] = [],
 ): boolean {
   const image = (value: unknown) => typeof value === "string" && (/^https?:\/\/.+/.test(value) || value.startsWith("/")) ? value : "";
-  let scheduledAt = "";
-  if (article.scheduledAt && article.status !== "published") {
-    const date = new Date(article.scheduledAt);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    scheduledAt = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  }
+  // الموعد بساعة الرياض كما يحمّله المحرر؛ المسودات القديمة (بساعة الجهاز) تُرحَّل قبل المقارنة.
+  const scheduledAt = article.scheduledAt && article.status !== "published" ? toRiyadhWall(article.scheduledAt) : "";
+  draft = { ...draft, scheduledAt: draftScheduledAtToRiyadh(draft.scheduledAt, draft.scheduledAtZone) };
   const stored: Record<string, unknown> = {
     ...article,
     articleType: article.articleType || "news",
@@ -25,6 +24,6 @@ export function draftDiffersFromArticle(
     metaDescription: article.seo?.metaDescription?.substring(0, 160) || "",
   };
   for (const key of ["isFeatured", "isReading", "hideFromHomepage", "isVideoTemplate"]) stored[key] = Boolean(article[key]);
-  return Object.keys(draft).some(key => key !== "savedAt" && !ignoredKeys.includes(key) &&
+  return Object.keys(draft).some(key => key !== "savedAt" && key !== "scheduledAtZone" && !ignoredKeys.includes(key) &&
     JSON.stringify(draft[key] ?? "") !== JSON.stringify(stored[key] ?? ""));
 }

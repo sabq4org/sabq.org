@@ -73,7 +73,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { displayTimeZone } from "@/lib/displayTimeZone";
+import { displayTimeZone, RIYADH_TIME_ZONE } from "@/lib/displayTimeZone";
+import { deviceDiffersFromRiyadh, RIYADH_NOTE } from "@/lib/riyadhSchedule";
 
 type Article = {
   id: string;
@@ -264,9 +265,9 @@ function parseArticleDate(value: string | Date | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function riyadhParts(date: Date) {
+function riyadhParts(date: Date, timeZone: string = displayTimeZone()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: displayTimeZone(),
+    timeZone,
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -287,6 +288,11 @@ function riyadhParts(date: Date) {
   };
 }
 
+/** مواعيد الجدولة بتوقيت الرياض؛ التنويه ظاهر لمن جهازه على توقيت آخر (مثل مصر). */
+function scheduleLabel(label: string) {
+  return deviceDiffersFromRiyadh() ? `${label} ${RIYADH_NOTE}` : label;
+}
+
 function shiftDayKey(key: string, days: number) {
   const [year, month, day] = key.split("-").map(Number);
   const shifted = new Date(Date.UTC(year, month - 1, day + days));
@@ -296,10 +302,10 @@ function shiftDayKey(key: string, days: number) {
   return `${y}-${m}-${d}`;
 }
 
-function riyadhWireLabel(date: Date, now = new Date()) {
-  const current = riyadhParts(date);
-  const today = riyadhParts(now);
-  const full = `${current.day} ${current.monthName} ${current.year}، ${current.clock}`;
+function riyadhWireLabel(date: Date, now = new Date(), timeZone: string = displayTimeZone()) {
+  const current = riyadhParts(date, timeZone);
+  const today = riyadhParts(now, timeZone);
+  const full = `${current.day} ${current.monthName} ${current.year}، ${current.clock}${timeZone === RIYADH_TIME_ZONE ? ` ${RIYADH_NOTE}` : ""}`;
   const iso = date.toISOString();
   if (current.dayKey === today.dayKey) return { label: current.clock, full, iso };
   if (current.dayKey === shiftDayKey(today.dayKey, -1)) return { label: `أمس ${current.clock}`, full, iso };
@@ -318,8 +324,10 @@ function wireMoment(article: Article, desktop: boolean) {
       prefix: "موعد النشر",
       testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
     };
+    const scheduledWhen = riyadhWireLabel(when, new Date(), RIYADH_TIME_ZONE);
     return {
-      ...riyadhWireLabel(when),
+      ...scheduledWhen,
+      label: scheduleLabel(scheduledWhen.label),
       prefix: "موعد النشر",
       testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
     };
@@ -339,11 +347,11 @@ function wireMoment(article: Article, desktop: boolean) {
       : null;
     const weekly = parseArticleDate(weeklyAt);
     if (weekly) {
-      const when = riyadhWireLabel(weekly);
-      const parts = riyadhParts(weekly);
+      const when = riyadhWireLabel(weekly, new Date(), RIYADH_TIME_ZONE);
+      const parts = riyadhParts(weekly, RIYADH_TIME_ZONE);
       const compactLabel = `${parts.day} ${parts.monthName}، ${parts.clock}`;
       return {
-        label: desktop && parts.year === riyadhParts(new Date()).year ? compactLabel : when.full,
+        label: scheduleLabel(desktop && parts.year === riyadhParts(new Date(), RIYADH_TIME_ZONE).year ? compactLabel : `${parts.day} ${parts.monthName} ${parts.year}، ${parts.clock}`),
         full: when.full,
         iso: when.iso,
         prefix: "موعد الكاتب",
@@ -792,9 +800,9 @@ function shortSpan(ms: number) {
 }
 
 /** تسمية الوقت داخل العمود: الساعة وحدها لليوم، واليوم والساعة لما سواه */
-function deskClock(date: Date, now: Date) {
-  const current = riyadhParts(date);
-  const today = riyadhParts(now);
+function deskClock(date: Date, now: Date, timeZone: string = displayTimeZone()) {
+  const current = riyadhParts(date, timeZone);
+  const today = riyadhParts(now, timeZone);
   if (current.dayKey === today.dayKey) return current.clock;
   if (current.dayKey === shiftDayKey(today.dayKey, -1)) return `أمس ${current.clock}`;
   if (current.dayKey === shiftDayKey(today.dayKey, 1)) return `غدًا ${current.clock}`;
@@ -826,7 +834,7 @@ function deskMoment(article: Article, now: Date): DeskMoment | null {
     const testId = `scheduled-label-desktop-${id}`;
     if (!when) return { kicker: "موعد النشر", clock: "غير محدد", sub: "بلا موعد صالح", tone: "amber", full: "هذه المادة مجدولة بلا موعد نشر صالح", testId };
     const diff = when.getTime() - now.getTime();
-    const base = { clock: deskClock(when, now), iso: when.toISOString(), full: riyadhWireLabel(when, now).full, testId };
+    const base = { clock: scheduleLabel(deskClock(when, now, RIYADH_TIME_ZONE)), iso: when.toISOString(), full: riyadhWireLabel(when, now, RIYADH_TIME_ZONE).full, testId };
     return diff <= 0
       ? { ...base, kicker: "فات الموعد", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
       : { ...base, kicker: "موعد النشر", sub: `بعد ${shortSpan(diff)}`, tone: "sky" };
@@ -836,7 +844,7 @@ function deskMoment(article: Article, now: Date): DeskMoment | null {
     const testId = `weekly-slot-desktop-${id}`;
     if (!slot) return { kicker: "موعد الكاتب", clock: "غير محدد", sub: "حدّده من لوحة الكتّاب", tone: "amber", full: "لم يُحدد موعد نشر لهذا الكاتب", testId };
     const diff = slot.getTime() - now.getTime();
-    const base = { clock: deskClock(slot, now), iso: slot.toISOString(), full: riyadhWireLabel(slot, now).full, testId };
+    const base = { clock: scheduleLabel(deskClock(slot, now, RIYADH_TIME_ZONE)), iso: slot.toISOString(), full: riyadhWireLabel(slot, now, RIYADH_TIME_ZONE).full, testId };
     return diff <= 0
       ? { ...base, kicker: "فات موعد الكاتب", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
       : { ...base, kicker: "موعد الكاتب", sub: `بعد ${shortSpan(diff)}`, tone: "violet" };
@@ -1046,7 +1054,9 @@ function deskDayLabel(key: string, todayKey: string) {
 
 /** يقسم الصفحة الحالية إلى مجموعات: باليوم للمنشور والمجدول، وبالنوع للمسودات. */
 function buildDeskList(articles: Article[], status: string, now: Date): DeskListItem[] {
-  const todayKey = riyadhParts(now).dayKey;
+  // أيام المجدولة بتوقيت الرياض مثل مواعيدها؛ المنشور بتوقيت الجهاز.
+  const groupZone = status === "scheduled" ? RIYADH_TIME_ZONE : displayTimeZone();
+  const todayKey = riyadhParts(now, groupZone).dayKey;
   if (status === BOT_DRAFT_READY_STATUS) {
     if (!articles.length) return [];
     return [
@@ -1085,7 +1095,7 @@ function buildDeskList(articles: Article[], status: string, now: Date): DeskList
       label = when ? "فات موعد نشرها" : "بلا موعد صالح";
       tone = "red";
     } else if (when) {
-      key = riyadhParts(when).dayKey;
+      key = riyadhParts(when, groupZone).dayKey;
       label = deskDayLabel(key, todayKey);
     } else {
       key = "undated";
