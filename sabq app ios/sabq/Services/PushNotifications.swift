@@ -27,6 +27,8 @@ enum NotificationDeepLink: Hashable {
     case roshnTeam(id: Int)
     case roshnMatch(id: Int)
     case survey(token: String)
+    /// sabq://writer/tickets/<id> — ردّ التحرير على محادثة الكاتب.
+    case writerTicket(id: String)
 }
 
 /// Coordinator owned by `sabqApp` — exposes the latest APNs device token
@@ -228,6 +230,9 @@ final class NotificationsStore {
         case "draft" where isValidToken(value):   return .draft(id: value)
         case "feedback" where isValidToken(value): return .feedback(id: value)
         case "survey" where isValidToken(value): return .survey(token: value)
+        case "writer":
+            if path.count >= 2, path[0] == "tickets", isValidToken(path[1]) { return .writerTicket(id: path[1]) }
+            return nil
         case "match":
             if let id = Int(value), id > 0 { return .match(id: id) }
             return nil

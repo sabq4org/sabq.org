@@ -255,6 +255,7 @@ struct ContentView: View {
                 case .roshnTeam: return "roshn_team"
                 case .roshnMatch: return "roshn_match"
                 case .survey: return "survey"
+                case .writerTicket: return "writer_ticket"
                 }
             }()
             SabqAnalytics.deepLinkOpen(kind: kind, source: source)
@@ -290,6 +291,9 @@ struct ContentView: View {
         case .survey(let token):
             if source == "notification" { SabqAnalytics.notificationOpen(type: "survey", articleId: nil) }
             navigation.paths[.home, default: NavigationPath()].append(SurveyDeepLinkRoute(token: token))
+        case .writerTicket(let id):
+            if source == "notification" { SabqAnalytics.notificationOpen(type: "writer_ticket", articleId: nil) }
+            navigation.paths[.home, default: NavigationPath()].append(WriterTicketRoute(id: id))
         }
     }
 }
