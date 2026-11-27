@@ -151,24 +151,57 @@ export function pickStripConversation(
   return null;
 }
 
+/** بعد هذه المدة يختفي شريط المحادثة الهادئة من البطاقة (المنتظِرة تبقى). */
+export const DUTY_CHAT_STRIP_FRESH_MS = 3 * 60 * 60 * 1000;
+
+/** شريط تحت بطاقة المناوبة: كامل، أو سطر صغير لرسالة قديمة لم يقرأها مستلمها. */
+export interface DutyStripItem {
+  conversation: DutyChatConversation;
+  compact: boolean;
+}
+
+/**
+ * كيف تظهر المحادثة في البطاقة:
+ * - كاملة إن كان فيها ما ينتظرني (غير مقروء أو «تنبيه» لم أؤكده)، أو آخر رسالة خلال 3 ساعات.
+ * - سطرًا صغيرًا إن كانت آخر رسالة مني وقديمة ولم تُقرأ (أو تنبيه لم يُؤكَّد استلامه).
+ * - لا شيء إن كانت قديمة ومقروءة.
+ */
+export function stripItemFor(c: DutyChatConversation, now = Date.now()): DutyStripItem | null {
+  if (c.unread > 0 || c.pendingAcks > 0) return { conversation: c, compact: false };
+  const at = new Date(c.last.createdAt).getTime();
+  if (Number.isFinite(at) && now - at < DUTY_CHAT_STRIP_FRESH_MS) return { conversation: c, compact: false };
+  if (c.last.mine && (!c.last.readAt || (c.last.kind === "alert" && !c.last.ackedAt))) {
+    return { conversation: c, compact: true };
+  }
+  return null;
+}
+
 /**
  * أشرطة البطاقة حين يناوب أكثر من زميل: لكل مناوب (غيري) محادثته تحت صفه،
  * و`extra` محادثة لا تخص أي صف (منتظرة من غير مناوب، أو أحدث محادثة إن كنت أنا المناوب).
+ * المحادثة القديمة المقروءة لا تظهر، والقديمة غير المقروءة تظهر سطرًا صغيرًا (stripItemFor).
  */
 export function pickStripConversations(
   conversations: readonly DutyChatConversation[],
   onDutyIds: readonly string[],
   meId?: string | null,
-): { byPeer: Map<string, DutyChatConversation>; extra: DutyChatConversation | null } {
+  now = Date.now(),
+): { byPeer: Map<string, DutyStripItem>; extra: DutyStripItem | null } {
   const byRecent = [...conversations].sort(
     (a, b) => new Date(b.last.createdAt).getTime() - new Date(a.last.createdAt).getTime(),
   );
   const duty = new Set(onDutyIds.filter((id) => id !== meId));
-  const byPeer = new Map<string, DutyChatConversation>();
-  for (const c of byRecent) if (duty.has(c.peer.id) && !byPeer.has(c.peer.id)) byPeer.set(c.peer.id, c);
-  const rest = byRecent.filter((c) => !byPeer.has(c.peer.id));
-  const extra = rest.find((c) => c.unread > 0 || c.pendingAcks > 0)
-    ?? (meId && onDutyIds.includes(meId) ? rest[0] ?? null : null);
+  const latest = new Map<string, DutyChatConversation>();
+  for (const c of byRecent) if (duty.has(c.peer.id) && !latest.has(c.peer.id)) latest.set(c.peer.id, c);
+  const byPeer = new Map<string, DutyStripItem>();
+  for (const [id, c] of latest) {
+    const item = stripItemFor(c, now);
+    if (item) byPeer.set(id, item);
+  }
+  const rest = byRecent.filter((c) => !latest.has(c.peer.id));
+  const pending = rest.find((c) => c.unread > 0 || c.pendingAcks > 0);
+  const own = meId && onDutyIds.includes(meId) ? rest[0] ?? null : null;
+  const extra = pending ? stripItemFor(pending, now) : own ? stripItemFor(own, now) : null;
   return { byPeer, extra };
 }
 
