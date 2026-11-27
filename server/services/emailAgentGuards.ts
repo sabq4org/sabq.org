@@ -198,7 +198,68 @@ export function buildSenderReply(
   return { subject: heading, text, html };
 }
 
-// ── التصنيف الاحتياطي ────────────────────────────────────────────────
+// ── التصنيف ──────────────────────────────────────────────────────────
+
+type EditorialCategory = {
+  nameAr: string;
+  nameEn?: string | null;
+  slug?: string | null;
+  status?: string | null;
+  isIfoxCategory?: boolean | null;
+};
+
+/**
+ * الأقسام التي يجوز للبريد الذكي أن ينشر فيها: الظاهرة («visible») والداخلية («active»)،
+ * بلا أقسام آي فوكس. كانت التصفية على «active» وحدها، والأقسام العامة كلها «visible»،
+ * فوصلت القائمة فارغة وسقط كل خبر إلى أول قسم («محليات»).
+ */
+export function selectEditorialCategories<T extends EditorialCategory>(all: T[]): T[] {
+  return all.filter((c) => (c.status === "visible" || c.status === "active") && !c.isIfoxCategory);
+}
+
+function normalizeCategoryName(value: string | null | undefined): string {
+  return (value || "")
+    .replace(/[«»"'“”]/g, "")
+    .replace(/[\u064B-\u0652\u0640]/g, "") // تشكيل وتطويل
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function withoutArticle(value: string): string {
+  return value.startsWith("ال") && value.length > 4 ? value.slice(2) : value;
+}
+
+/** يطابق التصنيف الذي اقترحه النموذج مع قسم فعلي: الاسم العربي أو الإنجليزي أو الرابط، ثم تطابق جزئي. */
+export function matchDetectedCategory<T extends EditorialCategory>(
+  detected: string | null | undefined,
+  categories: T[],
+): T | null {
+  const name = normalizeCategoryName(detected);
+  if (!name) return null;
+  const bare = withoutArticle(name);
+  const exact = categories.find((c) => {
+    const ar = normalizeCategoryName(c.nameAr);
+    return (
+      ar === name ||
+      withoutArticle(ar) === bare ||
+      normalizeCategoryName(c.nameEn) === name ||
+      normalizeCategoryName(c.slug) === name
+    );
+  });
+  if (exact) return exact;
+  if (bare.length < 3) return null;
+  return (
+    categories.find((c) => {
+      const ar = withoutArticle(normalizeCategoryName(c.nameAr));
+      const en = normalizeCategoryName(c.nameEn);
+      return (
+        (ar.length >= 3 && (ar.includes(bare) || bare.includes(ar))) ||
+        (en.length >= 3 && (en.includes(name) || name.includes(en)))
+      );
+    }) || null
+  );
+}
 
 /** حين لا يطابق تصنيف الذكاء أي قسم ولا يوجد قسم افتراضي للمرسل: «محليات» ثم أول قسم نشط. */
 export function pickFallbackCategory<T extends { nameAr: string; slug?: string | null }>(active: T[]): T | null {

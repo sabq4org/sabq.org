@@ -31,6 +31,8 @@ import {
   emailAgentRepliesEnabled,
   evaluateSenderAuth,
   pickFallbackCategory,
+  selectEditorialCategories,
+  matchDetectedCategory,
   redactEmailTokens,
   resolveSenderToken,
   senderAuthEnforced,
@@ -1595,10 +1597,10 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
     
     // 🎯 Fetch available categories for AI to choose from
     const allCategories = await storage.getAllCategories();
-    const activeCategories = allCategories.filter(c => c.status === 'active');
+    const activeCategories = selectEditorialCategories(allCategories);
     const categoriesForAI = activeCategories.map(c => ({ nameAr: c.nameAr, nameEn: c.nameEn }));
     
-    console.log("[Email Agent] Fetched", categoriesForAI.length, "active categories for AI");
+    console.log("[Email Agent] Fetched", categoriesForAI.length, "publishable categories for AI");
     console.log("[Email Agent] Analyzing and editing with Sabq editorial style...");
     const editorialResult = await analyzeAndEditWithSabqStyle(emailContent, language, categoriesForAI);
     
@@ -1792,39 +1794,12 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
     // Note: allCategories and activeCategories already fetched above for AI
     console.log("[Email Agent] Available categories:", activeCategories.length);
     
-    // Smart category matching function
-    const findMatchingCategory = (detectedName: string) => {
-      if (!detectedName) return null;
-      
-      // Exact match (case-insensitive)
-      let match = activeCategories.find(cat => 
-        cat.nameAr === detectedName ||
-        cat.nameEn.toLowerCase() === detectedName.toLowerCase()
-      );
-      
-      if (match) {
-        console.log("[Email Agent] ✅ Exact category match found:", match.nameAr, `(ID: ${match.id})`);
-        return match;
-      }
-      
-      // Partial match (fuzzy search)
-      match = activeCategories.find(cat => 
-        cat.nameAr.includes(detectedName) ||
-        cat.nameEn.toLowerCase().includes(detectedName.toLowerCase()) ||
-        detectedName.includes(cat.nameAr) ||
-        detectedName.toLowerCase().includes(cat.nameEn.toLowerCase())
-      );
-      
-      if (match) {
-        console.log("[Email Agent] ⚡ Partial category match found:", match.nameAr, `(ID: ${match.id})`);
-        return match;
-      }
-      
-      console.log("[Email Agent] ⚠️ No category match found for:", detectedName);
-      return null;
-    };
-    
-    const aiMatchedCategory = findMatchingCategory(editorialResult.detectedCategory);
+    const aiMatchedCategory = matchDetectedCategory(editorialResult.detectedCategory, activeCategories);
+    if (aiMatchedCategory) {
+      console.log("[Email Agent] ✅ Category match found:", aiMatchedCategory.nameAr, `(ID: ${aiMatchedCategory.id})`);
+    } else {
+      console.log("[Email Agent] ⚠️ No category match found for:", editorialResult.detectedCategory);
+    }
     
     // Fallback chain: AI match → Trusted sender default → First active → First overall
     let finalCategoryId = aiMatchedCategory?.id;

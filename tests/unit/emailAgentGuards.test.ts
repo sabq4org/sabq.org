@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildSenderReply,
   evaluateSenderAuth,
+  matchDetectedCategory,
   pickFallbackCategory,
   redactEmailTokens,
+  selectEditorialCategories,
   resolveSenderToken,
   senderAuthEnforced,
   shouldOcrAttachedImages,
@@ -200,5 +202,50 @@ describe("resolvePreviousTokenGrace", () => {
     expect(resolvePreviousTokenGrace("2027-01-01T00:00:00Z", now)?.toISOString()).toBe("2026-11-18T12:00:00.000Z");
     expect(resolvePreviousTokenGrace("2026-11-17T00:00:00Z", now)?.toISOString()).toBe("2026-11-17T00:00:00.000Z");
     expect(resolvePreviousTokenGrace("2026-11-16T11:00:00Z", now)).toBeNull();
+  });
+});
+
+// الأقسام كما على الإنتاج (11-27): كلها «visible»، و«محليات» أولها.
+const PROD_CATEGORIES = [
+  { id: "1", nameAr: "محليات", nameEn: "Saudi", slug: "saudi", status: "visible", isIfoxCategory: false },
+  { id: "2", nameAr: "مناطق", nameEn: "Regions", slug: "regions", status: "visible", isIfoxCategory: false },
+  { id: "3", nameAr: "مجتمع", nameEn: "Community", slug: "community", status: "visible", isIfoxCategory: false },
+  { id: "4", nameAr: "رياضة", nameEn: "Sports", slug: "sports", status: "visible", isIfoxCategory: false },
+  { id: "5", nameAr: "تقنية", nameEn: "Technology", slug: "technology", status: "visible", isIfoxCategory: false },
+  { id: "6", nameAr: "العالم", nameEn: "World", slug: "world", status: "visible", isIfoxCategory: false },
+  { id: "7", nameAr: "أرشيف قديم", nameEn: "Old", slug: "old", status: "inactive", isIfoxCategory: false },
+  { id: "8", nameAr: "آي فوكس تقنية", nameEn: "iFox Tech", slug: "ifox-tech", status: "active", isIfoxCategory: true },
+  { id: "9", nameAr: "داخلي", nameEn: "Internal", slug: "internal", status: "active", isIfoxCategory: false },
+];
+
+describe("selectEditorialCategories", () => {
+  it("keeps visible and active sections, drops inactive and iFox", () => {
+    expect(selectEditorialCategories(PROD_CATEGORIES).map((c) => c.id)).toEqual(["1", "2", "3", "4", "5", "6", "9"]);
+  });
+});
+
+describe("matchDetectedCategory", () => {
+  const usable = selectEditorialCategories(PROD_CATEGORIES);
+
+  it("sends a sports story to رياضة, not محليات (the 11-19 → 11-27 bug)", () => {
+    expect(matchDetectedCategory("رياضة", usable)?.id).toBe("4");
+  });
+
+  it("matches Arabic with or without ال, English names, slugs and quotes", () => {
+    expect(matchDetectedCategory("الرياضة", usable)?.id).toBe("4");
+    expect(matchDetectedCategory("«تقنية»", usable)?.id).toBe("5");
+    expect(matchDetectedCategory("Sports", usable)?.id).toBe("4");
+    expect(matchDetectedCategory("technology", usable)?.id).toBe("5");
+    expect(matchDetectedCategory("عالم", usable)?.id).toBe("6");
+  });
+
+  it("returns null for a label with no section so the sender default / محليات fallback applies", () => {
+    expect(matchDetectedCategory("صحة", usable)).toBeNull();
+    expect(matchDetectedCategory("", usable)).toBeNull();
+    expect(matchDetectedCategory(undefined, usable)).toBeNull();
+  });
+
+  it("never matches an excluded section", () => {
+    expect(matchDetectedCategory("آي فوكس تقنية", usable)?.id).not.toBe("8");
   });
 });
