@@ -6,7 +6,8 @@ import * as pdfParse from "pdf-parse";
 import OpenAI from "openai";
 import { storage } from "../storage";
 import { analyzeAndEditWithSabqStyle, detectLanguage, normalizeLanguageCode } from "../ai/contentAnalyzer";
-import { objectStorageClient } from "../objectStorage";
+import { objectStorageClient, ObjectStorageService } from "../objectStorage";
+import { needsWebpTranscode, normalizeImageForUpload } from "../utils/imageVerify";
 import { newsImageStorageService } from "../services/newsImageStorageService";
 import { nanoid } from "nanoid";
 import { isAuthenticated } from "../auth";
@@ -31,6 +32,8 @@ import {
   emailAgentRepliesEnabled,
   evaluateSenderAuth,
   pickFallbackCategory,
+  selectEditorialCategories,
+  matchDetectedCategory,
   redactEmailTokens,
   resolveSenderToken,
   senderAuthEnforced,
@@ -188,56 +191,47 @@ async function uploadAttachmentToGCS(
     }
   }
 
+  // باقي الملفات (Word وPDF والفيديو ونسخة «أعد المعالجة») عبر طبقة التخزين الموحدة:
+  // R2 أو S3 على Render، وGCS على Replit فقط. كان المسار يستدعي عميل GCS مباشرة
+  // فيفشل كل مرفق على Render (127.0.0.1:1106 ECONNREFUSED).
   try {
-    // For images, use PUBLIC directory so they can be displayed in browser
-    // For other files (Word docs, PDFs), use PRIVATE directory
-    const objectDir = isPublic
-      ? (process.env.PUBLIC_OBJECT_SEARCH_PATHS || "").split(',')[0]?.trim() || ""
-      : process.env.PRIVATE_OBJECT_DIR || "";
-
-    if (!objectDir) {
-      throw new Error(`${isPublic ? 'PUBLIC_OBJECT_SEARCH_PATHS' : 'PRIVATE_OBJECT_DIR'} not set`);
-    }
-
-    const { bucketName, objectPath } = parseObjectPath(objectDir);
-    const bucket = objectStorageClient.bucket(bucketName);
-
     const fileId = nanoid();
     // Reject anything other than a plain alphanumeric extension
     // (security audit H2, 2026-05-11). filename.split('.').pop() could
     // otherwise contain "../" and break out of email-attachments/.
     const rawExt = (filename.split('.').pop() || '').toLowerCase();
     const extension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
-    const storedFilename = `email-attachments/${fileId}.${extension}`;
-    const fullPath = `${objectPath}/${storedFilename}`.replace(/\/+/g, '/');
-
-    const gcsFile = bucket.file(fullPath);
-
-    await gcsFile.save(file, {
+    const stored = await new ObjectStorageService().uploadFile(
+      `email-attachments/${fileId}.${extension}`,
+      file,
       contentType,
-      metadata: {
-        originalName: filename,
-        uploadedAt: new Date().toISOString(),
-      },
-    });
-
-    console.log(`[Email Agent] ✅ Uploaded ${isPublic ? 'PUBLIC' : 'PRIVATE'} attachment to GCS: ${fullPath}`);
-
-    // 🎯 Return Backend Proxy URL (Replit Object Storage doesn't allow makePublic or signed URLs)
-    // The backend will stream the file from Object Storage
-    if (isPublic) {
-      const frontendUrl = process.env.FRONTEND_URL || 'https://sabq.org';
-      const proxyUrl = `${frontendUrl}/api/public-media/${fullPath}`;
-      console.log(`[Email Agent] 🌐 Generated proxy URL: ${proxyUrl}`);
-      return proxyUrl;
-    }
-
-    // For private files, return the relative path (requires proxy/download endpoint)
-    return `${objectDir}/${storedFilename}`;
+      isPublic ? "public" : "private",
+    );
+    console.log(`[Email Agent] ✅ Uploaded ${isPublic ? 'PUBLIC' : 'PRIVATE'} attachment: ${stored.path}`);
+    // العام رابط مباشر، والخاص مفتاح يُقرأ برابط موقّع (anywhere: loadStoredAttachments ونقطة «عرض»)
+    return isPublic ? stored.url : stored.path;
   } catch (error) {
     console.error("[Email Agent] Error uploading attachment:", error);
     throw error;
   }
+}
+
+/** مرفق خاص حُفظ عبر R2/S3 (مفتاح `.private/...`) لا عبر مسار GCS القديم. */
+function isProviderPrivateKey(url: string): boolean {
+  return url.startsWith(".private/");
+}
+
+/** يقرأ مرفقًا خاصًا: مفتاح R2/S3 برابط موقّع قصير، أو مسار GCS القديم (Replit). */
+async function readStoredAttachment(url: string): Promise<Buffer> {
+  if (isProviderPrivateKey(url)) {
+    const signed = await new ObjectStorageService().getPrivateFileDownloadURL(url, 120);
+    const response = await fetch(signed, { signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) throw new Error(`attachment fetch failed: ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  }
+  const { bucketName, objectPath } = parseObjectPath(url);
+  const [buffer] = await objectStorageClient.bucket(bucketName).file(objectPath).download();
+  return buffer;
 }
 
 /**
@@ -886,6 +880,25 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
                           attachment.originalname?.toLowerCase().endsWith('.docx');
         const isPdf = attachment.mimetype === 'application/pdf' ||
                       attachment.originalname?.toLowerCase().endsWith('.pdf');
+        // صور آيفون (HEIC) وAVIF: تُحوَّل إلى WebP/JPEG لتدخل مسار الصور بدل أن تُحفظ ملفًا خاصًا وتضيع
+        if (
+          needsWebpTranscode(attachment.mimetype || "") ||
+          /\.(heic|heif|avif)$/i.test(attachment.originalname || "")
+        ) {
+          try {
+            const normalized = await normalizeImageForUpload(attachment.buffer);
+            const baseName = (attachment.originalname || "image").replace(/\.[^.]+$/, "");
+            const ext = normalized.mimeType === "image/jpeg" ? "jpg" : "webp";
+            attachment.buffer = normalized.buffer;
+            attachment.mimetype = normalized.mimeType;
+            attachment.originalname = `${baseName}.${ext}`;
+            attachment.size = normalized.buffer.length;
+            console.log(`[Email Agent] 🔄 Converted ${baseName} to ${normalized.mimeType}`);
+          } catch (convertError: any) {
+            console.warn(`[Email Agent] ⚠️ Could not convert ${attachment.originalname}:`, convertError?.message);
+          }
+        }
+
         const isImage = /^image\/(jpeg|jpg|png|gif|webp)$/i.test(attachment.mimetype);
         
         try {
@@ -1595,10 +1608,10 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
     
     // 🎯 Fetch available categories for AI to choose from
     const allCategories = await storage.getAllCategories();
-    const activeCategories = allCategories.filter(c => c.status === 'active');
+    const activeCategories = selectEditorialCategories(allCategories);
     const categoriesForAI = activeCategories.map(c => ({ nameAr: c.nameAr, nameEn: c.nameEn }));
     
-    console.log("[Email Agent] Fetched", categoriesForAI.length, "active categories for AI");
+    console.log("[Email Agent] Fetched", categoriesForAI.length, "publishable categories for AI");
     console.log("[Email Agent] Analyzing and editing with Sabq editorial style...");
     const editorialResult = await analyzeAndEditWithSabqStyle(emailContent, language, categoriesForAI);
     
@@ -1792,39 +1805,12 @@ async function processInboundEmail(req: Request, res: Response, reprocess?: Repr
     // Note: allCategories and activeCategories already fetched above for AI
     console.log("[Email Agent] Available categories:", activeCategories.length);
     
-    // Smart category matching function
-    const findMatchingCategory = (detectedName: string) => {
-      if (!detectedName) return null;
-      
-      // Exact match (case-insensitive)
-      let match = activeCategories.find(cat => 
-        cat.nameAr === detectedName ||
-        cat.nameEn.toLowerCase() === detectedName.toLowerCase()
-      );
-      
-      if (match) {
-        console.log("[Email Agent] ✅ Exact category match found:", match.nameAr, `(ID: ${match.id})`);
-        return match;
-      }
-      
-      // Partial match (fuzzy search)
-      match = activeCategories.find(cat => 
-        cat.nameAr.includes(detectedName) ||
-        cat.nameEn.toLowerCase().includes(detectedName.toLowerCase()) ||
-        detectedName.includes(cat.nameAr) ||
-        detectedName.toLowerCase().includes(cat.nameEn.toLowerCase())
-      );
-      
-      if (match) {
-        console.log("[Email Agent] ⚡ Partial category match found:", match.nameAr, `(ID: ${match.id})`);
-        return match;
-      }
-      
-      console.log("[Email Agent] ⚠️ No category match found for:", detectedName);
-      return null;
-    };
-    
-    const aiMatchedCategory = findMatchingCategory(editorialResult.detectedCategory);
+    const aiMatchedCategory = matchDetectedCategory(editorialResult.detectedCategory, activeCategories);
+    if (aiMatchedCategory) {
+      console.log("[Email Agent] ✅ Category match found:", aiMatchedCategory.nameAr, `(ID: ${aiMatchedCategory.id})`);
+    } else {
+      console.log("[Email Agent] ⚠️ No category match found for:", editorialResult.detectedCategory);
+    }
     
     // Fallback chain: AI match → Trusted sender default → First active → First overall
     let finalCategoryId = aiMatchedCategory?.id;
@@ -2295,8 +2281,7 @@ async function loadStoredAttachments(log: any): Promise<Express.Multer.File[]> {
   for (const item of stored) {
     // المسارات الخاصة فقط (ما حفظته نقطة الحفظ). لا يُجلب أي رابط خارجي.
     if (!item?.url || /^https?:\/\//i.test(item.url) || !item.url.includes("email-attachments/")) continue;
-    const { bucketName, objectPath } = parseObjectPath(item.url);
-    const [buffer] = await objectStorageClient.bucket(bucketName).file(objectPath).download();
+    const buffer = await readStoredAttachment(item.url);
     files.push({
       fieldname: "attachment",
       originalname: item.filename || "attachment",
@@ -2556,6 +2541,25 @@ router.post("/logs/bulk-delete", isAuthenticated, requirePermission('admin.manag
 });
 
 // GET /api/email-agent/logs/:id - Get a specific webhook log (admin only)
+// GET /api/email-agent/logs/:id/attachments/:index — «عرض» مرفق خاص برابط موقّع قصير العمر
+router.get("/logs/:id/attachments/:index", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
+  try {
+    const log = await getEmailWebhookLogById(req.params.id);
+    const items: any[] = Array.isArray(log?.attachmentsData) ? (log!.attachmentsData as any[]) : [];
+    const item = items[Number.parseInt(req.params.index, 10)];
+    const url = typeof item?.url === "string" ? item.url : "";
+    if (!url) return res.status(404).json({ message: "المرفق غير موجود" });
+    if (/^https:\/\//i.test(url)) return res.redirect(302, url);
+    if (!isProviderPrivateKey(url)) return res.status(404).json({ message: "المرفق محفوظ في تخزين قديم" });
+    const signed = await new ObjectStorageService().getPrivateFileDownloadURL(url, 300);
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.redirect(302, signed);
+  } catch (error: any) {
+    console.error("[Email Agent] attachment view failed:", error?.message);
+    return res.status(500).json({ message: "تعذر فتح المرفق" });
+  }
+});
+
 router.get("/logs/:id", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
     const result = await storage.getEmailWebhookLogs();

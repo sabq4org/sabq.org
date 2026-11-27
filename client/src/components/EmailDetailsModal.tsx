@@ -13,6 +13,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { AlertCircle, CheckCircle, FileText, Paperclip } from "lucide-react";
 import type { EmailWebhookLog } from "@shared/schema";
 import DOMPurify from "isomorphic-dompurify";
+import { apiUrl } from "@/lib/queryClient";
 
 interface EmailDetailsModalProps {
   open: boolean;
@@ -157,7 +158,11 @@ export function EmailDetailsModal({
                       </div>
                       {attachment.url && (
                         <a
-                          href={attachment.url}
+                          href={
+                            /^https:\/\//i.test(attachment.url)
+                              ? attachment.url
+                              : apiUrl(`/api/email-agent/logs/${log.id}/attachments/${index}`)
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary text-sm hover:underline"
