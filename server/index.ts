@@ -1098,6 +1098,9 @@ if (!(globalThis as any).__sabqServer) {
     // إضافات مقال الرأي للتطبيقات: جملة المقال و«أوافق / لا أوافق» (Bearer).
     const mobileOpinionExtras = (await import("./routes/mobileOpinionExtras")).default;
     app.use("/api/v1", mobileOpinionExtras);
+    // لوحة كاتب الرأي في التطبيقات: خطوتك التالية، الإعلانات، تغيير اليوم، مقترح X.
+    const mobileWriterRoutes = (await import("./routes/mobileWriterRoutes")).default;
+    app.use("/api/v1", mobileWriterRoutes);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 

@@ -182,6 +182,8 @@ struct OpinionReaderExtrasSection: View {
             let updated = try await APIClient.shared.voteOpinion(articleId: articleId, agree: isAgree)
             withAnimation(.easeOut(duration: 0.25)) { agree = updated }
             SabqHaptics.success()
+        } catch APIError.apiMessage(let message) {
+            voteError = message
         } catch APIError.rateLimited {
             voteError = "محاولات كثيرة، حاول بعد قليل."
         } catch {

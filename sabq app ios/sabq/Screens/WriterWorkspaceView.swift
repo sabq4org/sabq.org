@@ -244,6 +244,8 @@ final class WriterWorkspaceViewModel: ObservableObject {
     @Published var workspace: WriterWorkspaceModel?
     @Published var notifications: EditorialNotificationsPage?
     @Published var schedule: WriterScheduleResponse?
+    /// «خطوتك التالية» والإعلانات وفرصة تغيير اليوم (/contributor/home).
+    @Published var home: WriterHomeModel?
     @Published var isLoading = true
     @Published var loadError: String?
 
@@ -281,7 +283,38 @@ final class WriterWorkspaceViewModel: ObservableObject {
             group.addTask { await self.loadWorkspace() }
             group.addTask { await self.loadNotifications() }
             group.addTask { await self.loadSchedule() }
+            group.addTask { await self.loadHome() }
         }
+    }
+
+    /// فشلها لا يُظهر خطأ: بطاقة الخطوة والإعلانات إضافة فوق المكتب.
+    func loadHome() async {
+        guard let fresh = try? await APIClient.shared.get(WriterHomeModel.self, path: "/contributor/home", ignoreCache: true) else { return }
+        home = fresh
+        let unseen = fresh.announcements.filter { !$0.seen }.map(\.id)
+        if !unseen.isEmpty {
+            struct Body: Encodable { let ids: [String] }
+            _ = try? await APIClient.shared.post(WriterOKResponse.self, path: "/contributor/announcements/seen", body: Body(ids: unseen))
+        }
+    }
+
+    func voteAnnouncement(_ item: WriterAnnouncementModel, option: Int) async {
+        struct Body: Encodable { let optionIndex: Int }
+        _ = try? await APIClient.shared.post(WriterOKResponse.self, path: "/contributor/announcements/\(item.id)/vote", body: Body(optionIndex: option))
+        SabqHaptics.light()
+        await loadHome()
+    }
+
+    /// رابط الإعلان أو ملفه (رابط موقّع مؤقت). يُسجَّل التفاعل بالاسم في الخادم.
+    func announcementURL(_ item: WriterAnnouncementModel) async -> URL? {
+        if let file = item.file {
+            let link = try? await APIClient.shared.get(WriterFileLink.self, path: "/contributor/files/\(file.id)/link", ignoreCache: true)
+            return link.flatMap { URL(string: $0.url) }
+        }
+        _ = try? await APIClient.shared.post(WriterOKResponse.self, path: "/contributor/announcements/\(item.id)/acted")
+        guard let raw = item.linkUrl else { return nil }
+        if raw.hasPrefix("/") { return URL(string: URLConstants.webOrigin + raw) }
+        return URL(string: raw)
     }
 
     func loadWorkspace() async {
@@ -431,6 +464,10 @@ struct WriterWorkspaceView: View {
     @State private var showNewOpinionSheet = false
     /// «طلب تعديل» على مقال منشور: نفس نموذج المراسل وقرار المحرر (2026-10-31).
     @State private var editRequestTarget: WriterTrackingArticle?
+    @State private var socialTarget: WriterTrackingArticle?
+    @State private var showSlotChange = false
+    @State private var showRevisions = false
+    @Environment(\.openURL) private var openURL
 
     /// مساحة العمل الكاملة لكاتب الرأي فقط؛ غيره (مراسل/إداري) يرى الأداء كما كان
     private var isOpinionWriter: Bool { authStore.currentUser?.isWriter == true }
@@ -474,6 +511,18 @@ struct WriterWorkspaceView: View {
             Task { await vm.load() }
         }) {
             ArticleSubmissionView(kind: .opinion)
+        }
+        .sheet(item: $socialTarget) { article in
+            WriterSocialProposalSheet(articleId: article.id, articleTitle: article.title)
+        }
+        .sheet(isPresented: $showSlotChange) {
+            if let state = vm.home?.slotChange {
+                WriterSlotChangeSheet(state: state) { Task { await vm.load() } }
+            }
+        }
+        .navigationDestination(isPresented: $showRevisions) {
+            ArticleRevisionsListView()
+                .duoContentInsets()
         }
         .onChange(of: vm.reviewResult != nil) { _, hasResult in
             if hasResult { showReviewSheet = true }
@@ -620,6 +669,16 @@ struct WriterWorkspaceView: View {
                     ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     workspaceErrorRow
+                    if let step = vm.home?.nextStep {
+                        WriterNextStepCard(step: step) { performNextStep(step) }
+                    }
+                    if let items = vm.home?.announcements, !items.isEmpty {
+                        WriterAnnouncementsGroup(items: items) { item in
+                            openAnnouncement(item)
+                        } onVote: { item, option in
+                            Task { await vm.voteAnnouncement(item, option: option) }
+                        }
+                    }
                     scheduleCard
                     notificationsStatusRow
                     if unreadCount > 0 { alertsCard }
@@ -1072,6 +1131,63 @@ struct WriterWorkspaceView: View {
 
     // MARK: - تبويب «مقالاتي»
 
+    // MARK: - خطوتك التالية والإعلانات وتغيير اليوم
+
+    private func performNextStep(_ step: WriterNextStepModel) {
+        switch step.action {
+        case "fix_article":
+            showRevisions = true
+        case "new_article":
+            if vm.canCreateNewArticle { showNewOpinionSheet = true } else { tab = .articles }
+        case "slot_change":
+            showSlotChange = true
+        case "announcement":
+            if let item = vm.home?.announcements.first(where: { $0.id == step.announcementId }), item.kind != "poll" {
+                openAnnouncement(item)
+            }
+        default:
+            tab = .articles
+        }
+    }
+
+    private func openAnnouncement(_ item: WriterAnnouncementModel) {
+        Task {
+            if let url = await vm.announcementURL(item) { openURL(url) }
+            await vm.loadHome()
+        }
+    }
+
+    /// يومك الأسبوعي، ومعه «تغيير» حين تفتح الإدارة الفرصة.
+    @ViewBuilder
+    private var slotChangeRow: some View {
+        if let slot = vm.home?.slotChange, let current = slot.current {
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: "calendar")
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("يومك الأسبوعي: \(WriterWeekdays.name(current.weekday)) · \(current.publishTime)")
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                    Text("بتوقيت الرياض")
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                }
+                Spacer(minLength: SabqLayout.space8)
+                if slot.canChange {
+                    Button("تغيير") { showSlotChange = true }
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, SabqLayout.space16)
+            .padding(.vertical, SabqLayout.space12)
+            .sabqBlockSurface()
+        }
+    }
+
     private var articlesSegment: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: SabqLayout.space24) {
@@ -1079,6 +1195,7 @@ struct WriterWorkspaceView: View {
                     ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     workspaceErrorRow
+                    slotChangeRow
                     trackingCountersRow
                     if unreadCount > 0 { alertsCard }
                     if vm.trackingCounts.action > 0 { needsChangesCallout }
@@ -1199,6 +1316,14 @@ struct WriterWorkspaceView: View {
                 if article.reviewStatus == "needs_changes" {
                     NavigationLink(value: ArticleRevisionsRoute()) {
                         actionLabel(icon: "pencil", text: "عدّل حسب الملاحظات", tint: SabqTheme.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if article.status == "published" && writerSocialWindowOpen(article.publishedAt) {
+                    Button {
+                        socialTarget = article
+                    } label: {
+                        actionLabel(icon: "paperplane", text: "اقتراح منشور X", tint: SabqTheme.primary)
                     }
                     .buttonStyle(.plain)
                 }
