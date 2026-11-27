@@ -1113,6 +1113,9 @@ export const articles = pgTable("articles", {
   // كامل لمليون صف كل 4 دقائق (حادثة بطء اللوحة 2026-08-07). هذا الفهرس وفهرس
   // views أعلاه أُنشئا يدوياً CONCURRENTLY في الإنتاج 2026-08-07.
   index("idx_articles_created_at").on(table.createdAt.desc()),
+  // «أخباري» في بوابة الوكالة: publisher_id + created_at — بدونه يمسح الطلب جدول
+  // المقالات كله (4.8–6.4 ثانية، 2026-11-18). أُنشئ CONCURRENTLY في الإنتاج يدويًا.
+  index("idx_articles_publisher_created").on(table.publisherId, table.createdAt.desc()).where(sql`publisher_id is not null`),
   index("idx_articles_slug").on(table.slug),
   // Edge slug-redirect does OR(englishSlug, slug); englishSlug was unindexed → full scan.
   index("idx_articles_english_slug").on(table.englishSlug),
