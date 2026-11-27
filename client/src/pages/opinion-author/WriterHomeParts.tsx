@@ -170,6 +170,59 @@ export function WriterArticleNowStrip({ article, onOpen }: { article: PipelineAr
   );
 }
 
+// مسودة حفظها الكاتب ولم يرسلها (2026-11-26): كثيرون ظنّوا أن «حفظ كمسودة» يرسل المقال.
+export function WriterUnsentDraftStrip({
+  article,
+  onOpen,
+  onSend,
+}: {
+  article: { id: string; title: string; updatedAt: string };
+  onOpen: () => void;
+  onSend: () => void;
+}) {
+  return (
+    <section
+      className="flex flex-col gap-3 rounded-[20px] bg-[#FFF8EC] px-4 py-3.5 shadow-[inset_0_0_0_1px_#F5DDB0] sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+      dir="rtl"
+      data-testid="writer-unsent-draft-strip"
+    >
+      <button type="button" onClick={onOpen} className="flex min-w-0 items-center gap-3 text-right">
+        <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[14px] bg-white text-[#E89B1A]" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 20h4L19 9l-4-4L4 16z" />
+          </svg>
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[13px] text-[#7A4B00]">مسودة لم تُرسل للتحرير</span>
+          <span className="block truncate text-base font-bold text-[#1B2B3A]">«{article.title || "بلا عنوان"}»</span>
+          <span className="block text-[13px] text-[#55667A]">
+            آخر تعديل {dateTime(article.updatedAt)}
+            <span className="hidden sm:inline"> · هيئة التحرير لا تراها حتى ترسلها</span>
+          </span>
+        </span>
+      </button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="hidden h-11 items-center rounded-full px-3 text-sm font-medium text-[#0B6FA8] hover:bg-white/70 sm:inline-flex"
+          data-testid="button-unsent-draft-open"
+        >
+          فتح
+        </button>
+        <button
+          type="button"
+          onClick={onSend}
+          className="inline-flex h-11 flex-1 items-center justify-center rounded-full bg-[#1E9BE6] px-5 text-[15px] font-semibold text-white hover:bg-[#178BD0] sm:flex-none"
+          data-testid="button-unsent-draft-send"
+        >
+          إرسال للمراجعة
+        </button>
+      </div>
+    </section>
+  );
+}
+
 const TABS = [
   { id: "today", label: "اليوم" },
   { id: "ideas", label: "أفكاري" },
